@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getCollection, getCollectionProducts } from 'lib/shopify';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
