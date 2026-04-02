@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { generateApiKey, hashApiKey } from '@/lib/voice/auth'
+import { agentCreateSchema } from '@/lib/voice/validation'
 import type { VoiceAgent } from '@/lib/voice/types'
 
 export async function GET(req: NextRequest) {
@@ -30,25 +31,17 @@ export async function POST(req: NextRequest) {
   const session = await getSession(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
-  const {
-    name,
-    systemPrompt,
-    llmModel = 'gpt-4o',
-    sttModel = 'nova-2',
-    ttsProvider = 'elevenlabs',
-    ttsVoiceId,
-    language = 'en-US',
-    silenceTimeoutMs = 1000,
-    maxCallDurationS = 3600,
-    webhookUrl,
-    pineconeIndex,
-    metadata,
-  } = body
-
-  if (!name?.trim()) {
-    return NextResponse.json({ error: 'Agent name is required' }, { status: 400 })
+  const raw = await req.json()
+  const parsed = agentCreateSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
   }
+
+  const {
+    name, systemPrompt, llmModel, sttModel, ttsProvider,
+    ttsVoiceId, language, silenceTimeoutMs, maxCallDurationS,
+    webhookUrl, pineconeIndex, metadata,
+  } = parsed.data
 
   // Generate a unique agent-scoped API key
   const rawKey = generateApiKey()

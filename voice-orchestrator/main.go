@@ -5,11 +5,13 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -23,23 +25,36 @@ import (
 	"github.com/marioretrejo/nextjs-commerce/voice-orchestrator/orchestrator"
 )
 
+var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
 	CheckOrigin: func(r *http.Request) bool {
-		// Validate API key from header; internal trusted clients only
 		apiKey := r.Header.Get("X-API-Key")
 		return validateAPIKey(apiKey)
 	},
 }
 
 func main() {
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic("failed to init logger: " + err.Error())
+	}
+	defer func() {
+		// Best-effort sync; log sync errors to stderr
+		if err := logger.Sync(); err != nil {
+			fmt.Fprintf(os.Stderr, "logger sync error: %v\n", err)
+		}
+	}()
 
 	db, err := sql.Open("postgres", mustEnv("DATABASE_URL"))
 	if err != nil {
 		logger.Fatal("failed to open DB", zap.Error(err))
+	}
+	// Verify connectivity at startup
+	if err := db.Ping(); err != nil {
+		logger.Fatal("DB unreachable at startup", zap.Error(err))
 	}
 	defer db.Close()
 
@@ -57,17 +72,23 @@ func main() {
 		handleCallWS(w, r, factory, logger)
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		// Also verify DB is reachable so K8s readiness probe gets accurate signal
+		if err := db.PingContext(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, "db_unavailable")
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
 	})
 	mux.Handle("/metrics", promhttp.Handler())
 
-	// Graceful shutdown
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", getEnvOrDefault("PORT", "8080")),
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:        fmt.Sprintf(":%s", getEnvOrDefault("PORT", "8080")),
+		Handler:     mux,
+		ReadTimeout: 15 * time.Second, // generous for WS upgrade handshake
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout: 5 * time.Minute,  // close idle keep-alive connections
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -98,7 +119,11 @@ func handleCallWS(w http.ResponseWriter, r *http.Request, factory *orchestrator.
 
 	callID := r.URL.Query().Get("call_id")
 	agentID := r.URL.Query().Get("agent_id")
-	if callID == "" || agentID == "" {
+
+	// Validate UUID format to prevent injection and invalid DB queries
+	if !uuidRE.MatchString(callID) || !uuidRE.MatchString(agentID) {
+		logger.Warn("invalid call_id or agent_id format", zap.String("call_id", callID), zap.String("agent_id", agentID))
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid params"))
 		conn.Close()
 		return
 	}
@@ -114,13 +139,17 @@ func handleCallWS(w http.ResponseWriter, r *http.Request, factory *orchestrator.
 	session.Run(r.Context(), conn, audio.NewBuffer(20*time.Millisecond))
 }
 
-// validateAPIKey checks the key against environment-configured valid keys.
+// validateAPIKey uses constant-time comparison to prevent timing attacks.
 func validateAPIKey(key string) bool {
 	if key == "" {
 		return false
 	}
 	validKey := os.Getenv("ORCHESTRATOR_API_KEY")
-	return key == validKey
+	if validKey == "" {
+		return false
+	}
+	// subtle.ConstantTimeCompare returns 1 only if slices are equal length AND content
+	return subtle.ConstantTimeCompare([]byte(key), []byte(validKey)) == 1
 }
 
 func mustEnv(key string) string {

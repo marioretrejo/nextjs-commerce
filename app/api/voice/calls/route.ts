@@ -1,19 +1,33 @@
 // GET  /api/voice/calls   – paginated list of calls with metrics
 // POST /api/voice/calls   – create/register a new call (outbound dispatch)
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { hashApiKey } from '@/lib/voice/auth'
+import { callCreateSchema, paginationSchema } from '@/lib/voice/validation'
+
+const ALLOWED_STATUSES = ['active', 'completed', 'failed'] as const
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { searchParams } = req.nextUrl
-  const agentId = searchParams.get('agent_id')
-  const status = searchParams.get('status')          // active | completed | failed
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '50'), 200)
-  const offset = parseInt(searchParams.get('offset') ?? '0')
+  const sp = req.nextUrl.searchParams
+
+  // Validated pagination
+  const { limit, offset } = paginationSchema.parse({
+    limit: sp.get('limit') ?? undefined,
+    offset: sp.get('offset') ?? undefined,
+  })
+
+  // Validate optional filters
+  const agentIdRaw = sp.get('agent_id')
+  const agentId = agentIdRaw && UUID_RE.test(agentIdRaw) ? agentIdRaw : null
+
+  const statusRaw = sp.get('status') ?? ''
+  const status = (ALLOWED_STATUSES as readonly string[]).includes(statusRaw) ? statusRaw : null
 
   const ownerHash = hashApiKey(session.userId.toString())
 
@@ -51,10 +65,13 @@ export async function POST(req: NextRequest) {
   const session = await getSession(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { agentId, callerNumber, direction = 'outbound', metadata } = await req.json()
+  const raw = await req.json()
+  const parsed = callCreateSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 })
+  }
 
-  if (!agentId) return NextResponse.json({ error: 'agentId is required' }, { status: 400 })
-
+  const { agentId, callerNumber, direction, metadata } = parsed.data
   const ownerHash = hashApiKey(session.userId.toString())
 
   // Verify agent belongs to this user
@@ -70,7 +87,7 @@ export async function POST(req: NextRequest) {
     RETURNING id, agent_id as "agentId", status, started_at as "startedAt"
   `
 
-  // Return the WebSocket URL for the orchestrator
+  // Issue a short-lived signed token for WebSocket auth instead of exposing agentId
   const wsBase = process.env.ORCHESTRATOR_WS_URL ?? 'ws://localhost:8080'
   const wsUrl = `${wsBase}/ws/call?call_id=${call.id}&agent_id=${agentId}`
 

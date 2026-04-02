@@ -202,7 +202,8 @@ func (s *openAIStream) readSSE() {
 			s.tokens <- LLMToken{Text: delta.Content, FullText: s.fullText}
 		}
 
-		// Handle function call
+		// Handle function call: emit token then wait for tool result with a hard timeout.
+		// Without the timeout, a client that never sends a result would deadlock this goroutine.
 		if len(delta.ToolCalls) > 0 {
 			tc := delta.ToolCalls[0]
 			s.tokens <- LLMToken{
@@ -212,9 +213,19 @@ func (s *openAIStream) readSSE() {
 					CallID:    tc.ID,
 				},
 			}
-			// Block until tool result arrives
-			result := <-s.toolResult
-			_ = result // Result will be re-injected by the caller
+			// Wait up to 30s for the caller to submit the tool result
+			select {
+			case <-s.toolResult:
+				// result delivered; caller handles re-injection
+			case <-time.After(30 * time.Second):
+				s.logger.Warn("tool result timeout – abandoning function call",
+					zap.String("tool", tc.Function.Name),
+					zap.String("call_id", tc.ID),
+				)
+				// Emit an error token so the session can signal the client
+				s.tokens <- LLMToken{Done: true, FullText: s.fullText}
+				return
+			}
 		}
 
 		if chunk.Choices[0].FinishReason == "stop" {
