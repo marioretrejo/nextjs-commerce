@@ -21,10 +21,21 @@ spec:
       labels:
         app: nextjs-app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nextjs
           image: ghcr.io/marioretrejo/nextjs-app:latest
           imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001         # nextjs user from Dockerfile
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 3000
           env:
@@ -67,16 +78,20 @@ spec:
               memory: "512Mi"
           livenessProbe:
             httpGet:
-              path: /api/auth/me
+              path: /healthz
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
           readinessProbe:
             httpGet:
-              path: /api/auth/me
+              path: /healthz
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -106,6 +121,16 @@ metadata:
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "Upgrade";
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Rate limiting: 100 req/s burst, 20 concurrent connections per IP
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    # Max request body size (prevent oversized audio uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "DENY";
+      add_header X-Content-Type-Options "nosniff";
+      add_header Referrer-Policy "strict-origin-when-cross-origin";
 spec:
   tls:
     - hosts:

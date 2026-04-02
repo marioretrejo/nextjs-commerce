@@ -80,17 +80,8 @@ async function handleCallEnded(event: WebhookEvent) {
     WHERE id = ${event.callId}::uuid
   `
 
-  // Trigger async post-call analysis via internal fetch
-  // Uses fire-and-forget pattern; errors are logged but not surfaced
-  const baseUrl = process.env.NEXTAUTH_URL ?? process.env.VERCEL_URL ?? 'http://localhost:3000'
-  fetch(`${baseUrl}/api/voice/calls/${event.callId}/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Internal service token for server-to-server auth
-      'x-service-token': process.env.INTERNAL_SERVICE_TOKEN ?? '',
-    },
-  }).catch((err) => console.error('[post-call-analysis] trigger failed', err))
+  // Trigger post-call analysis with exponential-backoff retry (max 3 attempts)
+  triggerAnalysisWithRetry(event.callId)
 }
 
 async function handleBargeIn(event: WebhookEvent) {
@@ -112,11 +103,43 @@ async function handleTranscript(event: WebhookEvent) {
   `
 }
 
+// triggerAnalysisWithRetry calls the analyze endpoint with exponential back-off.
+// Runs fully async (non-blocking) so the webhook response is not delayed.
+async function triggerAnalysisWithRetry(callId: string, maxAttempts = 3): Promise<void> {
+  const base = process.env.NEXTAUTH_URL ?? process.env.VERCEL_URL ?? 'http://localhost:3000'
+  const url = `${base}/api/voice/calls/${callId}/analyze`
+  const serviceToken = process.env.INTERNAL_SERVICE_TOKEN ?? ''
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-service-token': serviceToken,
+        },
+        signal: AbortSignal.timeout(90_000),
+      })
+      if (res.ok) return
+      console.error(`[post-call-analysis] attempt ${attempt} returned ${res.status} for call ${callId}`)
+    } catch (err) {
+      console.error(`[post-call-analysis] attempt ${attempt} failed for call ${callId}:`, err)
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1))) // 1s, 2s
+    }
+  }
+  console.error(`[post-call-analysis] all ${maxAttempts} attempts failed for call ${callId}`)
+}
+
 function verifySignature(body: string, signature: string | null): boolean {
   const secret = process.env.ORCHESTRATOR_WEBHOOK_SECRET
   if (!secret) {
-    // Signature verification disabled in development
-    return process.env.NODE_ENV !== 'production'
+    // Always require signature in production; allow bypass only with explicit dev flag
+    if (process.env.NODE_ENV === 'production') return false
+    if (process.env.SKIP_WEBHOOK_SIG_VERIFY !== 'true') return false
+    return true
   }
   if (!signature?.startsWith('sha256=')) return false
 

@@ -152,6 +152,18 @@ GROUP BY pod_id;
 -- ── Retention Policy: drop raw turn metrics older than 90 days ────────────────
 SELECT add_retention_policy('call_turn_metrics', INTERVAL '90 days');
 
+-- ── Additional indexes (performance) ─────────────────────────────────────────
+-- Frequently JOINed on call_id; without an index every join is a seq scan
+CREATE INDEX idx_call_transcripts_call_id  ON call_transcripts (call_id);
+CREATE INDEX idx_call_analysis_call_id     ON call_analysis (call_id);
+
+-- Analytics filters often combine agent + date + status
+CREATE INDEX idx_voice_calls_agent_date_status
+    ON voice_calls (agent_id, started_at DESC, status);
+
+-- FK lookup: which keys belong to a user
+CREATE INDEX idx_api_keys_user_id ON api_keys (user_id);
+
 -- ── Helper function: P95 latency for a given agent in the last N minutes ──────
 CREATE OR REPLACE FUNCTION agent_p95_latency(p_agent_id UUID, p_minutes INT DEFAULT 60)
 RETURNS TABLE (p95_ms FLOAT, sample_count BIGINT) AS $$

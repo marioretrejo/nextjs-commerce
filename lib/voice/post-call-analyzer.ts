@@ -59,14 +59,18 @@ export async function analyzeCall(
           content: `Call ID: ${request.callId}\n\nTranscript:\n${transcriptText}`,
         },
       ],
-      temperature: 0.1,    // low temperature for deterministic extraction
+      temperature: 0.1,
       response_format: { type: 'json_object' },
     }),
+    // Hard timeout: prevent hanging requests from exhausting the server thread pool
+    signal: AbortSignal.timeout(60_000),
   })
 
   if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`OpenAI post-call analysis failed (${response.status}): ${err}`)
+    // Do NOT forward raw API error details to callers (could expose keys/internals)
+    const status = response.status
+    console.error(`[post-call-analysis] OpenAI returned ${status} for call ${request.callId}`)
+    throw new Error(`Post-call analysis service error (${status})`)
   }
 
   const json = await response.json()
