@@ -1,0 +1,61 @@
+# Prometheus ServiceMonitor – scrapes /metrics from each orchestrator pod
+# Requires prometheus-operator CRD
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-orchestrator-monitor
+  namespace: voice-agent
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: voice-orchestrator
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+# PrometheusRule: alert when P95 TTFB exceeds 800 ms SLA
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: voice-agent-alerts
+  namespace: voice-agent
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: voice-agent.latency
+      interval: 1m
+      rules:
+        - alert: HighTTFBLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(voice_turn_ttfb_milliseconds_bucket[5m])) by (le, agent_id)
+            ) > 800
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "P95 TTFB > 800ms for agent {{ $labels.agent_id }}"
+            description: "P95 time-to-first-byte is {{ $value }}ms, exceeding the 800ms SLA."
+
+        - alert: HighBargeInRate
+          expr: |
+            rate(voice_barge_in_total[5m]) / rate(voice_turns_total[5m]) > 0.30
+          for: 5m
+          labels:
+            severity: info
+          annotations:
+            summary: "Barge-in rate > 30%"
+            description: "Customers are frequently interrupting the AI. Check TTS speed."
+
+        - alert: OrchestratorPodDown
+          expr: kube_deployment_status_replicas_available{deployment="voice-orchestrator"} < 2
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Voice orchestrator replicas below minimum"
