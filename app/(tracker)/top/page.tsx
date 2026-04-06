@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
 import {
   TrophyIcon,
@@ -11,6 +12,7 @@ import {
 
 interface RankedCampaign {
   rank: number;
+  rankChange: number | null;
   campaignBase: string;
   country: string;
   conversionRate: number;
@@ -21,6 +23,19 @@ interface RankedCampaign {
   crmRecommendation: string | null;
   score: number;
   lastFtdAt: string | null;
+}
+
+function RankChangeBadge({ change }: { change: number | null }) {
+  if (change === null) {
+    return <span className="text-xs text-indigo-400 font-medium">NUEVO</span>;
+  }
+  if (change > 0) {
+    return <span className="text-xs text-green-400 font-semibold">↑{change}</span>;
+  }
+  if (change < 0) {
+    return <span className="text-xs text-red-400 font-semibold">↓{Math.abs(change)}</span>;
+  }
+  return <span className="text-xs text-slate-500">—</span>;
 }
 
 const RANK_COLORS = [
@@ -137,19 +152,23 @@ export default function TopPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {top3.map((c, i) => {
                 const crm = CRM_LABELS[c.crmRecommendation ?? 'monitor'] ?? CRM_LABELS['monitor']!;
+                const profileHref = `/campaign/${encodeURIComponent(c.campaignBase)}/${encodeURIComponent(c.country)}`;
                 return (
                   <div
                     key={`${c.campaignBase}-${c.country}`}
                     className={clsx('rounded-xl border p-4', RANK_BG[i] ?? 'border-slate-700 bg-slate-900')}
                   >
                     <div className="flex items-start justify-between">
-                      <div
-                        className={clsx(
-                          'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white',
-                          RANK_COLORS[i] ?? 'bg-slate-600'
-                        )}
-                      >
-                        #{c.rank}
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={clsx(
+                            'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white',
+                            RANK_COLORS[i] ?? 'bg-slate-600'
+                          )}
+                        >
+                          #{c.rank}
+                        </div>
+                        <RankChangeBadge change={c.rankChange} />
                       </div>
                       <TriggerBadge status={c.triggerStatus} />
                     </div>
@@ -170,10 +189,13 @@ export default function TopPage() {
                         Último FTD: {new Date(c.lastFtdAt).toLocaleDateString('es')}
                       </p>
                     )}
-                    <div className="mt-2">
+                    <div className="mt-2 flex items-center justify-between">
                       <span className={clsx('rounded-full border px-2 py-0.5 text-xs font-medium', crm.cls)}>
                         {crm.label}
                       </span>
+                      <Link href={profileHref} className="text-xs text-indigo-400 hover:underline">
+                        Ver perfil →
+                      </Link>
                     </div>
                   </div>
                 );
@@ -195,6 +217,7 @@ export default function TopPage() {
                   <thead>
                     <tr className="border-b border-slate-800 text-xs text-slate-400">
                       <th className="px-4 py-2.5 text-left">#</th>
+                      <th className="px-4 py-2.5 text-left"></th>
                       <th className="px-4 py-2.5 text-left">Campaña</th>
                       <th className="px-4 py-2.5 text-left">País</th>
                       <th className="px-4 py-2.5 text-right">Conv. %</th>
@@ -207,13 +230,19 @@ export default function TopPage() {
                   <tbody>
                     {rest.map((c) => {
                       const crm = CRM_LABELS[c.crmRecommendation ?? 'monitor'] ?? CRM_LABELS['monitor']!;
+                      const profileHref = `/campaign/${encodeURIComponent(c.campaignBase)}/${encodeURIComponent(c.country)}`;
                       return (
                         <tr
                           key={`${c.campaignBase}-${c.country}`}
                           className="border-b border-slate-800/50 hover:bg-slate-800/30"
                         >
                           <td className="px-4 py-2.5 text-slate-400">{c.rank}</td>
-                          <td className="px-4 py-2.5 font-medium text-white">{c.campaignBase}</td>
+                          <td className="px-3 py-2.5"><RankChangeBadge change={c.rankChange} /></td>
+                          <td className="px-4 py-2.5 font-medium text-white">
+                            <Link href={profileHref} className="hover:text-indigo-400 hover:underline">
+                              {c.campaignBase}
+                            </Link>
+                          </td>
                           <td className="px-4 py-2.5 text-slate-300">{c.country}</td>
                           <td className={clsx('px-4 py-2.5 text-right font-bold', c.conversionRate >= 2 ? 'text-green-400' : 'text-white')}>
                             {c.conversionRate.toFixed(2)}%

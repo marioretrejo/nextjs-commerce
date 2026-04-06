@@ -3,6 +3,7 @@ import { AppSettings, getCurrentWeekRange, getCurrentMonthRange } from './metric
 
 export interface RankedCampaign {
   rank: number;
+  rankChange: number | null; // positive = moved up, negative = moved down, null = new
   campaignBase: string;
   country: string;
   conversionRate: number;
@@ -72,6 +73,22 @@ export async function buildTopRanking(
     )
   );
 
+  // Fetch previous period rank snapshots for rank-change calculation
+  const prevSnapshots = await prisma.rankSnapshot.findMany({
+    where: {
+      periodType,
+      campaignBase: { in: metrics.map((m) => m.campaignBase) }
+    },
+    orderBy: { periodStart: 'desc' }
+  });
+  // Build map: "campaignBase|country" -> previous rank (excluding current period)
+  const prevRankMap = new Map<string, number>();
+  for (const snap of prevSnapshots) {
+    if (snap.periodStart.getTime() === range.start.getTime()) continue;
+    const key = `${snap.campaignBase}|${snap.country}`;
+    if (!prevRankMap.has(key)) prevRankMap.set(key, snap.rank);
+  }
+
   const maxConvRate = Math.max(...metrics.map((m) => m.conversionRate), 0.01);
   const now = today.getTime();
   const ONE_DAY = 86400000;
@@ -92,8 +109,11 @@ export async function buildTopRanking(
     const recencyComponent = recencyFactor * 20;
     const score = convComponent + ftdComponent + recencyComponent;
 
+    const prevRank = prevRankMap.get(`${m.campaignBase}|${m.country}`) ?? null;
+
     return {
       rank: 0, // filled below
+      rankChange: null, // filled after sort
       campaignBase: m.campaignBase,
       country: m.country,
       conversionRate: m.conversionRate,
@@ -103,30 +123,61 @@ export async function buildTopRanking(
       triggerStatus: m.triggerStatus,
       crmRecommendation: m.crmRecommendation,
       score,
-      lastFtdAt
-    };
+      lastFtdAt,
+      _prevRank: prevRank
+    } as RankedCampaign & { _prevRank: number | null };
   });
 
   // Sort by score descending
   scored.sort((a, b) => b.score - a.score);
 
-  // Assign ranks
+  // Assign ranks and calculate rank change
   scored.forEach((c, i) => {
     c.rank = i + 1;
+    const prev = (c as RankedCampaign & { _prevRank?: number | null })._prevRank;
+    c.rankChange = prev != null ? prev - c.rank : null; // positive = improved
   });
 
-  // Update ranks in DB
+  // Update ranks in CampaignMetric and persist to RankSnapshot (history)
   await Promise.all(
     scored.map((c) =>
-      prisma.campaignMetric.updateMany({
-        where: {
-          campaignBase: c.campaignBase,
-          country: c.country,
-          periodType,
-          periodStart: range.start
-        },
-        data: { topRank: c.rank }
-      })
+      Promise.all([
+        prisma.campaignMetric.updateMany({
+          where: {
+            campaignBase: c.campaignBase,
+            country: c.country,
+            periodType,
+            periodStart: range.start
+          },
+          data: { topRank: c.rank }
+        }),
+        prisma.rankSnapshot.upsert({
+          where: {
+            campaignBase_country_periodType_periodStart: {
+              campaignBase: c.campaignBase,
+              country: c.country,
+              periodType,
+              periodStart: range.start
+            }
+          },
+          update: {
+            rank: c.rank,
+            conversionRate: c.conversionRate,
+            totalFtds: c.totalFtds,
+            totalLeads: c.totalLeads
+          },
+          create: {
+            campaignBase: c.campaignBase,
+            country: c.country,
+            periodType,
+            periodStart: range.start,
+            rank: c.rank,
+            conversionRate: c.conversionRate,
+            totalFtds: c.totalFtds,
+            totalLeads: c.totalLeads
+          }
+        })
+      ])
     )
   );
 

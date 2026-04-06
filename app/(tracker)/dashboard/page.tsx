@@ -14,10 +14,16 @@ import {
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
+interface TrendResult {
+  direction: 'up' | 'down' | 'stable' | 'new';
+  deltaAbsolute: number | null;
+  deltaPercent: number | null;
+}
+
 interface DashboardData {
   today: { ftds: number; leads: number };
-  weekly: { ftds: number; leads: number; conversion: number | null; range: { start: string; end: string } };
-  monthly: { ftds: number; leads: number; conversion: number | null };
+  weekly: { ftds: number; leads: number; conversion: number | null; prevConversion: number | null; trend: TrendResult; range: { start: string; end: string } };
+  monthly: { ftds: number; leads: number; conversion: number | null; prevConversion: number | null; trend: TrendResult };
   activeAlerts: number;
   fireNowCount: number;
   topWeekly: {
@@ -41,13 +47,29 @@ interface DashboardData {
   }[];
 }
 
+function TrendDelta({ trend }: { trend: TrendResult }) {
+  if (trend.direction === 'new' || trend.deltaAbsolute === null) return null;
+  const up = trend.direction === 'up';
+  const down = trend.direction === 'down';
+  const sign = trend.deltaAbsolute > 0 ? '+' : '';
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-0.5 text-xs font-semibold',
+      up ? 'text-green-400' : down ? 'text-red-400' : 'text-slate-400'
+    )}>
+      {up ? '↑' : down ? '↓' : '→'} {sign}{trend.deltaAbsolute.toFixed(2)}%
+    </span>
+  );
+}
+
 function MetricCard({
   title,
   value,
   sub,
   icon: Icon,
   color = 'indigo',
-  href
+  href,
+  trend
 }: {
   title: string;
   value: string;
@@ -55,6 +77,7 @@ function MetricCard({
   icon: React.ElementType;
   color?: string;
   href?: string;
+  trend?: TrendResult;
 }) {
   const colorMap: Record<string, string> = {
     indigo: 'bg-indigo-600/20 text-indigo-400',
@@ -69,6 +92,7 @@ function MetricCard({
         <div>
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">{title}</p>
           <p className="mt-1 text-2xl font-bold text-white">{value}</p>
+          {trend && <TrendDelta trend={trend} />}
           {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
         </div>
         <div className={clsx('rounded-lg p-2', colorMap[color] ?? colorMap.indigo)}>
@@ -155,6 +179,7 @@ export default function DashboardPage() {
           sub={`${data.weekly.ftds} FTD / ${data.weekly.leads} leads`}
           icon={ArrowTrendingUpIcon}
           color={data.weekly.conversion !== null && data.weekly.conversion >= 2 ? 'green' : 'indigo'}
+          trend={data.weekly.trend}
         />
         <MetricCard
           title="Conversión Mensual"
@@ -162,6 +187,7 @@ export default function DashboardPage() {
           sub={`${data.monthly.ftds} FTD / ${data.monthly.leads} leads`}
           icon={ArrowTrendingUpIcon}
           color={data.monthly.conversion !== null && data.monthly.conversion >= 2 ? 'green' : 'blue'}
+          trend={data.monthly.trend}
         />
         <MetricCard
           title="Alertas Activas"

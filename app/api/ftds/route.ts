@@ -4,6 +4,7 @@ import { parseFtdMessage, isParseError } from 'lib/parser';
 import { recalculateAndPersist, getSettings } from 'lib/metrics';
 import { evaluateFullTrigger } from 'lib/trigger';
 import { getCampaignRank } from 'lib/ranking';
+import { getTrendAnalysis, getHistoricalMetrics } from 'lib/memory';
 import { getSessionFromRequest } from 'lib/auth';
 
 // GET /api/ftds  → list FTDs with optional filters
@@ -105,19 +106,13 @@ export async function POST(req: NextRequest) {
     settings
   );
 
-  // Get top rank
-  const weeklyRank = await getCampaignRank(
-    parsed.campaignBase,
-    parsed.country,
-    'weekly',
-    settings
-  );
-  const monthlyRank = await getCampaignRank(
-    parsed.campaignBase,
-    parsed.country,
-    'monthly',
-    settings
-  );
+  // Get top rank + trend + last 4 weeks history (all in parallel)
+  const [weeklyRank, monthlyRank, trend, weeklyHistory] = await Promise.all([
+    getCampaignRank(parsed.campaignBase, parsed.country, 'weekly', settings),
+    getCampaignRank(parsed.campaignBase, parsed.country, 'monthly', settings),
+    getTrendAnalysis(parsed.campaignBase, parsed.country),
+    getHistoricalMetrics(parsed.campaignBase, parsed.country, 'weekly', 4)
+  ]);
 
   return NextResponse.json({
     ok: true,
@@ -142,7 +137,9 @@ export async function POST(req: NextRequest) {
       },
       trigger,
       weeklyRank,
-      monthlyRank
+      monthlyRank,
+      trend,
+      weeklyHistory
     }
   });
 }

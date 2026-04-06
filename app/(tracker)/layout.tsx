@@ -14,7 +14,8 @@ import {
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -25,6 +26,7 @@ const NAV = [
   { href: '/alerts', label: 'Alertas', icon: BellIcon },
   { href: '/trigger', label: '¿Cuándo Disparar?', icon: BoltIcon },
   { href: '/top', label: 'Top Campaña / País', icon: TrophyIcon },
+  { href: '/campaigns', label: 'Campañas', icon: ChartBarIcon },
   { href: '/history', label: 'Historial', icon: ClockIcon },
   { href: '/settings', label: 'Configuración', icon: Cog6ToothIcon }
 ];

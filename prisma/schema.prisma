@@ -69,6 +69,24 @@ model CampaignMetric {
   @@map("campaign_metrics")
 }
 
+model RankSnapshot {
+  id             Int      @id @default(autoincrement())
+  campaignBase   String
+  country        String
+  periodType     String
+  periodStart    DateTime
+  rank           Int
+  conversionRate Float
+  totalFtds      Int
+  totalLeads     Int
+  createdAt      DateTime @default(now())
+
+  @@unique([campaignBase, country, periodType, periodStart])
+  @@index([campaignBase, country])
+  @@index([periodType, periodStart])
+  @@map("rank_snapshots")
+}
+
 model Alert {
   id             Int      @id @default(autoincrement())
   campaignBase   String
@@ -85,15 +103,18 @@ model Alert {
 }
 
 model CrmAction {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   campaignBase   String
   country        String
   actionType     String
   reason         String?
   sourceMetricId Int?
-  createdAt      DateTime @default(now())
+  status         String    @default("pending")
+  executedAt     DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([campaignBase, country])
+  @@index([status])
   @@map("crm_actions")
 }
 

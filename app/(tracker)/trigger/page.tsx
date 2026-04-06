@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
 import {
   BoltIcon,
@@ -64,6 +65,23 @@ function MetricCard({ m }: { m: MetricItem }) {
   const cfg = TRIGGER_CONFIG[m.triggerStatus as keyof typeof TRIGGER_CONFIG] ?? TRIGGER_CONFIG.do_not_fire;
   const Icon = cfg.icon;
   const crm = CRM_LABELS[m.crmRecommendation ?? 'monitor'] ?? CRM_LABELS['monitor']!;
+  const [crmSaving, setCrmSaving] = useState<string | null>(null);
+  const [crmDone, setCrmDone] = useState<string | null>(null);
+  const profileHref = `/campaign/${encodeURIComponent(m.campaignBase)}/${encodeURIComponent(m.country)}`;
+
+  const handleCrm = async (actionType: string) => {
+    setCrmSaving(actionType);
+    try {
+      await fetch('/api/crm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignBase: m.campaignBase, country: m.country, actionType })
+      });
+      setCrmDone(actionType);
+    } finally {
+      setCrmSaving(null);
+    }
+  };
 
   return (
     <div className={clsx('rounded-xl border p-4', cfg.border, cfg.bg)}>
@@ -110,11 +128,30 @@ function MetricCard({ m }: { m: MetricItem }) {
         <p className="mt-2 text-xs text-slate-400">{m.triggerReason}</p>
       )}
 
-      <div className="mt-2 flex items-center gap-2">
-        <span className="text-xs text-slate-500">CRM:</span>
-        <span className={clsx('rounded-full border px-2 py-0.5 text-xs font-medium', crm.cls)}>
-          {crm.label}
-        </span>
+      {/* CRM action buttons */}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {[
+          { key: 'duplicate', label: 'Duplicar', cls: 'border-green-600/40 bg-green-900/20 text-green-300 hover:bg-green-900/40' },
+          { key: 'hide', label: 'Ocultar', cls: 'border-red-600/40 bg-red-900/20 text-red-300 hover:bg-red-900/40' },
+          { key: 'monitor', label: 'Monitorear', cls: 'border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700' }
+        ].map(({ key, label, cls }) => (
+          <button
+            key={key}
+            onClick={() => handleCrm(key)}
+            disabled={!!crmSaving || crmDone === key}
+            className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium transition disabled:opacity-50', cls,
+              m.crmRecommendation === key && 'ring-1 ring-current'
+            )}
+          >
+            {crmDone === key ? '✓ ' : ''}{crmSaving === key ? '…' : label}
+          </button>
+        ))}
+        <Link
+          href={profileHref}
+          className="ml-auto text-xs text-indigo-400 hover:underline self-center"
+        >
+          Historial →
+        </Link>
       </div>
     </div>
   );

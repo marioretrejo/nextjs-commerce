@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
 import {
   BoltIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
   CheckCircleIcon,
-  ClipboardDocumentIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline';
 
@@ -23,6 +23,21 @@ interface FtdRecord {
   isDelayedFtd: boolean;
   isSameDay: boolean;
   createdAt: string;
+}
+
+interface TrendResult {
+  direction: 'up' | 'down' | 'stable' | 'new';
+  currentRate: number | null;
+  previousRate: number | null;
+  deltaPercent: number | null;
+  deltaAbsolute: number | null;
+}
+
+interface HistoryRow {
+  periodStart: string;
+  conversionRate: number;
+  totalFtds: number;
+  totalLeads: number;
 }
 
 interface Analysis {
@@ -43,10 +58,50 @@ interface Analysis {
   };
   weeklyRank: number | null;
   monthlyRank: number | null;
+  trend?: { weekly: TrendResult; monthly: TrendResult };
+  weeklyHistory?: HistoryRow[];
+}
+
+function SparkBars({ rows }: { rows: HistoryRow[] }) {
+  if (rows.length === 0) return null;
+  const maxRate = Math.max(...rows.map((r) => r.conversionRate), 0.01);
+  return (
+    <div className="flex items-end gap-1 h-8">
+      {rows.map((r) => (
+        <div
+          key={r.periodStart}
+          style={{ height: `${Math.max((r.conversionRate / maxRate) * 100, 4)}%` }}
+          className={clsx('w-3 rounded-t flex-shrink-0', r.conversionRate >= 2 ? 'bg-green-500' : 'bg-slate-600')}
+          title={`${new Date(r.periodStart).toLocaleDateString('es', { month: 'short', day: '2-digit' })}: ${r.conversionRate.toFixed(2)}%`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TrendLine({ trend, label }: { trend: TrendResult; label: string }) {
+  if (trend.direction === 'new' || trend.previousRate === null) return null;
+  const up = trend.direction === 'up';
+  const down = trend.direction === 'down';
+  const sign = (trend.deltaAbsolute ?? 0) > 0 ? '+' : '';
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-slate-400">{label} ant.:</span>
+      <span className="flex items-center gap-1">
+        <span className="text-slate-300">{trend.previousRate.toFixed(2)}%</span>
+        <span className={clsx('font-semibold', up ? 'text-green-400' : down ? 'text-red-400' : 'text-slate-400')}>
+          {up ? '↑' : down ? '↓' : '→'} {sign}{trend.deltaAbsolute?.toFixed(2)}%
+        </span>
+      </span>
+    </div>
+  );
 }
 
 function TriggerCard({ analysis }: { analysis: Analysis }) {
   const { trigger } = analysis;
+  const [crmSaving, setCrmSaving] = useState<string | null>(null);
+  const [crmDone, setCrmDone] = useState<string | null>(null);
+
   const colorMap: Record<string, string> = {
     green: 'border-green-500/50 bg-green-900/20',
     yellow: 'border-amber-500/50 bg-amber-900/20',
@@ -69,14 +124,25 @@ function TriggerCard({ analysis }: { analysis: Analysis }) {
   const fmtPct = (v: number | null, pending: boolean) =>
     pending ? '⏳ Leads pendientes' : v === null ? '—' : `${v.toFixed(2)}%`;
 
-  const crmColorMap: Record<string, string> = {
-    duplicate: 'bg-green-500/20 text-green-400 border-green-500/30',
-    hide: 'bg-red-500/20 text-red-400 border-red-500/30',
-    monitor: 'bg-slate-700 text-slate-300 border-slate-600'
+  const handleCrm = async (action: string) => {
+    setCrmSaving(action);
+    try {
+      await fetch('/api/crm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignBase: analysis.campaign, country: analysis.country, actionType: action })
+      });
+      setCrmDone(action);
+    } finally {
+      setCrmSaving(null);
+    }
   };
 
+  const history = analysis.weeklyHistory ?? [];
+  const profileHref = `/campaign/${encodeURIComponent(analysis.campaign)}/${encodeURIComponent(analysis.country)}`;
+
   return (
-    <div className={clsx('rounded-xl border p-4', colorMap[trigger.color] ?? colorMap.gray)}>
+    <div className={clsx('rounded-xl border p-4 space-y-4', colorMap[trigger.color] ?? colorMap.gray)}>
       {/* Header */}
       <div className="flex items-start gap-3">
         <Icon className={clsx('mt-0.5 h-6 w-6 flex-shrink-0', textMap[trigger.color])} />
@@ -89,7 +155,7 @@ function TriggerCard({ analysis }: { analysis: Analysis }) {
             )}
           </p>
         </div>
-        <div className="text-right">
+        <div className="flex flex-col items-end gap-1">
           <span
             className={clsx(
               'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium',
@@ -98,11 +164,14 @@ function TriggerCard({ analysis }: { analysis: Analysis }) {
           >
             {analysis.isDelayed ? 'Delayed (D_)' : 'Del día'}
           </span>
+          <Link href={profileHref} className="text-xs text-indigo-400 hover:underline">
+            Ver perfil →
+          </Link>
         </div>
       </div>
 
       {/* Metrics grid */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-900/60 p-3">
           <p className="text-xs text-slate-400 mb-1">Semana</p>
           <p className={clsx('text-xl font-bold', (analysis.weekly.conversion ?? 0) >= 2 ? 'text-green-400' : 'text-white')}>
@@ -129,8 +198,23 @@ function TriggerCard({ analysis }: { analysis: Analysis }) {
         </div>
       </div>
 
+      {/* Historical context */}
+      {(history.length > 0 || analysis.trend) && (
+        <div className="rounded-lg bg-slate-900/60 p-3 space-y-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Contexto Histórico</p>
+          {analysis.trend?.weekly && <TrendLine trend={analysis.trend.weekly} label="Semana" />}
+          {analysis.trend?.monthly && <TrendLine trend={analysis.trend.monthly} label="Mes" />}
+          {history.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs text-slate-500 mb-1">Últimas {history.length} semanas</p>
+              <SparkBars rows={[...history].reverse()} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Reasons */}
-      <div className="mt-3 space-y-1">
+      <div className="space-y-1">
         {trigger.reasons.map((r, i) => (
           <p key={i} className="flex items-start gap-2 text-xs text-slate-300">
             <span className="mt-0.5 text-slate-500">•</span>
@@ -139,13 +223,36 @@ function TriggerCard({ analysis }: { analysis: Analysis }) {
         ))}
       </div>
 
-      {/* CRM recommendation */}
-      <div className="mt-3 flex items-center gap-2">
-        <span className="text-xs text-slate-400">Acción CRM recomendada:</span>
-        <span className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize', crmColorMap[trigger.crmRecommendation] ?? crmColorMap.monitor)}>
-          {trigger.crmRecommendation === 'duplicate' ? 'Duplicar campaña' :
-           trigger.crmRecommendation === 'hide' ? 'Ocultar campaña' : 'Monitorear'}
-        </span>
+      {/* CRM actions */}
+      <div className="space-y-2">
+        <p className="text-xs text-slate-400">
+          Acción CRM recomendada:{' '}
+          <span className={clsx('font-medium',
+            trigger.crmRecommendation === 'duplicate' ? 'text-green-400' :
+            trigger.crmRecommendation === 'hide' ? 'text-red-400' : 'text-slate-300'
+          )}>
+            {trigger.crmRecommendation === 'duplicate' ? 'Duplicar campaña' :
+             trigger.crmRecommendation === 'hide' ? 'Ocultar campaña' : 'Monitorear'}
+          </span>
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { action: 'duplicate', label: 'Duplicar', cls: 'border-green-600/40 bg-green-900/20 text-green-300 hover:bg-green-900/40' },
+            { action: 'hide', label: 'Ocultar', cls: 'border-red-600/40 bg-red-900/20 text-red-300 hover:bg-red-900/40' },
+            { action: 'monitor', label: 'Monitorear', cls: 'border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700' }
+          ].map(({ action, label, cls }) => (
+            <button
+              key={action}
+              onClick={() => handleCrm(action)}
+              disabled={!!crmSaving || crmDone === action}
+              className={clsx('rounded-full border px-3 py-1 text-xs font-medium transition disabled:opacity-50', cls,
+                crmDone === action && 'opacity-100 ring-1 ring-current'
+              )}
+            >
+              {crmDone === action ? '✓ ' : ''}{crmSaving === action ? 'Guardando…' : label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
