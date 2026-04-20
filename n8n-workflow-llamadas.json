@@ -1,0 +1,272 @@
+{
+  "name": "Llamadas Automaticas ElevenLabs - 10 por Lote",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Inicio Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [160, 340]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Programado Cada 10 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 480],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Estado",
+              "lookupValue": "Pendiente"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Leer Clientes Pendientes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [380, 340],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $items().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Hay Clientes Pendientes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [600, 340]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Lote de 10 Clientes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [820, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/convai/twilio/outbound-call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xi-api-key",
+              "value": "={{ $vars.ELEVENLABS_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ agent_id: $vars.ELEVENLABS_AGENT_ID, customer_number: $json.Telefono, from_number: $vars.TWILIO_FROM_NUMBER, metadata: { cliente_id: String($json.ID), cliente_nombre: $json.Nombre, row_number: String($json.row_number) } }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Llamar via ElevenLabs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 240]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "Llamada Iniciada",
+            "Fecha_Llamada": "={{ new Date().toISOString() }}",
+            "ID_Conversacion": "={{ $json.conversation_id || ('Error_' + ($json.statusCode || 'unknown')) }}"
+          },
+          "matchingColumns": ["ID"],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Fecha_Llamada",
+              "displayName": "Fecha_Llamada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "ID_Conversacion",
+              "displayName": "ID_Conversacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "77777777-7777-7777-7777-777777777777",
+      "name": "Marcar Llamada Iniciada",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1260, 240],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "88888888-8888-8888-8888-888888888888",
+      "name": "Sin Clientes - FIN",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [820, 460]
+    }
+  ],
+  "connections": {
+    "Inicio Manual": {
+      "main": [
+        [{ "node": "Leer Clientes Pendientes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Programado Cada 10 min": {
+      "main": [
+        [{ "node": "Leer Clientes Pendientes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Leer Clientes Pendientes": {
+      "main": [
+        [{ "node": "Hay Clientes Pendientes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Hay Clientes Pendientes": {
+      "main": [
+        [{ "node": "Lote de 10 Clientes", "type": "main", "index": 0 }],
+        [{ "node": "Sin Clientes - FIN", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lote de 10 Clientes": {
+      "main": [
+        [{ "node": "Llamar via ElevenLabs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Llamar via ElevenLabs": {
+      "main": [
+        [{ "node": "Marcar Llamada Iniciada", "type": "main", "index": 0 }]
+      ]
+    },
+    "Marcar Llamada Iniciada": {
+      "main": [
+        [{ "node": "Lote de 10 Clientes", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "llamadas" },
+    { "name": "elevenlabs" }
+  ],
+  "notes": "VARIABLES DE ENTORNO REQUERIDAS en N8n Settings > Variables:\n- GOOGLE_SHEET_ID: ID de tu Google Sheet (el string largo en la URL)\n- ELEVENLABS_API_KEY: Tu API key de ElevenLabs\n- ELEVENLABS_AGENT_ID: ID del agente de voz en ElevenLabs Conversational AI\n- TWILIO_FROM_NUMBER: Numero Twilio en formato +5491112345678\n\nESTRUCTURA DEL GOOGLE SHEET (hoja llamada 'Clientes'):\nColumnas: ID | Nombre | Telefono | Estado | Fecha_Llamada | ID_Conversacion | Notas | Transcripcion\nEstados posibles: Pendiente / Llamada Iniciada / No Contesta / Buzon de Voz / No Interesado / Interesado / Transferido / Error en Llamada"
+}

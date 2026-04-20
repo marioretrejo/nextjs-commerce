@@ -1,0 +1,397 @@
+{
+  "name": "Receptor Resultados ElevenLabs - Segmentacion Clientes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "elevenlabs-resultado",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "aa111111-1111-1111-1111-aaaaaaaaaaaa",
+      "name": "Webhook ElevenLabs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "elevenlabs-resultado-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrae datos del payload de ElevenLabs\nconst body = $input.first().json.body || $input.first().json;\n\n// Soporta tanto el formato de Twilio como el de ElevenLabs Conversational AI\nconst data = body?.data || body;\nconst conversationId = data?.conversation_id || body?.CallSid || '';\nconst clienteId     = data?.metadata?.cliente_id || '';\nconst clienteNombre = data?.metadata?.cliente_nombre || '';\nconst rowNumber     = data?.metadata?.row_number || '';\n\n// Duracion de la llamada\nconst duracion = data?.call_duration_secs || data?.CallDuration || 0;\n\n// Transcripcion\nconst rawTranscript = data?.transcript || [];\nconst transcripcion = Array.isArray(rawTranscript)\n  ? rawTranscript.map(t => `${t.role === 'agent' ? 'Agente' : 'Cliente'}: ${t.message}`).join('\\n')\n  : String(rawTranscript);\n\n// Determinar resultado ---------------------------------------------------\nlet outcome = 'Completado';\n\n// 1) Estado de llamada de Twilio (no_answer, busy, failed, completed)\nconst callStatus = data?.call_status || body?.CallStatus || '';\nif (callStatus === 'no-answer' || callStatus === 'no_answer') {\n  outcome = 'No Contesta';\n} else if (callStatus === 'busy') {\n  outcome = 'No Contesta';\n} else if (callStatus === 'failed') {\n  outcome = 'Error en Llamada';\n}\n\n// 2) Buzon de voz detectado por ElevenLabs\nif (data?.voicemail_detected === true || data?.voicemail_detected === 'true') {\n  outcome = 'Buzon de Voz';\n}\n\n// 3) Resultado recolectado por el agente durante la conversacion\n//    (configura 'call_outcome' como campo de data collection en tu agente ElevenLabs)\nconst dataCollection = data?.analysis?.data_collection_results\n                    || data?.data_collection_results\n                    || {};\nconst callOutcomeRaw = dataCollection?.call_outcome?.value\n                    || dataCollection?.resultado?.value\n                    || '';\n\nconst mapaOutcome = {\n  'no_answer':          'No Contesta',\n  'no_contesta':        'No Contesta',\n  'voicemail':          'Buzon de Voz',\n  'buzon':              'Buzon de Voz',\n  'buzon_de_voz':       'Buzon de Voz',\n  'not_interested':     'No Interesado',\n  'no_interesado':      'No Interesado',\n  'interested':         'Interesado',\n  'interesado':         'Interesado',\n  'transferred':        'Transferido',\n  'transferido':        'Transferido',\n  'callback':           'Solicita Devolucion',\n  'callback_requested': 'Solicita Devolucion',\n  'error':              'Error en Llamada'\n};\n\nif (callOutcomeRaw) {\n  outcome = mapaOutcome[callOutcomeRaw.toLowerCase()] || callOutcomeRaw;\n}\n\n// 4) Si analysis.call_successful es 'failed' y no tenemos otro outcome\nif (outcome === 'Completado') {\n  const callSuccessful = data?.analysis?.call_successful || '';\n  if (callSuccessful === 'failure' || callSuccessful === 'failed') {\n    outcome = 'No Contesta';\n  }\n}\n\nreturn [{\n  json: {\n    conversation_id: conversationId,\n    cliente_id:      clienteId,\n    cliente_nombre:  clienteNombre,\n    row_number:      rowNumber,\n    outcome:         outcome,\n    duracion_seg:    Number(duracion),\n    transcripcion:   transcripcion,\n    timestamp:       new Date().toISOString()\n  }\n}];"
+      },
+      "id": "aa222222-2222-2222-2222-aaaaaaaaaaaa",
+      "name": "Extraer Datos de Llamada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "No Contesta",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "No Contesta"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "Buzon de Voz",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Buzon de Voz"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "No Interesado",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "No Interesado"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r4",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "Interesado",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Interesado"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r5",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "Transferido",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Transferido"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "r6",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "Solicita Devolucion",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Solicita Devolucion"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "aa333333-3333-3333-3333-aaaaaaaaaaaa",
+      "name": "Clasificar Resultado",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [640, 400]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "No Contesta",
+            "Notas": "={{ 'Duracion: ' + $json.duracion_seg + 's | ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa444444-4444-4444-4444-aaaaaaaaaaaa",
+      "name": "Update - No Contesta",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 160],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "Buzon de Voz",
+            "Notas": "={{ 'Duracion: ' + $json.duracion_seg + 's | ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa555555-5555-5555-5555-aaaaaaaaaaaa",
+      "name": "Update - Buzon de Voz",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 280],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "No Interesado",
+            "Notas": "={{ 'Duracion: ' + $json.duracion_seg + 's | ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa666666-6666-6666-6666-aaaaaaaaaaaa",
+      "name": "Update - No Interesado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 400],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "Interesado",
+            "Notas": "={{ 'CALIENTE - Duracion: ' + $json.duracion_seg + 's | ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa777777-7777-7777-7777-aaaaaaaaaaaa",
+      "name": "Update - Interesado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 520],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "Transferido",
+            "Notas": "={{ 'Transferido a asesor - Duracion: ' + $json.duracion_seg + 's | ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa888888-8888-8888-8888-aaaaaaaaaaaa",
+      "name": "Update - Transferido",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 640],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "Solicita Devolucion",
+            "Notas": "={{ 'CALLBACK PENDIENTE - ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa999999-9999-9999-9999-aaaaaaaaaaaa",
+      "name": "Update - Solicita Devolucion",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 760],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $vars.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Clientes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "={{ $json.outcome }}",
+            "Notas": "={{ 'Duracion: ' + $json.duracion_seg + 's | ' + $json.timestamp }}",
+            "Transcripcion": "={{ $json.transcripcion }}"
+          },
+          "matchingColumns": ["ID_Conversacion"],
+          "schema": [
+            { "id": "ID_Conversacion", "displayName": "ID_Conversacion", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado", "displayName": "Estado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Transcripcion", "displayName": "Transcripcion", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aaAAAAAA-AAAA-AAAA-AAAA-aaaaaaaaaaaa",
+      "name": "Update - Otros Resultados",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 900],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "aaBBBBBB-BBBB-BBBB-BBBB-aaaaaaaaaaaa",
+      "name": "Responder 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 520]
+    }
+  ],
+  "connections": {
+    "Webhook ElevenLabs": {
+      "main": [
+        [{ "node": "Extraer Datos de Llamada", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extraer Datos de Llamada": {
+      "main": [
+        [{ "node": "Clasificar Resultado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Clasificar Resultado": {
+      "main": [
+        [{ "node": "Update - No Contesta",        "type": "main", "index": 0 }],
+        [{ "node": "Update - Buzon de Voz",        "type": "main", "index": 0 }],
+        [{ "node": "Update - No Interesado",       "type": "main", "index": 0 }],
+        [{ "node": "Update - Interesado",           "type": "main", "index": 0 }],
+        [{ "node": "Update - Transferido",          "type": "main", "index": 0 }],
+        [{ "node": "Update - Solicita Devolucion", "type": "main", "index": 0 }],
+        [{ "node": "Update - Otros Resultados",    "type": "main", "index": 0 }]
+      ]
+    },
+    "Update - No Contesta":        { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] },
+    "Update - Buzon de Voz":       { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] },
+    "Update - No Interesado":      { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] },
+    "Update - Interesado":          { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] },
+    "Update - Transferido":         { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] },
+    "Update - Solicita Devolucion": { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] },
+    "Update - Otros Resultados":    { "main": [[{ "node": "Responder 200 OK", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "llamadas" },
+    { "name": "elevenlabs" },
+    { "name": "webhook" }
+  ]
+}
