@@ -1,0 +1,244 @@
+{
+  "name": "Email Follow-up Automatico - Secuencia de 2 Mensajes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 11 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "fu111111-1111-1111-1111-111111111111",
+      "name": "Programado Lun-Vie 11am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 340]
+    },
+    {
+      "parameters": {},
+      "id": "fu222222-2222-2222-2222-222222222222",
+      "name": "Inicio Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [160, 480]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Estado_Email",
+              "lookupValue": "Email Enviado"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fu333333-3333-3333-3333-333333333333",
+      "name": "Leer Contactos Sin Respuesta",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [400, 340],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtra contactos donde el email fue enviado hace 3+ dias y tienen menos de 2 follow-ups\nvar DIAS_ESPERA = parseInt($vars.FOLLOWUP_DIAS_ESPERA || '3');\nvar MS_ESPERA   = DIAS_ESPERA * 24 * 60 * 60 * 1000;\nvar ahora       = Date.now();\n\nreturn $input.all().filter(function(item) {\n  var email      = (item.json.Email || '').trim();\n  var followupN  = parseInt(item.json.Followup_Num || '0');\n  var fechaEmail = item.json.Fecha_Email\n    ? new Date(item.json.Fecha_Email).getTime()\n    : 0;\n\n  return email.indexOf('@') > -1\n    && followupN < 2\n    && fechaEmail > 0\n    && (ahora - fechaEmail) >= MS_ESPERA;\n});"
+      },
+      "id": "fu444444-4444-4444-4444-444444444444",
+      "name": "Filtrar Por Dias Sin Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 340]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-fu-001",
+              "leftValue": "={{ $items().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fu555555-5555-5555-5555-555555555555",
+      "name": "Hay Follow-ups Pendientes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [840, 340]
+    },
+    {
+      "parameters": {
+        "batchSize": 30,
+        "options": {}
+      },
+      "id": "fu666666-6666-6666-6666-666666666666",
+      "name": "Lote de 30 Follow-ups",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1060, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construye el email de follow-up (1er o 2do seguimiento)\nconst n      = $json.Nombre || 'Cliente';\nconst s      = $json.Estado || '';\nconst emp    = $vars.EMPRESA_NOMBRE  || 'Nuestra Empresa';\nconst web    = $vars.WEBSITE_URL     || '#';\nconst wa     = $vars.WHATSAPP_LINK   || '#';\nconst emailC = $vars.EMAIL_CONTACTO  || '';\nconst fNum   = parseInt($json.Followup_Num || '0') + 1;\n\n// Helper: boton CTA\nconst btn = (url, txt) =>\n  `<a href=\"${url}\" style=\"display:inline-block;background:#1e40af;color:#fff;padding:12px 24px;text-decoration:none;border-radius:5px;font-weight:bold;margin:10px 0\">${txt}</a>`;\n\n// Helper: wrapper completo del email\nconst wrap = (title, accentColor, body) =>\n  `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>` +\n  `<body style=\"font-family:Arial,sans-serif;margin:0;padding:0;background:#f5f5f5\">` +\n  `<div style=\"max-width:600px;margin:0 auto;background:#ffffff\">` +\n  `<div style=\"background:${accentColor};color:#ffffff;padding:28px 32px\">` +\n  `<h1 style=\"margin:0;font-size:20px;font-weight:700\">${title}</h1></div>` +\n  `<div style=\"padding:28px 32px;color:#333333;line-height:1.7\">${body}</div>` +\n  `<div style=\"background:#f4f4f4;padding:16px 32px;text-align:center;font-size:11px;color:#888888\">` +\n  `<p style=\"margin:0\">${emailC} &nbsp;|&nbsp; Responde BAJA para cancelar suscripcion</p>` +\n  `</div></div></body></html>`;\n\nlet subj, html;\n\nif (fNum === 1) {\n  // PRIMER FOLLOW-UP: tono amigable, recordatorio\n  subj = `${n}, quisimos saber si recibiste nuestra propuesta`;\n\n  let contexto = '';\n  if (s === 'Interesado') {\n    contexto = '<p>Hace unos dias te enviamos informacion sobre nuestra propuesta porque nos dijiste que te interesaba. Queremos asegurarnos de que hayas podido verla.</p>';\n  } else if (s === 'No Contesta' || s === 'Buzon de Voz') {\n    contexto = '<p>Intentamos contactarte por telefono y luego te enviamos un email. Queremos asegurarnos de que hayas recibido nuestra propuesta.</p>';\n  } else {\n    contexto = '<p>Hace unos dias te enviamos informacion de nuestra parte. Queremos verificar que hayas podido verla.';\n  }\n\n  html = wrap(\n    'Seguimiento de tu consulta',\n    '#1e40af',\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    contexto +\n    `<div style=\"background:#eff6ff;border-left:4px solid #1e40af;padding:12px 16px;margin:15px 0;border-radius:0 5px 5px 0\">` +\n    `<strong>Podemos ayudarte por estos medios:</strong>` +\n    `<ul style=\"margin:8px 0;padding-left:20px\">` +\n    `<li>Respondiendo este email directamente</li>` +\n    `<li>Por WhatsApp: ${btn(wa, 'Escribirnos')}</li>` +\n    `<li>Visitando nuestra web: ${btn(web, 'Ver Propuesta')}</li>` +\n    `</ul></div>` +\n    `<p>Estamos disponibles para resolver cualquier duda.</p>` +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n\n} else {\n  // SEGUNDO FOLLOW-UP: tono respetuoso, ultimo contacto\n  subj = `${n}, ultimo mensaje de nuestra parte`;\n\n  html = wrap(\n    'Ultimo intento de contacto',\n    '#374151',\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Este es nuestro ultimo mensaje para no ser invasivos ni quitarte tiempo.</p>` +\n    `<p>Si en algun momento en el futuro necesitas nuestros servicios o quieres conocer nuestra propuesta, aqui estamos. Sera un placer atenderte.</p>` +\n    btn(wa, 'Contactarnos cuando lo necesites') +\n    `<p style=\"font-size:13px;color:#666;margin-top:20px\">` +\n    `Si no quieres recibir mas emails, simplemente responde con la palabra BAJA y te damos de baja inmediatamente.</p>` +\n    `<p>Muchas gracias por tu tiempo.<br>Saludos,<br><strong>${emp}</strong></p>`\n  );\n}\n\nreturn [{ json: Object.assign({}, $json, {\n  subject: subj,\n  html: html,\n  template_usado: 'followup_' + fNum,\n  timestamp_email: new Date().toISOString(),\n  Followup_Num: fNum\n}) }];"
+      },
+      "id": "fu777777-7777-7777-7777-777777777777",
+      "name": "Construir Email Follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 240]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "senderName": "={{ $vars.EMPRESA_NOMBRE }}"
+        }
+      },
+      "id": "fu888888-8888-8888-8888-888888888888",
+      "name": "Enviar Follow-up via Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1500, 240],
+      "continueOnFail": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GMAIL",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado_Email": "Follow-up Enviado",
+            "Fecha_Email": "={{ $json.timestamp_email }}",
+            "Template_Enviado": "={{ $json.template_usado }}",
+            "Followup_Num": "={{ $json.Followup_Num }}"
+          },
+          "matchingColumns": ["ID"],
+          "schema": [
+            { "id": "ID", "displayName": "ID", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado_Email", "displayName": "Estado_Email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Fecha_Email", "displayName": "Fecha_Email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Template_Enviado", "displayName": "Template_Enviado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Followup_Num", "displayName": "Followup_Num", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fu999999-9999-9999-9999-999999999999",
+      "name": "Marcar Follow-up Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1720, 240],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "fuAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+      "name": "Sin Follow-ups Pendientes",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 460]
+    }
+  ],
+  "connections": {
+    "Programado Lun-Vie 11am": {
+      "main": [[{ "node": "Leer Contactos Sin Respuesta", "type": "main", "index": 0 }]]
+    },
+    "Inicio Manual": {
+      "main": [[{ "node": "Leer Contactos Sin Respuesta", "type": "main", "index": 0 }]]
+    },
+    "Leer Contactos Sin Respuesta": {
+      "main": [[{ "node": "Filtrar Por Dias Sin Respuesta", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Por Dias Sin Respuesta": {
+      "main": [[{ "node": "Hay Follow-ups Pendientes", "type": "main", "index": 0 }]]
+    },
+    "Hay Follow-ups Pendientes": {
+      "main": [
+        [{ "node": "Lote de 30 Follow-ups",    "type": "main", "index": 0 }],
+        [{ "node": "Sin Follow-ups Pendientes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lote de 30 Follow-ups": {
+      "main": [[{ "node": "Construir Email Follow-up", "type": "main", "index": 0 }]]
+    },
+    "Construir Email Follow-up": {
+      "main": [[{ "node": "Enviar Follow-up via Gmail", "type": "main", "index": 0 }]]
+    },
+    "Enviar Follow-up via Gmail": {
+      "main": [[{ "node": "Marcar Follow-up Enviado", "type": "main", "index": 0 }]]
+    },
+    "Marcar Follow-up Enviado": {
+      "main": [[{ "node": "Lote de 30 Follow-ups", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "email" },
+    { "name": "follow-up" },
+    { "name": "marketing" }
+  ],
+  "notes": "VARIABLE EXTRA OPCIONAL:\n- FOLLOWUP_DIAS_ESPERA: dias a esperar entre emails (default: 3)\n\nSECUENCIA COMPLETA:\nDia 0: Llamada (workflow llamadas) -> Email inicial (workflow email-marketing)\nDia 3: Follow-up 1 (este workflow) - tono amigable\nDia 6: Follow-up 2 (este workflow) - ultimo contacto\nDia 6+: Sin mas contactos automaticos\n\nPara que el sistema funcione completo:\n1. Estado inicial de cada cliente en Estado_Email = 'Pendiente Email'\n2. Ejecutar primero el workflow de llamadas\n3. Ejecutar el workflow de email-marketing (envia email inicial)\n4. Este workflow se ejecuta automaticamente Lun-Vie 11am buscando quien necesita follow-up\n\nCambiar Followup_Num a 2 si no queres que reciban el 2do follow-up"
+}

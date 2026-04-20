@@ -1,0 +1,321 @@
+{
+  "name": "Email Marketing Automatizado - Segmentado por Estado",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "em111111-1111-1111-1111-111111111111",
+      "name": "Inicio Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [160, 340]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "em222222-2222-2222-2222-222222222222",
+      "name": "Programado Lun-Vie 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 480],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Estado_Email",
+              "lookupValue": "Pendiente Email"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "em333333-3333-3333-3333-333333333333",
+      "name": "Leer Contactos Para Emailear",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [380, 340],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtra solo filas con Email valido y estado correcto\nreturn $input.all().filter(function(item) {\n  var email = (item.json.Email || '').trim();\n  var estadoEmail = item.json.Estado_Email || '';\n  return email.indexOf('@') > -1\n    && estadoEmail !== 'Email Enviado'\n    && estadoEmail !== 'Follow-up Enviado'\n    && estadoEmail !== 'Baja';\n});"
+      },
+      "id": "em444444-4444-4444-4444-444444444444",
+      "name": "Filtrar Emails Validos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 340]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-em-001",
+              "leftValue": "={{ $items().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "em555555-5555-5555-5555-555555555555",
+      "name": "Hay Contactos Para Emailear",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [820, 340]
+    },
+    {
+      "parameters": {
+        "batchSize": 50,
+        "options": {}
+      },
+      "id": "em666666-6666-6666-6666-666666666666",
+      "name": "Lote de 50 Contactos",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1040, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construye email personalizado segun el Estado del cliente\nconst n      = $json.Nombre || 'Cliente';\nconst s      = $json.Estado || '';\nconst emp    = $vars.EMPRESA_NOMBRE  || 'Nuestra Empresa';\nconst web    = $vars.WEBSITE_URL     || '#';\nconst wa     = $vars.WHATSAPP_LINK   || '#';\nconst emailC = $vars.EMAIL_CONTACTO  || '';\n\n// Helper: boton CTA\nconst btn = (url, txt) =>\n  `<a href=\"${url}\" style=\"display:inline-block;background:#1e40af;color:#fff;padding:12px 24px;text-decoration:none;border-radius:5px;font-weight:bold;margin:10px 0\">${txt}</a>`;\n\n// Helper: caja de info\nconst box = (c) =>\n  `<div style=\"background:#eff6ff;border-left:4px solid #1e40af;padding:12px 16px;margin:15px 0;border-radius:0 5px 5px 0\">${c}</div>`;\n\n// Helper: wrapper completo del email\nconst wrap = (title, body) =>\n  `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>` +\n  `<body style=\"font-family:Arial,sans-serif;margin:0;padding:0;background:#f5f5f5\">` +\n  `<div style=\"max-width:600px;margin:0 auto;background:#ffffff\">` +\n  `<div style=\"background:#1e40af;color:#ffffff;padding:28px 32px\">` +\n  `<h1 style=\"margin:0;font-size:22px;font-weight:700\">${title}</h1></div>` +\n  `<div style=\"padding:28px 32px;color:#333333;line-height:1.7\">${body}</div>` +\n  `<div style=\"background:#f4f4f4;padding:16px 32px;text-align:center;font-size:11px;color:#888888\">` +\n  `<p style=\"margin:0\">${emailC} &nbsp;|&nbsp; Responde BAJA para cancelar suscripcion</p>` +\n  `</div></div></body></html>`;\n\nlet subj, html, tpl;\n\nif (s === 'Interesado') {\n  tpl  = 'interesado';\n  subj = `${n}, aqui esta la informacion que pediste`;\n  html = wrap(\n    `Gracias por tu interes, ${n}!`,\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Durante nuestra llamada nos comentaste que estas interesado/a en conocer mas. Queremos asegurarnos de darte toda la informacion para que puedas tomar la mejor decision.</p>` +\n    box('<strong>Lo que preparamos para vos:</strong><ul style=\"margin:8px 0;padding-left:20px\"><li>Un asesor especializado te contactara en las proximas 24hs</li><li>Propuesta personalizada segun tu perfil</li><li>Reunion informativa sin compromiso ni obligacion</li></ul>') +\n    btn(web, 'Ver Mas Informacion') +\n    `<p style=\"margin-top:20px\">Cualquier consulta, responde este email o escribinos directamente.</p>` +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n\n} else if (s === 'Solicita Devolucion') {\n  tpl  = 'callback';\n  subj = `${n}, te llamamos pronto`;\n  html = wrap(\n    `Recibimos tu solicitud de devolucion`,\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Registramos que nos pediste que te devolveramos la llamada. Nuestro equipo te contactara a la brevedad.</p>` +\n    box(`Mientras tanto, podes escribirnos por ${btn(wa, 'WhatsApp')} o responder directamente este email con tus consultas.`) +\n    `<p>Gracias por tu paciencia.</p>` +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n\n} else if (s === 'No Contesta' || s === 'Buzon de Voz') {\n  tpl  = 'no_contesta';\n  subj = `${n}, intentamos comunicarnos contigo`;\n  html = wrap(\n    `Quisimos hablar contigo`,\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Intentamos contactarte por telefono pero no pudimos comunicarnos. Queremos contarte sobre una oportunidad que podria interesarte.</p>` +\n    `<p>Te dejamos este email para que puedas conocer nuestra propuesta cuando tengas un momento:</p>` +\n    btn(web, 'Ver Nuestra Propuesta') +\n    `<p>O si prefieres, escribinos directamente por ${btn(wa, 'WhatsApp')}.</p>` +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n\n} else if (s === 'No Interesado') {\n  tpl  = 'nurture';\n  subj = `${n}, quedamos a disposicion cuando lo necesites`;\n  html = wrap(\n    `Sin presion, entendemos completamente`,\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Entendemos que por ahora no es el momento indicado. Respetamos completamente tu decision.</p>` +\n    `<p>Guardamos tu informacion para el futuro. Si en algun momento las circunstancias cambian o surge alguna consulta, estamos a un mensaje de distancia.</p>` +\n    btn(wa, 'Contactarnos cuando estes listo/a') +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n\n} else if (s === 'Transferido') {\n  tpl  = 'transferido';\n  subj = `${n}, resumen de tu consulta`;\n  html = wrap(\n    `Tu consulta fue derivada a un especialista`,\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Durante nuestra llamada te pusimos en contacto con un asesor especializado. Te enviamos este email como confirmacion y para que tengas nuestros datos a mano.</p>` +\n    box(`<strong>Contacto directo:</strong><br>Email: <a href=\"mailto:${emailC}\">${emailC}</a><br>WhatsApp: <a href=\"${wa}\">${wa}</a>`) +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n\n} else {\n  tpl  = 'bienvenida';\n  subj = `Hola ${n}, te presentamos ${emp}`;\n  html = wrap(\n    `Bienvenido/a, ${n}`,\n    `<p>Hola <strong>${n}</strong>,</p>` +\n    `<p>Somos <strong>${emp}</strong> y queremos contarte lo que podemos hacer por vos. <em>[COMPLETAR CON TU PROPUESTA DE VALOR AQUI]</em></p>` +\n    box('<ul style=\"margin:8px 0;padding-left:20px\"><li>Beneficio 1 - Editar esto</li><li>Beneficio 2 - Editar esto</li><li>Beneficio 3 - Editar esto</li></ul>') +\n    btn(web, 'Conocer Mas') +\n    `<p>Cualquier consulta, respondenos directamente este email.</p>` +\n    `<p>Saludos,<br><strong>${emp}</strong></p>`\n  );\n}\n\nreturn [{ json: Object.assign({}, $json, {\n  subject: subj,\n  html: html,\n  template_usado: tpl,\n  timestamp_email: new Date().toISOString()\n}) }];"
+      },
+      "id": "em777777-7777-7777-7777-777777777777",
+      "name": "Construir Email Personalizado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 240]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "senderName": "={{ $vars.EMPRESA_NOMBRE }}"
+        }
+      },
+      "id": "em888888-8888-8888-8888-888888888888",
+      "name": "Enviar Email via Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1480, 240],
+      "continueOnFail": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GMAIL",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-em-002",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "em999999-9999-9999-9999-999999999999",
+      "name": "Email Enviado OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1700, 240]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado_Email": "Email Enviado",
+            "Fecha_Email": "={{ $json.timestamp_email }}",
+            "Template_Enviado": "={{ $json.template_usado }}"
+          },
+          "matchingColumns": ["ID"],
+          "schema": [
+            { "id": "ID", "displayName": "ID", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado_Email", "displayName": "Estado_Email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Fecha_Email", "displayName": "Fecha_Email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Template_Enviado", "displayName": "Template_Enviado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "emAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+      "name": "Marcar Email Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1920, 160],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "="{{ $vars.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Clientes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado_Email": "Error Email",
+            "Notas": "={{ 'Error al enviar email: ' + ($json.error?.message || 'Desconocido') }}"
+          },
+          "matchingColumns": ["ID"],
+          "schema": [
+            { "id": "ID", "displayName": "ID", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Estado_Email", "displayName": "Estado_Email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Notas", "displayName": "Notas", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "emBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB",
+      "name": "Marcar Error de Email",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1920, 340],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR_ID_CREDENCIAL_GOOGLE",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "emCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC",
+      "name": "Sin Contactos - FIN",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1040, 460]
+    }
+  ],
+  "connections": {
+    "Inicio Manual": {
+      "main": [[{ "node": "Leer Contactos Para Emailear", "type": "main", "index": 0 }]]
+    },
+    "Programado Lun-Vie 9am": {
+      "main": [[{ "node": "Leer Contactos Para Emailear", "type": "main", "index": 0 }]]
+    },
+    "Leer Contactos Para Emailear": {
+      "main": [[{ "node": "Filtrar Emails Validos", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Emails Validos": {
+      "main": [[{ "node": "Hay Contactos Para Emailear", "type": "main", "index": 0 }]]
+    },
+    "Hay Contactos Para Emailear": {
+      "main": [
+        [{ "node": "Lote de 50 Contactos", "type": "main", "index": 0 }],
+        [{ "node": "Sin Contactos - FIN", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lote de 50 Contactos": {
+      "main": [[{ "node": "Construir Email Personalizado", "type": "main", "index": 0 }]]
+    },
+    "Construir Email Personalizado": {
+      "main": [[{ "node": "Enviar Email via Gmail", "type": "main", "index": 0 }]]
+    },
+    "Enviar Email via Gmail": {
+      "main": [[{ "node": "Email Enviado OK", "type": "main", "index": 0 }]]
+    },
+    "Email Enviado OK": {
+      "main": [
+        [{ "node": "Marcar Email Enviado",    "type": "main", "index": 0 }],
+        [{ "node": "Marcar Error de Email",   "type": "main", "index": 0 }]
+      ]
+    },
+    "Marcar Email Enviado": {
+      "main": [[{ "node": "Lote de 50 Contactos", "type": "main", "index": 0 }]]
+    },
+    "Marcar Error de Email": {
+      "main": [[{ "node": "Lote de 50 Contactos", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "email" },
+    { "name": "marketing" }
+  ],
+  "notes": "VARIABLES DE ENTORNO REQUERIDAS (N8n Settings > Variables):\n- GOOGLE_SHEET_ID: ID del Google Sheet\n- EMPRESA_NOMBRE: Nombre de tu empresa (aparece en emails)\n- WEBSITE_URL: URL de tu sitio web\n- WHATSAPP_LINK: Link de WhatsApp Business (ej: https://wa.me/5491112345678)\n- EMAIL_CONTACTO: Email de contacto que aparece en el footer\n\nCREDENCIALES REQUERIDAS:\n- Google Sheets OAuth2: conectar cuenta de Google\n- Gmail OAuth2: conectar cuenta de Gmail para envio\n\nCOLUMNAS ADICIONALES EN GOOGLE SHEET (hoja 'Clientes'):\nEstado_Email | Fecha_Email | Template_Enviado | Followup_Num\n\nVALORES DE Estado_Email:\n- Pendiente Email (para iniciar campana)\n- Email Enviado (enviado, esperando respuesta)\n- Follow-up Enviado (follow-up enviado)\n- Error Email (fallo el envio)\n- Baja (no enviar mas)\n\nTEMPLATES AUTOMATICOS SEGUN Estado:\n- Interesado -> Email caliente con propuesta y CTA\n- Solicita Devolucion -> Confirmacion de callback\n- No Contesta / Buzon de Voz -> Alcance alternativo por email\n- No Interesado -> Nurturing suave\n- Transferido -> Resumen y datos de contacto\n- Cualquier otro -> Email de bienvenida generico (EDITAR)\n\nLIMITE: Gmail permite ~500 emails/dia (cuenta personal) o 2000/dia (Workspace)"
+}
