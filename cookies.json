@@ -1,50 +1,20 @@
 [
   {
-    "name": "optimizelySegments",
-    "value": "%7B%7D",
-    "domain": ".the-internet.herokuapp.com",
-    "path": "/",
-    "expires": 1813547611.43515,
-    "httpOnly": false,
-    "secure": false,
-    "sameSite": "Lax"
-  },
-  {
-    "name": "optimizelyEndUserId",
-    "value": "oeu1778987611437r0.9525439466453366",
-    "domain": ".the-internet.herokuapp.com",
-    "path": "/",
-    "expires": 1813547611.437623,
-    "httpOnly": false,
-    "secure": false,
-    "sameSite": "Lax"
-  },
-  {
-    "name": "optimizelyBuckets",
-    "value": "%7B%7D",
-    "domain": ".the-internet.herokuapp.com",
-    "path": "/",
-    "expires": 1813547611.439485,
-    "httpOnly": false,
-    "secure": false,
-    "sameSite": "Lax"
-  },
-  {
-    "name": "rack.session",
-    "value": "BAh7CkkiD3Nlc3Npb25faWQGOgZFVEkiRTJhMTc3ZDc5N2RhNGU0MzY1OGM2%0AMzJmYjY2YWEyMTg1ZWM3ZjM0ZTQzZjNmZDJhM2E4Yjg2YzU5YzllODk4YzkG%0AOwBGSSIJY3NyZgY7AEZJIiVmMWEwYzFmZGNmYmZmOWE2MGZjNDNjNGRmZjM5%0AZWZkYQY7AEZJIg10cmFja2luZwY7AEZ7B0kiFEhUVFBfVVNFUl9BR0VOVAY7%0AAFRJIi1lZmFiYWJlMzBkMmYzMDBmNzc5OTk5ZTkzYWM2ZDI2ZTQyZTkxZDZh%0ABjsARkkiGUhUVFBfQUNDRVBUX0xBTkdVQUdFBjsAVEkiLWQ0ZTdkMzNmNGVi%0ANzNiY2U4ZmY3MDdjODBiNjlhYzU3ZWU1YzlmYmMGOwBGSSIKZmxhc2gGOwBG%0AewBJIg11c2VybmFtZQY7AEZJIg10b21zbWl0aAY7AFQ%3D%0A--2efafef10ede8cf223249a39e2483875cc2b60ee",
-    "domain": "the-internet.herokuapp.com",
+    "name": "PHPSESSID",
+    "value": "h4ki57n4tgrll7ud8euklug1vg",
+    "domain": "tracker.machukllc.xyz",
     "path": "/",
     "expires": -1,
-    "httpOnly": true,
+    "httpOnly": false,
     "secure": false,
     "sameSite": "Lax"
   },
   {
-    "name": "optimizelyPendingLogEvents",
-    "value": "%5B%22n%3Dhttps%253A%252F%252Fthe-internet.herokuapp.com%252Fsecure%26u%3Doeu1778987611437r0.9525439466453366%26wxhr%3Dtrue%26t%3D1778987612361%26f%3D298349752%2C318188263%22%2C%22n%3Dengagement%26g%3D298283957%26u%3Doeu1778987611437r0.9525439466453366%26wxhr%3Dtrue%26t%3D1778987612232%26f%3D298349752%2C318188263%22%2C%22n%3Dhttps%253A%252F%252Fthe-internet.herokuapp.com%252Flogin%26u%3Doeu1778987611437r0.9525439466453366%26wxhr%3Dtrue%26t%3D1778987611441%26f%3D298349752%2C318188263%22%5D",
-    "domain": ".the-internet.herokuapp.com",
+    "name": "druid",
+    "value": "DR:42821168311778988287720",
+    "domain": "tracker.machukllc.xyz",
     "path": "/",
-    "expires": 1778987627,
+    "expires": 1813548287.732939,
     "httpOnly": false,
     "secure": false,
     "sameSite": "Lax"
