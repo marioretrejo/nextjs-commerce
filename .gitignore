@@ -41,3 +41,4 @@ next-env.d.ts
 /generated/prisma
 prisma/prisma/
 .env
+credentials.json
