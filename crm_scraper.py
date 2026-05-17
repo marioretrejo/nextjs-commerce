@@ -5,7 +5,7 @@ Para adaptar a un CRM real, ver comentarios al final del archivo.
 """
 
 import json
-from datetime import datetime, date
+from datetime import datetime
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -15,6 +15,7 @@ LOGIN_URL        = "https://the-internet.herokuapp.com/login"
 USERNAME         = "tomsmith"
 PASSWORD         = "SuperSecretPassword!"
 CREDENTIALS_FILE = "credentials.json"
+SPREADSHEET_ID   = "1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA"
 OUTPUT_COOKIES   = "cookies.json"
 
 SCOPES = [
@@ -26,15 +27,13 @@ HEADERS = ["URL", "Título", "Heading", "Mensaje", "Cuerpo", "Timestamp"]
 
 
 def get_or_create_sheet(gc: gspread.Client) -> gspread.Spreadsheet:
-    sheet_name = f"CRM Data - {date.today().strftime('%Y-%m-%d')}"
-    try:
-        spreadsheet = gc.open(sheet_name)
-        print(f"      Sheet existente encontrado: '{sheet_name}'")
-    except gspread.SpreadsheetNotFound:
-        spreadsheet = gc.create(sheet_name)
-        ws = spreadsheet.sheet1
-        ws.append_row(HEADERS)
-        print(f"      Sheet nuevo creado: '{sheet_name}'")
+    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+    ws = spreadsheet.sheet1
+    if ws.row_count == 0 or ws.acell("A1").value != "URL":
+        ws.insert_row(HEADERS, index=1)
+        print("      Headers insertados en fila 1")
+    else:
+        print("      Headers ya presentes, agregando fila nueva")
     return spreadsheet
 
 
