@@ -1,0 +1,52 @@
+[
+  {
+    "name": "optimizelySegments",
+    "value": "%7B%7D",
+    "domain": ".the-internet.herokuapp.com",
+    "path": "/",
+    "expires": 1813542874.588689,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "optimizelyEndUserId",
+    "value": "oeu1778982874591r0.2616030921404625",
+    "domain": ".the-internet.herokuapp.com",
+    "path": "/",
+    "expires": 1813542874.591875,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "optimizelyBuckets",
+    "value": "%7B%7D",
+    "domain": ".the-internet.herokuapp.com",
+    "path": "/",
+    "expires": 1813542874.593975,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "rack.session",
+    "value": "BAh7CkkiD3Nlc3Npb25faWQGOgZFVEkiRWFmYjRhYjk1MjA2NWJlMjQzY2E4%0ANTAzOWU4OWViNGVkNDJlZThiYWNkYjc4Y2VjZDYxMmM5ZmVmZWZkNGM3OTIG%0AOwBGSSIJY3NyZgY7AEZJIiVkYzk1MGM2NTY1ZjA4ODRiMTE0YTEyMDNlY2Fk%0AYTdlZgY7AEZJIg10cmFja2luZwY7AEZ7B0kiFEhUVFBfVVNFUl9BR0VOVAY7%0AAFRJIi1lZmFiYWJlMzBkMmYzMDBmNzc5OTk5ZTkzYWM2ZDI2ZTQyZTkxZDZh%0ABjsARkkiGUhUVFBfQUNDRVBUX0xBTkdVQUdFBjsAVEkiLWQ0ZTdkMzNmNGVi%0ANzNiY2U4ZmY3MDdjODBiNjlhYzU3ZWU1YzlmYmMGOwBGSSIKZmxhc2gGOwBG%0AewBJIg11c2VybmFtZQY7AEZJIg10b21zbWl0aAY7AFQ%3D%0A--8bafce811ef901d6a535149cd31d03eb1317f955",
+    "domain": "the-internet.herokuapp.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "optimizelyPendingLogEvents",
+    "value": "%5B%22n%3Dhttps%253A%252F%252Fthe-internet.herokuapp.com%252Fsecure%26u%3Doeu1778982874591r0.2616030921404625%26wxhr%3Dtrue%26t%3D1778982875581%26f%3D298349752%2C318188263%22%2C%22n%3Dengagement%26g%3D298283957%26u%3Doeu1778982874591r0.2616030921404625%26wxhr%3Dtrue%26t%3D1778982875451%26f%3D298349752%2C318188263%22%2C%22n%3Dhttps%253A%252F%252Fthe-internet.herokuapp.com%252Flogin%26u%3Doeu1778982874591r0.2616030921404625%26wxhr%3Dtrue%26t%3D1778982874596%26f%3D298349752%2C318188263%22%5D",
+    "domain": ".the-internet.herokuapp.com",
+    "path": "/",
+    "expires": 1778982890,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  }
+]
