@@ -1,0 +1,252 @@
+{
+  "name": "CRM Scraper",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 11 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "0 15 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Login al CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://tracker.machukllc.xyz/login.php",
+        "sendBody": true,
+        "contentType": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "conversion@tresenlinea.xyz"
+            },
+            {
+              "name": "password",
+              "value": "24731840Mt."
+            },
+            {
+              "name": "theme",
+              "value": ""
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Extraer Cookie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers = $input.first().json.headers;\nconst raw = headers['set-cookie'] || [];\nconst list = Array.isArray(raw) ? raw : [raw];\nconst cookie = list.map(c => c.split(';')[0]).join('; ');\nreturn [{ json: { cookie } }];"
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Obtener Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://tracker.machukllc.xyz/crm.new.php",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $json.cookie }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Parsear Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const html = String($input.first().json);\nconst now = new Date().toISOString();\nconst emails = [...new Set((html.match(/[\\w.+\\-]+@[\\w\\-]+\\.[a-z]{2,}/g) || []))]\n  .filter(e => !e.includes('example') && !e.includes('n8n') && !e.includes('doctor'));\nif (!emails.length) return [{ json: { error: 'Sin leads', timestamp: now } }];\nreturn emails.map(email => ({ json: { email, scraped_at: now, source: 'CRM tracker.machukllc.xyz' } }));"
+      }
+    },
+    {
+      "id": "n6",
+      "name": "Generar JWT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Service account config\nconst SA_EMAIL = 'crm-scraper-bot@gen-lang-client-0454483073.iam.gserviceaccount.com';\nconst PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC2vwWymG3/5rde\nVfmYIEZYTXjeqLSIXLfph4XNPQUO+hRHgN7zazdX0lNr9NHQJB532gGFBEpVnKMO\n4K9w9Xm0GIYy2Kw1sy073BrCQEGlDpToesUzv2BjnIZD5l3nTaKCxJayg1qxPzij\nrBAStOPg1SqG8tySf8HDG0Okv0/BfEddGuWW0v15vjZnkX91sLJhiZULRM6GIYue\nyJapxlRWrHXiYS0LSSodR/lfC9ol23PPAWMk8b21rU7n2kjZYEIaiesxp3NGiRF8\nXmAudcGdXDBERq1Vgbg8QL6/STCPoR1YqzghlRiov93Lhhs035F9yV0hc5X/LGrR\nuccIT8rvAgMBAAECggEADxqX28LFCXesXVimKdBpEzB8AyZW0K2d6bUKXJ2X4HAD\nSXgGQhokPdbwj1ik5E4UuPuRhC8hmBSh79kNxwlGFABLslu9uyziJsz/TS5gZPlg\n9BuWVu7EIBeDJVnrfIv3GLwrNF/hsnD/1M89mNfO8CzOHs80M2Uc9gVrDTleqMAU\nv9rAYgsTSK0gw3H/+0nm2t4DY7LiPGzZJ6T5e2z0R2teH5yHCGwRErjoW/odS1+O\nls8nJEolMJgGkVz6znYLnGZshWYr8wKhW/rvXcK2gwh7GTg/GzovBBu6DLecVsnt\n/t9W3zcqRlhFGwskz96WfpzKAxwXIorUXzxSUY4icQKBgQDp+clyy+p+8zBhvQTL\nBLY7GV2cREPNsH5+5wHbCVL7aWIz2bCjE+wcqvbGN+padUx8d7nMq1QIHvzVIpk6\n4c//W7uvQcMcLIh2Vjk8tXHurEw2fEu4LMfqrajjufWkpAxbXtXIRCOjFZFtHtbg\nurzj/nQrWQfrKBFdixM0MvjUGQKBgQDH8rwqHPiruE0z304qlT5PBBxwU4oCgKCV\nYtcUYpBXq8Xq0UIYPxy0k0wvqTFWcdH+vmiIJKdPKkAbaFIDfeiK/10v1j4+o7mj\ngSOcHAcXUrJj9wcR1/0Gy+nsaUOUKau6VCxy/IfM8ECpem7dP0jgbVJsek9zIrU0\nvwhGpxO4RwKBgQDT3MHjt+/DOlQR/IUtjDuycfqIuGupAerY4DaW7u98BeXNS44d\nbLm9D7XasOD9Pf+fKQ5N3Ml/fQe1utmDLtwXvynIvUR963k5pkO3zBi5ZLyyDYTG\n5Y2028D1S/q5NW6XAd2UtNaMIsiHRYiO/6hwzoTEh56a+bIXwQoHlywnaQKBgQCx\nKr3buuwEjDusGNOUG8WoEgZ46SzCZuLjOz9EislHRacLF/wuq81tm47INGzJIfVm\neaT57TBqjw9auabh/TCN6RPTDUz+B+i3nffFnXgTDG2Q8hPLlcxXt1tA5UzB/eJy\nKZ9xC53w03kYMqoFVMvoQDXmdMHtTPWvFQ3qPKTWhQKBgE8ijNA5vXdW8Du4IcLx\neziwhiC0CM2IP47rHrIHhUwhjG0HfclQ31cv20Su6TLzxghY3m92hnSRIXOFGGF5\ncClOYvom4MTd6wygIqUvOL4c7IC43z0q3Yd9iu5fhbKGXzv4sEPk3hqHZUBWuExx\nldIh3PLDGIUPNtDqJd+/2Tp5\n-----END PRIVATE KEY-----\n`;\nconst SHEET_ID = '1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA';\n\nfunction b64url(obj) {\n  return Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj))\n    .toString('base64')\n    .replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');\n}\n\n// Construir JWT para Google OAuth2\nconst now = Math.floor(Date.now()/1000);\nconst header  = { alg:'RS256', typ:'JWT' };\nconst payload = {\n  iss: SA_EMAIL,\n  scope: 'https://www.googleapis.com/auth/spreadsheets',\n  aud: 'https://oauth2.googleapis.com/token',\n  iat: now,\n  exp: now + 3600\n};\nconst toSign = b64url(header) + '.' + b64url(payload);\nconst sign = crypto.createSign('RSA-SHA256');\nsign.update(toSign);\nconst sig = sign.sign(PRIVATE_KEY, 'base64')\n  .replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');\nconst jwt = toSign + '.' + sig;\n\n// Pasar leads del nodo anterior junto con el JWT\nconst leads = $input.all().map(i => i.json);\nreturn [{ json: { jwt, leads, sheetId: SHEET_ID } }];",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "n7",
+      "name": "Obtener Token Google",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Intercambiar JWT por access token de Google\nconst { jwt, leads, sheetId } = $input.first().json;\nconst resp = await $helpers.httpRequest({\n  method: 'POST',\n  url: 'https://oauth2.googleapis.com/token',\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`\n});\nreturn [{ json: { accessToken: resp.access_token, leads, sheetId } }];",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "n8",
+      "name": "Insertar en Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Insertar leads en Google Sheets via API REST\nconst { accessToken, leads, sheetId } = $input.first().json;\nconst headers = ['Email', 'Scrapeado', 'Fuente'];\nconst values = leads.map(l => [l.email || '', l.scraped_at || '', l.source || '']);\n\nconst resp = await $helpers.httpRequest({\n  method: 'POST',\n  url: `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,\n  headers: {\n    'Authorization': `Bearer ${accessToken}`,\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({ values }),\n  json: false\n});\n\nconst result = typeof resp === 'string' ? JSON.parse(resp) : resp;\nconst updated = result.updates?.updatedRows || 0;\nreturn [{ json: { success: true, rowsInserted: updated, timestamp: new Date().toISOString() } }];",
+        "mode": "runOnceForAllItems"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Login al CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login al CRM": {
+      "main": [
+        [
+          {
+            "node": "Extraer Cookie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Cookie": {
+      "main": [
+        [
+          {
+            "node": "Obtener Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Leads": {
+      "main": [
+        [
+          {
+            "node": "Parsear Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Leads": {
+      "main": [
+        [
+          {
+            "node": "Generar JWT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar JWT": {
+      "main": [
+        [
+          {
+            "node": "Obtener Token Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Token Google": {
+      "main": [
+        [
+          {
+            "node": "Insertar en Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
