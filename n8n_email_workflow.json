@@ -2,13 +2,13 @@
   "name": "Bienvenida - Secuencia 3 emails",
   "nodes": [
     {
-      "id": "n1",
-      "name": "Schedule - Cada hora",
+      "id": "n-schedule",
+      "name": "Cada Hora",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        0,
-        0
+        -400,
+        200
       ],
       "parameters": {
         "rule": {
@@ -22,72 +22,196 @@
       }
     },
     {
-      "id": "n2",
-      "name": "Leer y Clasificar Leads",
-      "type": "n8n-nodes-base.code",
+      "id": "n-webhook",
+      "name": "Test Webhook",
+      "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        240,
+        -400,
         0
       ],
       "parameters": {
-        "jsCode": "\nconst crypto = require('crypto');\n\nconst SA_EMAIL     = 'crm-scraper-bot@gen-lang-client-0454483073.iam.gserviceaccount.com';\nconst PRIVATE_KEY  = `-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC2vwWymG3/5rde\nVfmYIEZYTXjeqLSIXLfph4XNPQUO+hRHgN7zazdX0lNr9NHQJB532gGFBEpVnKMO\n4K9w9Xm0GIYy2Kw1sy073BrCQEGlDpToesUzv2BjnIZD5l3nTaKCxJayg1qxPzij\nrBAStOPg1SqG8tySf8HDG0Okv0/BfEddGuWW0v15vjZnkX91sLJhiZULRM6GIYue\nyJapxlRWrHXiYS0LSSodR/lfC9ol23PPAWMk8b21rU7n2kjZYEIaiesxp3NGiRF8\nXmAudcGdXDBERq1Vgbg8QL6/STCPoR1YqzghlRiov93Lhhs035F9yV0hc5X/LGrR\nuccIT8rvAgMBAAECggEADxqX28LFCXesXVimKdBpEzB8AyZW0K2d6bUKXJ2X4HAD\nSXgGQhokPdbwj1ik5E4UuPuRhC8hmBSh79kNxwlGFABLslu9uyziJsz/TS5gZPlg\n9BuWVu7EIBeDJVnrfIv3GLwrNF/hsnD/1M89mNfO8CzOHs80M2Uc9gVrDTleqMAU\nv9rAYgsTSK0gw3H/+0nm2t4DY7LiPGzZJ6T5e2z0R2teH5yHCGwRErjoW/odS1+O\nls8nJEolMJgGkVz6znYLnGZshWYr8wKhW/rvXcK2gwh7GTg/GzovBBu6DLecVsnt\n/t9W3zcqRlhFGwskz96WfpzKAxwXIorUXzxSUY4icQKBgQDp+clyy+p+8zBhvQTL\nBLY7GV2cREPNsH5+5wHbCVL7aWIz2bCjE+wcqvbGN+padUx8d7nMq1QIHvzVIpk6\n4c//W7uvQcMcLIh2Vjk8tXHurEw2fEu4LMfqrajjufWkpAxbXtXIRCOjFZFtHtbg\nurzj/nQrWQfrKBFdixM0MvjUGQKBgQDH8rwqHPiruE0z304qlT5PBBxwU4oCgKCV\nYtcUYpBXq8Xq0UIYPxy0k0wvqTFWcdH+vmiIJKdPKkAbaFIDfeiK/10v1j4+o7mj\ngSOcHAcXUrJj9wcR1/0Gy+nsaUOUKau6VCxy/IfM8ECpem7dP0jgbVJsek9zIrU0\nvwhGpxO4RwKBgQDT3MHjt+/DOlQR/IUtjDuycfqIuGupAerY4DaW7u98BeXNS44d\nbLm9D7XasOD9Pf+fKQ5N3Ml/fQe1utmDLtwXvynIvUR963k5pkO3zBi5ZLyyDYTG\n5Y2028D1S/q5NW6XAd2UtNaMIsiHRYiO/6hwzoTEh56a+bIXwQoHlywnaQKBgQCx\nKr3buuwEjDusGNOUG8WoEgZ46SzCZuLjOz9EislHRacLF/wuq81tm47INGzJIfVm\neaT57TBqjw9auabh/TCN6RPTDUz+B+i3nffFnXgTDG2Q8hPLlcxXt1tA5UzB/eJy\nKZ9xC53w03kYMqoFVMvoQDXmdMHtTPWvFQ3qPKTWhQKBgE8ijNA5vXdW8Du4IcLx\neziwhiC0CM2IP47rHrIHhUwhjG0HfclQ31cv20Su6TLzxghY3m92hnSRIXOFGGF5\ncClOYvom4MTd6wygIqUvOL4c7IC43z0q3Yd9iu5fhbKGXzv4sEPk3hqHZUBWuExx\nldIh3PLDGIUPNtDqJd+/2Tp5\n-----END PRIVATE KEY-----\n`;\nconst SHEET_ID     = '1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA';\nconst SHEET_RANGE  = 'Contactos!A:H';\n\nfunction b64url(v) {\n  return Buffer.from(typeof v === 'string' ? v : JSON.stringify(v))\n    .toString('base64').replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');\n}\nfunction makeJWT(scope) {\n  const now = Math.floor(Date.now()/1000);\n  const hdr  = { alg:'RS256', typ:'JWT' };\n  const pay  = { iss:SA_EMAIL, scope, aud:'https://oauth2.googleapis.com/token', iat:now, exp:now+3600 };\n  const msg  = b64url(hdr)+'.'+b64url(pay);\n  const sign = crypto.createSign('RSA-SHA256');\n  sign.update(msg);\n  return msg+'.'+sign.sign(PRIVATE_KEY,'base64').replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');\n}\n\n// 1. Obtener token\nconst tokenResp = await $helpers.httpRequest({\n  method:'POST', url:'https://oauth2.googleapis.com/token',\n  headers:{'Content-Type':'application/x-www-form-urlencoded'},\n  body:`grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${makeJWT('https://www.googleapis.com/auth/spreadsheets')}`\n});\nconst token = tokenResp.access_token;\n\n// 2. Leer sheet\nconst sheetResp = await $helpers.httpRequest({\n  url:`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}`,\n  headers:{'Authorization':`Bearer ${token}`}\n});\nconst rows = sheetResp.values || [];\nif (rows.length < 2) return [{ json:{ skip:true, reason:'Sin leads', token, sheetId:SHEET_ID } }];\n\nconst headers = rows[0];\nconst now = Date.now();\nconst DAY = 86400000;\n\nconst leads = [];\nfor (let i = 1; i < rows.length; i++) {\n  const r = rows[i];\n  const obj = {};\n  headers.forEach((h,idx) => obj[h] = r[idx] || '');\n  obj._row = i + 1; // fila en el sheet (1-indexed, con header en fila 1)\n\n  const regDate = new Date(obj['Fecha_Registro']).getTime();\n  const daysSince = isNaN(regDate) ? 0 : (now - regDate) / DAY;\n  const d1 = (obj['Email_Enviado_D1'] || '').trim().toUpperCase();\n  const d3 = (obj['Email_Enviado_D3'] || '').trim().toUpperCase();\n  const d7 = (obj['Email_Enviado_D7'] || '').trim().toUpperCase();\n\n  if (d1 !== 'SI') {\n    leads.push({ ...obj, _emailDay:1, _row:obj._row, token, sheetId:SHEET_ID });\n  } else if (d3 !== 'SI' && daysSince >= 3) {\n    leads.push({ ...obj, _emailDay:3, _row:obj._row, token, sheetId:SHEET_ID });\n  } else if (d1 === 'SI' && d3 === 'SI' && d7 !== 'SI' && daysSince >= 7) {\n    leads.push({ ...obj, _emailDay:7, _row:obj._row, token, sheetId:SHEET_ID });\n  }\n}\n\nif (!leads.length) return [{ json:{ skip:true, reason:'Sin leads pendientes', token, sheetId:SHEET_ID } }];\nreturn leads.map(l => ({ json: l }));",
-        "mode": "runOnceForAllItems"
+        "path": "bienvenida-test",
+        "responseMode": "onReceived",
+        "options": {}
       }
     },
     {
-      "id": "n3",
-      "name": "Skip si no hay pendientes",
-      "type": "n8n-nodes-base.if",
+      "id": "n-read",
+      "name": "Leer Contactos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -160,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PENDING",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "gid"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n-f1",
+      "name": "\u00bfNecesita D1?",
+      "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
       "position": [
-        480,
-        0
+        80,
+        -100
       ],
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": false,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ $json.skip }}",
-              "rightValue": true,
+              "leftValue": "={{ $json['Email_Enviado_D1'] }}",
+              "rightValue": "SI",
               "operator": {
-                "type": "boolean",
-                "operation": "equals"
+                "type": "string",
+                "operation": "notStartsWith"
               }
             }
           ],
           "combinator": "and"
-        },
-        "options": {}
+        }
       }
     },
     {
-      "id": "n4",
-      "name": "Armar Contenido Email",
-      "type": "n8n-nodes-base.code",
+      "id": "n-f3",
+      "name": "\u00bfNecesita D3?",
+      "type": "n8n-nodes-base.filter",
       "typeVersion": 2,
       "position": [
-        720,
-        0
+        80,
+        100
       ],
       "parameters": {
-        "jsCode": "const lead = $input.first().json;\nif (lead.skip) return [{ json: lead }];\n\nconst nombre = lead['Nombre'] || 'amigo/a';\nconst dia = lead._emailDay;\n\nconst emails = {\n  1: {\n    subject: `Bienvenido/a, ${nombre} \ud83d\udc4b`,\n    html: `\n<p>Hola <strong>${nombre}</strong>,</p>\n<p>Nos alegra mucho que est\u00e9s aqu\u00ed. Queremos que sepas que a partir de hoy cont\u00e1s con nuestro apoyo en cada paso de tu camino.</p>\n<p><strong>\u00bfQu\u00e9 pod\u00e9s esperar de nosotros?</strong></p>\n<ul>\n  <li>\u2705 Atenci\u00f3n personalizada y \u00e1gil</li>\n  <li>\u2705 Recursos y herramientas pensados para tu crecimiento</li>\n  <li>\u2705 Un equipo real detr\u00e1s de cada mensaje</li>\n</ul>\n<p>Como primer paso, te invitamos a <strong>agendar una llamada gratuita de 15 minutos</strong> para conocerte mejor y ver c\u00f3mo podemos ayudarte.</p>\n<p style=\"text-align:center;margin:24px 0\">\n  <a href=\"https://tracker.machukllc.xyz\" style=\"background:#4F46E5;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold\">\n    Agendar mi llamada \u2192\n  </a>\n</p>\n<p>\u00a1Bienvenido/a al equipo!<br>Victoria</p>`\n  },\n  3: {\n    subject: `${nombre}, \u00bften\u00e9s alguna pregunta?`,\n    html: `\n<p>Hola <strong>${nombre}</strong>,</p>\n<p>Han pasado unos d\u00edas desde que te registraste y quer\u00eda asegurarme de que todo est\u00e9 bien.</p>\n<p><strong>Recordatorio r\u00e1pido de lo que tenemos para vos:</strong></p>\n<ul>\n  <li>\ud83d\ude80 Resultados desde el primer mes</li>\n  <li>\ud83d\udcac Soporte en espa\u00f1ol, sin vueltas</li>\n  <li>\ud83d\udcca Reportes claros y transparentes</li>\n</ul>\n<p>Si ten\u00e9s alguna duda o quer\u00e9s saber m\u00e1s, simplemente <strong>respond\u00e9 este email</strong> y te contesto personalmente.</p>\n<p>Estoy ac\u00e1 para ayudarte.<br>Victoria</p>`\n  },\n  7: {\n    subject: `Una oportunidad especial para vos, ${nombre}`,\n    html: `\n<p>Hola <strong>${nombre}</strong>,</p>\n<p>Llevamos una semana juntos y quiero compartirte algo especial.</p>\n<blockquote style=\"border-left:4px solid #4F46E5;padding-left:16px;color:#555\">\n  <em>\"En el primer mes ya notamos resultados. El equipo estuvo presente en todo momento y eso marc\u00f3 la diferencia.\"</em>\n  <br>\u2014 Carlos M., cliente desde 2024\n</blockquote>\n<p>Esta semana tenemos una oportunidad exclusiva para nuevos miembros. No quiero que te la pierdas.</p>\n<p style=\"text-align:center;margin:24px 0\">\n  <a href=\"https://tracker.machukllc.xyz\" style=\"background:#059669;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold\">\n    Ver mi oportunidad \u2192\n  </a>\n</p>\n<p>Esta oferta vence el viernes. \u00a1Actu\u00e1 esta semana!<br>Victoria</p>`\n  }\n};\n\nconst email = emails[dia];\nreturn [{ json: {\n  ...lead,\n  subject: email.subject,\n  html:    email.html,\n  to:      lead['Email'],\n  from:    'Victoria <Victoriabarriostrejos@gmail.com>'\n}}];"
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json['Email_Enviado_D1'] }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json['Email_Enviado_D3'] }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "string",
+                "operation": "notStartsWith"
+              }
+            },
+            {
+              "id": "c3",
+              "leftValue": "={{ $now.diff(DateTime.fromISO($json['Fecha_Registro']),'days') }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
       }
     },
     {
-      "id": "n5",
-      "name": "Enviar Email",
+      "id": "n-f7",
+      "name": "\u00bfNecesita D7?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        80,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json['Email_Enviado_D1'] }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json['Email_Enviado_D3'] }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            },
+            {
+              "id": "c3",
+              "leftValue": "={{ $json['Email_Enviado_D7'] }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "string",
+                "operation": "notStartsWith"
+              }
+            },
+            {
+              "id": "c4",
+              "leftValue": "={{ $now.diff(DateTime.fromISO($json['Fecha_Registro']),'days') }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "n-e1",
+      "name": "Enviar D1",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        960,
-        0
+        340,
+        -100
       ],
       "credentials": {
         "smtp": {
@@ -97,102 +221,349 @@
       },
       "parameters": {
         "fromEmail": "Victoriabarriostrejos@gmail.com",
-        "toEmail": "={{ $json.to }}",
-        "subject": "={{ $json.subject }}",
+        "toEmail": "={{ $json['Email'] }}",
+        "subject": "=Bienvenido/a, {{ $json['Nombre'] }} \ud83d\udc4b",
         "emailType": "html",
-        "message": "={{ $json.html }}",
+        "message": "<p>Hola <strong>{{ $json['Nombre'] }}</strong>,</p>\n<p>Nos alegra mucho que est\u00e9s aqu\u00ed. Queremos que sepas que a partir de hoy cont\u00e1s con nuestro apoyo en cada paso de tu camino.</p>\n<p><strong>\u00bfQu\u00e9 pod\u00e9s esperar de nosotros?</strong></p>\n<ul>\n  <li>\u2705 Atenci\u00f3n personalizada y \u00e1gil</li>\n  <li>\u2705 Recursos y herramientas pensados para tu crecimiento</li>\n  <li>\u2705 Un equipo real detr\u00e1s de cada mensaje</li>\n</ul>\n<p>Como primer paso, te invitamos a <strong>agendar una llamada gratuita de 15 minutos</strong> para conocerte mejor.</p>\n<p style=\"text-align:center;margin:24px 0\">\n  <a href=\"https://tracker.machukllc.xyz\" style=\"background:#4F46E5;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold\">Agendar mi llamada \u2192</a>\n</p>\n<p>\u00a1Bienvenido/a!<br>Victoria</p>",
         "options": {}
       }
     },
     {
-      "id": "n6",
-      "name": "Actualizar Sheet",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "n-e3",
+      "name": "Enviar D3",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
       "position": [
-        1200,
-        0
+        340,
+        100
       ],
+      "credentials": {
+        "smtp": {
+          "id": "ed8qQqJOrrT7zaVb",
+          "name": "Gmail SMTP - Victoria"
+        }
+      },
       "parameters": {
-        "jsCode": "const lead = $input.first().json;\nif (lead.skip || lead._sendError) {\n  if (lead._sendError) {\n    // Registrar error en col H\n    const col = 'H';\n    await $helpers.httpRequest({\n      method:'PUT',\n      url:`https://sheets.googleapis.com/v4/spreadsheets/${lead.sheetId}/values/Contactos!${col}${lead._row}?valueInputOption=RAW`,\n      headers:{'Authorization':`Bearer ${lead.token}`,'Content-Type':'application/json'},\n      body: JSON.stringify({ values:[[`Error: ${lead._sendError}`]] })\n    });\n  }\n  return [{ json: lead }];\n}\n\nconst now = new Date().toLocaleString('es-AR', { timeZone:'America/Argentina/Buenos_Aires' });\nconst dayColMap = { 1:'D', 3:'E', 7:'F' }; // D=D1, E=D3, F=D7\nconst col = dayColMap[lead._emailDay];\n\nawait $helpers.httpRequest({\n  method:'PUT',\n  url:`https://sheets.googleapis.com/v4/spreadsheets/${lead.sheetId}/values/Contactos!${col}${lead._row}?valueInputOption=RAW`,\n  headers:{'Authorization':`Bearer ${lead.token}`,'Content-Type':'application/json'},\n  body: JSON.stringify({ values:[[`SI - ${now}`]] })\n});\n\nreturn [{ json: { success:true, email:lead['Email'], day:lead._emailDay, row:lead._row, updatedAt:now } }];"
+        "fromEmail": "Victoriabarriostrejos@gmail.com",
+        "toEmail": "={{ $json['Email'] }}",
+        "subject": "={{ $json['Nombre'] }}, \u00bften\u00e9s alguna pregunta?",
+        "emailType": "html",
+        "message": "<p>Hola <strong>{{ $json['Nombre'] }}</strong>,</p>\n<p>Han pasado unos d\u00edas y quer\u00eda asegurarme de que todo est\u00e9 bien.</p>\n<p><strong>Recordatorio r\u00e1pido de lo que tenemos para vos:</strong></p>\n<ul>\n  <li>\ud83d\ude80 Resultados desde el primer mes</li>\n  <li>\ud83d\udcac Soporte en espa\u00f1ol, sin vueltas</li>\n  <li>\ud83d\udcca Reportes claros y transparentes</li>\n</ul>\n<p>Si ten\u00e9s alguna duda, simplemente <strong>respond\u00e9 este email</strong> y te contesto personalmente.</p>\n<p>Estoy ac\u00e1 para ayudarte.<br>Victoria</p>",
+        "options": {}
       }
     },
     {
-      "id": "n7",
-      "name": "Registrar Error",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "n-e7",
+      "name": "Enviar D7",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
       "position": [
-        960,
-        200
+        340,
+        300
       ],
+      "credentials": {
+        "smtp": {
+          "id": "ed8qQqJOrrT7zaVb",
+          "name": "Gmail SMTP - Victoria"
+        }
+      },
       "parameters": {
-        "jsCode": "const e=$input.first().json;\nreturn [{ json:{ ...e, _sendError: e.message||'Error desconocido' } }];"
+        "fromEmail": "Victoriabarriostrejos@gmail.com",
+        "toEmail": "={{ $json['Email'] }}",
+        "subject": "=Una oportunidad especial para vos, {{ $json['Nombre'] }}",
+        "emailType": "html",
+        "message": "<p>Hola <strong>{{ $json['Nombre'] }}</strong>,</p>\n<p>Llevamos una semana juntos y quiero compartirte algo especial.</p>\n<blockquote style=\"border-left:4px solid #4F46E5;padding-left:16px;color:#555\">\n  <em>\"En el primer mes ya notamos resultados. El equipo estuvo presente en todo momento.\"</em><br>\u2014 Carlos M., cliente 2024\n</blockquote>\n<p>Esta semana tenemos una oportunidad exclusiva para nuevos miembros. \u00a1No te la pierdas!</p>\n<p style=\"text-align:center;margin:24px 0\">\n  <a href=\"https://tracker.machukllc.xyz\" style=\"background:#059669;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold\">Ver mi oportunidad \u2192</a>\n</p>\n<p>Esta oferta vence el viernes.<br>Victoria</p>",
+        "options": {}
+      }
+    },
+    {
+      "id": "n-u1",
+      "name": "Marcar D1 Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        600,
+        -100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PENDING",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "gid"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email_Enviado_D1": "={{ 'SI - ' + $now.format('dd/MM/yyyy HH:mm') }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "Email_Enviado_D1",
+              "displayName": "Email_Enviado_D1",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false,
+              "display": true,
+              "type": "string",
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n-u3",
+      "name": "Marcar D3 Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        600,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PENDING",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "gid"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email_Enviado_D3": "={{ 'SI - ' + $now.format('dd/MM/yyyy HH:mm') }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "Email_Enviado_D3",
+              "displayName": "Email_Enviado_D3",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false,
+              "display": true,
+              "type": "string",
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n-u7",
+      "name": "Marcar D7 Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PENDING",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "gid"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email_Enviado_D7": "={{ 'SI - ' + $now.format('dd/MM/yyyy HH:mm') }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "Email_Enviado_D7",
+              "displayName": "Email_Enviado_D7",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false,
+              "display": true,
+              "type": "string",
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
       }
     }
   ],
   "connections": {
-    "Schedule - Cada hora": {
+    "Cada Hora": {
       "main": [
         [
           {
-            "node": "Leer y Clasificar Leads",
+            "node": "Leer Contactos",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Leer y Clasificar Leads": {
+    "Test Webhook": {
       "main": [
         [
           {
-            "node": "Skip si no hay pendientes",
+            "node": "Leer Contactos",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Skip si no hay pendientes": {
+    "Leer Contactos": {
       "main": [
-        [],
         [
           {
-            "node": "Armar Contenido Email",
+            "node": "\u00bfNecesita D1?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "\u00bfNecesita D3?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "\u00bfNecesita D7?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Armar Contenido Email": {
+    "\u00bfNecesita D1?": {
       "main": [
         [
           {
-            "node": "Enviar Email",
+            "node": "Enviar D1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enviar Email": {
+    "\u00bfNecesita D3?": {
       "main": [
         [
           {
-            "node": "Actualizar Sheet",
+            "node": "Enviar D3",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Registrar Error": {
+    "\u00bfNecesita D7?": {
       "main": [
         [
           {
-            "node": "Actualizar Sheet",
+            "node": "Enviar D7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar D1": {
+      "main": [
+        [
+          {
+            "node": "Marcar D1 Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar D3": {
+      "main": [
+        [
+          {
+            "node": "Marcar D3 Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar D7": {
+      "main": [
+        [
+          {
+            "node": "Marcar D7 Enviado",
             "type": "main",
             "index": 0
           }
