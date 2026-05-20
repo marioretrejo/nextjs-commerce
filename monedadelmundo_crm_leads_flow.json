@@ -1,0 +1,538 @@
+{
+  "name": "Moneda del Mundo — CRM Leads → Google Sheets",
+  "nodes": [
+    {
+      "id": "sn1",
+      "name": "📌 SECCIÓN 1 — AUTENTICACIÓN",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -830,
+        80
+      ],
+      "parameters": {
+        "content": "## 🔐 Autenticación\n\n1. GET login page → extrae CSRF token\n2. POST login con credenciales de `$env`\n3. Extrae Bearer token + cookie de sesión\n\n**Variables requeridas:**\n- `CRM_USER`\n- `CRM_PASSWORD`",
+        "height": 340,
+        "width": 380,
+        "color": 4
+      }
+    },
+    {
+      "id": "sn2",
+      "name": "📌 SECCIÓN 2 — EXTRACCIÓN",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        630,
+        80
+      ],
+      "parameters": {
+        "content": "## 📥 Extracción Paginada\n\nLoop interno: PageNumber += 1\nhasta que response < 100 registros.\n\nReintentos: 3x con 5s de delay.\n\n**Endpoint:**\n`/Customer/DynamicCustomerGet`",
+        "height": 340,
+        "width": 320,
+        "color": 3
+      }
+    },
+    {
+      "id": "sn3",
+      "name": "📌 SECCIÓN 3 — DEDUP & SHEETS",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        80
+      ],
+      "parameters": {
+        "content": "## 🗄️ Deduplicación + Sheets\n\nDedup por `CustomerId`.\n\nUpsert en Google Sheets:\nmatch por columna `CustomerId`.\n\n**Variables requeridas:**\n- `SHEET_ID`\n- `SHEET_NAME`\n- `ALERT_EMAIL`",
+        "height": 340,
+        "width": 320,
+        "color": 2
+      }
+    },
+    {
+      "id": "n-trigger",
+      "name": "⏰ Cada Hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -820,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n-getlogin",
+      "name": "GET Login Page (CSRF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -580,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://production-backoffice.monedadelmundo.com/Account/Login",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "n-csrf",
+      "name": "Extraer CSRF Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst html = String(resp.data || resp.body || resp);\nconst headers = resp.headers || {};\n\n// CSRF token del formulario de login\nconst match = html.match(/name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"|value=\"([^\"]+)\"[^>]*name=\"__RequestVerificationToken\"/);\nconst csrfToken = match ? (match[1] || match[2] || '') : '';\n\n// Cookie inicial de sesión (ASP.NET_SessionId o similar)\nconst raw = headers['set-cookie'] || [];\nconst list = Array.isArray(raw) ? raw : [raw];\nconst initialCookie = list.map(c => c.split(';')[0]).filter(Boolean).join('; ');\n\nreturn [{ json: { csrfToken, initialCookie } }];"
+      }
+    },
+    {
+      "id": "n-login",
+      "name": "POST Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://production-backoffice.monedadelmundo.com/Account/Login",
+        "sendBody": true,
+        "contentType": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "UserName",
+              "value": "={{ $env.CRM_USER }}"
+            },
+            {
+              "name": "Password",
+              "value": "={{ $env.CRM_PASSWORD }}"
+            },
+            {
+              "name": "__RequestVerificationToken",
+              "value": "={{ $json.csrfToken }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $json.initialCookie }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "n-auth",
+      "name": "Extraer Bearer + Cookie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const resp  = $input.first().json;\nconst heads = resp.headers || {};\n\n// Cookie de sesión post-login\nconst raw  = heads['set-cookie'] || [];\nconst list = Array.isArray(raw) ? raw : [raw];\nconst sessionCookie = list.map(c => c.split(';')[0]).filter(Boolean).join('; ');\n\n// Bearer token (puede venir en header, body JSON o HTML)\nlet bearerToken = '';\nif (heads['authorization']) {\n  bearerToken = String(heads['authorization']).replace(/^Bearer\\s+/i, '').trim();\n}\nif (!bearerToken) {\n  try {\n    const body = typeof resp.data === 'object' ? resp.data : JSON.parse(String(resp.data || '{}'));\n    bearerToken = body?.token || body?.Token || body?.access_token || body?.bearerToken || '';\n  } catch(_) {}\n}\nif (!bearerToken) {\n  const m = String(resp.data || '').match(/[Bb]earer[:\\s]+([A-Za-z0-9\\-._~+\\/]+=*)/);\n  if (m) bearerToken = m[1];\n}\n\nconst loginSuccess = !!(sessionCookie || bearerToken);\nreturn [{ json: { sessionCookie, bearerToken, loginSuccess, statusCode: resp.statusCode || 0 } }];"
+      }
+    },
+    {
+      "id": "n-iflogin",
+      "name": "¿Login exitoso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.loginSuccess }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "n-email-login",
+      "name": "🚨 Alerta: Login Fallido",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        520
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP Credentials"
+        }
+      },
+      "parameters": {
+        "fromEmail": "={{ $env.ALERT_EMAIL }}",
+        "toEmail": "={{ $env.ALERT_EMAIL }}",
+        "subject": "🚨 [MDM Scraper] Login fallido — {{ $now.toISO() }}",
+        "emailType": "text",
+        "message": "El workflow 'Moneda del Mundo CRM Leads' no pudo autenticarse.\n\nTimestamp: {{ $now.toISO() }}\nStatus: {{ $json.statusCode }}\n\nVerificá las variables CRM_USER y CRM_PASSWORD en N8n Settings > Variables.",
+        "options": {}
+      }
+    },
+    {
+      "id": "n-stop",
+      "name": "⛔ Detener",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        640,
+        520
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n-paginate",
+      "name": "📥 Loop Paginación (todas las páginas)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const { bearerToken, sessionCookie } = $input.first().json;\nconst today = new Date();\nconst dd = String(today.getDate()).padStart(2,'0');\nconst mm = String(today.getMonth()+1).padStart(2,'0');\nconst yyyy = today.getFullYear();\nconst toDate = `${dd}/${mm}/${yyyy}`;\n\nconst BASE_PARAMS = {\n  PageSize:'100', CustomerType:'-1', StageId:'-1', Country:'all',\n  FromDate:'01/01/2018', ToDate:toDate, CustomerProfileId:'-1',\n  Search:'', CustomerSearchId:'0', SalesBy:'', ReportingUserId:'0',\n  SortColumn:'CUST.InsertedOn', SortOrder:'DESC', BOApprovalStatus:'-1',\n  RiskClassification:'-1', IsPEP:'-1', FromLastCallTime:'', ToLastCallTime:'',\n  CampaignCode:'-1', SubCampaignCode:'-1', SubCampaign2Code:'-1',\n  FunnelCode:'-1', SubsourceCode:'-1', FromLastEffectiveCallTime:'',\n  ToLastEffectiveCallTime:'', IsEligible:'-1', Gender:'-1', Nationality:'-1',\n  DateOfApprovalFromDate:'', DateOfApprovalToDate:'', RefferedBy:'-1',\n  EducationLevel:'-1', EmployementStatus:'-1', ApprovedBy:'0', Potential:'-1',\n  Source:'-1', Affiliate:'-1', RegistrationType:'-1', DeclinedType:'-1',\n  JobTitle:'-1', GrossAnnualIncome:'-1', SourceOfFund:'-1', Proffesion:'-1',\n  AnnualTurnOver:'-1', OutComeIds:'0', RetentionalStatusIds:'0',\n  LastRetentionEffectiveCallFromDate:'', LastRetentionEffectiveCallToDate:'',\n  Tags:'0', FirstDepositFromDate:'', FirstDepositToDate:'',\n  LastDepositFromDate:'', LastDepositToDate:'', MinTotalDeposit:'',\n  MaxTotalDeposit:'', MinTotalWithdraw:'', MaxTotalWithdraw:'',\n};\n\nconst allLeads = [];\nlet pageNumber  = 1;\nlet hasMore     = true;\n\nwhile (hasMore) {\n  const params = new URLSearchParams({ ...BASE_PARAMS, PageNumber: String(pageNumber) });\n  let resp;\n  for (let attempt = 1; attempt <= 3; attempt++) {\n    try {\n      resp = await $helpers.httpRequest({\n        method: 'POST',\n        url: 'https://production-backoffice.monedadelmundo.com/Customer/DynamicCustomerGet',\n        headers: {\n          'Authorization': `Bearer ${bearerToken}`,\n          'Cookie': sessionCookie,\n          'X-Requested-With': 'XMLHttpRequest',\n          'Isajax': 'true',\n          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',\n          'Origin': 'https://production-backoffice.monedadelmundo.com',\n          'Referer': 'https://production-backoffice.monedadelmundo.com/Customer/ClientList',\n        },\n        body: params.toString(),\n      });\n      break;\n    } catch (e) {\n      if (attempt === 3) throw new Error(`Pág ${pageNumber} falló 3 veces: ${e.message}`);\n      await new Promise(r => setTimeout(r, 5000 * attempt));\n    }\n  }\n\n  // Detectar el array de leads (distintos CRMs usan distintas keys)\n  let leads = [];\n  if (Array.isArray(resp)) {\n    leads = resp;\n  } else if (resp && typeof resp === 'object') {\n    leads = resp.data || resp.Data || resp.customers || resp.Customers ||\n            resp.result || resp.Result || resp.items || resp.Items || [];\n  }\n  if (!Array.isArray(leads)) leads = [];\n\n  allLeads.push(...leads);\n  console.log(`Pág ${pageNumber}: ${leads.length} leads (total: ${allLeads.length})`);\n  hasMore = leads.length === 100;\n  pageNumber++;\n}\n\nif (!allLeads.length) return [{ json: { totalLeads: 0, leads: [] } }];\nreturn allLeads.map(lead => ({ json: lead }));",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "n-checkempty",
+      "name": "Verificar cantidad de leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst isEmpty = items.length === 0 || (items.length === 1 && items[0].json?.totalLeads === 0);\nreturn [{ json: { isEmpty, count: isEmpty ? 0 : items.length } }];",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "n-ifempty",
+      "name": "¿0 leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.isEmpty }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "n-email-empty",
+      "name": "⚠️ Alerta: 0 Leads Extraídos",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        520
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP Credentials"
+        }
+      },
+      "parameters": {
+        "fromEmail": "={{ $env.ALERT_EMAIL }}",
+        "toEmail": "={{ $env.ALERT_EMAIL }}",
+        "subject": "⚠️ [MDM Scraper] 0 leads extraídos — {{ $now.toISO() }}",
+        "emailType": "text",
+        "message": "El scraper no encontró leads en esta ejecución.\n\nTimestamp: {{ $now.toISO() }}\n\nPosibles causas:\n- Sesión expirada\n- Cambio en el endpoint del CRM\n- Sin registros nuevos\n\nVerificá manualmente: https://production-backoffice.monedadelmundo.com",
+        "options": {}
+      }
+    },
+    {
+      "id": "n-dedup",
+      "name": "🔎 Deduplicar por CustomerId",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const seen = new Set();\nconst result = $input.all().filter(item => {\n  const id = String(\n    item.json?.CustomerId || item.json?.customerId ||\n    item.json?.Id         || item.json?.id         || ''\n  );\n  if (!id || seen.has(id)) return false;\n  seen.add(id);\n  return true;\n});\nconsole.log(`Deduplicación: ${$input.all().length} → ${result.length} registros únicos`);\nreturn result;"
+      }
+    },
+    {
+      "id": "n-sheets",
+      "name": "📊 Google Sheets — Upsert leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $env.SHEET_NAME }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "CustomerId"
+          ],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n-log",
+      "name": "✅ Log Éxito",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const count = $input.all().length;\nconsole.log(`✅ ${count} leads guardados en Google Sheets — ${new Date().toISOString()}`);\nreturn [{ json: { success: true, leadsProcessed: count, timestamp: new Date().toISOString() } }];"
+      }
+    }
+  ],
+  "connections": {
+    "⏰ Cada Hora": {
+      "main": [
+        [
+          {
+            "node": "GET Login Page (CSRF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Login Page (CSRF)": {
+      "main": [
+        [
+          {
+            "node": "Extraer CSRF Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer CSRF Token": {
+      "main": [
+        [
+          {
+            "node": "POST Login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Login": {
+      "main": [
+        [
+          {
+            "node": "Extraer Bearer + Cookie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Bearer + Cookie": {
+      "main": [
+        [
+          {
+            "node": "¿Login exitoso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Login exitoso?": {
+      "main": [
+        [
+          {
+            "node": "📥 Loop Paginación (todas las páginas)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🚨 Alerta: Login Fallido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚨 Alerta: Login Fallido": {
+      "main": [
+        [
+          {
+            "node": "⛔ Detener",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Loop Paginación (todas las páginas)": {
+      "main": [
+        [
+          {
+            "node": "Verificar cantidad de leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar cantidad de leads": {
+      "main": [
+        [
+          {
+            "node": "¿0 leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿0 leads?": {
+      "main": [
+        [
+          {
+            "node": "⚠️ Alerta: 0 Leads Extraídos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔎 Deduplicar por CustomerId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔎 Deduplicar por CustomerId": {
+      "main": [
+        [
+          {
+            "node": "📊 Google Sheets — Upsert leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 Google Sheets — Upsert leads": {
+      "main": [
+        [
+          {
+            "node": "✅ Log Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
