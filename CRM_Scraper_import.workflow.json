@@ -1,0 +1,332 @@
+{
+  "name": "CRM Scraper - tracker.machukllc.xyz",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Trigger 11am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        -100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 11 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Trigger 3pm",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        50
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 15 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Trigger 6pm",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Login al CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        50
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://tracker.machukllc.xyz/login.php",
+        "sendBody": true,
+        "contentType": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "conversion@tresenlinea.xyz"
+            },
+            {
+              "name": "password",
+              "value": "24731840Mt."
+            },
+            {
+              "name": "theme",
+              "value": ""
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Extraer Cookie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        50
+      ],
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst raw  = resp.headers?.['set-cookie'] || [];\nconst list = Array.isArray(raw) ? raw : [raw];\nconst cookie = list.map(c => c.split(';')[0]).filter(Boolean).join('; ');\nif (!cookie) throw new Error('Login fallido - no se recibió cookie de sesión');\nreturn [{ json: { cookie } }];"
+      }
+    },
+    {
+      "id": "n6",
+      "name": "Obtener Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        120,
+        50
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://tracker.machukllc.xyz/crm.new.php",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $json.cookie }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n7",
+      "name": "Parsear Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        50
+      ],
+      "parameters": {
+        "jsCode": "const html = String($input.first().json);\nconst now  = new Date().toISOString();\n\n// Extraer datos de las filas Tabulator via regex sobre el HTML\nconst emailRx  = /tabulator-field=\"email\"[^>]*>\\s*<a[^>]*>([^<]+)<\\/a>/g;\nconst nameRx   = /tabulator-field=\"first_name\"[^>]*>([^<]+)</g;\nconst lastRx   = /tabulator-field=\"last_name\"[^>]*>([^<]+)</g;\nconst phoneRx  = /tabulator-field=\"phone\"[^>]*>\\s*<a[^>]*>([^<]+)<\\/a>/g;\nconst countryRx= /tabulator-field=\"country\"[^>]*>([^<]+)</g;\nconst brandRx  = /tabulator-field=\"brand\"[^>]*>([^<\\n]{1,40})/g;\nconst dateRx   = /tabulator-field=\"creation_date\"[^>]*>([^<]+)</g;\n\nconst extract = (rx, src) => { const r=[]; let m; while((m=rx.exec(src))!==null) r.push(m[1].trim()); return r; };\n\nconst emails   = extract(emailRx,   html);\nconst names    = extract(nameRx,    html);\nconst lastnames= extract(lastRx,    html);\nconst phones   = extract(phoneRx,   html);\nconst countries= extract(countryRx, html);\nconst brands   = extract(brandRx,   html);\nconst dates    = extract(dateRx,    html);\n\nif (!emails.length) return [{ json: { skip: true, reason: 'Sin leads en esta ejecución', timestamp: now } }];\n\nreturn emails.map((email, i) => ({\n  json: {\n    email,\n    nombre:    (names[i]    || '') + ' ' + (lastnames[i] || ''),\n    telefono:  phones[i]   || '',\n    pais:      countries[i]|| '',\n    brand:     brands[i]   || '',\n    fecha:     dates[i]    || '',\n    scrapeado: now,\n    fuente:    'tracker.machukllc.xyz'\n  }\n}));"
+      }
+    },
+    {
+      "id": "n8",
+      "name": "Filtrar vacíos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        50
+      ],
+      "parameters": {
+        "jsCode": "if ($input.first().json.skip) {\n  console.log('Sin leads pendientes:', $input.first().json.reason);\n  return [];\n}\nreturn $input.all();"
+      }
+    },
+    {
+      "id": "n9",
+      "name": "Guardar en Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        820,
+        50
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1-cPywxrJYYI0qhACMWea1MVK3y36X1PNyJExZzWm8sA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "gid"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Log resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        50
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconsole.log(`✓ ${items.length} leads guardados en Google Sheets — ${new Date().toISOString()}`);\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Trigger 11am": {
+      "main": [
+        [
+          {
+            "node": "Login al CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger 3pm": {
+      "main": [
+        [
+          {
+            "node": "Login al CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger 6pm": {
+      "main": [
+        [
+          {
+            "node": "Login al CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login al CRM": {
+      "main": [
+        [
+          {
+            "node": "Extraer Cookie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Cookie": {
+      "main": [
+        [
+          {
+            "node": "Obtener Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Leads": {
+      "main": [
+        [
+          {
+            "node": "Parsear Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Leads": {
+      "main": [
+        [
+          {
+            "node": "Filtrar vacíos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar vacíos": {
+      "main": [
+        [
+          {
+            "node": "Guardar en Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Log resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
