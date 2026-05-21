@@ -1,0 +1,459 @@
+{
+  "name": "Laura Voice Agent",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Schedule - Poll Leads",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "seconds", "secondsInterval": 30 }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Get Pendiente Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [240, 0],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Estado", "lookupValue": "pendiente" }
+          ]
+        },
+        "options": { "returnFirstMatch": false }
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n3",
+      "name": "Has Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.Teléfono }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Lock Row - llamando",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [720, -80],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "llamando",
+            "Último_Intento": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": ["Teléfono"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n5",
+      "name": "ElevenLabs - Dispatch Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, -80],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/convai/conversations/outbound",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "xi-api-key", "value": "={{ $env.ELEVENLABS_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"agent_id\": \"{{ $env.ELEVENLABS_AGENT_ID }}\",\n  \"customer\": {\n    \"phone_number\": \"{{ $json.Teléfono }}\",\n    \"name\": \"{{ $json.Nombre }}\"\n  },\n  \"conversation_initiation_client_data\": {\n    \"dynamic_variables\": {\n      \"nombre\": \"{{ $json.Nombre }}\",\n      \"telefono\": \"{{ $json.Teléfono }}\"\n    }\n  }\n}",
+        "options": {
+          "response": { "response": { "fullResponse": false } }
+        }
+      }
+    },
+    {
+      "id": "n6",
+      "name": "Write Conv_ID",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1200, -80],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Conv_ID": "={{ $json.conversation_id }}"
+          },
+          "matchingColumns": ["Teléfono"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n7",
+      "name": "API Error - Mark error",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [960, 120],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "error",
+            "Resultado": "=ElevenLabs API error"
+          },
+          "matchingColumns": ["Teléfono"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n8",
+      "name": "Webhook - ElevenLabs Events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "parameters": {
+        "path": "elevenlabs",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "responseData": "={ \"ok\": true }"
+      },
+      "webhookId": "laura-elevenlabs"
+    },
+    {
+      "id": "n9",
+      "name": "Determine Outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [240, 300],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "calificado",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.analysis.call_successful }}",
+                    "operator": { "type": "boolean", "operation": "true" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "no_contesta",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.status }}",
+                    "rightValue": "no_answer",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "rechazado",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.status }}",
+                    "rightValue": "rejected",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Update Sheet - calificado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [480, 200],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "calificado",
+            "Resultado": "calificado",
+            "Transcript": "={{ $json.body.transcript }}",
+            "Último_Intento": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": ["Conv_ID"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n11",
+      "name": "Transfer to CallCenter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.elevenlabs.io/v1/convai/conversations/{{ $json.body.conversation_id }}/transfer",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "xi-api-key", "value": "={{ $env.ELEVENLABS_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={ \"phone_number\": \"{{ $env.SIP_CALLCENTER_NUMBER }}\" }",
+        "options": {}
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Update Sheet - transferido",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [960, 200],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "transferido",
+            "Resultado": "=Transferido a callcenter"
+          },
+          "matchingColumns": ["Conv_ID"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n13",
+      "name": "Update Sheet - no_contesta",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [480, 320],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "pendiente",
+            "Resultado": "no_contesta",
+            "Último_Intento": "={{ new Date().toISOString() }}",
+            "Intentos": "={{ ($json.body.metadata?.intentos || 0) + 1 }}"
+          },
+          "matchingColumns": ["Conv_ID"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n14",
+      "name": "Update Sheet - rechazado/error",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [480, 440],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "={{ $json.body.status === 'rejected' ? 'rechazado' : 'error' }}",
+            "Resultado": "={{ $json.body.status }}",
+            "Transcript": "={{ $json.body.transcript || '' }}",
+            "Último_Intento": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": ["Conv_ID"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "id": "n15",
+      "name": "Webhook - Laura Transfer Tool",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 560],
+      "parameters": {
+        "path": "transfer",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "responseData": "={ \"ok\": true }"
+      },
+      "webhookId": "laura-transfer"
+    },
+    {
+      "id": "n16",
+      "name": "Is Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [240, 560],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.qualified }}",
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "n17",
+      "name": "Transfer Now",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 520],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.elevenlabs.io/v1/convai/conversations/{{ $json.body.conversation_id }}/transfer",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "xi-api-key", "value": "={{ $env.ELEVENLABS_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={ \"phone_number\": \"{{ $env.SIP_CALLCENTER_NUMBER }}\" }",
+        "options": {}
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Mark transferido (tool)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [720, 520],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Estado": "transferido",
+            "Resultado": "=Transferido (tool call)"
+          },
+          "matchingColumns": ["Conv_ID"]
+        },
+        "options": {}
+      },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Schedule - Poll Leads": {
+      "main": [[{ "node": "Get Pendiente Leads", "type": "main", "index": 0 }]]
+    },
+    "Get Pendiente Leads": {
+      "main": [[{ "node": "Has Leads?", "type": "main", "index": 0 }]]
+    },
+    "Has Leads?": {
+      "main": [
+        [{ "node": "Lock Row - llamando", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Lock Row - llamando": {
+      "main": [[{ "node": "ElevenLabs - Dispatch Call", "type": "main", "index": 0 }]]
+    },
+    "ElevenLabs - Dispatch Call": {
+      "main": [[{ "node": "Write Conv_ID", "type": "main", "index": 0 }]],
+      "error": [[{ "node": "API Error - Mark error", "type": "main", "index": 0 }]]
+    },
+    "Webhook - ElevenLabs Events": {
+      "main": [[{ "node": "Determine Outcome", "type": "main", "index": 0 }]]
+    },
+    "Determine Outcome": {
+      "main": [
+        [{ "node": "Update Sheet - calificado", "type": "main", "index": 0 }],
+        [{ "node": "Update Sheet - no_contesta", "type": "main", "index": 0 }],
+        [{ "node": "Update Sheet - rechazado/error", "type": "main", "index": 0 }],
+        [{ "node": "Update Sheet - rechazado/error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Sheet - calificado": {
+      "main": [[{ "node": "Transfer to CallCenter", "type": "main", "index": 0 }]]
+    },
+    "Transfer to CallCenter": {
+      "main": [[{ "node": "Update Sheet - transferido", "type": "main", "index": 0 }]]
+    },
+    "Webhook - Laura Transfer Tool": {
+      "main": [[{ "node": "Is Qualified?", "type": "main", "index": 0 }]]
+    },
+    "Is Qualified?": {
+      "main": [
+        [{ "node": "Transfer Now", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Transfer Now": {
+      "main": [[{ "node": "Mark transferido (tool)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": ""
+  }
+}
