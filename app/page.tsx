@@ -1,5 +1,2 @@
-import { redirect } from 'next/navigation';
+export { default } from './(marketing)/page';
 
-export default function RootPage() {
-  redirect('/login');
-}

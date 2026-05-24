@@ -3,19 +3,57 @@
 @plugin "@tailwindcss/container-queries";
 @plugin "@tailwindcss/typography";
 
+/* ── VoiceOS Design System ─────────────────────────────────────────────────
+   Strict monochrome palette. Zero border-radius. Geist Sans throughout.
+   ──────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Radii – none */
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-full: 0px;
+
+  /* Font */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* Monochrome colour tokens */
+  --color-background: #ffffff;
+  --color-foreground: #000000;
+  --color-border: #000000;
+  --color-muted: #f5f5f5;
+  --color-muted-fg: #737373;
+  --color-card: #ffffff;
+  --color-card-fg: #000000;
+  --color-accent: #f5f5f5;
+  --color-accent-fg: #000000;
+  --color-destructive: #000000;
+  --color-destructive-fg: #ffffff;
+  --color-input: #000000;
+  --color-ring: #000000;
+}
+
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
+    border-color: var(--color-border);
+    box-sizing: border-box;
   }
-}
 
-@media (prefers-color-scheme: dark) {
   html {
-    color-scheme: dark;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
   }
 }
 
@@ -27,6 +65,8 @@
 
 a,
 input,
-button {
-  @apply focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-50 dark:focus-visible:ring-neutral-600 dark:focus-visible:ring-offset-neutral-900;
+button,
+select,
+textarea {
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-white;
 }
