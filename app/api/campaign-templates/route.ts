@@ -9,14 +9,16 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const workspaceId = searchParams.get('workspace_id');
+  if (!workspaceId) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
 
-  // RLS scopes to user's workspaces; optional filter narrows to one workspace
-  let query = supabase.from('integrations').select('*').order('type');
-  if (workspaceId) query = query.eq('workspace_id', workspaceId);
+  const { data, error } = await supabase
+    .from('campaign_templates')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: false });
 
-  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ integrations: data ?? [] });
+  return NextResponse.json({ templates: data ?? [] });
 }
 
 export async function POST(req: Request) {
@@ -25,22 +27,22 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json() as Record<string, unknown>;
-  if (!body['workspace_id']) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
+  const workspaceId = body['workspace_id'] as string;
+  if (!workspaceId) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
 
-  // Verify workspace ownership via RLS
-  const { data: ws } = await supabase.from('workspaces').select('id').eq('id', body['workspace_id'] as string).single();
+  // Verify access
+  const { data: ws } = await supabase.from('workspaces').select('id').eq('id', workspaceId).single();
   if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
   const admin = createAdminClient();
-  const { data, error } = await admin.from('integrations').upsert({
-    workspace_id: body['workspace_id'],
-    type: body['type'],
-    status: body['status'] ?? 'connected',
-    credentials: body['credentials'] ?? {},
-    webhook_url: body['webhook_url'] ?? null,
-    webhook_events: body['webhook_events'] ?? []
-  }, { onConflict: 'workspace_id,type' }).select().single();
+  const { data, error } = await admin.from('campaign_templates').insert({
+    workspace_id: workspaceId,
+    name: body['name'],
+    description: body['description'] ?? null,
+    agent_id: body['agent_id'] ?? null,
+    config: body['config'] ?? {},
+  }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(data, { status: 201 });
 }

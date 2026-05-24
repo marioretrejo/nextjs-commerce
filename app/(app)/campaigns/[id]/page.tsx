@@ -36,28 +36,47 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
 
+  async function refetchCampaign() {
+    const r = await fetch(`/api/campaigns/${id}`);
+    if (r.ok) setCampaign(await r.json() as Campaign);
+  }
+
+  async function refetchContacts() {
+    const r = await fetch(`/api/campaigns/${id}/contacts`);
+    if (r.ok) setContacts(await r.json() as Contact[]);
+  }
+
   useEffect(() => {
     async function load() {
-      const [cRes, coRes] = await Promise.all([
-        fetch(`/api/campaigns?workspace_id=_`).then(() => fetch(`/api/campaigns/${id}`)),
+      const [campRes, coRes] = await Promise.all([
+        fetch(`/api/campaigns/${id}`),
         fetch(`/api/campaigns/${id}/contacts`)
       ]);
-      // Fetch campaign directly
-      const campRes = await fetch(`/api/campaigns/${id}`);
       if (campRes.ok) setCampaign(await campRes.json() as Campaign);
       if (coRes.ok) setContacts(await coRes.json() as Contact[]);
       setLoading(false);
     }
     load();
 
-    // Realtime for contacts
     const supabase = createClient();
-    const channel = supabase.channel(`campaign-${id}`)
+
+    // Realtime for contacts
+    const contactsChannel = supabase.channel(`campaign-contacts-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_contacts', filter: `campaign_id=eq.${id}` },
-        () => { fetch(`/api/campaigns/${id}/contacts`).then((r) => r.json()).then((d) => setContacts(d as Contact[])); })
+        () => { refetchContacts(); refetchCampaign(); })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Realtime for campaign row (metrics updates)
+    const campaignChannel = supabase.channel(`campaign-row-${id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'campaigns', filter: `id=eq.${id}` },
+        (payload) => { setCampaign((c) => c ? { ...c, ...(payload.new as Partial<Campaign>) } : c); })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(contactsChannel);
+      supabase.removeChannel(campaignChannel);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function launch() {
@@ -174,10 +193,4 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       </Card>
     </div>
   );
-}
-
-// Also need a route for single campaign
-async function getCampaign(id: string) {
-  // stub — the page uses client-side fetch
-  return null;
 }

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronLeft, ChevronRight, Loader2, Play, Volume2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Play, Plus, Trash2, Volume2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -44,6 +44,7 @@ export default function NewAgentPage() {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState('');
+  const [dynVars, setDynVars] = useState<{ key: string; value: string }[]>([]);
 
   const [form, setForm] = useState({
     name: '',
@@ -103,6 +104,13 @@ export default function NewAgentPage() {
 
   function setField<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: val }));
+  }
+
+  function updateDynVars(entries: { key: string; value: string }[]) {
+    setDynVars(entries);
+    const record: Record<string, string> = {};
+    entries.filter(e => e.key).forEach(e => { record[e.key] = e.value; });
+    setField('dynamic_variables', record);
   }
 
   function toggleDay(day: string) {
@@ -409,6 +417,55 @@ export default function NewAgentPage() {
                     <p className="text-sm font-medium">{label}</p>
                     <p className="text-xs text-[#6b6b6b]">{desc}</p>
                   </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Dynamic Variables</Label>
+                  <p className="text-xs text-[#6b6b6b]">Variables injected into prompts at call time.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateDynVars([...dynVars, { key: '', value: '' }])}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+              </div>
+              {dynVars.map((entry, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <Input
+                    placeholder="key"
+                    value={entry.key}
+                    onChange={(e) => {
+                      const next = [...dynVars];
+                      next[idx] = { ...next[idx]!, key: e.target.value };
+                      updateDynVars(next);
+                    }}
+                    className="font-mono text-sm"
+                  />
+                  <Input
+                    placeholder="value"
+                    value={entry.value}
+                    onChange={(e) => {
+                      const next = [...dynVars];
+                      next[idx] = { ...next[idx]!, value: e.target.value };
+                      updateDynVars(next);
+                    }}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => updateDynVars(dynVars.filter((_, i) => i !== idx))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-[#6b6b6b]" />
+                  </Button>
                 </div>
               ))}
             </div>

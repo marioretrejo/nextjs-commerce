@@ -6,11 +6,14 @@ import {
   Bell,
   Bot,
   CreditCard,
+  DollarSign,
   Globe,
+  Key,
   LayoutDashboard,
   Megaphone,
   Phone,
   PhoneCall,
+  Radio,
   Settings,
   Shield,
   Star,
@@ -20,17 +23,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
-  { href: '/dashboard',    label: 'Dashboard',   icon: LayoutDashboard },
-  { href: '/agents',       label: 'Agents',       icon: Bot },
-  { href: '/campaigns',    label: 'Campaigns',    icon: Megaphone },
-  { href: '/calls',        label: 'Calls',        icon: PhoneCall },
-  { href: '/analytics',   label: 'Analytics',    icon: BarChart2 },
-  { href: '/quality',     label: 'Quality',      icon: Star },
-  { href: '/numbers',     label: 'Numbers',      icon: Phone },
-  { href: '/integrations',label: 'Integrations', icon: Globe },
-  { href: '/team',        label: 'Team',         icon: Users },
-  { href: '/billing',     label: 'Billing',      icon: CreditCard },
-  { href: '/settings',    label: 'Settings',     icon: Settings },
+  { href: '/dashboard',       label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/agents',          label: 'Agents',        icon: Bot },
+  { href: '/campaigns',       label: 'Campaigns',     icon: Megaphone },
+  { href: '/calls',           label: 'Calls',         icon: PhoneCall },
+  { href: '/calls/live',      label: 'Live Monitor',  icon: Radio, pulse: true },
+  { href: '/analytics',       label: 'Analytics',     icon: BarChart2 },
+  { href: '/analytics/costs', label: 'Cost Analytics',icon: DollarSign },
+  { href: '/quality',         label: 'Quality',       icon: Star },
+  { href: '/numbers',         label: 'Numbers',       icon: Phone },
+  { href: '/integrations',    label: 'Integrations',  icon: Globe },
+  { href: '/team',            label: 'Team',          icon: Users },
+  { href: '/billing',         label: 'Billing',       icon: CreditCard },
+  { href: '/settings',        label: 'Settings',      icon: Settings },
+  { href: '/settings/api-keys', label: 'API Keys',    icon: Key },
 ];
 
 const adminItems = [
@@ -53,8 +59,8 @@ export function Sidebar({ isSuperadmin = false }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/');
+        {navItems.map(({ href, label, icon: Icon, pulse }) => {
+          const active = pathname === href || (href !== '/calls' && href !== '/analytics' && pathname.startsWith(href + '/'));
           return (
             <Link
               key={href}
@@ -68,6 +74,12 @@ export function Sidebar({ isSuperadmin = false }: SidebarProps) {
             >
               <Icon className="h-4 w-4 shrink-0" />
               {label}
+              {pulse && (
+                <span className="ml-auto flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                </span>
+              )}
             </Link>
           );
         })}

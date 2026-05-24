@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import type { Agent } from '@/lib/supabase/types';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -21,6 +21,17 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<Partial<Agent>>(agent);
+
+  const [dynVars, setDynVars] = useState<{ key: string; value: string }[]>(
+    Object.entries(agent.dynamic_variables ?? {}).map(([key, value]) => ({ key, value }))
+  );
+
+  function updateDynVars(entries: { key: string; value: string }[]) {
+    setDynVars(entries);
+    const record: Record<string, string> = {};
+    entries.filter(e => e.key).forEach(e => { record[e.key] = e.value; });
+    setForm(f => ({ ...f, dynamic_variables: record }));
+  }
 
   function setField<K extends keyof Agent>(key: K, val: Agent[K]) {
     setForm((f) => ({ ...f, [key]: val }));
@@ -153,6 +164,53 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                   <Label>{label}</Label>
                 </div>
               ))}
+
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center justify-between">
+                  <Label>Dynamic Variables</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateDynVars([...dynVars, { key: '', value: '' }])}
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add
+                  </Button>
+                </div>
+                <p className="text-xs text-[#6b6b6b]">Variables injected into the agent's prompts at call time.</p>
+                {dynVars.map((entry, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="key"
+                      value={entry.key}
+                      onChange={(e) => {
+                        const next = [...dynVars];
+                        next[idx] = { ...next[idx]!, key: e.target.value };
+                        updateDynVars(next);
+                      }}
+                      className="font-mono text-sm"
+                    />
+                    <Input
+                      placeholder="value"
+                      value={entry.value}
+                      onChange={(e) => {
+                        const next = [...dynVars];
+                        next[idx] = { ...next[idx]!, value: e.target.value };
+                        updateDynVars(next);
+                      }}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => updateDynVars(dynVars.filter((_, i) => i !== idx))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-[#6b6b6b]" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

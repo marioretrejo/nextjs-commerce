@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { deliverWebhook } from '@/lib/webhooks/deliver';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
     else sentiment = 'neutral';
 
     // Insert call record
-    await admin.from('calls').insert({
+    const { data: insertedCall } = await admin.from('calls').insert({
       workspace_id: agentRow.workspace_id,
       agent_id: agentRow.id,
       campaign_id: (call.metadata?.['campaign_id'] as string | null) ?? null,
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
       extracted_objections: customData['objections'] as string | null ?? null,
       retell_call_id: call.call_id,
       cost_usd: (durationSeconds / 60) * 0.05
-    });
+    }).select().single();
 
     // Update campaign contact if applicable
     const campaignId = call.metadata?.['campaign_id'] as string | null;
@@ -119,6 +120,20 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({ retell_call_id: call.call_id, agent_id: agentRow.id, workspace_id: agentRow.workspace_id })
       }).catch(console.error);
+    }
+
+    // Deliver outbound webhooks (fire-and-forget)
+    const callPayload = {
+      call_id: call.call_id,
+      agent_id: agentRow.id,
+      outcome,
+      sentiment,
+      duration_seconds: durationSeconds,
+      campaign_id: campaignId,
+    };
+    deliverWebhook(agentRow.workspace_id, 'call.completed', callPayload).catch(console.error);
+    if (outcome === 'converted') {
+      deliverWebhook(agentRow.workspace_id, 'call.converted', { ...callPayload, contact: insertedCall }).catch(console.error);
     }
   }
 

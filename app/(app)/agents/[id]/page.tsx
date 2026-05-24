@@ -38,6 +38,12 @@ export default async function AgentEditPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
         <Badge variant={agent.status === 'active' ? 'default' : 'secondary'}>{agent.status}</Badge>
+        <Link href={`/agents/${agent.id}/flow`}>
+          <Button variant="outline" size="sm">Flow Builder</Button>
+        </Link>
+        <Link href={`/agents/${agent.id}/widget`}>
+          <Button variant="outline" size="sm">Widget</Button>
+        </Link>
         <Link href={`/agents/${agent.id}/test`}>
           <Button variant="secondary" size="sm">Test Call</Button>
         </Link>

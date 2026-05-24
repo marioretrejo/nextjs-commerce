@@ -8,9 +8,11 @@ const PUBLIC_PATHS = [
   '/register',
   '/forgot-password',
   '/verify-email',
+  '/widget',
   '/api/webhooks/retell',
   '/api/webhooks/stripe',
-  '/api/webhooks/elevenlabs'
+  '/api/webhooks/elevenlabs',
+  '/api/health',
 ];
 
 const ADMIN_PATHS = ['/admin'];

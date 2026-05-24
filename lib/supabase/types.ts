@@ -43,6 +43,7 @@ export interface Workspace {
   minutes_limit: number;
   is_white_label: boolean;
   custom_domain: string | null;
+  branding: WorkspaceBranding | null;
   created_at: string;
 }
 
@@ -57,6 +58,43 @@ export interface WorkspaceMember {
   invited_at: string;
   joined_at: string | null;
   user?: User;
+}
+
+export interface FlowNode {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: Record<string, unknown>;
+}
+
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
+export interface FlowJSON {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
+export interface WorkspaceBranding {
+  primary_color: string;
+  logo_url: string | null;
+  app_name: string;
+  favicon_url?: string | null;
+  custom_css?: string | null;
+}
+
+export interface CampaignTemplate {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  agent_id: string | null;
+  config: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface Agent {
@@ -97,6 +135,8 @@ export interface Agent {
   status: AgentStatus;
   retell_agent_id: string | null;
   elevenlabs_agent_id: string | null;
+  flow_json: FlowJSON | null;
+  widget_config: Record<string, unknown> | null;
   avg_qa_score: number;
   total_calls: number;
   created_at: string;
@@ -151,6 +191,9 @@ export interface Campaign {
   completed_contacts: number;
   converted_contacts: number;
   retell_batch_call_id: string | null;
+  ab_enabled: boolean;
+  ab_agent_id: string | null;
+  ab_split_ratio: number;
   created_at: string;
   agent?: Agent;
 }
@@ -269,6 +312,7 @@ export type Database = {
       notifications: { Row: Notification; Insert: Omit<Notification, 'id' | 'created_at'>; Update: Partial<Notification> };
       billing_invoices: { Row: BillingInvoice; Insert: Omit<BillingInvoice, 'id' | 'created_at'>; Update: Partial<BillingInvoice> };
       api_keys: { Row: ApiKey; Insert: Omit<ApiKey, 'id' | 'created_at'>; Update: Partial<ApiKey> };
+      campaign_templates: { Row: CampaignTemplate; Insert: Omit<CampaignTemplate, 'id' | 'created_at'>; Update: Partial<CampaignTemplate> };
     };
   };
 };

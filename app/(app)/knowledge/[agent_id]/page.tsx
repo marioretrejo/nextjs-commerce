@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { createClient } from '@/lib/supabase/client';
 import { ArrowLeft, FileText, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import Link from 'next/link';
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 interface Doc { id: string; name: string; type: string; status: string; page_count: number | null; created_at: string }
@@ -19,8 +20,11 @@ export default function KnowledgeBasePage({ params }: { params: Promise<{ agent_
   const [docs, setDocs] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', type: 'text' as string, content_text: '', url: '' });
   const [workspaceId, setWorkspaceId] = useState('');
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -59,6 +63,57 @@ export default function KnowledgeBasePage({ params }: { params: Promise<{ agent_
       toast.success('Document added');
     } catch (e) { toast.error(String(e)); }
     finally { setAdding(false); }
+  }
+
+  async function uploadPdf(file: File) {
+    if (!form.name) { toast.error('Enter a document name first'); return; }
+    setUploadingPdf(true);
+    try {
+      const supabase = createClient();
+      const path = `${workspaceId}/${agent_id}/${Date.now()}-${file.name}`;
+      const { error: upError } = await supabase.storage.from('knowledge').upload(path, file);
+      if (upError) throw new Error(upError.message);
+      const { data: urlData } = supabase.storage.from('knowledge').getPublicUrl(path);
+
+      const res = await fetch('/api/knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_id,
+          workspace_id: workspaceId,
+          name: form.name,
+          type: 'pdf',
+          file_url: urlData.publicUrl
+        })
+      });
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      const doc = await res.json() as Doc;
+      setDocs((d) => [doc, ...d]);
+      setForm({ name: '', type: 'text', content_text: '', url: '' });
+      toast.success('PDF uploaded — processing…');
+
+      // Poll until status != 'processing'
+      const pollInterval = setInterval(async () => {
+        const r = await fetch(`/api/knowledge?agent_id=${agent_id}`);
+        if (r.ok) {
+          const updated = await r.json() as Doc[];
+          setDocs(updated);
+          if (updated.every(d => d.status !== 'processing')) clearInterval(pollInterval);
+        }
+      }, 5000);
+    } catch (e) { toast.error(String(e)); }
+    finally { setUploadingPdf(false); }
+  }
+
+  async function deleteDoc(id: string) {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/knowledge/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      setDocs((d) => d.filter((doc) => doc.id !== id));
+      toast.success('Document deleted');
+    } catch (e) { toast.error(String(e)); }
+    finally { setDeletingId(null); }
   }
 
   return (
@@ -108,16 +163,32 @@ export default function KnowledgeBasePage({ params }: { params: Promise<{ agent_
             </div>
           )}
           {form.type === 'pdf' && (
-            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#e0e0e0] p-8 text-center">
-              <Upload className="h-6 w-6 text-[#6b6b6b] mb-2" />
-              <p className="text-sm text-[#6b6b6b]">PDF upload requires Supabase Storage to be configured</p>
+            <div
+              className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#e0e0e0] p-8 text-center cursor-pointer hover:border-[#0a0a0a] transition-colors"
+              onClick={() => fileRef.current?.click()}
+            >
+              {uploadingPdf ? (
+                <Loader2 className="h-6 w-6 text-[#6b6b6b] mb-2 animate-spin" />
+              ) : (
+                <Upload className="h-6 w-6 text-[#6b6b6b] mb-2" />
+              )}
+              <p className="text-sm text-[#6b6b6b]">{uploadingPdf ? 'Uploading…' : 'Click to upload PDF (max 25 MB)'}</p>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPdf(f); }}
+              />
             </div>
           )}
 
-          <Button onClick={addDoc} disabled={adding}>
-            {adding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Add Document
-          </Button>
+          {form.type !== 'pdf' && (
+            <Button onClick={addDoc} disabled={adding}>
+              {adding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Add Document
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -143,8 +214,17 @@ export default function KnowledgeBasePage({ params }: { params: Promise<{ agent_
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {doc.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin text-[#6b6b6b]" />}
                   <Badge variant={doc.status === 'ready' ? 'default' : 'secondary'}>{doc.status}</Badge>
-                  <Button variant="ghost" size="icon" className="text-[#6b6b6b]"><Trash2 className="h-4 w-4" /></Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-[#6b6b6b]"
+                    disabled={deletingId === doc.id}
+                    onClick={() => deleteDoc(doc.id)}
+                  >
+                    {deletingId === doc.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
