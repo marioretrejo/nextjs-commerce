@@ -14,7 +14,7 @@ export const getUser = cache(async (): Promise<User | null> => {
     .eq('id', user.id)
     .single();
 
-  return data;
+  return (data as User) ?? null;
 });
 
 export const getWorkspace = cache(async (workspaceId: string): Promise<Workspace | null> => {
@@ -25,7 +25,7 @@ export const getWorkspace = cache(async (workspaceId: string): Promise<Workspace
     .eq('id', workspaceId)
     .single();
 
-  return data;
+  return (data as Workspace) ?? null;
 });
 
 export const getUserWorkspaces = cache(async (): Promise<Workspace[]> => {
@@ -39,7 +39,7 @@ export const getUserWorkspaces = cache(async (): Promise<Workspace[]> => {
     .eq('owner_id', user.id)
     .order('created_at', { ascending: true });
 
-  return data ?? [];
+  return (data as Workspace[]) ?? [];
 });
 
 export async function requireUser(): Promise<User> {
@@ -55,7 +55,6 @@ export async function requireWorkspace(workspaceId: string): Promise<Workspace> 
   return workspace;
 }
 
-// Plan limits
 export const PLAN_LIMITS = {
   free:  { agents: 1,         minutes: 50,   campaigns: 1  },
   pro:   { agents: 5,         minutes: 1000, campaigns: 20 },
