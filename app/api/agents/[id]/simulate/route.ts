@@ -42,7 +42,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
     });
     const data = await resp.json() as { content: { text: string }[] };
-    const transcript = JSON.parse(data.content[0]?.text ?? '[]') as unknown[];
+    let transcript: unknown[] = [];
+    try {
+      transcript = JSON.parse(data.content[0]?.text ?? '[]') as unknown[];
+    } catch {
+      // Claude returned non-JSON — return the raw text as a single agent turn
+      transcript = [{ role: 'agent', text: data.content[0]?.text ?? '' }];
+    }
     return NextResponse.json({ transcript });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

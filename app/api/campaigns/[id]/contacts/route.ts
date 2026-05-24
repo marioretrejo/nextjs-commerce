@@ -8,6 +8,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Verify campaign ownership via RLS before writing
+  const { data: campaign } = await supabase.from('campaigns').select('id').eq('id', id).single();
+  if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   const { contacts } = await req.json() as { contacts: Record<string, unknown>[] };
   if (!contacts?.length) return NextResponse.json({ error: 'No contacts' }, { status: 400 });
 
@@ -17,7 +21,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Update total_contacts count
   const { count } = await admin.from('campaign_contacts').select('*', { count: 'exact', head: true }).eq('campaign_id', id);
   await admin.from('campaigns').update({ total_contacts: count ?? 0 }).eq('id', id);
 
@@ -30,6 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // RLS scopes campaign_contacts to owned workspaces via the campaign join
   const { data, error } = await supabase
     .from('campaign_contacts')
     .select('*')

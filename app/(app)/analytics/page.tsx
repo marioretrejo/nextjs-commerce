@@ -48,31 +48,41 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>('30d');
   const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [workspaceId, setWorkspaceId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/workspace-id')
+      .then((r) => r.json())
+      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''));
+  }, []);
 
   const fetchData = useCallback(async () => {
+    if (!workspaceId) return;
     setLoading(true);
     const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90;
     const since = subDays(new Date(), days).toISOString();
-    const params = new URLSearchParams({ since, limit: '1000' });
-    if (agentFilter !== 'all') params.set('agent_id', agentFilter);
+    const callParams = new URLSearchParams({ workspace_id: workspaceId, since, limit: '1000' });
+    if (agentFilter !== 'all') callParams.set('agent_id', agentFilter);
 
     const [callsRes, agentsRes] = await Promise.all([
-      fetch(`/api/calls?${params.toString()}`),
-      fetch('/api/agents?limit=100'),
+      fetch(`/api/calls?${callParams.toString()}`),
+      fetch(`/api/agents?workspace_id=${workspaceId}`),
     ]);
 
     if (callsRes.ok) {
-      const d = await callsRes.json() as { calls: Call[] };
-      setCalls(d.calls ?? []);
+      // /api/calls returns { data: Call[], total, page, limit }
+      const d = await callsRes.json() as { data: Call[] };
+      setCalls(d.data ?? []);
     }
     if (agentsRes.ok) {
-      const d = await agentsRes.json() as { agents: Agent[] };
-      setAgents(d.agents ?? []);
+      // /api/agents returns Agent[] directly
+      const d = await agentsRes.json() as Agent[];
+      setAgents(Array.isArray(d) ? d : []);
     }
     setLoading(false);
-  }, [dateRange, agentFilter]);
+  }, [dateRange, agentFilter, workspaceId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (workspaceId) fetchData(); }, [fetchData, workspaceId]);
 
   // Metrics
   const totalCalls = calls.length;

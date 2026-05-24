@@ -35,7 +35,8 @@ export async function POST(req: Request) {
   const signature = req.headers.get('x-retell-signature') ?? '';
   const secret = process.env['RETELL_WEBHOOK_SECRET'];
 
-  if (secret && signature) {
+  if (secret) {
+    if (!signature) return new NextResponse('Missing signature', { status: 401 });
     const valid = verifySignature(body, signature, secret);
     if (!valid) return new NextResponse('Invalid signature', { status: 401 });
   }
@@ -112,7 +113,10 @@ export async function POST(req: Request) {
     if (call.transcript && process.env['ANTHROPIC_API_KEY']) {
       fetch(`${process.env['NEXT_PUBLIC_APP_URL']}/api/qa/score`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env['INTERNAL_API_SECRET'] ? { 'x-internal-token': process.env['INTERNAL_API_SECRET'] } : {})
+        },
         body: JSON.stringify({ retell_call_id: call.call_id, agent_id: agentRow.id, workspace_id: agentRow.workspace_id })
       }).catch(console.error);
     }

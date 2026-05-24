@@ -29,6 +29,7 @@ export interface User {
   subscription_status: string | null;
   is_superadmin: boolean;
   is_suspended: boolean;
+  notification_preferences: NotificationType[];
   created_at: string;
 }
 

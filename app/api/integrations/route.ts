@@ -10,8 +10,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const workspaceId = searchParams.get('workspace_id');
 
-  const query = supabase.from('integrations').select('*').order('type');
-  if (workspaceId) query.eq('workspace_id', workspaceId);
+  // RLS scopes to user's workspaces; optional filter narrows to one workspace
+  let query = supabase.from('integrations').select('*').order('type');
+  if (workspaceId) query = query.eq('workspace_id', workspaceId);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -24,9 +25,13 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json() as Record<string, unknown>;
-  const admin = createAdminClient();
+  if (!body['workspace_id']) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
 
-  // Upsert (workspace_id, type) unique pair
+  // Verify workspace ownership via RLS
+  const { data: ws } = await supabase.from('workspaces').select('id').eq('id', body['workspace_id'] as string).single();
+  if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+
+  const admin = createAdminClient();
   const { data, error } = await admin.from('integrations').upsert({
     workspace_id: body['workspace_id'],
     type: body['type'],

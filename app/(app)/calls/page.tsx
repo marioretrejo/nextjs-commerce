@@ -52,26 +52,39 @@ export default function CallsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
+  const [workspaceId, setWorkspaceId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/workspace-id')
+      .then((r) => r.json())
+      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''));
+  }, []);
 
   const fetchCalls = useCallback(async () => {
+    if (!workspaceId) return;
     setLoading(true);
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ workspace_id: workspaceId, limit: '100' });
     if (outcomeFilter !== 'all') params.set('outcome', outcomeFilter);
-    if (search.trim()) params.set('search', search.trim());
-    params.set('limit', '100');
 
     const res = await fetch(`/api/calls?${params.toString()}`);
     if (res.ok) {
-      const data = await res.json() as { calls: Call[] };
-      setCalls(data.calls ?? []);
+      const data = await res.json() as { data: Call[] };
+      const all = data.data ?? [];
+      // Client-side search filter since the API doesn't support text search
+      const q = search.trim().toLowerCase();
+      setCalls(q ? all.filter(c =>
+        c.contact_name?.toLowerCase().includes(q) || c.contact_phone?.includes(q)
+      ) : all);
     }
     setLoading(false);
-  }, [outcomeFilter, search]);
+  }, [outcomeFilter, search, workspaceId]);
 
   useEffect(() => {
+    if (!workspaceId) return;
     const timer = setTimeout(fetchCalls, 300);
     return () => clearTimeout(timer);
-  }, [fetchCalls]);
+  }, [fetchCalls, workspaceId]);
+
 
   const outcomes: { value: OutcomeFilter; label: string }[] = [
     { value: 'all',         label: 'All Outcomes' },

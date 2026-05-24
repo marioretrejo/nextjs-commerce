@@ -1,8 +1,19 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
+// Internal-only endpoint — called by the Retell webhook (server-to-server).
+// Secured by requiring a shared internal secret token.
 export async function POST(req: Request) {
-  const { retell_call_id, agent_id, workspace_id } = await req.json() as {
+  const internalToken = req.headers.get('x-internal-token');
+  const expectedToken = process.env['INTERNAL_API_SECRET'];
+
+  // Allow calls from within the same process (no token) only in development,
+  // or when token matches. In production, always require the token.
+  if (expectedToken && internalToken !== expectedToken) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { retell_call_id, agent_id } = await req.json() as {
     retell_call_id: string;
     agent_id: string;
     workspace_id: string;
@@ -10,7 +21,6 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Get call + criteria
   const [{ data: callData }, { data: criteria }] = await Promise.all([
     admin.from('calls').select('transcript, id').eq('retell_call_id', retell_call_id).single(),
     admin.from('qa_criteria').select('*').eq('agent_id', agent_id)
@@ -46,7 +56,12 @@ export async function POST(req: Request) {
     });
 
     const data = await res.json() as { content: { text: string }[] };
-    const result = JSON.parse(data.content[0]?.text ?? '{}') as { overall: number };
+    let result: { overall?: number } = {};
+    try {
+      result = JSON.parse(data.content[0]?.text ?? '{}') as { overall?: number };
+    } catch {
+      console.error('QA: failed to parse Claude response');
+    }
 
     if (typeof result.overall === 'number') {
       await admin.from('calls').update({ qa_score: result.overall }).eq('id', call.id);

@@ -61,18 +61,26 @@ export default function TeamPage() {
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/workspace-id')
+      .then((r) => r.json())
+      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''));
+  }, []);
 
   const fetchMembers = useCallback(async () => {
+    if (!workspaceId) return;
     setLoading(true);
-    const res = await fetch('/api/team');
+    const res = await fetch(`/api/team?workspace_id=${workspaceId}`);
     if (res.ok) {
       const d = await res.json() as { members: WorkspaceMember[] };
       setMembers(d.members ?? []);
     }
     setLoading(false);
-  }, []);
+  }, [workspaceId]);
 
-  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+  useEffect(() => { if (workspaceId) fetchMembers(); }, [fetchMembers, workspaceId]);
 
   async function inviteMember() {
     if (!inviteEmail.trim()) return;
@@ -81,7 +89,7 @@ export default function TeamPage() {
     const res = await fetch('/api/team/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, workspace_id: workspaceId }),
     });
     if (res.ok) {
       await fetchMembers();

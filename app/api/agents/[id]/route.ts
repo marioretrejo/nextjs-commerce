@@ -10,8 +10,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // RLS on the user client ensures only owned agents are returned
   const { data, error } = await supabase.from('agents').select('*').eq('id', id).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(data);
 }
 
@@ -20,6 +21,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Verify ownership via RLS before using admin client for the write
+  const { data: existing } = await supabase.from('agents').select('id').eq('id', id).single();
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json() as Partial<Agent>;
   const admin = createAdminClient();
@@ -57,9 +62,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Verify ownership via RLS — also fetch retell_agent_id while we're at it
   const { data: agent } = await supabase.from('agents').select('retell_agent_id').eq('id', id).single();
+  if (!agent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  if (agent && (agent as { retell_agent_id: string | null }).retell_agent_id && process.env['RETELL_API_KEY']) {
+  if ((agent as { retell_agent_id: string | null }).retell_agent_id && process.env['RETELL_API_KEY']) {
     try {
       await retell.deleteAgent((agent as { retell_agent_id: string }).retell_agent_id);
     } catch (e) {

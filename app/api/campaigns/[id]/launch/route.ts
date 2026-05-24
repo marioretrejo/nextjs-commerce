@@ -10,6 +10,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // RLS on user client verifies campaign belongs to user's workspace
   const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', id).single();
   if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
 

@@ -64,37 +64,49 @@ export default function QualityPage() {
   const [criteriaForm, setCriteriaForm] = useState<CriteriaForm>({ name: '', description: '', weight: 50 });
   const [savingCriteria, setSavingCriteria] = useState(false);
 
+  const [workspaceId, setWorkspaceId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/workspace-id')
+      .then((r) => r.json())
+      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''));
+  }, []);
+
   const fetchData = useCallback(async () => {
+    if (!workspaceId) return;
     setLoading(true);
     const since = subDays(new Date(), 90).toISOString();
     const [agentsRes, callsRes] = await Promise.all([
-      fetch('/api/agents?limit=100'),
-      fetch(`/api/calls?since=${since}&limit=1000`),
+      fetch(`/api/agents?workspace_id=${workspaceId}`),
+      fetch(`/api/calls?workspace_id=${workspaceId}&since=${since}&limit=1000`),
     ]);
     if (agentsRes.ok) {
-      const d = await agentsRes.json() as { agents: Agent[] };
-      const agentList = d.agents ?? [];
-      setAgents(agentList);
+      // /api/agents returns Agent[] directly
+      const agentList = await agentsRes.json() as Agent[];
+      setAgents(Array.isArray(agentList) ? agentList : []);
 
       // Fetch criteria for each agent
       const criteriaMap: Record<string, QACriteria[]> = {};
-      await Promise.all(agentList.map(async (a) => {
+      await Promise.all((Array.isArray(agentList) ? agentList : []).map(async (a) => {
         const r = await fetch(`/api/agents/${a.id}/criteria`);
         if (r.ok) {
-          const cd = await r.json() as { criteria: QACriteria[] };
-          criteriaMap[a.id] = cd.criteria ?? [];
+          // /api/agents/[id]/criteria returns QACriteria[] directly
+          const cd = await r.json() as QACriteria[];
+          criteriaMap[a.id] = Array.isArray(cd) ? cd : [];
         }
       }));
       setCriteria(criteriaMap);
     }
     if (callsRes.ok) {
-      const d = await callsRes.json() as { calls: Call[] };
-      setCalls(d.calls ?? []);
+      // /api/calls returns { data: Call[], ... }
+      const d = await callsRes.json() as { data: Call[] };
+      setCalls(d.data ?? []);
     }
     setLoading(false);
-  }, []);
+  }, [workspaceId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (workspaceId) fetchData(); }, [fetchData, workspaceId]);
+
 
   // Filtered calls
   const filteredCalls = selectedAgent === 'all'
@@ -154,14 +166,15 @@ export default function QualityPage() {
   async function saveCriteria() {
     if (!criteriaForm.name.trim()) return;
     setSavingCriteria(true);
-    const url = editingCriteria
-      ? `/api/agents/${criteriaAgentId}/criteria/${editingCriteria.id}`
-      : `/api/agents/${criteriaAgentId}/criteria`;
+    const url = `/api/agents/${criteriaAgentId}/criteria`;
     const method = editingCriteria ? 'PATCH' : 'POST';
+    const body = editingCriteria
+      ? { ...criteriaForm, criteria_id: editingCriteria.id }
+      : criteriaForm;
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(criteriaForm),
+      body: JSON.stringify(body),
     });
     if (res.ok) {
       await fetchData();
@@ -171,7 +184,7 @@ export default function QualityPage() {
   }
 
   async function deleteCriteria(agentId: string, criteriaId: string) {
-    await fetch(`/api/agents/${agentId}/criteria/${criteriaId}`, { method: 'DELETE' });
+    await fetch(`/api/agents/${agentId}/criteria?criteria_id=${criteriaId}`, { method: 'DELETE' });
     await fetchData();
   }
 
