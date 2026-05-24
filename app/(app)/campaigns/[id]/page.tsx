@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { createClient } from '@/lib/supabase/client';
-import { ArrowLeft, Loader2, Pause, Play } from 'lucide-react';
+import { ArrowLeft, Loader2, Pause, Play, BookmarkPlus } from 'lucide-react';
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -35,6 +35,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   async function refetchCampaign() {
     const r = await fetch(`/api/campaigns/${id}`);
@@ -94,6 +95,24 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     setActing(false);
   }
 
+  async function saveAsTemplate() {
+    if (!campaign) return;
+    setSavingTemplate(true);
+    const res = await fetch('/api/campaign-templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${campaign.name} (template)`,
+        description: '',
+        agent_id: campaign.agent_id,
+        settings: { max_concurrency: campaign.max_concurrency },
+      }),
+    });
+    if (res.ok) toast.success('Saved as template');
+    else toast.error('Failed to save template');
+    setSavingTemplate(false);
+  }
+
   if (loading) return <div className="p-6"><p className="text-[#6b6b6b]">Loading…</p></div>;
   if (!campaign) return <div className="p-6"><p>Campaign not found.</p></div>;
 
@@ -112,6 +131,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         </div>
         <div className="flex items-center gap-3">
           <Badge variant={campaign.status === 'active' ? 'default' : 'secondary'}>{campaign.status}</Badge>
+          <Button variant="outline" size="sm" onClick={saveAsTemplate} disabled={savingTemplate}>
+            <BookmarkPlus className="mr-2 h-4 w-4" />
+            {savingTemplate ? 'Saving…' : 'Save as Template'}
+          </Button>
           {campaign.status === 'draft' || campaign.status === 'paused' ? (
             <Button onClick={launch} disabled={acting}>
               {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}

@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import type { Call, Agent } from '@/lib/supabase/types';
-import { Phone, Clock, TrendingUp, Target, Bot } from 'lucide-react';
+import { Phone, Clock, TrendingUp, Target, Bot, DollarSign } from 'lucide-react';
+import Link from 'next/link';
 import {
   BarChart,
   Bar,
@@ -149,6 +150,12 @@ export default function AnalyticsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Analytics</h1>
           <p className="mt-1 text-sm text-[#6b6b6b]">Performance metrics and trends for your AI voice agents.</p>
+          <div className="flex gap-2 mt-2">
+            <span className="inline-flex items-center rounded-md border border-[#0a0a0a] bg-[#0a0a0a] text-white px-3 py-1 text-xs font-medium">Performance</span>
+            <Link href="/analytics/costs" className="inline-flex items-center gap-1 rounded-md border border-[#e0e0e0] px-3 py-1 text-xs font-medium text-[#6b6b6b] hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors">
+              <DollarSign className="h-3 w-3" /> Cost Analytics
+            </Link>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <select

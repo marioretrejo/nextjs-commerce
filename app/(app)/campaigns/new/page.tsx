@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-const STEPS = ['Campaign Info', 'Upload Contacts', 'Schedule', 'Review'];
+const STEPS = ['Campaign Info', 'Upload Contacts', 'A/B Test', 'Schedule', 'Review'];
 
 interface Agent { id: string; name: string }
 interface Contact { name?: string; phone: string; email?: string; [key: string]: string | undefined }
@@ -36,7 +36,10 @@ export default function NewCampaignPage() {
     respect_schedule: true,
     timezone: 'America/New_York',
     start_at: '',
-    end_at: ''
+    end_at: '',
+    ab_enabled: false,
+    ab_agent_id: '',
+    ab_split_ratio: 50,
   });
 
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -81,10 +84,15 @@ export default function NewCampaignPage() {
 
     try {
       // Create campaign
+      const payload = {
+        ...form,
+        workspace_id: workspaceId,
+        ab_agent_id: form.ab_enabled && form.ab_agent_id ? form.ab_agent_id : null,
+      };
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, workspace_id: workspaceId })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error((await res.json() as { error: string }).error);
       const campaign = await res.json() as { id: string };
@@ -229,6 +237,63 @@ export default function NewCampaignPage() {
 
       {step === 2 && (
         <Card>
+          <CardHeader>
+            <CardTitle>A/B Test (Optional)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="flex items-center gap-3">
+              <Switch checked={form.ab_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, ab_enabled: v }))} />
+              <div>
+                <Label>Enable A/B Test</Label>
+                <p className="text-xs text-[#6b6b6b]">Split contacts between two agents to compare performance</p>
+              </div>
+            </div>
+
+            {form.ab_enabled && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Agent B</Label>
+                  <Select value={form.ab_agent_id} onValueChange={(v) => setForm((f) => ({ ...f, ab_agent_id: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select Agent B" /></SelectTrigger>
+                    <SelectContent>
+                      {agents.filter((a) => a.id !== form.agent_id).map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-[#6b6b6b]">Agent A is already selected in step 1.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Split Ratio — Agent A: {form.ab_split_ratio}% / Agent B: {100 - form.ab_split_ratio}%</Label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={90}
+                    step={10}
+                    value={form.ab_split_ratio}
+                    onChange={(e) => setForm((f) => ({ ...f, ab_split_ratio: Number(e.target.value) }))}
+                    className="w-full accent-[#0a0a0a]"
+                  />
+                  <div className="flex justify-between text-xs text-[#6b6b6b]">
+                    <span>Agent A: {agents.find((a) => a.id === form.agent_id)?.name ?? '—'}</span>
+                    <span>Agent B: {agents.find((a) => a.id === form.ab_agent_id)?.name ?? '—'}</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {!form.ab_enabled && (
+              <div className="rounded-lg bg-[#f5f5f5] p-4 text-sm text-[#6b6b6b]">
+                Skip this step to run the campaign with a single agent. Enable A/B testing to compare two agents head-to-head.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {step === 3 && (
+        <Card>
           <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -263,14 +328,18 @@ export default function NewCampaignPage() {
         </Card>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <Card>
           <CardHeader><CardTitle>Review & Launch</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-md border border-[#e0e0e0] divide-y divide-[#e0e0e0]">
               {[
                 { label: 'Campaign Name', value: form.name },
-                { label: 'Agent', value: agents.find((a) => a.id === form.agent_id)?.name ?? '—' },
+                { label: 'Agent A', value: agents.find((a) => a.id === form.agent_id)?.name ?? '—' },
+                ...(form.ab_enabled ? [
+                  { label: 'Agent B', value: agents.find((a) => a.id === form.ab_agent_id)?.name ?? '—' },
+                  { label: 'A/B Split', value: `${form.ab_split_ratio}% / ${100 - form.ab_split_ratio}%` },
+                ] : []),
                 { label: 'Contacts', value: `${contacts.length} contacts` },
                 { label: 'Concurrency', value: `${form.max_concurrency} simultaneous calls` },
                 { label: 'Retry', value: form.retry_enabled ? `Yes, every ${form.retry_interval_hours}h` : 'No' },
@@ -293,7 +362,14 @@ export default function NewCampaignPage() {
           {step === 0 ? 'Cancel' : 'Back'}
         </Button>
         {step < STEPS.length - 1 ? (
-          <Button onClick={() => setStep(step + 1)} disabled={(step === 0 && !form.name) || (step === 1 && contacts.length === 0)}>
+          <Button
+            onClick={() => setStep(step + 1)}
+            disabled={
+              (step === 0 && !form.name) ||
+              (step === 1 && contacts.length === 0) ||
+              (step === 2 && form.ab_enabled && !form.ab_agent_id)
+            }
+          >
             Next <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         ) : (

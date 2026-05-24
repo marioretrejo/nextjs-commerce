@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Call, Agent } from '@/lib/supabase/types';
-import { DollarSign, TrendingUp, Phone, Target } from 'lucide-react';
+import { DollarSign, TrendingUp, Phone, Target, BarChart2 } from 'lucide-react';
+import Link from 'next/link';
 import {
   AreaChart,
   Area,
@@ -117,6 +118,12 @@ export default function CostAnalyticsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Cost Analytics</h1>
           <p className="mt-1 text-sm text-[#6b6b6b]">ROI visibility and spend analysis for your AI voice agents.</p>
+          <div className="flex gap-2 mt-2">
+            <Link href="/analytics" className="inline-flex items-center gap-1 rounded-md border border-[#e0e0e0] px-3 py-1 text-xs font-medium text-[#6b6b6b] hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors">
+              <BarChart2 className="h-3 w-3" /> Performance
+            </Link>
+            <span className="inline-flex items-center rounded-md border border-[#0a0a0a] bg-[#0a0a0a] text-white px-3 py-1 text-xs font-medium">Cost Analytics</span>
+          </div>
         </div>
         <select
           value={dateRange}

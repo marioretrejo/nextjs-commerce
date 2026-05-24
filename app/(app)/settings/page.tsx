@@ -18,7 +18,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import type { User, NotificationType } from '@/lib/supabase/types';
-import { User as UserIcon, Lock, Bell, AlertTriangle, Upload, Check } from 'lucide-react';
+import { User as UserIcon, Lock, Bell, AlertTriangle, Upload, Check, Key, Building2 } from 'lucide-react';
+import Link from 'next/link';
 
 const TIMEZONES = [
   'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -203,6 +204,15 @@ export default function SettingsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Settings</h1>
         <p className="mt-1 text-sm text-[#6b6b6b]">Manage your account preferences and security.</p>
+        <div className="flex gap-2 mt-2">
+          <span className="inline-flex items-center rounded-md border border-[#0a0a0a] bg-[#0a0a0a] text-white px-3 py-1 text-xs font-medium">Account</span>
+          <Link href="/settings/api-keys" className="inline-flex items-center gap-1 rounded-md border border-[#e0e0e0] px-3 py-1 text-xs font-medium text-[#6b6b6b] hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors">
+            <Key className="h-3 w-3" /> API Keys
+          </Link>
+          <Link href="/settings/workspace" className="inline-flex items-center gap-1 rounded-md border border-[#e0e0e0] px-3 py-1 text-xs font-medium text-[#6b6b6b] hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors">
+            <Building2 className="h-3 w-3" /> Workspace
+          </Link>
+        </div>
       </div>
 
       <Tabs defaultValue="profile">

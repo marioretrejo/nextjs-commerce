@@ -14,7 +14,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import type { PhoneNumber, PhoneStatus } from '@/lib/supabase/types';
-import { Phone, Globe, Plus, Trash2, Bot } from 'lucide-react';
+import { Phone, Globe, Plus, Trash2, Bot, Settings2 } from 'lucide-react';
+import Link from 'next/link';
 import { format } from 'date-fns';
 
 const COUNTRIES = [
@@ -147,7 +148,7 @@ export default function NumbersPage() {
           </CardContent>
         ) : (
           <CardContent className="p-0">
-            <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_100px] gap-3 px-5 py-3 border-b border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
+            <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_160px] gap-3 px-5 py-3 border-b border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
               <span>Number</span>
               <span>Country</span>
               <span>Provider</span>
@@ -159,7 +160,7 @@ export default function NumbersPage() {
               {numbers.map((num) => (
                 <div
                   key={num.id}
-                  className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_100px] gap-3 px-5 py-4 text-sm items-center hover:bg-[#f5f5f5]"
+                  className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_160px] gap-3 px-5 py-4 text-sm items-center hover:bg-[#f5f5f5]"
                 >
                   <span className="font-mono font-medium text-[#0a0a0a] flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-[#6b6b6b] shrink-0" />
@@ -181,7 +182,13 @@ export default function NumbersPage() {
                       <span className="text-[#6b6b6b]">—</span>
                     )}
                   </span>
-                  <span className="text-right">
+                  <span className="flex items-center gap-1.5 justify-end">
+                    <Link href={`/numbers/${num.id}/routing`}>
+                      <Button variant="outline" size="sm" className="text-xs">
+                        <Settings2 className="w-3.5 h-3.5 mr-1" />
+                        Routing
+                      </Button>
+                    </Link>
                     <Button
                       variant="outline"
                       size="sm"
