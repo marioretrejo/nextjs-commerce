@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import type { Campaign, CampaignStatus } from '@/lib/supabase/types';
-import { Plus, PlayCircle, PauseCircle, Users, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
+import type { Campaign, CampaignStatus, CampaignTemplate } from '@/lib/supabase/types';
+import { Plus, PlayCircle, PauseCircle, Users, CheckCircle, TrendingUp, Calendar, BookmarkPlus, Bot } from 'lucide-react';
 import { format } from 'date-fns';
 
 function statusBadge(status: CampaignStatus) {
@@ -35,14 +35,23 @@ export default async function CampaignsPage() {
   const workspace = workspaces[0];
 
   let campaigns: Campaign[] = [];
+  let templates: (CampaignTemplate & { agent?: { name: string } })[] = [];
   if (workspace) {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from('campaigns')
-      .select('*, agent:agents(id, name, status)')
-      .eq('workspace_id', workspace.id)
-      .order('created_at', { ascending: false });
-    campaigns = (data as Campaign[]) ?? [];
+    const [{ data: campaignData }, { data: templateData }] = await Promise.all([
+      supabase
+        .from('campaigns')
+        .select('*, agent:agents(id, name, status)')
+        .eq('workspace_id', workspace.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('campaign_templates')
+        .select('*, agent:agents(id, name)')
+        .eq('workspace_id', workspace.id)
+        .order('created_at', { ascending: false }),
+    ]);
+    campaigns = (campaignData as Campaign[]) ?? [];
+    templates = (templateData as (CampaignTemplate & { agent?: { name: string } })[]) ?? [];
   }
 
   return (
@@ -191,6 +200,48 @@ export default async function CampaignsPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Templates section */}
+      {templates.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[#0a0a0a]">Campaign Templates</h2>
+              <p className="text-sm text-[#6b6b6b]">Start a new campaign from a saved template.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {templates.map((tpl) => (
+              <Card key={tpl.id} className="hover:border-[#0a0a0a] transition-colors">
+                <CardContent className="p-5">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f5f5f5] shrink-0">
+                      <BookmarkPlus className="h-4 w-4 text-[#6b6b6b]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-[#0a0a0a] truncate">{tpl.name}</p>
+                      {tpl.description && (
+                        <p className="text-xs text-[#6b6b6b] mt-0.5 line-clamp-2">{tpl.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  {tpl.agent && (
+                    <p className="text-xs text-[#6b6b6b] flex items-center gap-1 mb-4">
+                      <Bot className="w-3 h-3" />
+                      {tpl.agent.name}
+                    </p>
+                  )}
+                  <Link href={`/campaigns/new?template_id=${tpl.id}`}>
+                    <Button size="sm" variant="outline" className="w-full text-xs">
+                      Use Template
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>

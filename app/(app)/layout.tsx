@@ -1,6 +1,6 @@
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
-import type { User } from '@/lib/supabase/types';
+import type { User, WorkspaceBranding } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
 import { getUserWorkspaces } from '@/lib/workspace';
 import { redirect } from 'next/navigation';
@@ -32,9 +32,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const unread = notifications?.length ?? 0;
 
+  // Fetch workspace branding
+  const branding = (workspace.branding ?? null) as WorkspaceBranding | null;
+  const appName = branding?.app_name ?? 'VoiceOS';
+  const primaryColor = branding?.primary_color ?? '#0a0a0a';
+
   return (
-    <div className="flex min-h-screen bg-[#f5f5f5]">
-      <Sidebar isSuperadmin={userProfile.is_superadmin} />
+    <div
+      className="flex min-h-screen bg-[#f5f5f5]"
+      style={{ '--brand': primaryColor } as React.CSSProperties}
+    >
+      <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} />
       <div className="flex flex-1 flex-col pl-56">
         <Header user={userProfile} workspace={workspace} unreadNotifications={unread} />
         <main className="flex-1 pt-14">

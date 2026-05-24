@@ -7,9 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Upload, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Upload, X, BookmarkPlus } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -20,10 +20,13 @@ interface Contact { name?: string; phone: string; email?: string; [key: string]:
 
 export default function NewCampaignPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const templateId = searchParams.get('template_id');
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
+  const [fromTemplate, setFromTemplate] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -55,9 +58,24 @@ export default function NewCampaignPage() {
       const agData = await agRes.json() as Agent[];
       setAgents(agData ?? []);
       if (agData?.[0]) setForm((f) => ({ ...f, agent_id: agData[0]!.id }));
+
+      if (templateId) {
+        const tplRes = await fetch(`/api/campaign-templates?id=${templateId}`);
+        if (tplRes.ok) {
+          const tpl = await tplRes.json() as { name?: string; description?: string; agent_id?: string; config?: { max_concurrency?: number } };
+          setFromTemplate(tpl.name ?? null);
+          setForm((f) => ({
+            ...f,
+            name: tpl.name ? `${tpl.name} (copy)` : f.name,
+            description: tpl.description ?? f.description,
+            agent_id: tpl.agent_id ?? f.agent_id,
+            max_concurrency: tpl.config?.max_concurrency ?? f.max_concurrency,
+          }));
+        }
+      }
     }
     load();
-  }, []);
+  }, [templateId]);
 
   async function handleCSV(file: File) {
     const Papa = (await import('papaparse')).default;
@@ -141,6 +159,13 @@ export default function NewCampaignPage() {
           <div key={s} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-[#0a0a0a]' : 'bg-[#e0e0e0]'}`} />
         ))}
       </div>
+
+      {fromTemplate && (
+        <div className="flex items-center gap-2 rounded-md border border-[#e0e0e0] bg-[#f5f5f5] px-4 py-2.5 text-sm text-[#6b6b6b]">
+          <BookmarkPlus className="w-4 h-4 shrink-0" />
+          Started from template: <span className="font-medium text-[#0a0a0a]">{fromTemplate}</span>
+        </div>
+      )}
 
       {step === 0 && (
         <Card>

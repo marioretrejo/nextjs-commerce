@@ -8,6 +8,19 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+
+  // Single template by ID
+  if (id) {
+    const { data, error } = await supabase
+      .from('campaign_templates')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+    return NextResponse.json(data);
+  }
+
   const workspaceId = searchParams.get('workspace_id');
   if (!workspaceId) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
 

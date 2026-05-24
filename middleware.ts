@@ -17,6 +17,11 @@ const PUBLIC_PATHS = [
 
 const ADMIN_PATHS = ['/admin'];
 
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -28,6 +33,37 @@ export async function middleware(req: NextRequest) {
   // Allow static files and next internals
   if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) {
     return NextResponse.next();
+  }
+
+  // API key authentication for programmatic access (Bearer vos_xxx)
+  const authHeader = req.headers.get('authorization');
+  if (pathname.startsWith('/api/') && authHeader?.startsWith('Bearer vos_')) {
+    const rawKey = authHeader.slice(7); // strip "Bearer "
+    const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+    const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+
+    if (supabaseUrl && serviceKey) {
+      const keyHash = await sha256Hex(rawKey);
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&status=eq.active&select=id,workspace_id`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+      );
+      if (res.ok) {
+        const rows = await res.json() as { id: string; workspace_id: string }[];
+        if (rows.length > 0) {
+          // Update last_used_at asynchronously (fire-and-forget)
+          fetch(`${supabaseUrl}/rest/v1/api_keys?id=eq.${rows[0]!.id}`, {
+            method: 'PATCH',
+            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({ last_used_at: new Date().toISOString() }),
+          }).catch(() => {});
+          const response = NextResponse.next();
+          response.headers.set('x-api-workspace-id', rows[0]!.workspace_id);
+          return response;
+        }
+      }
+      return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+    }
   }
 
   const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];

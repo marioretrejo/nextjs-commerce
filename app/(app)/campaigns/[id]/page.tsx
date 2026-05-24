@@ -102,10 +102,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        workspace_id: campaign.workspace_id,
         name: `${campaign.name} (template)`,
         description: '',
         agent_id: campaign.agent_id,
-        settings: { max_concurrency: campaign.max_concurrency },
+        config: { max_concurrency: campaign.max_concurrency },
       }),
     });
     if (res.ok) toast.success('Saved as template');

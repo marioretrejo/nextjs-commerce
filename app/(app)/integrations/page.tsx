@@ -18,6 +18,7 @@ interface IntegrationDef {
   logo: string;
   docsUrl: string;
   isWebhook?: boolean;
+  comingSoon?: boolean;
 }
 
 const INTEGRATIONS: IntegrationDef[] = [
@@ -34,6 +35,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Integrate with GoHighLevel for CRM and automation.',
     logo: 'GHL',
     docsUrl: 'https://highlevel.stoplight.io',
+    comingSoon: true,
   },
   {
     type: 'salesforce',
@@ -41,6 +43,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Push call outcomes to Salesforce CRM records.',
     logo: 'SF',
     docsUrl: 'https://developer.salesforce.com',
+    comingSoon: true,
   },
   {
     type: 'zapier',
@@ -48,6 +51,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Automate workflows with 5,000+ apps via Zapier.',
     logo: 'ZAP',
     docsUrl: 'https://zapier.com/apps',
+    comingSoon: true,
   },
   {
     type: 'make',
@@ -55,6 +59,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Build advanced automations with Make (Integromat).',
     logo: 'MK',
     docsUrl: 'https://www.make.com/en/api-documentation',
+    comingSoon: true,
   },
   {
     type: 'calendly',
@@ -62,6 +67,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Book meetings during calls using Calendly.',
     logo: 'CAL',
     docsUrl: 'https://developer.calendly.com',
+    comingSoon: true,
   },
   {
     type: 'google_calendar',
@@ -69,6 +75,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Schedule events directly from call outcomes.',
     logo: 'GC',
     docsUrl: 'https://developers.google.com/calendar',
+    comingSoon: true,
   },
   {
     type: 'twilio',
@@ -76,6 +83,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Bring your own Twilio account for calling.',
     logo: 'TW',
     docsUrl: 'https://www.twilio.com/docs',
+    comingSoon: true,
   },
   {
     type: 'telnyx',
@@ -83,6 +91,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Use Telnyx for carrier-grade voice infrastructure.',
     logo: 'TEL',
     docsUrl: 'https://developers.telnyx.com',
+    comingSoon: true,
   },
   {
     type: 'webhook',
@@ -208,7 +217,7 @@ export default function IntegrationsPage() {
           const isBusy = connecting === def.type;
 
           return (
-            <Card key={def.type} className={isConnected ? 'border-[#0a0a0a]' : ''}>
+            <Card key={def.type} className={isConnected ? 'border-[#0a0a0a]' : def.comingSoon ? 'opacity-60' : ''}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -217,7 +226,11 @@ export default function IntegrationsPage() {
                     </div>
                     <div>
                       <CardTitle className="text-sm">{def.name}</CardTitle>
-                      {!loading && statusBadge(integration?.status ?? null)}
+                      {def.comingSoon ? (
+                        <Badge className="text-xs border-[#e0e0e0] text-[#6b6b6b] bg-white">Coming Soon</Badge>
+                      ) : !loading ? (
+                        statusBadge(integration?.status ?? null)
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -226,7 +239,11 @@ export default function IntegrationsPage() {
                 <CardDescription className="mb-4 text-xs leading-relaxed">
                   {def.description}
                 </CardDescription>
-                {loading ? (
+                {def.comingSoon ? (
+                  <Button size="sm" className="w-full text-xs" disabled>
+                    Coming Soon
+                  </Button>
+                ) : loading ? (
                   <div className="h-8 bg-[#f5f5f5] rounded animate-pulse" />
                 ) : isConnected ? (
                   <Button

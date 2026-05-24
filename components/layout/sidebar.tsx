@@ -45,16 +45,17 @@ const adminItems = [
 
 interface SidebarProps {
   isSuperadmin?: boolean;
+  appName?: string;
 }
 
-export function Sidebar({ isSuperadmin = false }: SidebarProps) {
+export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarProps) {
   const pathname = usePathname();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-56 flex-col border-r border-[#e0e0e0] bg-white">
       {/* Logo */}
       <div className="flex h-14 items-center border-b border-[#e0e0e0] px-5">
-        <span className="text-base font-bold tracking-tight">VoiceOS</span>
+        <span className="text-base font-bold tracking-tight truncate">{appName}</span>
       </div>
 
       {/* Nav */}
