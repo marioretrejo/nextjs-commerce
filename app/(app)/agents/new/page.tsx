@@ -81,17 +81,15 @@ export default function NewAgentPage() {
   });
 
   useEffect(() => {
-    // Get workspace id
-    fetch('/api/agents?workspace_id=_', { method: 'HEAD' });
-    // Fetch workspace from localStorage or from API
     async function load() {
-      const res = await fetch('/api/agents?workspace_id=check');
-      if (res.ok) {
-        const data = await res.json() as { workspace_id?: string };
-        if (data.workspace_id) setWorkspaceId(data.workspace_id);
+      const [wsRes, vRes] = await Promise.all([
+        fetch('/api/admin/workspace-id'),
+        fetch('/api/voices'),
+      ]);
+      if (wsRes.ok) {
+        const d = await wsRes.json() as { workspace_id: string };
+        setWorkspaceId(d.workspace_id ?? '');
       }
-      // Fetch voices
-      const vRes = await fetch('/api/voices');
       if (vRes.ok) {
         const vData = await vRes.json() as { voices: Voice[] };
         setVoices(vData.voices ?? []);
@@ -101,20 +99,6 @@ export default function NewAgentPage() {
       }
     }
     load();
-    // Get workspace from session
-    fetch('/api/billing/checkout', { method: 'HEAD' }).catch(() => {});
-  }, []);
-
-  // Fetch workspace_id from the user's workspaces
-  useEffect(() => {
-    async function fetchWs() {
-      const r = await fetch('/api/admin/workspace-id');
-      if (r.ok) {
-        const d = await r.json() as { workspace_id: string };
-        setWorkspaceId(d.workspace_id ?? '');
-      }
-    }
-    fetchWs();
   }, []);
 
   function setField<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {

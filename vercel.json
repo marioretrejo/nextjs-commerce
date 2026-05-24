@@ -1,0 +1,42 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install",
+  "outputDirectory": ".next",
+  "functions": {
+    "app/api/webhooks/retell/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/webhooks/stripe/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/campaigns/[id]/launch/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/agents/[id]/simulate/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/qa/score/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/healthz",
+      "destination": "/api/health"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_APP_URL": "@app_url"
+  }
+}
