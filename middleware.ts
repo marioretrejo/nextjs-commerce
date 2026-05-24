@@ -1,40 +1,83 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getSessionFromRequest } from 'lib/auth';
+import { createServerClient } from '@supabase/ssr';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-const TRACKER_PATHS = ['/dashboard', '/ftds', '/leads', '/alerts', '/trigger', '/top', '/history', '/settings'];
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/seed'];
+const PUBLIC_PATHS = [
+  '/',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/verify-email',
+  '/api/webhooks/retell',
+  '/api/webhooks/stripe',
+  '/api/webhooks/elevenlabs'
+];
+
+const ADMIN_PATHS = ['/admin'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Only apply to tracker paths
-  const isTrackerPage = TRACKER_PATHS.some((p) => pathname.startsWith(p));
-  const isApiRoute = pathname.startsWith('/api/') && !PUBLIC_PATHS.some((p) => pathname.startsWith(p));
-
-  if (!isTrackerPage && !isApiRoute) return NextResponse.next();
-
-  const session = await getSessionFromRequest(req);
-
-  if (!session) {
-    if (isTrackerPage) {
-      return NextResponse.redirect(new URL('/login', req.url));
-    }
-    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  // Allow all public paths
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Allow static files and next internals
+  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) {
+    return NextResponse.next();
+  }
+
+  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const supabaseAnonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+
+  // If Supabase is not configured, allow all requests (development mode)
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.next();
+  }
+
+  const res = NextResponse.next();
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          req.cookies.set(name, value);
+          res.cookies.set(name, value, options);
+        });
+      }
+    }
+  });
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Superadmin check for /admin routes
+  if (ADMIN_PATHS.some((p) => pathname.startsWith(p))) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('is_superadmin')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.is_superadmin) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+  }
+
+  return res;
 }
 
 export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/ftds/:path*',
-    '/leads/:path*',
-    '/alerts/:path*',
-    '/trigger/:path*',
-    '/top/:path*',
-    '/history/:path*',
-    '/settings/:path*',
-    '/api/((?!auth/login|seed|revalidate).*)'
-  ]
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)']
 };

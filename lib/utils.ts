@@ -1,51 +1,39 @@
-import { ReadonlyURLSearchParams } from 'next/navigation';
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
-export const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : 'http://localhost:3000';
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
-export const createUrl = (
-  pathname: string,
-  params: URLSearchParams | ReadonlyURLSearchParams
-) => {
-  const paramsString = params.toString();
-  const queryString = `${paramsString.length ? '?' : ''}${paramsString}`;
+export function formatDate(date: string | Date) {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(date));
+}
 
-  return `${pathname}${queryString}`;
-};
+export function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
-export const ensureStartsWith = (stringToCheck: string, startsWith: string) =>
-  stringToCheck.startsWith(startsWith)
-    ? stringToCheck
-    : `${startsWith}${stringToCheck}`;
+export function formatCurrency(amount: number, currency = 'USD') {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+}
 
-export const validateEnvironmentVariables = () => {
-  const requiredEnvironmentVariables = [
-    'SHOPIFY_STORE_DOMAIN',
-    'SHOPIFY_STOREFRONT_ACCESS_TOKEN'
-  ];
-  const missingEnvironmentVariables = [] as string[];
+export function formatNumber(n: number) {
+  return new Intl.NumberFormat('en-US').format(n);
+}
 
-  requiredEnvironmentVariables.forEach((envVar) => {
-    if (!process.env[envVar]) {
-      missingEnvironmentVariables.push(envVar);
-    }
-  });
+export function slugify(str: string) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
 
-  if (missingEnvironmentVariables.length) {
-    throw new Error(
-      `The following environment variables are missing. Your site will not work without them. Read more: https://vercel.com/docs/integrations/shopify#configure-environment-variables\n\n${missingEnvironmentVariables.join(
-        '\n'
-      )}\n`
-    );
-  }
-
-  if (
-    process.env.SHOPIFY_STORE_DOMAIN?.includes('[') ||
-    process.env.SHOPIFY_STORE_DOMAIN?.includes(']')
-  ) {
-    throw new Error(
-      'Your `SHOPIFY_STORE_DOMAIN` environment variable includes brackets (ie. `[` and / or `]`). Your site will not work with them there. Please remove them.'
-    );
-  }
-};
+export function truncate(str: string, length: number) {
+  return str.length > length ? str.slice(0, length) + '…' : str;
+}
