@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { retell } from '@/lib/retell/client';
+import { checkMinuteLimit, minuteLimitBlockedResponse } from '@/lib/checkMinuteLimit';
 import { NextResponse } from 'next/server';
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,9 +11,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: agent } = await supabase
     .from('agents')
-    .select('retell_agent_id')
+    .select('retell_agent_id, workspace_id')
     .eq('id', id)
     .single();
+
+  // Minute limit enforcement gate
+  const workspaceId = (agent as { workspace_id?: string } | null)?.workspace_id;
+  if (workspaceId) {
+    const limit = await checkMinuteLimit(workspaceId);
+    if (!limit.allowed) return NextResponse.json(minuteLimitBlockedResponse(limit), { status: 402 });
+  }
 
   const retellAgentId = (agent as { retell_agent_id: string | null } | null)?.retell_agent_id;
   if (!retellAgentId) {

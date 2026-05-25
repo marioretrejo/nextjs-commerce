@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { retell } from '@/lib/retell/client';
+import { checkMinuteLimit, minuteLimitBlockedResponse } from '@/lib/checkMinuteLimit';
 import type { Agent, Campaign, CampaignContact } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
 
@@ -16,11 +17,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const c = campaign as Campaign;
 
-  // Check minutes limit
-  const { data: ws } = await supabase.from('workspaces').select('minutes_used, minutes_limit').eq('id', c.workspace_id).single();
-  const workspace = ws as { minutes_used: number; minutes_limit: number } | null;
-  if (workspace && workspace.minutes_used >= workspace.minutes_limit) {
-    return NextResponse.json({ error: 'Minutes limit reached' }, { status: 403 });
+  // Bulletproof minute limit enforcement gate
+  const limitCheck = await checkMinuteLimit(c.workspace_id);
+  if (!limitCheck.allowed) {
+    return NextResponse.json(minuteLimitBlockedResponse(limitCheck), { status: 402 });
   }
 
   // Get agent
