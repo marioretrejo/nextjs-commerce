@@ -334,8 +334,9 @@ export default async function AdminPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {[
-                  { href: '/admin/users',   label: 'Manage Users',   icon: <Users className="w-4 h-4" /> },
-                  { href: '/admin/metrics', label: 'Platform Metrics', icon: <BarChart2 className="w-4 h-4" /> },
+                  { href: '/admin/users',          label: 'Manage Users',      icon: <Users className="w-4 h-4" /> },
+                  { href: '/admin/metrics',        label: 'Platform Metrics',  icon: <BarChart2 className="w-4 h-4" /> },
+                  { href: '/admin/infrastructure', label: 'Infrastructure',    icon: <Shield className="w-4 h-4" /> },
                 ].map((link) => (
                   <Link
                     key={link.href}

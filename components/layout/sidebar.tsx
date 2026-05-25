@@ -5,6 +5,7 @@ import {
   BarChart2,
   Bell,
   Bot,
+  Cpu,
   CreditCard,
   DollarSign,
   Globe,
@@ -42,7 +43,8 @@ const navItems = [
 ];
 
 const adminItems = [
-  { href: '/admin', label: 'Superadmin', icon: Shield },
+  { href: '/admin',                label: 'Superadmin',    icon: Shield },
+  { href: '/admin/infrastructure', label: 'Infrastructure', icon: Cpu },
 ];
 
 interface SidebarProps {
