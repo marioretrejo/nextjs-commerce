@@ -95,8 +95,8 @@ export async function POST(req: Request) {
 
   const agentRow = agent as Agent;
 
-  // Sync to Retell if engine is retell or hybrid
-  if ((agentRow.voice_engine === 'retell' || agentRow.voice_engine === 'hybrid') &&
+  // Sync to Retell for standard and ultra_fast engines
+  if ((agentRow.voice_engine === 'standard' || agentRow.voice_engine === 'ultra_fast') &&
       process.env['RETELL_API_KEY']) {
     try {
       const llm = await retell.createLLM({

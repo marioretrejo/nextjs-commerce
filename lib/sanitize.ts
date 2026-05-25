@@ -5,7 +5,7 @@ export function sanitizeAgentForClient(agent: Record<string, unknown>) {
 }
 
 export function sanitizeCallForClient(call: Record<string, unknown>) {
-  const { internal_provider, routing_data, provider_cost, ...safe } = call;
-  void internal_provider; void routing_data; void provider_cost;
+  const { internal_provider, routing_data, provider_cost, cost_usd, ...safe } = call;
+  void internal_provider; void routing_data; void provider_cost; void cost_usd;
   return safe;
 }

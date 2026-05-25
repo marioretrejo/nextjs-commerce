@@ -1,5 +1,5 @@
 export type Plan = 'free' | 'pro' | 'scale';
-export type VoiceEngine = 'retell' | 'elevenlabs' | 'hybrid';
+export type VoiceEngine = 'standard' | 'ultra_fast' | 'premium';
 export type AgentStatus = 'active' | 'paused';
 export type CampaignStatus = 'draft' | 'scheduled' | 'active' | 'paused' | 'completed';
 export type ContactStatus = 'pending' | 'calling' | 'converted' | 'no_answer' | 'invalid' | 'rejected' | 'voicemail' | 'max_attempts';

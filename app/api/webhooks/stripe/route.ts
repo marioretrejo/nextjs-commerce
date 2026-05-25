@@ -44,6 +44,20 @@ export async function POST(req: Request) {
         stripe_subscription_id: sub.id,
         subscription_status: sub.status
       }).eq('stripe_customer_id', sub.customer as string);
+
+      // Resume campaigns paused due to minute limit when user upgrades
+      if (plan !== 'free') {
+        const { data: workspace } = await admin.from('workspaces')
+          .select('id')
+          .eq('owner_id', (await admin.from('users').select('id').eq('stripe_customer_id', sub.customer as string).single()).data?.id ?? '')
+          .single();
+        if (workspace) {
+          await admin.from('campaigns')
+            .update({ status: 'active', pause_reason: null })
+            .eq('workspace_id', (workspace as { id: string }).id)
+            .eq('pause_reason', 'minute_limit_reached');
+        }
+      }
       break;
     }
 
