@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import type { BillingInvoice, Plan } from '@/lib/supabase/types';
 import { CreditCard, FileText, Zap, Check, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
+import { EnterpriseInquiryModal } from '@/components/billing/enterprise-inquiry-modal';
 
 interface PlanDef {
   name: Plan;
@@ -203,7 +204,7 @@ export default async function BillingPage() {
           <CardDescription>Choose the plan that fits your team.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="grid grid-cols-3 divide-x divide-[#e0e0e0] border-t border-[#e0e0e0]">
+          <div className="grid grid-cols-4 divide-x divide-[#e0e0e0] border-t border-[#e0e0e0]">
             {PLANS.map((plan) => {
               const isCurrent = plan.name === currentPlan;
               return (
@@ -235,6 +236,33 @@ export default async function BillingPage() {
                 </div>
               );
             })}
+
+            {/* Enterprise column */}
+            <div className="p-6 bg-[#0a0a0a] text-white">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-semibold">Enterprise</p>
+              </div>
+              <p className="text-2xl font-bold mb-4">Custom</p>
+              <ul className="space-y-2 mb-6">
+                {[
+                  'Custom minute volume',
+                  'Custom per-minute rate',
+                  'Dedicated infrastructure',
+                  'BYOT with privacy mode',
+                  'Custom data residency',
+                  'White label + custom domain',
+                  'SLA guarantee',
+                  'Dedicated account manager',
+                  'BAA / NDA / custom contracts',
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-xs text-[#a0a0a0]">
+                    <Check className="w-3.5 h-3.5 text-white shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <EnterpriseInquiryModal />
+            </div>
           </div>
         </CardContent>
       </Card>

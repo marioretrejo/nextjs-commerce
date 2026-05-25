@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { AdjustMinutesModal } from '@/components/admin/adjust-minutes-modal';
 
 export default async function AdminUsersPage() {
   const supabase = await createClient();
@@ -39,7 +40,7 @@ export default async function AdminUsersPage() {
           <table className="w-full text-sm">
             <thead className="bg-[#f5f5f5] border-b border-[#e0e0e0]">
               <tr>
-                {['User', 'Plan', 'Minutes', 'Status', 'Joined'].map((h) => (
+                {['User', 'Plan', 'Minutes', 'Status', 'Joined', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#6b6b6b]">{h}</th>
                 ))}
               </tr>
@@ -66,6 +67,14 @@ export default async function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-[#6b6b6b]">
                     {new Date(u.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <AdjustMinutesModal
+                      workspaceId={u.id}
+                      currentUsed={u.minutes_used}
+                      currentLimit={u.minutes_limit}
+                      userName={u.name ?? u.email}
+                    />
                   </td>
                 </tr>
               ))}
