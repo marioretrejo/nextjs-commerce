@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeCallForClient } from '@/lib/sanitize';
 import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
@@ -36,5 +37,5 @@ export async function GET(req: Request) {
 
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data, total: count, page, limit });
+  return NextResponse.json({ data: (data ?? []).map(c => sanitizeCallForClient(c as Record<string, unknown>)), total: count, page, limit });
 }

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeCallForClient } from '@/lib/sanitize';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
@@ -27,5 +28,5 @@ export async function GET() {
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ calls: data ?? [] });
+  return NextResponse.json({ calls: (data ?? []).map(c => sanitizeCallForClient(c as Record<string, unknown>)) });
 }

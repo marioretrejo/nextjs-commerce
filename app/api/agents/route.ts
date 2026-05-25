@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { retell } from '@/lib/retell/client';
+import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
 
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json((data as Record<string, unknown>[]).map(sanitizeAgentForClient));
 }
 
 export async function POST(req: Request) {
@@ -123,5 +124,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json(agentRow, { status: 201 });
+  return NextResponse.json(sanitizeAgentForClient(agentRow as unknown as Record<string, unknown>), { status: 201 });
 }

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeCallForClient } from '@/lib/sanitize';
 import { NextResponse } from 'next/server';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -14,5 +15,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
-  return NextResponse.json(data);
+  return NextResponse.json(sanitizeCallForClient(data as Record<string, unknown>));
 }

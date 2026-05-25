@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { retell } from '@/lib/retell/client';
+import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
 
@@ -13,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // RLS on the user client ensures only owned agents are returned
   const { data, error } = await supabase.from('agents').select('*').eq('id', id).single();
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(data);
+  return NextResponse.json(sanitizeAgentForClient(data as Record<string, unknown>));
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -53,7 +54,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  return NextResponse.json(agent);
+  return NextResponse.json(sanitizeAgentForClient(agent as unknown as Record<string, unknown>));
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
