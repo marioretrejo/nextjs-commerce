@@ -38,8 +38,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   async function refetchCampaign() {
-    const r = await fetch(`/api/campaigns/${id}`);
-    if (r.ok) setCampaign(await r.json() as Campaign);
+    try {
+      const r = await fetch(`/api/campaigns/${id}`);
+      if (r.ok) setCampaign(await r.json() as Campaign);
+    } catch { /* ignore network errors in background refetch */ }
   }
 
   async function refetchContacts() {
@@ -49,12 +51,14 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
   useEffect(() => {
     async function load() {
-      const [campRes, coRes] = await Promise.all([
-        fetch(`/api/campaigns/${id}`),
-        fetch(`/api/campaigns/${id}/contacts`)
-      ]);
-      if (campRes.ok) setCampaign(await campRes.json() as Campaign);
-      if (coRes.ok) setContacts(await coRes.json() as Contact[]);
+      try {
+        const [campRes, coRes] = await Promise.all([
+          fetch(`/api/campaigns/${id}`),
+          fetch(`/api/campaigns/${id}/contacts`)
+        ]);
+        if (campRes.ok) setCampaign(await campRes.json() as Campaign);
+        if (coRes.ok) setContacts(await coRes.json() as Contact[]);
+      } catch { /* ignore network errors */ }
       setLoading(false);
     }
     load();

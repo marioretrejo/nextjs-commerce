@@ -34,7 +34,8 @@ export default function WidgetPage({ params }: { params: Promise<{ id: string }>
         setAgentName(d.name ?? '');
         if (d.widget_config) setConfig(d.widget_config);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, [id]);
 
   async function save() {

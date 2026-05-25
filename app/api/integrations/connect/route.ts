@@ -11,6 +11,11 @@ export async function POST(req: Request) {
   const { type } = body;
   if (!type) return NextResponse.json({ error: 'type required' }, { status: 400 });
 
+  const AVAILABLE_INTEGRATIONS = ['hubspot', 'webhook'];
+  if (!AVAILABLE_INTEGRATIONS.includes(type)) {
+    return NextResponse.json({ error: 'Integration not available yet' }, { status: 400 });
+  }
+
   // For HubSpot, return OAuth redirect URL
   if (type === 'hubspot') {
     const clientId = process.env['HUBSPOT_CLIENT_ID'];

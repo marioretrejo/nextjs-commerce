@@ -54,7 +54,8 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetch('/api/admin/workspace-id')
       .then((r) => r.json())
-      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''));
+      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
+      .catch(() => setLoading(false));
   }, []);
 
   const fetchData = useCallback(async () => {

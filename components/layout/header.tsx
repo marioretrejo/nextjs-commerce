@@ -16,6 +16,7 @@ import type { User, Workspace } from '@/lib/supabase/types';
 import { Bell, CreditCard, LogOut, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { CommandPaletteTrigger } from '@/components/command-palette';
 
 const planColors: Record<string, string> = {
   free: 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e0e0e0]',
@@ -73,6 +74,9 @@ export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps
         <Badge className={planColors[workspace.plan] ?? planColors['free']}>
           {workspace.plan.charAt(0).toUpperCase() + workspace.plan.slice(1)}
         </Badge>
+
+        {/* Command palette trigger */}
+        <CommandPaletteTrigger />
 
         {/* Notifications */}
         <Link href="/notifications" className="relative">

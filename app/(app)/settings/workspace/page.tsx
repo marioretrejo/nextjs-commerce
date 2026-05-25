@@ -34,7 +34,8 @@ export default function WorkspaceBrandingPage() {
         setWorkspaceName(d.name ?? '');
         if (d.branding) setBranding(d.branding);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   async function save() {
