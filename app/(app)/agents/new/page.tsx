@@ -290,7 +290,7 @@ export default function NewAgentPage() {
     name: '',
     language: 'en-US',
     auto_language_detection: false,
-    voice_engine: 'retell' as 'retell' | 'elevenlabs' | 'hybrid',
+    voice_engine: 'standard' as 'standard' | 'ultra_fast' | 'premium',
     voice_id: '',
     voice_name: '',
     emotional_speed: 1.0,
@@ -772,12 +772,17 @@ export default function NewAgentPage() {
           <CardHeader><CardTitle>Voice Configuration</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-1.5">
-              <Label>Voice Engine <FieldTooltip text="Retell uses their native voices. ElevenLabs provides ultra-realistic voices with more emotional range. Hybrid uses Retell for STT and ElevenLabs for TTS." /></Label>
+              <Label>Voice Engine <FieldTooltip text="Choose the voice quality tier. Standard is great for most use cases. Ultra-Fast minimizes latency for fast-paced conversations. Premium delivers the highest naturalness and emotional depth." /></Label>
               <div className="grid grid-cols-3 gap-3">
-                {(['retell', 'elevenlabs', 'hybrid'] as const).map((e) => (
-                  <button key={e} onClick={() => setField('voice_engine', e)}
-                    className={`rounded-md border p-3 text-sm font-medium capitalize transition-colors ${form.voice_engine === e ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white' : 'border-[#e0e0e0] hover:border-[#0a0a0a]'}`}>
-                    {e === 'elevenlabs' ? 'ElevenLabs' : e.charAt(0).toUpperCase() + e.slice(1)}
+                {([
+                  { value: 'standard',   label: 'Standard Voice',   sub: 'Best for most calls' },
+                  { value: 'ultra_fast', label: 'Ultra-Fast Voice',  sub: 'Lowest latency' },
+                  { value: 'premium',    label: 'Premium Voice',     sub: 'Highest quality' },
+                ] as const).map(({ value, label, sub }) => (
+                  <button key={value} onClick={() => setField('voice_engine', value)}
+                    className={`rounded-md border p-3 text-left transition-colors ${form.voice_engine === value ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white' : 'border-[#e0e0e0] hover:border-[#0a0a0a]'}`}>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className={`text-xs mt-0.5 ${form.voice_engine === value ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>{sub}</p>
                   </button>
                 ))}
               </div>
@@ -1004,7 +1009,7 @@ export default function NewAgentPage() {
               ))}
             </div>
             <p className="text-xs text-[#6b6b6b]">
-              The agent will be synced to {form.voice_engine === 'retell' || form.voice_engine === 'hybrid' ? 'Retell AI' : 'ElevenLabs'} immediately.
+              The agent will be activated and ready to make calls immediately after creation.
             </p>
           </CardContent>
         </Card>

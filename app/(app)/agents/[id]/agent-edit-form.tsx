@@ -182,12 +182,12 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                 <Input value={form.name ?? ''} onChange={(e) => setField('name', e.target.value)} />
               </div>
               <div className="space-y-1.5"><Label>Voice Engine</Label>
-                <Select value={form.voice_engine ?? 'retell'} onValueChange={(v) => setField('voice_engine', v as Agent['voice_engine'])}>
+                <Select value={form.voice_engine ?? 'standard'} onValueChange={(v) => setField('voice_engine', v as Agent['voice_engine'])}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="retell">Retell AI</SelectItem>
-                    <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
-                    <SelectItem value="hybrid">Hybrid</SelectItem>
+                    <SelectItem value="standard">Standard Voice</SelectItem>
+                    <SelectItem value="ultra_fast">Ultra-Fast Voice</SelectItem>
+                    <SelectItem value="premium">Premium Voice</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

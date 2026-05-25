@@ -78,22 +78,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     comingSoon: true,
   },
   {
-    type: 'twilio',
-    name: 'Twilio BYOC',
-    description: 'Bring your own Twilio account for calling.',
-    logo: 'TW',
-    docsUrl: 'https://www.twilio.com/docs',
-    comingSoon: true,
-  },
-  {
-    type: 'telnyx',
-    name: 'Telnyx',
-    description: 'Use Telnyx for carrier-grade voice infrastructure.',
-    logo: 'TEL',
-    docsUrl: 'https://developers.telnyx.com',
-    comingSoon: true,
-  },
-  {
     type: 'webhook',
     name: 'Webhook',
     description: 'Send real-time event notifications to your endpoint.',

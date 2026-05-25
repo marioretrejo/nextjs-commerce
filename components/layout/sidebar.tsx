@@ -30,7 +30,7 @@ const navItems = [
   { href: '/calls',           label: 'Calls',         icon: PhoneCall },
   { href: '/calls/live',      label: 'Live Monitor',  icon: Radio, pulse: true },
   { href: '/analytics',       label: 'Analytics',     icon: BarChart2 },
-  { href: '/analytics/costs', label: 'Cost Analytics',icon: DollarSign },
+  { href: '/analytics/costs', label: 'Usage',         icon: DollarSign },
   { href: '/quality',         label: 'Quality',       icon: Star },
   { href: '/numbers',         label: 'Numbers',       icon: Phone },
   { href: '/compliance',      label: 'Compliance',    icon: ShieldCheck },
