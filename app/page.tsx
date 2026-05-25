@@ -1,6 +1,37 @@
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
+const SOCIAL_PROOF_LOGOS = [
+  'TechCorp', 'GrowthCo', 'SalesForce Inc.', 'LeadGen Pro', 'RevOps HQ', 'DialMax', 'OutreachPro',
+];
+
+const FAQ = [
+  {
+    q: 'How is VoiceOS different from regular auto-dialers?',
+    a: 'VoiceOS uses large language models and ultra-realistic AI voices to hold genuine two-way conversations. Unlike dialers that play pre-recorded messages, our agents understand responses, handle objections, ask follow-up questions, and adapt in real-time.',
+  },
+  {
+    q: 'Is this compliant with TCPA and GDPR?',
+    a: 'VoiceOS includes a built-in Compliance Center with DNC list management, configurable calling hours, consent tracking, and data retention policies. You remain responsible for ensuring your use case meets local regulations, but we give you all the controls.',
+  },
+  {
+    q: 'What languages are supported?',
+    a: 'We support 70+ languages through Retell AI and ElevenLabs voice engines. You can configure a primary language per agent and enable auto-detection to match the caller\'s language on the first turn.',
+  },
+  {
+    q: 'Can I use my own phone numbers?',
+    a: 'Yes. VoiceOS supports Twilio BYOC and Telnyx BYO number so you can port your existing numbers. Alternatively, provision new numbers directly inside the platform in 16+ countries.',
+  },
+  {
+    q: 'How does billing work for extra minutes?',
+    a: 'Free plan includes 50 minutes/month. Pro includes 1,000 minutes. Scale includes 5,000 minutes. Additional minutes on Scale are billed at $0.05/minute. No surprise charges — you\'ll get an alert at 80% and 100% usage.',
+  },
+  {
+    q: 'Can I embed the voice agent on my website?',
+    a: 'Yes. Every agent has a built-in web widget that you can embed via a single <script> tag or <iframe>. Visitors can start a voice call directly in the browser with no phone needed.',
+  },
+];
+
 const FEATURES = [
   {
     icon: '🎙️',
@@ -87,6 +118,7 @@ export default function LandingPage() {
           <Link href="#features" className="hover:text-[#0a0a0a] transition-colors">Features</Link>
           <Link href="#how-it-works" className="hover:text-[#0a0a0a] transition-colors">How it works</Link>
           <Link href="#pricing" className="hover:text-[#0a0a0a] transition-colors">Pricing</Link>
+          <Link href="#faq" className="hover:text-[#0a0a0a] transition-colors">FAQ</Link>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/login">
@@ -144,6 +176,22 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Social Proof Bar ── */}
+      <section className="border-y border-[#e0e0e0] bg-white px-6 py-8 sm:px-10">
+        <div className="mx-auto max-w-5xl">
+          <p className="mb-6 text-center text-xs font-medium uppercase tracking-widest text-[#6b6b6b]">
+            Trusted by revenue teams at
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+            {SOCIAL_PROOF_LOGOS.map((name) => (
+              <span key={name} className="text-sm font-semibold text-[#c0c0c0] tracking-tight select-none">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── Stats ── */}
       <section className="border-y border-[#e0e0e0] bg-[#f5f5f5] px-6 py-12 sm:px-10">
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 md:grid-cols-4">
@@ -173,6 +221,23 @@ export default function LandingPage() {
                 <p className="text-sm leading-relaxed text-[#6b6b6b]">{f.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Demo Video ── */}
+      <section className="border-t border-[#e0e0e0] bg-white px-6 py-20 sm:px-10">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="text-sm font-medium uppercase tracking-widest text-[#6b6b6b] mb-2">Live demo</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-8">See it in action</h2>
+          <div className="relative rounded-2xl border-2 border-dashed border-[#e0e0e0] bg-[#f5f5f5] aspect-video flex flex-col items-center justify-center gap-4 cursor-pointer group hover:border-[#0a0a0a] transition-colors">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#0a0a0a] text-white shadow-lg group-hover:scale-105 transition-transform">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7 ml-0.5">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-[#6b6b6b]">Watch a 2-minute product demo</p>
+            <p className="text-xs text-[#6b6b6b]">See a live call, campaign launch, and analytics dashboard</p>
           </div>
         </div>
       </section>
@@ -322,6 +387,31 @@ export default function LandingPage() {
                   </Button>
                 </Link>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section className="border-t border-[#e0e0e0] bg-white px-6 py-24 sm:px-10" id="faq">
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-14 text-center">
+            <p className="text-sm font-medium uppercase tracking-widest text-[#6b6b6b]">FAQ</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2>
+          </div>
+          <div className="divide-y divide-[#e0e0e0]">
+            {FAQ.map((item) => (
+              <details key={item.q} className="group py-5">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 text-sm font-semibold text-[#0a0a0a] list-none">
+                  {item.q}
+                  <span className="shrink-0 rounded-full border border-[#e0e0e0] p-1 transition-transform group-open:rotate-180">
+                    <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" stroke="currentColor" strokeWidth={2}>
+                      <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </summary>
+                <p className="mt-3 text-sm leading-relaxed text-[#6b6b6b] pr-8">{item.a}</p>
+              </details>
             ))}
           </div>
         </div>
