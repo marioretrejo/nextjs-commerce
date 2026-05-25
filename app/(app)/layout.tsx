@@ -1,5 +1,6 @@
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
+import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
 import type { User, WorkspaceBranding } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
 import { getUserWorkspaces } from '@/lib/workspace';
@@ -49,6 +50,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {!userProfile.onboarding_completed && (
+        <OnboardingWizard userId={userProfile.id} userName={userProfile.name} />
+      )}
     </div>
   );
 }

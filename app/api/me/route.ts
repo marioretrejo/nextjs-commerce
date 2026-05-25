@@ -17,12 +17,17 @@ export async function PATCH(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json() as { name?: string; company?: string };
+  const body = await req.json() as { name?: string; company?: string; onboarding_completed?: boolean };
   const admin = createAdminClient();
+
+  const update: Record<string, unknown> = {};
+  if (body.name !== undefined) update['name'] = body.name;
+  if (body.company !== undefined) update['company'] = body.company;
+  if (body.onboarding_completed !== undefined) update['onboarding_completed'] = body.onboarding_completed;
 
   const { data, error } = await admin
     .from('users')
-    .update({ name: body.name, company: body.company })
+    .update(update)
     .eq('id', user.id)
     .select()
     .single();
