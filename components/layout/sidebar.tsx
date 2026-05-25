@@ -16,6 +16,7 @@ import {
   Radio,
   Settings,
   Shield,
+  ShieldCheck,
   Star,
   Users
 } from 'lucide-react';
@@ -32,6 +33,7 @@ const navItems = [
   { href: '/analytics/costs', label: 'Cost Analytics',icon: DollarSign },
   { href: '/quality',         label: 'Quality',       icon: Star },
   { href: '/numbers',         label: 'Numbers',       icon: Phone },
+  { href: '/compliance',      label: 'Compliance',    icon: ShieldCheck },
   { href: '/integrations',    label: 'Integrations',  icon: Globe },
   { href: '/team',            label: 'Team',          icon: Users },
   { href: '/billing',         label: 'Billing',       icon: CreditCard },

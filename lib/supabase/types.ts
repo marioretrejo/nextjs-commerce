@@ -310,6 +310,31 @@ export interface AutomationRule {
   created_at: string;
 }
 
+export interface DncEntry {
+  id: string;
+  workspace_id: string;
+  phone: string;
+  reason: string | null;
+  added_at: string;
+}
+
+export interface ComplianceSettings {
+  id: string;
+  workspace_id: string;
+  calling_hours_enabled: boolean;
+  calling_hours_start: string;
+  calling_hours_end: string;
+  calling_days: string[];
+  call_recording_retention_days: number;
+  transcript_retention_days: number;
+  require_consent: boolean;
+  consent_message: string | null;
+  tcpa_compliance_enabled: boolean;
+  gdpr_compliance_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Database type map for Supabase generics
 export type Database = {
   public: {
