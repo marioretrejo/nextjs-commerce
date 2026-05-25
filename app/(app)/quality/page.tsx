@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 import type { Agent, Call, QACriteria } from '@/lib/supabase/types';
 import { Shield, TrendingUp, AlertTriangle, Star, Plus, Pencil, Trash2 } from 'lucide-react';
+import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { format, subDays, eachWeekOfInterval, endOfWeek, startOfDay } from 'date-fns';
 import Link from 'next/link';
 
@@ -459,7 +460,7 @@ export default function QualityPage() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="criteria-name">Name</Label>
+              <Label htmlFor="criteria-name">Name <FieldTooltip text="A short label for this criterion. Keep it clear and specific, e.g. 'Greeting Quality' or 'Objection Handling'." /></Label>
               <Input
                 id="criteria-name"
                 placeholder="e.g. Greeting quality"
@@ -469,7 +470,7 @@ export default function QualityPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="criteria-desc">Description</Label>
+              <Label htmlFor="criteria-desc">Description <FieldTooltip text="Explain what the AI should evaluate. More detail helps the scoring model apply the criterion consistently across calls." /></Label>
               <Textarea
                 id="criteria-desc"
                 placeholder="Describe what this criterion evaluates…"
@@ -481,7 +482,7 @@ export default function QualityPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Weight</Label>
+                <Label>Weight <FieldTooltip text="How much this criterion contributes to the final QA score (0–100). All criteria weights are normalised, so relative proportions matter more than absolute values." /></Label>
                 <span className="text-sm font-medium text-[#0a0a0a]">{criteriaForm.weight}%</span>
               </div>
               <Slider

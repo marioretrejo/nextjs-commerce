@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -710,7 +711,7 @@ export default function NewAgentPage() {
               <Input placeholder="e.g. Sales SDR, Appointment Setter" value={form.name} onChange={(e) => setField('name', e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Language</Label>
+              <Label>Language <FieldTooltip text="The primary language the agent will speak. This also controls the speech recognition model used during calls." /></Label>
               <Select value={form.language} onValueChange={(v) => setField('language', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -721,7 +722,7 @@ export default function NewAgentPage() {
             <div className="flex items-center gap-3">
               <Switch checked={form.auto_language_detection} onCheckedChange={(v) => setField('auto_language_detection', v)} />
               <div>
-                <Label>Auto Language Detection</Label>
+                <Label>Auto Language Detection <FieldTooltip text="When enabled, the agent will detect the caller's language on the first turn and switch automatically. Useful for multilingual markets." /></Label>
                 <p className="text-xs text-[#6b6b6b]">Detect and match the caller&apos;s language automatically</p>
               </div>
             </div>
@@ -734,7 +735,7 @@ export default function NewAgentPage() {
           <CardHeader><CardTitle>Voice Configuration</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-1.5">
-              <Label>Voice Engine</Label>
+              <Label>Voice Engine <FieldTooltip text="Retell uses their native voices. ElevenLabs provides ultra-realistic voices with more emotional range. Hybrid uses Retell for STT and ElevenLabs for TTS." /></Label>
               <div className="grid grid-cols-3 gap-3">
                 {(['retell', 'elevenlabs', 'hybrid'] as const).map((e) => (
                   <button key={e} onClick={() => setField('voice_engine', e)}
@@ -768,7 +769,7 @@ export default function NewAgentPage() {
               </div>
             </div>
             <div className="space-y-4">
-              <Label>Emotional Controls</Label>
+              <Label>Emotional Controls <FieldTooltip text="Fine-tune how the agent sounds. Speed affects speaking pace, Pitch affects voice frequency, and Expressiveness controls emotional variation between sentences." /></Label>
               {[
                 { key: 'emotional_speed' as const, label: 'Speed', min: 0.5, max: 2.0, step: 0.1 },
                 { key: 'emotional_pitch' as const, label: 'Pitch', min: 0.5, max: 2.0, step: 0.1 },
@@ -801,17 +802,17 @@ export default function NewAgentPage() {
             </div>
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <Label>System Prompt</Label>
+                <Label>System Prompt <FieldTooltip text="Instructions the AI follows throughout the call. Use [variable_name] placeholders for dynamic values like contact name or company. More detail = better performance." /></Label>
                 <span className="text-xs text-[#6b6b6b]">~{tokenCount} tokens</span>
               </div>
               <Textarea rows={8} placeholder="You are a friendly sales representative for Acme Inc. Your goal is to..." value={form.system_prompt} onChange={(e) => setField('system_prompt', e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>First Message</Label>
+              <Label>First Message <FieldTooltip text="The exact words the agent says when the call is answered. Keep it short and natural. Use [name] to personalize with the contact's name." /></Label>
               <Textarea rows={3} placeholder="Hello! I'm calling from Acme Inc. Is this a good time to talk?" value={form.first_message} onChange={(e) => setField('first_message', e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Voicemail Message</Label>
+              <Label>Voicemail Message <FieldTooltip text="Spoken when the call goes to voicemail. Keep it under 30 seconds. Include a callback number or clear next step." /></Label>
               <Textarea rows={3} placeholder="Hi, I'm calling from Acme Inc. Please call us back at..." value={form.voicemail_message} onChange={(e) => setField('voicemail_message', e.target.value)} />
             </div>
           </CardContent>
@@ -854,11 +855,11 @@ export default function NewAgentPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Max Attempts</Label>
+                <Label>Max Attempts <FieldTooltip text="How many times the agent will call a contact if they don't answer. Each unanswered call counts. Recommended: 3–5." /></Label>
                 <Input type="number" min={1} max={10} value={form.max_attempts} onChange={(e) => setField('max_attempts', Number(e.target.value))} />
               </div>
               <div className="space-y-1.5">
-                <Label>Retry Interval (min)</Label>
+                <Label>Retry Interval (min) <FieldTooltip text="Minutes to wait before calling a contact again after a no-answer. Minimum 15 minutes. Recommended: 60–240 minutes." /></Label>
                 <Input type="number" min={15} value={form.retry_interval_minutes} onChange={(e) => setField('retry_interval_minutes', Number(e.target.value))} />
               </div>
             </div>
@@ -871,7 +872,7 @@ export default function NewAgentPage() {
           <CardHeader><CardTitle>Advanced Settings</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-1.5">
-              <Label>Branded Caller ID</Label>
+              <Label>Branded Caller ID <FieldTooltip text="The name displayed on the recipient's phone screen. Requires CNAM registration with your phone provider. Leave blank to use the number." /></Label>
               <Input placeholder="Acme Inc." value={form.branded_caller_id} onChange={(e) => setField('branded_caller_id', e.target.value)} />
             </div>
             <div className="space-y-3">
@@ -922,7 +923,7 @@ export default function NewAgentPage() {
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Dynamic Variables</Label>
+                  <Label>Dynamic Variables <FieldTooltip text="Key-value pairs injected into your system prompt at call time. Reference them with [key_name] syntax. Example: key='company', value='Acme Inc.'." /></Label>
                   <p className="text-xs text-[#6b6b6b]">Variables injected into prompts at call time.</p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={() => updateDynVars([...dynVars, { key: '', value: '' }])}>

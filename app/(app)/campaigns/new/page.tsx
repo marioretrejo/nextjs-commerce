@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -190,11 +191,11 @@ export default function NewCampaignPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Max Concurrent Calls</Label>
+                <Label>Max Concurrent Calls <FieldTooltip text="How many simultaneous calls the campaign can place. Higher concurrency finishes faster but requires more phone lines. Start with 5 and scale up." /></Label>
                 <Input type="number" min={1} max={50} value={form.max_concurrency} onChange={(e) => setForm((f) => ({ ...f, max_concurrency: Number(e.target.value) }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>Retry Interval (hours)</Label>
+                <Label>Retry Interval (hours) <FieldTooltip text="How long to wait before retrying a contact who didn't answer. 24 hours is recommended to avoid appearing as spam." /></Label>
                 <Input type="number" min={1} value={form.retry_interval_hours} onChange={(e) => setForm((f) => ({ ...f, retry_interval_hours: Number(e.target.value) }))} />
               </div>
             </div>
@@ -269,7 +270,7 @@ export default function NewCampaignPage() {
             <div className="flex items-center gap-3">
               <Switch checked={form.ab_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, ab_enabled: v }))} />
               <div>
-                <Label>Enable A/B Test</Label>
+                <Label>Enable A/B Test <FieldTooltip text="Randomly splits your contact list between Agent A and Agent B. After the campaign, compare conversion rates to find the better-performing agent." /></Label>
                 <p className="text-xs text-[#6b6b6b]">Split contacts between two agents to compare performance</p>
               </div>
             </div>
@@ -290,7 +291,7 @@ export default function NewCampaignPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Split Ratio — Agent A: {form.ab_split_ratio}% / Agent B: {100 - form.ab_split_ratio}%</Label>
+                  <Label>Split Ratio <FieldTooltip text="The percentage of contacts assigned to each agent. 50/50 gives the most statistically reliable comparison. Bias towards a known-good agent if you want lower risk." /> — Agent A: {form.ab_split_ratio}% / Agent B: {100 - form.ab_split_ratio}%</Label>
                   <input
                     type="range"
                     min={10}
