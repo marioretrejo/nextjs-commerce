@@ -295,6 +295,21 @@ export interface ApiKey {
   created_at: string;
 }
 
+export type AutomationTrigger = 'converted' | 'no_answer' | 'voicemail' | 'rejected' | 'transferred' | 'any';
+export type AutomationActionType = 'webhook' | 'tag_contact' | 'send_sms' | 'notify_team' | 'add_to_campaign';
+
+export interface AutomationRule {
+  id: string;
+  agent_id: string;
+  workspace_id: string;
+  name: string;
+  trigger_outcome: AutomationTrigger;
+  action_type: AutomationActionType;
+  action_config: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+}
+
 // Database type map for Supabase generics
 export type Database = {
   public: {
