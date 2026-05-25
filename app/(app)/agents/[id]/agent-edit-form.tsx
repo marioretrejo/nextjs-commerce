@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import type { Agent, AutomationRule } from '@/lib/supabase/types';
-import { Loader2, Plus, Trash2, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Plus, Trash2, Zap, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { AgentScorecard } from '@/components/agents/agent-scorecard';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -171,6 +172,7 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="advanced">Advanced</TabsTrigger>
           <TabsTrigger value="automation" onClick={loadAutomation}>Automation</TabsTrigger>
+          <TabsTrigger value="scorecard"><Star className="h-3.5 w-3.5 mr-1" />Scorecard</TabsTrigger>
         </TabsList>
 
         <TabsContent value="basics" className="space-y-4 pt-4">
@@ -433,6 +435,9 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
               ))}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="scorecard" className="pt-4">
+          <AgentScorecard agentId={agent.id} />
         </TabsContent>
       </Tabs>
 
