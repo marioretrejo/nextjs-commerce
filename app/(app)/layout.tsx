@@ -1,5 +1,7 @@
 import { Header } from '@/components/layout/header';
+import { MobileNav } from '@/components/layout/mobile-nav';
 import { Sidebar } from '@/components/layout/sidebar';
+import { CommandPalette } from '@/components/command-palette';
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
 import type { User, WorkspaceBranding } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
@@ -43,13 +45,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       className="flex min-h-screen bg-[#f5f5f5]"
       style={{ '--brand': primaryColor } as React.CSSProperties}
     >
-      <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} />
-      <div className="flex flex-1 flex-col pl-56">
+      <div className="hidden md:block">
+        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} />
+      </div>
+      <div className="flex flex-1 flex-col md:pl-56">
         <Header user={userProfile} workspace={workspace} unreadNotifications={unread} />
-        <main className="flex-1 pt-14">
+        <main className="flex-1 pt-14 pb-16 md:pb-0">
           {children}
         </main>
       </div>
+      <MobileNav />
+      <CommandPalette />
       {!userProfile.onboarding_completed && (
         <OnboardingWizard userId={userProfile.id} userName={userProfile.name} />
       )}

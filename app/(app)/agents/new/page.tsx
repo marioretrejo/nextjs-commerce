@@ -321,7 +321,32 @@ export default function NewAgentPage() {
     dynamic_variables: {} as Record<string, string>
   };
 
-  const [form, setForm] = useState(defaultForm);
+  const AUTOSAVE_KEY = 'voiceos:agent-draft';
+
+  const [form, setForm] = useState(() => {
+    // Restore autosaved draft if available
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(AUTOSAVE_KEY);
+        if (saved) return { ...defaultForm, ...JSON.parse(saved) as Partial<typeof defaultForm> };
+      } catch { /* ignore */ }
+    }
+    return defaultForm;
+  });
+
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saved'>('idle');
+
+  useEffect(() => {
+    if (screen !== 'simple') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(form));
+        setAutosaveStatus('saved');
+        setTimeout(() => setAutosaveStatus('idle'), 2000);
+      } catch { /* ignore */ }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [form, screen]);
 
   useEffect(() => {
     async function load() {
@@ -404,6 +429,7 @@ export default function NewAgentPage() {
         throw new Error(e.error);
       }
       const agent = await res.json() as { id: string };
+      localStorage.removeItem(AUTOSAVE_KEY);
       toast.success('Agent created!');
       router.push(`/agents/${agent.id}`);
     } catch (e) {
@@ -686,6 +712,17 @@ export default function NewAgentPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">New Agent</h1>
           <p className="text-sm text-[#6b6b6b]">Step {step + 1} of {STEPS.length} — {STEPS[step]}</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {autosaveStatus === 'saved' && (
+            <span className="text-xs text-[#6b6b6b]">Draft saved</span>
+          )}
+          <button
+            onClick={() => { localStorage.removeItem(AUTOSAVE_KEY); setForm(defaultForm); toast.success('Draft cleared'); }}
+            className="text-xs text-[#6b6b6b] hover:text-[#0a0a0a] underline underline-offset-2 transition-colors"
+          >
+            Clear draft
+          </button>
         </div>
       </div>
 
