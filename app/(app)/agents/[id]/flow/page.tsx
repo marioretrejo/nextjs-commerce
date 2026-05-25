@@ -33,7 +33,15 @@ interface FlowNodeData {
   condition?: string;
   transferNumber?: string;
   nodeType: NodeType;
+  voiceId?: string;
+  voiceName?: string;
   [key: string]: unknown;
+}
+
+interface Voice {
+  voice_id: string;
+  name: string;
+  labels?: Record<string, string>;
 }
 
 const NODE_COLORS: Record<NodeType, { bg: string; border: string; text: string }> = {
@@ -55,13 +63,18 @@ function CustomNode({ data }: { data: FlowNodeData }) {
         color: colors.text,
         borderRadius: 8,
         padding: '10px 16px',
-        minWidth: 140,
+        minWidth: 160,
         fontSize: 13,
       }}
     >
       <div style={{ fontSize: 10, opacity: 0.6, textTransform: 'uppercase', marginBottom: 2 }}>{data.nodeType}</div>
       <div style={{ fontWeight: 600 }}>{data.label}</div>
       {data.message && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 3 }}>{String(data.message).slice(0, 40)}…</div>}
+      {data.voiceName && (
+        <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+          🎙 {String(data.voiceName)}
+        </div>
+      )}
     </div>
   );
 }
@@ -93,17 +106,20 @@ export default function FlowBuilderPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Node<FlowNodeData> | null>(null);
+  const [voices, setVoices] = useState<Voice[]>([]);
 
   useEffect(() => {
-    fetch(`/api/agents/${id}/flow`)
-      .then(r => r.json())
-      .then((d: { flow_json: { nodes: Node<FlowNodeData>[]; edges: Edge[] } | null }) => {
-        if (d.flow_json?.nodes?.length) {
-          setNodes(d.flow_json.nodes);
-          setEdges(d.flow_json.edges ?? []);
-        }
-        setLoading(false);
-      });
+    Promise.all([
+      fetch(`/api/agents/${id}/flow`).then(r => r.json() as Promise<{ flow_json: { nodes: Node<FlowNodeData>[]; edges: Edge[] } | null }>),
+      fetch('/api/voices').then(r => r.ok ? r.json() as Promise<{ voices: Voice[] }> : Promise.resolve({ voices: [] })),
+    ]).then(([flowData, voiceData]) => {
+      if (flowData.flow_json?.nodes?.length) {
+        setNodes(flowData.flow_json.nodes);
+        setEdges(flowData.flow_json.edges ?? []);
+      }
+      setVoices(voiceData.voices ?? []);
+      setLoading(false);
+    });
   }, [id, setNodes, setEdges]);
 
   const onConnect = useCallback(
@@ -271,6 +287,32 @@ export default function FlowBuilderPage({ params }: { params: Promise<{ id: stri
                   placeholder="+1234567890"
                   className="h-8 text-sm font-mono"
                 />
+              </div>
+            )}
+
+            {(selected.data.nodeType === 'say' || selected.data.nodeType === 'ask') && voices.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Voice (override)</Label>
+                <Select
+                  value={selected.data.voiceId ?? '__default__'}
+                  onValueChange={(v) => {
+                    const voice = voices.find(x => x.voice_id === v);
+                    updateSelectedNode('voiceId', v === '__default__' ? '' : v);
+                    updateSelectedNode('voiceName', v === '__default__' ? '' : (voice?.name ?? ''));
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">Default (agent voice)</SelectItem>
+                    {voices.map(v => (
+                      <SelectItem key={v.voice_id} value={v.voice_id}>
+                        {v.name}
+                        {v.labels?.['gender'] && <span className="text-[#6b6b6b] ml-1 text-xs">· {v.labels['gender']}</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-[#6b6b6b]">This node will use a different voice than the agent default</p>
               </div>
             )}
           </div>
