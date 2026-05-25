@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { createClient } from '@/lib/supabase/server';
 import { getUserWorkspaces } from '@/lib/workspace';
@@ -7,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { DashboardCharts } from './dashboard-charts';
 import { LiveCallsCounter } from './live-calls-counter';
+import { MinuteAlerts } from '@/components/minute-usage/minute-alerts';
+import { CircularRing } from '@/components/minute-usage/circular-ring';
 
 export default async function DashboardPage() {
   return (
@@ -55,24 +56,17 @@ async function DashboardContent() {
   const avgDuration = totalCalls > 0
     ? Math.round((recentCalls?.reduce((s, c) => s + (c.duration_seconds ?? 0), 0) ?? 0) / totalCalls)
     : 0;
-  const minutesPct = Math.min((workspace.minutes_used / workspace.minutes_limit) * 100, 100);
   const activeCampaigns = campaigns?.filter((c) => c.status === 'active').length ?? 0;
 
   return (
     <>
-      {/* Alert banners */}
-      {minutesPct >= 100 && (
-        <div className="rounded-lg border border-[#0a0a0a] bg-[#0a0a0a] px-4 py-3 text-sm text-white">
-          <strong>Minutes limit reached.</strong> All calls are paused.{' '}
-          <a href="/billing" className="underline">Upgrade your plan</a> to resume.
-        </div>
-      )}
-      {minutesPct >= 80 && minutesPct < 100 && (
-        <div className="rounded-lg border border-[#e0e0e0] bg-[#f5f5f5] px-4 py-3 text-sm text-[#0a0a0a]">
-          <strong>80% of minutes used.</strong> You have {workspace.minutes_limit - workspace.minutes_used} minutes remaining.{' '}
-          <a href="/billing" className="underline">Upgrade to avoid interruption.</a>
-        </div>
-      )}
+      {/* Alert banners — real-time via Supabase (layout also shows global modal at 100%) */}
+      <MinuteAlerts
+        workspaceId={workspace.id}
+        initialUsed={Number(workspace.minutes_used)}
+        limit={Number(workspace.minutes_limit)}
+        plan={workspace.plan}
+      />
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -86,15 +80,14 @@ async function DashboardContent() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-[#6b6b6b]">Minutes Used</CardTitle>
+            <CardTitle className="text-sm font-medium text-[#6b6b6b]">Minutes Usage</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="mb-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold">{workspace.minutes_used.toLocaleString()}</span>
-              <span className="text-sm text-[#6b6b6b]">/ {workspace.minutes_limit.toLocaleString()} min</span>
-            </div>
-            <Progress value={minutesPct} />
-            <p className="mt-1 text-xs text-[#6b6b6b]">{minutesPct.toFixed(1)}% of monthly limit</p>
+          <CardContent className="flex items-center justify-center py-4">
+            <CircularRing
+              workspaceId={workspace.id}
+              initialUsed={Number(workspace.minutes_used)}
+              limit={Number(workspace.minutes_limit)}
+            />
           </CardContent>
         </Card>
 

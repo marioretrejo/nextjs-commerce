@@ -11,12 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Progress } from '@/components/ui/progress';
 import type { User, Workspace } from '@/lib/supabase/types';
 import { Bell, CreditCard, LogOut, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CommandPaletteTrigger } from '@/components/command-palette';
+import { MinutePill } from '@/components/minute-usage/minute-pill';
 
 const planColors: Record<string, string> = {
   free: 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e0e0e0]',
@@ -32,7 +32,6 @@ interface HeaderProps {
 
 export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps) {
   const router = useRouter();
-  const minutesPct = Math.min((workspace.minutes_used / workspace.minutes_limit) * 100, 100);
   const initials = (user.name ?? user.email)
     .split(' ')
     .map((w) => w[0])
@@ -48,24 +47,13 @@ export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps
 
   return (
     <header className="fixed left-56 right-0 top-0 z-30 flex h-14 items-center justify-between border-b border-[#e0e0e0] bg-white px-6">
-      {/* Minutes used */}
-      <div className="flex items-center gap-4">
-        <div className="hidden items-center gap-3 sm:flex">
-          <span className="text-xs text-[#6b6b6b]">
-            {workspace.minutes_used.toLocaleString()} / {workspace.minutes_limit.toLocaleString()} min
-          </span>
-          <div className="w-32">
-            <Progress
-              value={minutesPct}
-              className={minutesPct >= 100 ? '[&>div]:bg-[#0a0a0a]' : minutesPct >= 80 ? '[&>div]:bg-[#6b6b6b]' : ''}
-            />
-          </div>
-          {minutesPct >= 80 && (
-            <span className={`text-xs font-medium ${minutesPct >= 100 ? 'text-[#0a0a0a]' : 'text-[#6b6b6b]'}`}>
-              {minutesPct >= 100 ? 'Limit reached' : '80% used'}
-            </span>
-          )}
-        </div>
+      {/* Minutes pill — real-time via Supabase */}
+      <div className="flex items-center gap-3">
+        <MinutePill
+          workspaceId={workspace.id}
+          initialUsed={Number(workspace.minutes_used)}
+          limit={Number(workspace.minutes_limit)}
+        />
       </div>
 
       {/* Right side */}

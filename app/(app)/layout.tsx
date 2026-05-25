@@ -3,6 +3,7 @@ import { MobileNav } from '@/components/layout/mobile-nav';
 import { Sidebar } from '@/components/layout/sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
+import { MinuteAlerts } from '@/components/minute-usage/minute-alerts';
 import type { User, WorkspaceBranding } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
 import { getUserWorkspaces } from '@/lib/workspace';
@@ -59,6 +60,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       {!userProfile.onboarding_completed && (
         <OnboardingWizard userId={userProfile.id} userName={userProfile.name} />
       )}
+      <MinuteAlerts
+        workspaceId={workspace.id}
+        initialUsed={Number(workspace.minutes_used)}
+        limit={Number(workspace.minutes_limit)}
+        plan={workspace.plan}
+      />
     </div>
   );
 }
