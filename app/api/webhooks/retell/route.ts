@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { deliverWebhook } from '@/lib/webhooks/deliver';
+import { updateWorkspaceMinutes } from '@/lib/updateWorkspaceMinutes';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
@@ -100,6 +101,9 @@ export async function POST(req: Request) {
       retell_call_id: call.call_id,
       cost_usd: (durationSeconds / 60) * 0.05
     }).select().single();
+
+    // Atomic minute update + threshold enforcement (fire-and-forget)
+    updateWorkspaceMinutes(agentRow.workspace_id, durationSeconds).catch(console.error);
 
     // Update campaign contact if applicable
     const campaignId = call.metadata?.['campaign_id'] as string | null;
