@@ -41,3 +41,6 @@ next-env.d.ts
 /generated/prisma
 prisma/prisma/
 .env
+
+# Supabase CLI temp files
+supabase/.temp/
