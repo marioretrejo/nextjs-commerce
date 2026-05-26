@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
           getAll() {
             return request.cookies.getAll();
           },
-          setAll(toSet) {
+          setAll(toSet: { name: string; value: string; options?: CookieOptions }[]) {
             cookiesToSet.push(...toSet);
           }
         }
