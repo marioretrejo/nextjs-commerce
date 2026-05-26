@@ -48,7 +48,7 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push('/verify-email');
+      router.push('/dashboard');
     } catch {
       toast.error('Something went wrong. Please try again.');
     } finally {
