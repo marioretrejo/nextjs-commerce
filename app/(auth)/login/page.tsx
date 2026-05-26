@@ -33,7 +33,6 @@ function LoginForm() {
       }
 
       router.push(redirect);
-      router.refresh();
     } catch {
       toast.error('Something went wrong. Please try again.');
     } finally {
