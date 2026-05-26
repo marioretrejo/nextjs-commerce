@@ -29,39 +29,50 @@ export default function RegisterPage() {
     }
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          full_name: form.name,
-          company: form.company
-        },
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            full_name: form.name,
+            company: form.company
+          },
+          emailRedirectTo: `${window.location.origin}/api/auth/callback`
+        }
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
       }
-    });
 
-    if (error) {
-      toast.error(error.message);
+      router.push('/verify-email');
+    } catch {
+      toast.error('Something went wrong. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push('/verify-email');
   }
 
   async function handleGoogle() {
     setGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/api/auth/callback`
+        }
+      });
+      if (error || !data?.url) {
+        toast.error(error?.message ?? 'Google sign-in is not available. Please use email.');
+        setGoogleLoading(false);
       }
-    });
-    if (error) {
-      toast.error(error.message);
+      // On success the browser redirects to Google — no further action needed
+    } catch {
+      toast.error('Something went wrong. Please try again.');
       setGoogleLoading(false);
     }
   }

@@ -23,30 +23,41 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      toast.error(error.message);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      router.push(redirect);
+      router.refresh();
+    } catch {
+      toast.error('Something went wrong. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push(redirect);
-    router.refresh();
   }
 
   async function handleGoogle() {
     setGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=${redirect}`
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/api/auth/callback?next=${redirect}`
+        }
+      });
+      if (error || !data?.url) {
+        toast.error(error?.message ?? 'Google sign-in is not available. Please use email.');
+        setGoogleLoading(false);
       }
-    });
-    if (error) {
-      toast.error(error.message);
+      // On success the browser redirects to Google — no further action needed
+    } catch {
+      toast.error('Something went wrong. Please try again.');
       setGoogleLoading(false);
     }
   }
