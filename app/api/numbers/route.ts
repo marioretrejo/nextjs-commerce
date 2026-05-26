@@ -25,11 +25,23 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json() as { workspace_id: string; country_code: string; phone_number?: string };
-  if (!body.workspace_id) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
+  const body = await req.json() as { workspace_id?: string; country_code: string; phone_number?: string };
+
+  // Bug fix #2: auto-detect workspace_id from the authenticated user's first workspace
+  let workspaceId = body.workspace_id;
+  if (!workspaceId) {
+    const { data: ws } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', user.id)
+      .limit(1)
+      .single();
+    workspaceId = (ws as { id: string } | null)?.id;
+  }
+  if (!workspaceId) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
   // Verify the workspace belongs to this user via RLS
-  const { data: ws } = await supabase.from('workspaces').select('id').eq('id', body.workspace_id).single();
+  const { data: ws } = await supabase.from('workspaces').select('id').eq('id', workspaceId).single();
   if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
   let phone: string;
@@ -56,7 +68,7 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
   const { data, error } = await admin.from('phone_numbers').insert({
-    workspace_id: body.workspace_id,
+    workspace_id: workspaceId,
     number: phone,
     country_code: body.country_code,
     country_name: country?.name ?? body.country_code,

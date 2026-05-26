@@ -136,8 +136,18 @@ export default function RegisterPage() {
         </div>
 
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Creating account…' : 'Create account'}
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Setting up your account…
+            </span>
+          ) : 'Create account'}
         </Button>
+        {loading && (
+          <p className="text-center text-xs text-[#6b6b6b]">
+            This takes a few seconds — setting up your workspace.
+          </p>
+        )}
       </form>
 
       <p className="mt-4 text-center text-xs text-[#6b6b6b]">

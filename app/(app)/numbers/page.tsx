@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import type { PhoneNumber, PhoneStatus } from '@/lib/supabase/types';
 import { Phone, Globe, Plus, Trash2, Bot, Settings2 } from 'lucide-react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { format } from 'date-fns';
 
@@ -57,29 +58,44 @@ export default function NumbersPage() {
 
   const fetchNumbers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch('/api/numbers?limit=100');
-    if (res.ok) {
-      const d = await res.json() as { numbers: PhoneNumber[] };
-      setNumbers(d.numbers ?? []);
+    try {
+      const res = await fetch('/api/numbers?limit=100');
+      if (res.ok) {
+        // Bug fix #3: API returns array directly, not { numbers: [] }
+        const data = await res.json() as PhoneNumber[];
+        setNumbers(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // non-blocking fetch error
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchNumbers(); }, [fetchNumbers]);
 
   async function requestNumber() {
     setRequesting(true);
-    const country = COUNTRIES.find(c => c.code === selectedCountry);
-    const res = await fetch('/api/numbers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ country_code: selectedCountry, country_name: country?.name }),
-    });
-    if (res.ok) {
-      await fetchNumbers();
-      setRequestDialogOpen(false);
+    try {
+      const country = COUNTRIES.find(c => c.code === selectedCountry);
+      const res = await fetch('/api/numbers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Bug fix #2: workspace_id is auto-detected server-side from the session
+        body: JSON.stringify({ country_code: selectedCountry, country_name: country?.name }),
+      });
+      if (res.ok) {
+        await fetchNumbers();
+        setRequestDialogOpen(false);
+      } else {
+        const err = await res.json() as { error?: string };
+        toast.error(err.error ?? 'Failed to request number. Please try again.');
+      }
+    } catch {
+      toast.error('Network error. Check your connection and try again.');
+    } finally {
+      setRequesting(false);
     }
-    setRequesting(false);
   }
 
   async function releaseNumber(id: string) {

@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { Bot, Building2, CheckCircle2, ChevronRight, Phone, Rocket, Sparkles, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface OnboardingWizardProps {
   userId: string;
   userName: string | null;
+  workspaceId: string;
 }
 
 const STEPS = [
@@ -32,11 +34,12 @@ const LANGUAGES = [
   { value: 'pt-BR', label: 'Portuguese (Brazil)' },
 ];
 
-export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
+export function OnboardingWizard({ userId: _userId, userName, workspaceId }: OnboardingWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   const [company, setCompany] = useState('');
   const [industry, setIndustry] = useState('');
@@ -66,14 +69,34 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
     });
   }
 
+  // Bug fix #6: save business data when advancing from step 2
+  async function handleStep2Next() {
+    setLoading(true);
+    try {
+      await fetch('/api/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: company || undefined }),
+      });
+    } catch {
+      // non-blocking — profile save failure shouldn't block onboarding
+    } finally {
+      setLoading(false);
+      setStep(3);
+    }
+  }
+
+  // Bug fix #1 (workspace_id) + Bug fix #4 (error handling)
   async function handleStep3Next() {
     if (!agentName.trim()) return;
     setLoading(true);
+    setAgentError(null);
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          workspace_id: workspaceId,
           name: agentName,
           language: agentLanguage,
           objective: agentObjective,
@@ -81,13 +104,24 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
           system_prompt: `You are ${agentName}, a voice AI assistant. ${agentObjective}`,
         }),
       });
+
       if (res.ok) {
         const data = await res.json() as { id: string };
         setCreatedAgentId(data.id);
+        setStep(4);
+      } else {
+        const err = await res.json() as { error?: string };
+        const msg = err.error ?? 'Failed to create agent. Please try again.';
+        setAgentError(msg);
+        toast.error(msg);
+        // Stay on step 3 — don't advance silently on failure
       }
+    } catch {
+      const msg = 'Network error. Check your connection and try again.';
+      setAgentError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
-      setStep(4);
     }
   }
 
@@ -228,11 +262,13 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
                 <button onClick={() => setStep(1)} className="flex-1 rounded-lg border border-[#e0e0e0] py-2.5 text-sm font-medium text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors">
                   Back
                 </button>
+                {/* Bug fix #6: save business data before advancing */}
                 <button
-                  onClick={() => setStep(3)}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#0a0a0a] text-white py-2.5 text-sm font-medium hover:bg-[#333] transition-colors"
+                  onClick={handleStep2Next}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#0a0a0a] text-white py-2.5 text-sm font-medium hover:bg-[#333] transition-colors disabled:opacity-50"
                 >
-                  Continue <ChevronRight className="h-4 w-4" />
+                  {loading ? 'Saving…' : <> Continue <ChevronRight className="h-4 w-4" /></>}
                 </button>
               </div>
             </div>
@@ -250,7 +286,7 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
                   <label className="text-sm font-medium text-[#0a0a0a]">Agent name <span className="text-red-500">*</span></label>
                   <input
                     value={agentName}
-                    onChange={(e) => setAgentName(e.target.value)}
+                    onChange={(e) => { setAgentName(e.target.value); setAgentError(null); }}
                     placeholder="e.g. Sales Assistant, Sofia, Max"
                     className="mt-1 w-full rounded-lg border border-[#e0e0e0] px-3 py-2 text-sm outline-none focus:border-[#0a0a0a] transition-colors"
                   />
@@ -277,6 +313,12 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
                     ))}
                   </select>
                 </div>
+                {/* Bug fix #4: show error if creation failed */}
+                {agentError && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {agentError}
+                  </p>
+                )}
               </div>
               <div className="mt-6 flex gap-3">
                 <button onClick={() => setStep(2)} className="flex-1 rounded-lg border border-[#e0e0e0] py-2.5 text-sm font-medium text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors">
@@ -306,7 +348,7 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
                   <div>
                     <p className="text-sm font-medium text-[#0a0a0a]">Provision a number from the Numbers page</p>
                     <p className="text-xs text-[#6b6b6b] mt-1">
-                      VoiceOS supports Twilio and Telnyx numbers in 16+ countries. Head to the Numbers page after setup to provision one.
+                      VoiceOS supports Twilio numbers in 16+ countries. Head to the Numbers page after setup to provision one.
                     </p>
                   </div>
                 </div>
@@ -320,12 +362,13 @@ export function OnboardingWizard({ userId, userName }: OnboardingWizardProps) {
                   </div>
                 </div>
               )}
+              {/* Bug fix #7: remove duplicate buttons — Back goes to step 3, Continue goes to step 5 */}
               <div className="mt-4 flex gap-3">
                 <button
-                  onClick={handleSkipToFinish}
+                  onClick={() => setStep(3)}
                   className="flex-1 rounded-lg border border-[#e0e0e0] py-2.5 text-sm font-medium text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
                 >
-                  Skip for now
+                  Back
                 </button>
                 <button
                   onClick={handleSkipToFinish}

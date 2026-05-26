@@ -58,7 +58,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <MobileNav />
       <CommandPalette />
       {!userProfile.onboarding_completed && (
-        <OnboardingWizard userId={userProfile.id} userName={userProfile.name} />
+        <OnboardingWizard userId={userProfile.id} userName={userProfile.name} workspaceId={workspace.id} />
       )}
       <MinuteAlerts
         workspaceId={workspace.id}
