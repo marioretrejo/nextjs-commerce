@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { deliverWebhook } from '@/lib/webhooks/deliver';
 import { updateWorkspaceMinutes } from '@/lib/updateWorkspaceMinutes';
+import { executeAutomationRule } from '@/lib/automation/execute';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
@@ -139,6 +140,31 @@ export async function POST(req: Request) {
     if (outcome === 'converted') {
       deliverWebhook(agentRow.workspace_id, 'call.converted', { ...callPayload, contact: insertedCall }).catch(console.error);
     }
+
+    // Execute automation rules matching this call outcome (fire-and-forget)
+    const callRecord = {
+      id: (insertedCall as { id?: string } | null)?.id,
+      retell_call_id: call.call_id,
+      contact_phone: (call.metadata?.['to_number'] as string | null) ?? null,
+      campaign_id: campaignId,
+      outcome,
+      sentiment,
+      duration_seconds: durationSeconds
+    };
+    Promise.resolve(
+      admin
+        .from('automation_rules')
+        .select('*')
+        .eq('workspace_id', agentRow.workspace_id)
+        .eq('agent_id', agentRow.id)
+        .eq('enabled', true)
+        .in('trigger_outcome', [outcome ?? 'no_answer', 'any'])
+    ).then(({ data: rules }) => {
+      if (!rules?.length) return;
+      return Promise.all(rules.map((rule) =>
+        executeAutomationRule(rule as Parameters<typeof executeAutomationRule>[0], callRecord, admin)
+      ));
+    }).catch(console.error);
   }
 
   return NextResponse.json({ ok: true });

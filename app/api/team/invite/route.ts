@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { sendTeamInvite } from '@/lib/email';
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -28,10 +30,14 @@ export async function POST(req: Request) {
 
   if (!wsId) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
-  // Verify the calling user owns this workspace
-  const { data: ws } = await supabase.from('workspaces').select('id').eq('id', wsId).single();
+  const { data: ws } = await supabase
+    .from('workspaces')
+    .select('id, name')
+    .eq('id', wsId)
+    .single();
   if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
+  const workspace = ws as { id: string; name: string };
   const admin = createAdminClient();
 
   // Check if user already exists
@@ -42,17 +48,27 @@ export async function POST(req: Request) {
     .single();
 
   const inviteeId = (existingUser as { id: string } | null)?.id ?? null;
+  const inviteToken = crypto.randomUUID();
 
-  // Upsert member record
   const { data, error } = await admin.from('workspace_members').upsert({
     workspace_id: wsId,
     user_id: inviteeId,
     role: role ?? 'editor',
     status: inviteeId ? 'active' : 'pending',
     invite_email: inviteeId ? null : email,
-    invited_by: user.id
+    invited_by: user.id,
+    invite_token: inviteeId ? null : inviteToken
   }, { onConflict: 'workspace_id,user_id' }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Send invite email for new (pending) members
+  if (!inviteeId) {
+    const inviterName = (user.user_metadata?.['full_name'] as string | undefined) ?? user.email ?? 'A teammate';
+    const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
+    sendTeamInvite({ to: email, inviterName, workspaceName: workspace.name, inviteToken, appUrl })
+      .catch(console.error);
+  }
+
   return NextResponse.json(data, { status: 201 });
 }

@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { stripe } from '@/lib/stripe/client';
+import { sendPaymentFailed } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 
@@ -96,17 +97,30 @@ export async function POST(req: Request) {
 
     case 'invoice.payment_failed': {
       const inv = event.data.object as Stripe.Invoice;
-      const { data: user } = await admin.from('users').select('id').eq('stripe_customer_id', inv.customer as string).single();
+      const { data: user } = await admin.from('users').select('id, email').eq('stripe_customer_id', inv.customer as string).single();
       if (!user) break;
-      const userId = (user as { id: string }).id;
+      const u = user as { id: string; email: string };
 
-      // Notify user
+      const { data: ws } = await admin.from('workspaces').select('name').eq('owner_id', u.id).single();
+      const workspaceName = (ws as { name: string } | null)?.name ?? 'your workspace';
+      const amountStr = `$${((inv.amount_due ?? 0) / 100).toFixed(2)}`;
+      const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
+
+      // In-app notification
       await admin.from('notifications').insert({
-        user_id: userId,
+        user_id: u.id,
         type: 'payment_failed',
         title: 'Payment failed',
-        message: 'Your last payment failed. Please update your payment method to avoid service interruption.'
+        message: `Your payment of ${amountStr} failed. Please update your payment method.`
       });
+
+      // Email notification
+      sendPaymentFailed({
+        to: u.email,
+        workspaceName,
+        amount: amountStr,
+        retryUrl: `${appUrl}/billing`
+      }).catch(console.error);
       break;
     }
   }
