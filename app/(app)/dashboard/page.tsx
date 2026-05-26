@@ -31,7 +31,7 @@ async function DashboardContent() {
 
   const workspaces = await getUserWorkspaces();
   const workspace = workspaces[0];
-  if (!workspace) redirect('/login');
+  if (!workspace) redirect('/onboarding');
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

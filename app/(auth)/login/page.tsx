@@ -5,14 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { toast } from 'sonner';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') ?? '/dashboard';
+  const redirectTo = searchParams.get('redirect') ?? '/dashboard';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +31,8 @@ function LoginForm() {
         return;
       }
 
-      router.push(redirect);
+      // Hard navigation ensures session cookies are sent with the next server request
+      window.location.href = redirectTo;
     } catch {
       toast.error('Something went wrong. Please try again.');
     } finally {

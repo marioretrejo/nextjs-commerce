@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (userProfile.is_suspended) redirect('/suspended');
 
   const workspace = workspaces[0];
-  if (!workspace) redirect('/login');
+  if (!workspace) redirect('/onboarding');
 
   const unread = notifications?.length ?? 0;
 
