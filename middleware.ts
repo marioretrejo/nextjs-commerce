@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -87,12 +87,12 @@ export async function middleware(req: NextRequest) {
       getAll() {
         return req.cookies.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
         // Propagate refreshed cookies to both the forwarded request and the response
         cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
         supabaseResponse = NextResponse.next({ request: req });
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
+          supabaseResponse.cookies.set(name, value, options as Parameters<typeof supabaseResponse.cookies.set>[2])
         );
       }
     }
