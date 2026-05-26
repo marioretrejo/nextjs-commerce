@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   '/api/webhooks/stripe',
   '/api/webhooks/elevenlabs',
   '/api/health',
+  '/api/debug',
 ];
 
 const ADMIN_PATHS = ['/admin'];
@@ -60,7 +61,7 @@ export async function middleware(req: NextRequest) {
             headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
             body: JSON.stringify({ last_used_at: new Date().toISOString() }),
           }).catch(() => {});
-          const response = NextResponse.next();
+          const response = NextResponse.next({ request: req });
           response.headers.set('x-api-workspace-id', rows[0]!.workspace_id);
           return response;
         }
@@ -77,18 +78,22 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const res = NextResponse.next();
+  // Official Next.js 15 + Supabase SSR pattern — passes request so Server Components
+  // see any cookies that the middleware refreshes during token validation.
+  let supabaseResponse = NextResponse.next({ request: req });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return req.cookies.getAll();
       },
-      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          req.cookies.set(name, value);
-          res.cookies.set(name, value, options);
-        });
+      setAll(cookiesToSet) {
+        // Propagate refreshed cookies to both the forwarded request and the response
+        cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+        supabaseResponse = NextResponse.next({ request: req });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        );
       }
     }
   });
@@ -116,7 +121,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  return res;
+  return supabaseResponse;
 }
 
 export const config = {
