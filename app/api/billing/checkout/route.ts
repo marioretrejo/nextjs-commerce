@@ -2,15 +2,23 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { stripe } from '@/lib/stripe/client';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { apiError, parseBody } from '@/lib/api';
+import { env } from '@/lib/env';
+
+const CheckoutSchema = z.object({
+  plan: z.enum(['pro', 'scale']),
+});
 
 export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { plan } = await req.json() as { plan: 'pro' | 'scale' };
-  const priceId = plan === 'pro' ? process.env['STRIPE_PRICE_PRO'] : process.env['STRIPE_PRICE_SCALE'];
-  if (!priceId) return NextResponse.json({ error: 'Price not configured' }, { status: 500 });
+  const parsed = parseBody(CheckoutSchema, await req.json());
+  if (!parsed.success) return parsed.response;
+  const { plan } = parsed.data;
+  const priceId = plan === 'pro' ? env.STRIPE_PRICE_PRO : env.STRIPE_PRICE_SCALE;
 
   const { data: userProfile } = await supabase.from('users').select('stripe_customer_id, email, name').eq('id', user.id).single();
   const profile = userProfile as { stripe_customer_id: string | null; email: string; name: string | null } | null;

@@ -3,6 +3,7 @@ import { stripe } from '@/lib/stripe/client';
 import { sendPaymentFailed } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
+import { env } from '@/lib/env';
 
 const PLAN_MINUTES: Record<string, number> = { pro: 1000, scale: 5000, free: 50 };
 
@@ -10,13 +11,13 @@ export async function POST(req: Request) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature');
 
-  if (!sig || !process.env['STRIPE_WEBHOOK_SECRET']) {
+  if (!sig) {
     return new NextResponse('Missing signature', { status: 400 });
   }
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env['STRIPE_WEBHOOK_SECRET']!);
+    event = stripe.webhooks.constructEvent(body, sig, env.STRIPE_WEBHOOK_SECRET);
   } catch {
     return new NextResponse('Invalid signature', { status: 400 });
   }
@@ -29,8 +30,8 @@ export async function POST(req: Request) {
       const sub = event.data.object as Stripe.Subscription;
       const priceId = sub.items.data[0]?.price.id;
       let plan = 'free';
-      if (priceId === process.env['STRIPE_PRICE_PRO']) plan = 'pro';
-      else if (priceId === process.env['STRIPE_PRICE_SCALE']) plan = 'scale';
+      if (priceId === env.STRIPE_PRICE_PRO) plan = 'pro';
+      else if (priceId === env.STRIPE_PRICE_SCALE) plan = 'scale';
 
       await admin.from('workspaces')
         .update({

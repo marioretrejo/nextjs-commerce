@@ -38,11 +38,10 @@ export async function POST(req: Request) {
   const signature = req.headers.get('x-retell-signature') ?? '';
   const secret = process.env['RETELL_WEBHOOK_SECRET'];
 
-  if (secret) {
-    if (!signature) return new NextResponse('Missing signature', { status: 401 });
-    const valid = verifySignature(body, signature, secret);
-    if (!valid) return new NextResponse('Invalid signature', { status: 401 });
-  }
+  if (!secret) return new NextResponse('Webhook secret not configured', { status: 500 });
+  if (!signature) return new NextResponse('Missing signature', { status: 401 });
+  const valid = verifySignature(body, signature, secret);
+  if (!valid) return new NextResponse('Invalid signature', { status: 401 });
 
   const event = JSON.parse(body) as RetellCallEndedEvent;
   const admin = createAdminClient();

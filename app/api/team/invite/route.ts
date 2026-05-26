@@ -1,21 +1,24 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { sendTeamInvite } from '@/lib/email';
-import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { z } from 'zod';
+import { apiError, apiOk, parseBody } from '@/lib/api';
+
+const InviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['admin', 'editor', 'viewer']).default('editor'),
+  workspace_id: z.string().uuid().optional(),
+});
 
 export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!user) return apiError('Unauthorized', 401);
 
-  const { email, role, workspace_id } = await req.json() as {
-    email: string;
-    role: string;
-    workspace_id?: string;
-  };
-
-  if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
+  const parsed = parseBody(InviteSchema, await req.json());
+  if (!parsed.success) return parsed.response;
+  const { email, role, workspace_id } = parsed.data;
 
   // Get the workspace to invite to (default to user's first workspace)
   let wsId = workspace_id;
@@ -28,14 +31,14 @@ export async function POST(req: Request) {
     wsId = (ws as { id: string } | null)?.id;
   }
 
-  if (!wsId) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+  if (!wsId) return apiError('Workspace not found', 404);
 
   const { data: ws } = await supabase
     .from('workspaces')
     .select('id, name')
     .eq('id', wsId)
     .single();
-  if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+  if (!ws) return apiError('Workspace not found', 404);
 
   const workspace = ws as { id: string; name: string };
   const admin = createAdminClient();
@@ -60,7 +63,10 @@ export async function POST(req: Request) {
     invite_token: inviteeId ? null : inviteToken
   }, { onConflict: 'workspace_id,user_id' }).select().single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[team/invite] upsert error:', error);
+    return apiError('Internal server error', 500);
+  }
 
   // Send invite email for new (pending) members
   if (!inviteeId) {
@@ -70,5 +76,5 @@ export async function POST(req: Request) {
       .catch(console.error);
   }
 
-  return NextResponse.json(data, { status: 201 });
+  return apiOk(data, 201);
 }

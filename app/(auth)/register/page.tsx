@@ -5,13 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 export default function RegisterPage() {
-  const router = useRouter();
-
   const [form, setForm] = useState({ name: '', email: '', password: '', company: '' });
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -48,7 +45,8 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push('/dashboard');
+      // Hard navigation ensures session cookies are sent with the next server request
+      window.location.href = '/dashboard';
     } catch {
       toast.error('Something went wrong. Please try again.');
     } finally {

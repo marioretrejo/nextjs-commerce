@@ -4,6 +4,44 @@ import { retell } from '@/lib/retell/client';
 import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { apiError, apiOk, parseBody } from '@/lib/api';
+
+const CreateAgentSchema = z.object({
+  workspace_id: z.string().uuid(),
+  name: z.string().min(1).max(100).optional(),
+  language: z.string().optional(),
+  auto_language_detection: z.boolean().optional(),
+  voice_engine: z.enum(['retell', 'standard', 'ultra_fast']).optional(),
+  voice_id: z.string().optional(),
+  voice_name: z.string().optional(),
+  emotional_speed: z.number().min(0.5).max(2).optional(),
+  emotional_pitch: z.number().min(0.5).max(2).optional(),
+  emotional_expressiveness: z.number().min(0).max(1).optional(),
+  objective: z.string().optional(),
+  personality: z.string().optional(),
+  system_prompt: z.string().optional(),
+  first_message: z.string().optional(),
+  voicemail_message: z.string().optional(),
+  schedule_days: z.array(z.string()).optional(),
+  schedule_start_time: z.string().optional(),
+  schedule_end_time: z.string().optional(),
+  timezone: z.string().optional(),
+  max_attempts: z.number().int().min(1).max(10).optional(),
+  retry_interval_minutes: z.number().int().min(1).optional(),
+  phone_number_id: z.string().optional(),
+  branded_caller_id: z.string().optional(),
+  transfer_enabled: z.boolean().optional(),
+  transfer_number: z.string().optional(),
+  transfer_type: z.enum(['warm', 'cold']).optional(),
+  transfer_condition: z.string().optional(),
+  interruption_handling: z.boolean().optional(),
+  noise_cancellation: z.boolean().optional(),
+  ivr_mode: z.boolean().optional(),
+  dtmf_enabled: z.boolean().optional(),
+  post_call_analysis_enabled: z.boolean().optional(),
+  dynamic_variables: z.record(z.unknown()).optional(),
+});
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -20,8 +58,11 @@ export async function GET(req: Request) {
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json((data as Record<string, unknown>[]).map(sanitizeAgentForClient));
+  if (error) {
+    console.error('[agents] GET error:', error);
+    return apiError('Internal server error', 500);
+  }
+  return apiOk((data as Record<string, unknown>[]).map(sanitizeAgentForClient));
 }
 
 export async function POST(req: Request) {
@@ -29,9 +70,10 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json() as Partial<Agent>;
+  const parsed = parseBody(CreateAgentSchema, await req.json());
+  if (!parsed.success) return parsed.response;
+  const body = parsed.data;
   const { workspace_id } = body;
-  if (!workspace_id) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
 
   // Check plan limits
   const { count } = await supabase
@@ -90,8 +132,11 @@ export async function POST(req: Request) {
     .select()
     .single();
 
-  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
-  if (!agent) return NextResponse.json({ error: 'Insert failed' }, { status: 500 });
+  if (dbErr) {
+    console.error('[agents] POST insert error:', dbErr);
+    return apiError('Internal server error', 500);
+  }
+  if (!agent) return apiError('Insert failed', 500);
 
   const agentRow = agent as Agent;
 
@@ -124,5 +169,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json(sanitizeAgentForClient(agentRow as unknown as Record<string, unknown>), { status: 201 });
+  return apiOk(sanitizeAgentForClient(agentRow as unknown as Record<string, unknown>), 201);
 }

@@ -1,6 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { apiError, apiOk, parseBody } from '@/lib/api';
+
+const UpdateProfileSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  company: z.string().max(100).optional(),
+  onboarding_completed: z.boolean().optional(),
+});
 
 export async function GET() {
   const supabase = await createClient();
@@ -17,7 +25,9 @@ export async function PATCH(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json() as { name?: string; company?: string; onboarding_completed?: boolean };
+  const parsed = parseBody(UpdateProfileSchema, await req.json());
+  if (!parsed.success) return parsed.response;
+  const body = parsed.data;
   const admin = createAdminClient();
 
   const update: Record<string, unknown> = {};
@@ -32,8 +42,11 @@ export async function PATCH(req: Request) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ user: data });
+  if (error) {
+    console.error('[me] PATCH error:', error);
+    return apiError('Internal server error', 500);
+  }
+  return apiOk({ user: data });
 }
 
 export async function DELETE() {
