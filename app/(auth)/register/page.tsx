@@ -28,7 +28,7 @@ export default function RegisterPage() {
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
         options: {
@@ -45,10 +45,33 @@ export default function RegisterPage() {
         return;
       }
 
-      // Hard navigation ensures session cookies are sent with the next server request
+      if (!data.session) {
+        // Email confirmation required — show message, don't redirect
+        toast.success('Check your email to confirm your account before signing in.');
+        return;
+      }
+
+      // Exchange client-side session tokens for server-set cookies so the
+      // middleware can read the session on the very next request.
+      const res = await fetch('/api/auth/set-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? 'Session exchange failed');
+      }
+
       window.location.href = '/dashboard';
-    } catch {
-      toast.error('Something went wrong. Please try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      console.error('[register] handleRegister error:', err);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

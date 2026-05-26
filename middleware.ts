@@ -17,6 +17,7 @@ const PUBLIC_PATHS = [
   '/api/webhooks/elevenlabs',
   '/api/health',
   '/api/debug',
+  '/api/auth/set-session',
 ];
 
 const ADMIN_PATHS = ['/admin'];

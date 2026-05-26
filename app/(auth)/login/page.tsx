@@ -17,24 +17,52 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    setErrorMsg('');
     setLoading(true);
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
+        setErrorMsg(error.message);
         toast.error(error.message);
         return;
       }
 
-      // Hard navigation ensures session cookies are sent with the next server request
+      const session = data.session;
+      if (!session) {
+        setErrorMsg('No session returned. Please try again.');
+        return;
+      }
+
+      // Exchange the client-side session tokens for server-set cookies so the
+      // Next.js middleware can read the session on the very next request.
+      const res = await fetch('/api/auth/set-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? 'Session exchange failed');
+      }
+
+      // Hard navigation — browser now has server-set cookies the middleware can read
       window.location.href = redirectTo;
-    } catch {
-      toast.error('Something went wrong. Please try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      console.error('[login] handleLogin error:', err);
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
