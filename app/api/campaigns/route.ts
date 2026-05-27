@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
   let query = supabase
     .from('campaigns')
-    .select('*, agent:agents(name, voice_engine)')
+    .select('*, agent:agents!campaigns_agent_id_fkey(name, voice_engine)')
     .order('created_at', { ascending: false });
 
   if (workspaceId) query = query.eq('workspace_id', workspaceId);

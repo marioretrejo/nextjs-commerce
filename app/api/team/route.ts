@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   let query = supabase
     .from('workspace_members')
     .select('*, user:users(id, name, email, avatar_url)')
-    .order('created_at', { ascending: true });
+    .order('invited_at', { ascending: true });
 
   if (workspaceId) query = query.eq('workspace_id', workspaceId);
 

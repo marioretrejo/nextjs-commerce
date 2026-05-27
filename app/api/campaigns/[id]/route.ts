@@ -10,7 +10,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // RLS on user client scopes to owned workspaces
   const { data, error } = await supabase
     .from('campaigns')
-    .select('*, agent:agents(name, voice_engine)')
+    .select('*, agent:agents!campaigns_agent_id_fkey(name, voice_engine)')
     .eq('id', id)
     .single();
 

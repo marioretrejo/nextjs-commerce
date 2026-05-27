@@ -41,12 +41,12 @@ export default async function CampaignsPage() {
     const [{ data: campaignData }, { data: templateData }] = await Promise.all([
       supabase
         .from('campaigns')
-        .select('*, agent:agents(id, name, status)')
+        .select('*, agent:agents!campaigns_agent_id_fkey(id, name, status)')
         .eq('workspace_id', workspace.id)
         .order('created_at', { ascending: false }),
       supabase
         .from('campaign_templates')
-        .select('*, agent:agents(id, name)')
+        .select('*, agent:agents!campaign_templates_agent_id_fkey(id, name)')
         .eq('workspace_id', workspace.id)
         .order('created_at', { ascending: false }),
     ]);
