@@ -11,12 +11,13 @@ export async function GET() {
     const retellClient = getRetellClient();
     const allVoices = await retellClient.voice.list();
 
-    // Only ElevenLabs voices (11labs-*) — these support eleven_v3 with emotions
+    // ElevenLabs (eleven_v3 — emotions) + Cartesia (sonic-3.5 — ultra-low latency)
     const voices = allVoices
-      .filter((v) => v.provider === 'elevenlabs' && v.voice_id && v.preview_audio_url)
+      .filter((v) => (v.provider === 'elevenlabs' || v.provider === 'cartesia') && v.voice_id && v.preview_audio_url)
       .map((v) => ({
         voice_id: v.voice_id,
         name: v.voice_name ?? v.voice_id,
+        provider: v.provider as 'elevenlabs' | 'cartesia',
         preview_url: v.preview_audio_url ?? '',
         labels: {
           gender: v.gender ?? '',

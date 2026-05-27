@@ -264,7 +264,7 @@ const TIMEZONES = [
   'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'
 ];
 
-interface Voice { voice_id: string; name: string; preview_url: string; labels: Record<string, string> }
+interface Voice { voice_id: string; name: string; provider?: string; preview_url: string; labels: Record<string, string> }
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -785,8 +785,13 @@ export default function NewAgentPage() {
                 ) : voices.map((v) => (
                   <div key={v.voice_id} onClick={() => setForm((f) => ({ ...f, voice_id: v.voice_id, voice_name: v.name }))}
                     className={`flex items-center justify-between p-3 cursor-pointer border-b border-[#e0e0e0] last:border-b-0 transition-colors ${form.voice_id === v.voice_id ? 'bg-[#0a0a0a] text-white' : 'hover:bg-[#f5f5f5]'}`}>
-                    <div>
-                      <p className="text-sm font-medium">{v.name}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{v.name}</p>
+                        {v.provider === 'cartesia' && (
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>Cartesia</span>
+                        )}
+                      </div>
                       <p className={`text-xs ${form.voice_id === v.voice_id ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
                         {v.labels?.['gender'] ?? ''} {v.labels?.['accent'] ? `· ${v.labels['accent']}` : ''}
                       </p>

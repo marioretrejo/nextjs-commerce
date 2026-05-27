@@ -10,11 +10,13 @@ export async function GET(req: Request) {
   const url = searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 });
 
-  // Allow ElevenLabs CDN and Retell's public S3 (for 11labs-* voice previews)
+  // Allow ElevenLabs CDN, Retell S3, and Cartesia CDN (for voice previews)
   if (!url.startsWith('https://storage.googleapis.com/eleven-') &&
       !url.startsWith('https://api.elevenlabs.io/') &&
       !url.startsWith('https://elevenlabs.io/') &&
-      !url.startsWith('https://retell-utils-public.s3.')) {
+      !url.startsWith('https://retell-utils-public.s3.') &&
+      !url.startsWith('https://cdn.cartesia.ai/') &&
+      !url.startsWith('https://storage.googleapis.com/cartesia-')) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 

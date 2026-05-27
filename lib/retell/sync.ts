@@ -64,12 +64,16 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
 
   const voicemailOption = buildVoicemailOption(agent);
 
+  // Pick voice model based on provider prefix
+  const isCartesia = voiceId.startsWith('cartesia-');
+  const voiceModel = isCartesia ? 'sonic-3.5' : 'eleven_v3';
+
   const retellAgent = await retellClient.agent.create({
     agent_name: agent.name,
     response_engine: { type: 'retell-llm', llm_id: llm.llm_id },
     voice_id: voiceId,
-    voice_model: 'eleven_v3',       // ElevenLabs v3 — supports emotions
-    voice_temperature: 1.0,          // Natural expressiveness
+    voice_model: voiceModel,
+    voice_temperature: 1.0,
     language: (agent.language ?? 'en-US') as 'en-US',
     interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
     enable_backchannel: true,
