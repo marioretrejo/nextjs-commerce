@@ -771,22 +771,6 @@ export default function NewAgentPage() {
         <Card>
           <CardHeader><CardTitle>Voice Configuration</CardTitle></CardHeader>
           <CardContent className="space-y-5">
-            <div className="space-y-1.5">
-              <Label>Voice Engine <FieldTooltip text="Choose the voice quality tier. Standard is great for most use cases. Ultra-Fast minimizes latency for fast-paced conversations. Premium delivers the highest naturalness and emotional depth." /></Label>
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  { value: 'standard',   label: 'Standard Voice',   sub: 'Best for most calls' },
-                  { value: 'ultra_fast', label: 'Ultra-Fast Voice',  sub: 'Lowest latency' },
-                  { value: 'premium',    label: 'Premium Voice',     sub: 'Highest quality' },
-                ] as const).map(({ value, label, sub }) => (
-                  <button key={value} onClick={() => setField('voice_engine', value)}
-                    className={`rounded-md border p-3 text-left transition-colors ${form.voice_engine === value ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white' : 'border-[#e0e0e0] hover:border-[#0a0a0a]'}`}>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className={`text-xs mt-0.5 ${form.voice_engine === value ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>{sub}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
             <div className="space-y-2">
               <Label>Voice</Label>
               <div className="max-h-64 overflow-y-auto rounded-md border border-[#e0e0e0]">
@@ -994,7 +978,6 @@ export default function NewAgentPage() {
               {[
                 { label: 'Name', value: form.name },
                 { label: 'Language', value: LANGUAGES.find((l) => l.value === form.language)?.label ?? form.language },
-                { label: 'Voice Engine', value: form.voice_engine },
                 { label: 'Voice', value: form.voice_name || form.voice_id },
                 { label: 'Objective', value: form.objective || '—' },
                 { label: 'Schedule', value: `${form.schedule_days.join(', ')} · ${form.schedule_start_time}–${form.schedule_end_time}` },
