@@ -8,9 +8,10 @@ const Schema = z.object({
   next: z.string().optional(),
 });
 
-// Called by the browser login form after a successful signInWithPassword.
-// Sets session cookies server-side so the middleware can read them on the
-// next navigation — bypassing the document.cookie read-back limitation.
+// Called by the browser login/register form after a successful signInWithPassword
+// or signUp. Sets session cookies server-side (via HTTP Set-Cookie headers) so the
+// Next.js Edge middleware can read them on the very next navigation — bypassing the
+// document.cookie write-then-read limitation.
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const parsed = Schema.safeParse(body);
@@ -22,13 +23,24 @@ export async function POST(request: NextRequest) {
 
   const cookiesToSet: { name: string; value: string; options?: CookieOptions }[] = [];
 
+  // In production (HTTPS) set the Secure flag so cookies are only transmitted
+  // over encrypted connections. httpOnly stays false because the browser-side
+  // Supabase client also needs to read these cookies.
+  const isProduction = process.env['NODE_ENV'] === 'production';
+
   const supabase = createServerClient(
     process.env['NEXT_PUBLIC_SUPABASE_URL']!,
     process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
     {
       cookies: {
         getAll() { return []; },
-        setAll(cookies) { cookiesToSet.push(...cookies); },
+        setAll(cookies: { name: string; value: string; options?: CookieOptions }[]) { cookiesToSet.push(...cookies); },
+      },
+      cookieOptions: {
+        secure: isProduction,
+        sameSite: 'lax',
+        httpOnly: false,
+        path: '/',
       },
     }
   );

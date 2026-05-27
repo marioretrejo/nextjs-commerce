@@ -17,14 +17,31 @@ const PUBLIC_PATHS = [
   '/api/webhooks/elevenlabs',
   '/api/health',
   '/api/debug',
+  '/api/auth/callback',
   '/api/auth/set-session',
+  '/api/auth/signout',
 ];
 
 const ADMIN_PATHS = ['/admin'];
 
+// Derive the Supabase project ref from the URL so we can fast-check for
+// session cookies before incurring the Supabase API round-trip.
+// e.g. "https://blyzfuwwxwpuihrjdpuh.supabase.co" → "blyzfuwwxwpuihrjdpuh"
+const SUPABASE_REF = (() => {
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
+  const match = url.match(/https?:\/\/([^.]+)\./);
+  return match?.[1] ?? '';
+})();
+
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function buildLoginRedirect(req: NextRequest, pathname: string): NextResponse {
+  const loginUrl = new URL('/login', req.url);
+  loginUrl.searchParams.set('callbackUrl', pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export async function middleware(req: NextRequest) {
@@ -35,7 +52,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow static files and next internals
+  // Allow static files and Next.js internals
   if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) {
     return NextResponse.next();
   }
@@ -43,7 +60,7 @@ export async function middleware(req: NextRequest) {
   // API key authentication for programmatic access (Bearer vos_xxx)
   const authHeader = req.headers.get('authorization');
   if (pathname.startsWith('/api/') && authHeader?.startsWith('Bearer vos_')) {
-    const rawKey = authHeader.slice(7); // strip "Bearer "
+    const rawKey = authHeader.slice(7);
     const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
     const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
 
@@ -56,10 +73,14 @@ export async function middleware(req: NextRequest) {
       if (res.ok) {
         const rows = await res.json() as { id: string; workspace_id: string }[];
         if (rows.length > 0) {
-          // Update last_used_at asynchronously (fire-and-forget)
           fetch(`${supabaseUrl}/rest/v1/api_keys?id=eq.${rows[0]!.id}`, {
             method: 'PATCH',
-            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            headers: {
+              apikey: serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            },
             body: JSON.stringify({ last_used_at: new Date().toISOString() }),
           }).catch(() => {});
           const response = NextResponse.next({ request: req });
@@ -79,8 +100,28 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Official Next.js 15 + Supabase SSR pattern — passes request so Server Components
-  // see any cookies that the middleware refreshes during token validation.
+  // Fast pre-check: avoid the Supabase API round-trip when no session cookies
+  // exist at all. Support both the plain name and the __Secure- prefixed
+  // variant that some HTTPS environments produce.
+  const allCookies = req.cookies.getAll();
+  const sessionCookiePrefix = SUPABASE_REF
+    ? `sb-${SUPABASE_REF}-auth-token`
+    : 'sb-';
+  const hasSessionCookie = allCookies.some(
+    ({ name }) =>
+      name === sessionCookiePrefix ||
+      name.startsWith(sessionCookiePrefix + '.') ||
+      name === `__Secure-${sessionCookiePrefix}` ||
+      name.startsWith(`__Secure-${sessionCookiePrefix}.`)
+  );
+
+  if (!hasSessionCookie) {
+    return buildLoginRedirect(req, pathname);
+  }
+
+  // Official Next.js 15 + Supabase SSR pattern — passes the request object so
+  // Server Components see any cookies that the middleware refreshes during
+  // token validation.
   let supabaseResponse = NextResponse.next({ request: req });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -89,24 +130,21 @@ export async function middleware(req: NextRequest) {
         return req.cookies.getAll();
       },
       setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
-        // Propagate refreshed cookies to both the forwarded request and the response
         cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
         supabaseResponse = NextResponse.next({ request: req });
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options as Parameters<typeof supabaseResponse.cookies.set>[2])
         );
-      }
-    }
+      },
+    },
   });
 
   const {
-    data: { user }
+    data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return buildLoginRedirect(req, pathname);
   }
 
   // Superadmin check for /admin routes
@@ -126,5 +164,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)']
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };

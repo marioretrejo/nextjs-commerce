@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect') ?? '/dashboard';
+  const redirectTo = searchParams.get('callbackUrl') ?? searchParams.get('redirect') ?? '/dashboard';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
