@@ -6,7 +6,6 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { DashboardCharts } from './dashboard-charts';
 import { LiveCallsCounter } from './live-calls-counter';
-import { MinuteAlerts } from '@/components/minute-usage/minute-alerts';
 import { CircularRing } from '@/components/minute-usage/circular-ring';
 
 export default async function DashboardPage() {
@@ -60,14 +59,6 @@ async function DashboardContent() {
 
   return (
     <>
-      {/* Alert banners — real-time via Supabase (layout also shows global modal at 100%) */}
-      <MinuteAlerts
-        workspaceId={workspace.id}
-        initialUsed={Number(workspace.minutes_used)}
-        limit={Number(workspace.minutes_limit)}
-        plan={workspace.plan}
-      />
-
       {/* Metric cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard title="Active Agents" value={String(activeAgents ?? 0)} sub={`of ${totalAgents ?? 0} total`} />
