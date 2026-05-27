@@ -20,6 +20,7 @@ const PUBLIC_PATHS = [
   '/api/auth/callback',
   '/api/auth/set-session',
   '/api/auth/signout',
+  '/api/auth/direct-access',
 ];
 
 const ADMIN_PATHS = ['/admin'];

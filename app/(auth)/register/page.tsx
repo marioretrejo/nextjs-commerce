@@ -7,11 +7,13 @@ import { registerAction, type AuthActionState } from '@/app/actions/auth';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 const initialState: AuthActionState = { status: 'idle' };
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(registerAction, initialState);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -22,7 +24,11 @@ export default function RegisterPage() {
     if (state.status === 'needs_confirmation') {
       toast.success('Check your email to confirm your account before signing in.');
     }
-  }, [state]);
+    if (state.status === 'success') {
+      router.refresh();
+      router.push(state.redirectTo);
+    }
+  }, [state, router]);
 
   async function handleGoogle() {
     setGoogleLoading(true);

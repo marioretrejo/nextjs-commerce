@@ -1,12 +1,12 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 
 export type AuthActionState =
   | { status: 'idle' }
   | { status: 'error'; error: string }
-  | { status: 'needs_confirmation' };
+  | { status: 'needs_confirmation' }
+  | { status: 'success'; redirectTo: string };
 
 function sanitizeRedirect(value: string | null | undefined): string {
   if (!value) return '/dashboard';
@@ -29,9 +29,10 @@ export async function loginAction(
 
   if (error) return { status: 'error', error: error.message };
 
-  // Cookies are written by createClient()'s setAll() into next/headers before
-  // this redirect fires — single round-trip, no race condition.
-  redirect(redirectTo);
+  // Return success with the redirect target. The client calls router.refresh()
+  // before router.push() so the new session cookies are visible to middleware
+  // before the navigation — avoids the redirect() race condition in Server Actions.
+  return { status: 'success', redirectTo };
 }
 
 export async function registerAction(
@@ -61,6 +62,5 @@ export async function registerAction(
   // Email confirmation required — session is null, user must verify first.
   if (!data.session) return { status: 'needs_confirmation' };
 
-  // Cookies committed to next/headers before redirect fires.
-  redirect('/dashboard');
+  return { status: 'success', redirectTo: '/dashboard' };
 }
