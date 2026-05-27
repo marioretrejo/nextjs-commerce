@@ -888,7 +888,7 @@ export default function NewAgentPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Max Attempts <FieldTooltip text="How many times the agent will call a contact if they don't answer. Each unanswered call counts. Recommended: 3–5." /></Label>
-                <Input type="number" min={1} max={10} value={form.max_attempts} onChange={(e) => setField('max_attempts', Number(e.target.value))} />
+                <Input type="number" min={1} max={30} value={form.max_attempts} onChange={(e) => setField('max_attempts', Number(e.target.value))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Retry Interval (min) <FieldTooltip text="Minutes to wait before calling a contact again after a no-answer. Minimum 15 minutes. Recommended: 60–240 minutes." /></Label>

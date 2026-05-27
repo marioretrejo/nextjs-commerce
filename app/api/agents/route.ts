@@ -27,7 +27,7 @@ const CreateAgentSchema = z.object({
   schedule_start_time: z.string().optional(),
   schedule_end_time: z.string().optional(),
   timezone: z.string().optional(),
-  max_attempts: z.number().int().min(1).max(10).optional(),
+  max_attempts: z.number().int().min(1).max(30).optional(),
   retry_interval_minutes: z.number().int().min(1).optional(),
   phone_number_id: z.string().optional(),
   branded_caller_id: z.string().optional(),
