@@ -27,7 +27,7 @@ export default async function DashboardPage() {
 async function DashboardContent() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) redirect('/login?callbackUrl=/dashboard');
 
   const workspaces = await getUserWorkspaces();
   const workspace = workspaces[0];
