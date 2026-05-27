@@ -392,9 +392,15 @@ export default function NewAgentPage() {
   async function playPreview(voice: Voice) {
     if (!voice.preview_url) return;
     setPlayingVoice(voice.voice_id);
-    const audio = new Audio(voice.preview_url);
-    audio.play();
-    audio.onended = () => setPlayingVoice(null);
+    try {
+      const proxied = `/api/voices/preview?url=${encodeURIComponent(voice.preview_url)}`;
+      const audio = new Audio(proxied);
+      audio.onended = () => setPlayingVoice(null);
+      audio.onerror = () => setPlayingVoice(null);
+      await audio.play();
+    } catch {
+      setPlayingVoice(null);
+    }
   }
 
   function applyTemplate(tpl: AgentTemplate) {
