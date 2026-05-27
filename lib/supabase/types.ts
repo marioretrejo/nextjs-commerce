@@ -149,11 +149,13 @@ export interface PhoneNumber {
   number: string;
   country_code: string;
   country_name: string;
-  provider: 'twilio' | 'telnyx';
+  provider: 'twilio' | 'telnyx' | 'sip_trunk' | 'custom';
   agent_id: string | null;
   status: PhoneStatus;
   branded_name: string | null;
   twilio_sid: string | null;
+  sip_trunk_uri: string | null;
+  display_name: string | null;
   created_at: string;
   agent?: Agent;
 }
