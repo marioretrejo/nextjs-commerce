@@ -236,7 +236,7 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5"><Label>Max Attempts</Label>
-                  <Input type="number" min={1} max={10} value={form.max_attempts ?? 3} onChange={(e) => setField('max_attempts', Number(e.target.value))} />
+                  <Input type="number" min={1} max={30} value={form.max_attempts ?? 3} onChange={(e) => setField('max_attempts', Number(e.target.value))} />
                 </div>
                 <div className="space-y-1.5"><Label>Retry (min)</Label>
                   <Input type="number" min={15} value={form.retry_interval_minutes ?? 60} onChange={(e) => setField('retry_interval_minutes', Number(e.target.value))} />
@@ -269,6 +269,46 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                   <Label>{label}</Label>
                 </div>
               ))}
+
+              {/* AMD — Answer Machine Detection */}
+              <div className="space-y-3 rounded-lg border border-[#e0e0e0] p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">Answer Machine Detection (AMD)</Label>
+                    <p className="text-xs text-[#6b6b6b] mt-0.5">Automatically detect voicemail and take action instead of speaking to the machine.</p>
+                  </div>
+                  <Switch checked={!!form.amd_enabled} onCheckedChange={(v) => setField('amd_enabled', v)} />
+                </div>
+                {form.amd_enabled && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <Label>When voicemail is detected</Label>
+                      <Select
+                        value={form.amd_action ?? 'hangup'}
+                        onValueChange={(v) => setField('amd_action', v as Agent['amd_action'])}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="hangup">Hang up immediately</SelectItem>
+                          <SelectItem value="leave_voicemail">Leave a voicemail message</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.amd_action !== 'hangup' && (
+                      <div className="space-y-1.5">
+                        <Label>Voicemail Message</Label>
+                        <Textarea
+                          rows={3}
+                          placeholder="Hi, this is [Agent Name]. We tried to reach you today. We'll try again later. Thank you!"
+                          value={form.voicemail_message ?? ''}
+                          onChange={(e) => setField('voicemail_message', e.target.value)}
+                        />
+                        <p className="text-xs text-[#6b6b6b]">This message will be spoken when a voicemail is detected.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">

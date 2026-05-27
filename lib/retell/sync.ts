@@ -34,6 +34,16 @@ function resolveRetellVoiceId(voiceId: string | null | undefined, language?: str
   return LANGUAGE_VOICE_FALLBACK[langCode] ?? '11labs-Elli';
 }
 
+function buildVoicemailOption(agent: Partial<Agent>) {
+  if (!agent.amd_enabled) return null;
+  if (agent.amd_action === 'hangup') return { action: { type: 'hangup' as const } };
+  if (agent.amd_action === 'leave_voicemail') {
+    const msg = agent.voicemail_message?.trim() || 'Thank you for your time. We\'ll try reaching you again soon.';
+    return { action: { type: 'static_text' as const, text: msg } };
+  }
+  return null;
+}
+
 export async function syncAgentToRetell(agentId: string): Promise<string | null> {
   if (!process.env['RETELL_API_KEY']) return null;
 
@@ -52,6 +62,8 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
     begin_message: agent.first_message ?? undefined,
   });
 
+  const voicemailOption = buildVoicemailOption(agent);
+
   const retellAgent = await retellClient.agent.create({
     agent_name: agent.name,
     response_engine: { type: 'retell-llm', llm_id: llm.llm_id },
@@ -61,7 +73,8 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
     language: (agent.language ?? 'en-US') as 'en-US',
     interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
     enable_backchannel: true,
-  });
+    voicemail_option: voicemailOption ?? undefined,
+  } as Parameters<typeof retellClient.agent.create>[0]);
 
   await admin
     .from('agents')

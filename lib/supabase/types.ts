@@ -132,6 +132,8 @@ export interface Agent {
   ivr_mode: boolean;
   dtmf_enabled: boolean;
   post_call_analysis_enabled: boolean;
+  amd_enabled: boolean;
+  amd_action: 'hangup' | 'leave_voicemail' | null;
   dynamic_variables: Record<string, string>;
   status: AgentStatus;
   retell_agent_id: string | null;

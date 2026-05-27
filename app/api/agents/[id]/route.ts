@@ -43,11 +43,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Sync to Retell
   if (agent.retell_agent_id && process.env['RETELL_API_KEY']) {
     try {
+      let voicemailOption: { action: { type: 'hangup' } | { type: 'static_text'; text: string } } | null = null;
+      if (agent.amd_enabled) {
+        if (agent.amd_action === 'hangup') {
+          voicemailOption = { action: { type: 'hangup' } };
+        } else if (agent.amd_action === 'leave_voicemail') {
+          const msg = agent.voicemail_message?.trim() || 'Thank you for your time. We\'ll try reaching you again soon.';
+          voicemailOption = { action: { type: 'static_text', text: msg } };
+        }
+      }
       await retell.updateAgent(agent.retell_agent_id, {
         agent_name: agent.name,
         voice_id: agent.voice_id ?? undefined,
         language: agent.language as 'en-US',
-        interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1
+        interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
+        voicemail_option: voicemailOption,
       });
     } catch (e) {
       console.error('Retell sync failed:', e);

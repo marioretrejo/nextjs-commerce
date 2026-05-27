@@ -32,6 +32,7 @@ export const retell = {
     voice_id?: string;
     language?: string;
     interruption_sensitivity?: number;
+    voicemail_option?: { action: { type: 'hangup' } | { type: 'static_text'; text: string } } | null;
   }) {
     return getRetellClient().agent.update(agentId, config as Parameters<ReturnType<typeof getRetellClient>['agent']['update']>[1]);
   },
