@@ -9,9 +9,21 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { toast } from 'sonner';
 
+// Only allow same-origin relative paths to prevent open-redirect attacks and 404s.
+function sanitizeRedirect(value: string | null): string {
+  if (!value) return '/dashboard';
+  // Must start with / but not // (protocol-relative) and not contain a protocol
+  if (value.startsWith('/') && !value.startsWith('//') && !value.includes(':')) {
+    return value;
+  }
+  return '/dashboard';
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('callbackUrl') ?? searchParams.get('redirect') ?? '/dashboard';
+  const redirectTo = sanitizeRedirect(
+    searchParams.get('callbackUrl') ?? searchParams.get('redirect')
+  );
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
