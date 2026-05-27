@@ -24,15 +24,6 @@ const PUBLIC_PATHS = [
 
 const ADMIN_PATHS = ['/admin'];
 
-// Derive the Supabase project ref from the URL so we can fast-check for
-// session cookies before incurring the Supabase API round-trip.
-// e.g. "https://blyzfuwwxwpuihrjdpuh.supabase.co" → "blyzfuwwxwpuihrjdpuh"
-const SUPABASE_REF = (() => {
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
-  const match = url.match(/https?:\/\/([^.]+)\./);
-  return match?.[1] ?? '';
-})();
-
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -100,19 +91,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Fast pre-check: avoid the Supabase API round-trip when no session cookies
-  // exist at all. Support both the plain name and the __Secure- prefixed
-  // variant that some HTTPS environments produce.
+  // Fast pre-check: skip the Supabase getUser() round-trip when no session
+  // cookies exist at all. Broad match (any sb-* cookie) avoids false negatives
+  // caused by chunked JWTs where only sb-{ref}-auth-token.0 exists, not the
+  // base cookie name. The actual getUser() call below is the authoritative check.
   const allCookies = req.cookies.getAll();
-  const sessionCookiePrefix = SUPABASE_REF
-    ? `sb-${SUPABASE_REF}-auth-token`
-    : 'sb-';
   const hasSessionCookie = allCookies.some(
-    ({ name }) =>
-      name === sessionCookiePrefix ||
-      name.startsWith(sessionCookiePrefix + '.') ||
-      name === `__Secure-${sessionCookiePrefix}` ||
-      name.startsWith(`__Secure-${sessionCookiePrefix}.`)
+    ({ name }) => name.startsWith('sb-') || name.startsWith('__Secure-sb-')
   );
 
   if (!hasSessionCookie) {

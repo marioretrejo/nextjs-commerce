@@ -3,21 +3,23 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { loginAction, type AuthActionState } from '@/app/actions/auth';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 // Only allow same-origin relative paths to prevent open-redirect attacks and 404s.
 function sanitizeRedirect(value: string | null): string {
   if (!value) return '/dashboard';
-  // Must start with / but not // (protocol-relative) and not contain a protocol
   if (value.startsWith('/') && !value.startsWith('//') && !value.includes(':')) {
     return value;
   }
   return '/dashboard';
 }
+
+const initialState: AuthActionState = { status: 'idle' };
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -25,60 +27,14 @@ function LoginForm() {
     searchParams.get('callbackUrl') ?? searchParams.get('redirect')
   );
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [state, formAction, isPending] = useActionState(loginAction, initialState);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg('');
-    setLoading(true);
-
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        setErrorMsg(error.message);
-        toast.error(error.message);
-        return;
-      }
-
-      const session = data.session;
-      if (!session) {
-        setErrorMsg('No session returned. Please try again.');
-        return;
-      }
-
-      // Exchange the client-side session tokens for server-set cookies so the
-      // Next.js middleware can read the session on the very next request.
-      const res = await fetch('/api/auth/set-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? 'Session exchange failed');
-      }
-
-      // Hard navigation — browser now has server-set cookies the middleware can read
-      window.location.href = redirectTo;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      console.error('[login] handleLogin error:', err);
-      setErrorMsg(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (state.status === 'error') {
+      toast.error(state.error);
     }
-  }
+  }, [state]);
 
   async function handleGoogle() {
     setGoogleLoading(true);
@@ -132,17 +88,23 @@ function LoginForm() {
         </div>
       </div>
 
-      <form onSubmit={handleLogin} className="space-y-4">
+      <form action={formAction} className="space-y-4">
+        {/* Passes the sanitized redirectTo to the Server Action */}
+        <input type="hidden" name="redirectTo" value={redirectTo} />
+
+        {state.status === 'error' && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{state.error}</p>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
+            name="email"
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
@@ -155,17 +117,16 @@ function LoginForm() {
           </div>
           <Input
             id="password"
+            name="password"
             type="password"
             placeholder="••••••••"
             autoComplete="current-password"
             required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
           />
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Signing in…' : 'Sign in'}
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
 

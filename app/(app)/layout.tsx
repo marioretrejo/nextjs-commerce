@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
 
-  if (!authUser) redirect('/login');
+  if (!authUser) redirect('/login?callbackUrl=/dashboard');
 
   const [{ data: rawProfile }, workspaces, { data: notifications }] = await Promise.all([
     supabase.from('users').select('*').eq('id', authUser.id).single(),
@@ -28,7 +28,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const userProfile = rawProfile as User | null;
 
-  if (!userProfile) redirect('/login');
+  if (!userProfile) redirect('/login?callbackUrl=/dashboard');
   if (userProfile.is_suspended) redirect('/suspended');
 
   const workspace = workspaces[0];

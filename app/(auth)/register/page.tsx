@@ -3,79 +3,26 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { registerAction, type AuthActionState } from '@/app/actions/auth';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+const initialState: AuthActionState = { status: 'idle' };
+
 export default function RegisterPage() {
-  const [form, setForm] = useState({ name: '', email: '', password: '', company: '' });
-  const [loading, setLoading] = useState(false);
+  const [state, formAction, isPending] = useActionState(registerAction, initialState);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  function update(field: string) {
-    return (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((prev) => ({ ...prev, [field]: e.target.value }));
-  }
-
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault();
-    if (form.password.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
+  useEffect(() => {
+    if (state.status === 'error') {
+      toast.error(state.error);
     }
-    setLoading(true);
-
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          data: {
-            full_name: form.name,
-            company: form.company
-          },
-          emailRedirectTo: `${window.location.origin}/api/auth/callback`
-        }
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-
-      if (!data.session) {
-        // Email confirmation required — show message, don't redirect
-        toast.success('Check your email to confirm your account before signing in.');
-        return;
-      }
-
-      // Exchange client-side session tokens for server-set cookies so the
-      // middleware can read the session on the very next request.
-      const res = await fetch('/api/auth/set-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? 'Session exchange failed');
-      }
-
-      window.location.href = '/dashboard';
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      console.error('[register] handleRegister error:', err);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
+    if (state.status === 'needs_confirmation') {
+      toast.success('Check your email to confirm your account before signing in.');
     }
-  }
+  }, [state]);
 
   async function handleGoogle() {
     setGoogleLoading(true);
@@ -128,15 +75,24 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      <form onSubmit={handleRegister} className="space-y-4">
+      <form action={formAction} className="space-y-4">
+        {state.status === 'error' && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{state.error}</p>
+        )}
+        {state.status === 'needs_confirmation' && (
+          <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+            Check your email to confirm your account before signing in.
+          </p>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="name">Full name</Label>
-            <Input id="name" placeholder="Jane Doe" required value={form.name} onChange={update('name')} />
+            <Input id="name" name="name" placeholder="Jane Doe" required />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="company">Company</Label>
-            <Input id="company" placeholder="Acme Inc." value={form.company} onChange={update('company')} />
+            <Input id="company" name="company" placeholder="Acme Inc." />
           </div>
         </div>
 
@@ -144,12 +100,11 @@ export default function RegisterPage() {
           <Label htmlFor="email">Work email</Label>
           <Input
             id="email"
+            name="email"
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
             required
-            value={form.email}
-            onChange={update('email')}
           />
         </div>
 
@@ -157,25 +112,24 @@ export default function RegisterPage() {
           <Label htmlFor="password">Password</Label>
           <Input
             id="password"
+            name="password"
             type="password"
             placeholder="Min. 8 characters"
             autoComplete="new-password"
             required
             minLength={8}
-            value={form.password}
-            onChange={update('password')}
           />
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? (
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending ? (
             <span className="flex items-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               Setting up your account…
             </span>
           ) : 'Create account'}
         </Button>
-        {loading && (
+        {isPending && (
           <p className="text-center text-xs text-[#6b6b6b]">
             This takes a few seconds — setting up your workspace.
           </p>
