@@ -33,6 +33,8 @@ export const retell = {
     language?: string;
     interruption_sensitivity?: number;
     voicemail_option?: { action: { type: 'hangup' } | { type: 'static_text'; text: string } } | null;
+    ambient_sound?: 'coffee-shop' | 'convention-hall' | 'summer-outdoor' | 'mountain-outdoor' | 'static-noise' | 'call-center' | null;
+    ambient_sound_volume?: number;
   }) {
     return getRetellClient().agent.update(agentId, config as Parameters<ReturnType<typeof getRetellClient>['agent']['update']>[1]);
   },

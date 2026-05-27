@@ -134,6 +134,8 @@ export interface Agent {
   post_call_analysis_enabled: boolean;
   amd_enabled: boolean;
   amd_action: 'hangup' | 'leave_voicemail' | null;
+  ambient_sound: 'coffee-shop' | 'convention-hall' | 'summer-outdoor' | 'mountain-outdoor' | 'static-noise' | 'call-center' | null;
+  ambient_sound_volume: number;
   dynamic_variables: Record<string, string>;
   status: AgentStatus;
   retell_agent_id: string | null;

@@ -58,6 +58,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         language: agent.language as 'en-US',
         interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
         voicemail_option: voicemailOption,
+        ambient_sound: agent.ambient_sound ?? null,
+        ambient_sound_volume: agent.ambient_sound != null ? (agent.ambient_sound_volume ?? 1.0) : undefined,
       });
     } catch (e) {
       console.error('Retell sync failed:', e);

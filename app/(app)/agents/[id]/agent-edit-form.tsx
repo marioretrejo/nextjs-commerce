@@ -310,6 +310,51 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                 )}
               </div>
 
+              {/* Background Soundscape */}
+              <div className="space-y-3 rounded-lg border border-[#e0e0e0] p-4">
+                <div>
+                  <Label className="text-sm font-medium">Background Soundscape</Label>
+                  <p className="text-xs text-[#6b6b6b] mt-0.5">Add ambient background sound to make the agent feel more natural during calls.</p>
+                </div>
+                <Select
+                  value={form.ambient_sound ?? 'none'}
+                  onValueChange={(v) => setField('ambient_sound', v === 'none' ? null : v as Agent['ambient_sound'])}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (silent)</SelectItem>
+                    <SelectItem value="coffee-shop">☕ Coffee Shop</SelectItem>
+                    <SelectItem value="convention-hall">🏛️ Convention Hall</SelectItem>
+                    <SelectItem value="summer-outdoor">🌿 Summer Outdoor</SelectItem>
+                    <SelectItem value="mountain-outdoor">⛰️ Mountain Outdoor</SelectItem>
+                    <SelectItem value="static-noise">📻 Static Noise</SelectItem>
+                    <SelectItem value="call-center">🎧 Call Center</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.ambient_sound && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Volume</Label>
+                      <span className="text-xs text-[#6b6b6b]">{((form.ambient_sound_volume ?? 1.0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={form.ambient_sound_volume ?? 1.0}
+                      onChange={(e) => setField('ambient_sound_volume', parseFloat(e.target.value))}
+                      className="w-full accent-[#0a0a0a]"
+                    />
+                    <div className="flex justify-between text-[10px] text-[#6b6b6b]">
+                      <span>Quiet</span>
+                      <span>Normal</span>
+                      <span>Loud</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">
                   <Label>Dynamic Variables</Label>

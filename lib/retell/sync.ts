@@ -74,6 +74,8 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
     interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
     enable_backchannel: true,
     voicemail_option: voicemailOption ?? undefined,
+    ambient_sound: agent.ambient_sound ?? undefined,
+    ambient_sound_volume: agent.ambient_sound != null ? (agent.ambient_sound_volume ?? 1.0) : undefined,
   } as Parameters<typeof retellClient.agent.create>[0]);
 
   await admin
