@@ -25,9 +25,14 @@ export default function AppError({
           </div>
         </div>
         <h1 className="mb-2 text-xl font-semibold">Something went wrong</h1>
-        <p className="mb-6 text-sm text-[#6b6b6b]">
+        <p className="mb-4 text-sm text-[#6b6b6b]">
           An unexpected error occurred. Please try again or contact support if the problem persists.
         </p>
+        {error?.message && (
+          <p className="mb-4 rounded bg-[#f5f5f5] px-3 py-2 text-left font-mono text-xs text-[#0a0a0a] break-all">
+            {error.message}
+          </p>
+        )}
         <div className="flex flex-col gap-2">
           <button
             onClick={reset}
