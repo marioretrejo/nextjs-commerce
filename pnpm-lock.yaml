@@ -113,6 +113,9 @@ importers:
       resend:
         specifier: ^6.12.4
         version: 6.12.4
+      retell-client-js-sdk:
+        specifier: ^2.0.7
+        version: 2.0.7(@types/dom-mediacapture-record@1.0.22)
       sonner:
         specifier: ^2.0.1
         version: 2.0.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -175,6 +178,9 @@ packages:
   '@babel/runtime@7.29.2':
     resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
+
+  '@bufbuild/protobuf@1.10.1':
+    resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
 
   '@emnapi/runtime@1.10.0':
     resolution: {integrity: sha512-ewvYlk86xUoGI0zQRNq/mC+16R1QeDlKQy21Ki3oSYXNgLb45GV1P6A0M+/s6nyCuNDqe5VpaY84BzXGwVbwFA==}
@@ -359,6 +365,12 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [win32]
+
+  '@livekit/mutex@1.1.1':
+    resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
+
+  '@livekit/protocol@1.45.8':
+    resolution: {integrity: sha512-Q+l57E7w/xxOBFVWzdX5rkAZO7ffyF+rlDzNUYq2SU114+5aTyCq+PK4unaEVDNd4952Af7wteKr3sOgasGuaA==}
 
   '@next/env@15.3.9':
     resolution: {integrity: sha512-I7wMCjlHc85EvAebNYJCRBZ+shdrGhcIXBviWmDzGYXwTQ+WrYpfg1LBOnTK1Bn3b+ud5apesNObXKEGqi/C3g==}
@@ -1173,6 +1185,9 @@ packages:
   '@types/d3-zoom@3.0.8':
     resolution: {integrity: sha512-iqMC4/YlFCSlO8+2Ii1GGGliCAY4XdeG748w5vQUbevlbDu0zSjH/+jojorQVBK/se0j6DUFNPBGSqD3YWYnDw==}
 
+  '@types/dom-mediacapture-record@1.0.22':
+    resolution: {integrity: sha512-mUMZLK3NvwRLcAAT9qmcK+9p7tpU2FHdDsntR3YI4+GY88XrgG4XiE7u1Q2LAN2/FZOz/tdMDC3GQCR4T8nFuw==}
+
   '@types/node@22.13.10':
     resolution: {integrity: sha512-I6LPUvlRH+O6VRUqYOcMudhaIdUVWfsjnZavnsraHvpBwaEyMN29ry+0UVJhImYL16xsscu0aske3yA+uPOWfw==}
 
@@ -1358,6 +1373,13 @@ packages:
   eventemitter3@4.0.7:
     resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
 
+  eventemitter3@5.0.4:
+    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
+
+  events@3.3.0:
+    resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
+    engines: {node: '>=0.8.x'}
+
   fast-equals@5.4.0:
     resolution: {integrity: sha512-jt2DW/aNFNwke7AUd+Z+e6pz39KO5rzdbbFCg2sGafS4mk13MI7Z8O5z9cADNn5lhGODIgLwug6TZO2ctf7kcw==}
     engines: {node: '>=6.0.0'}
@@ -1411,6 +1433,9 @@ packages:
   jiti@2.4.2:
     resolution: {integrity: sha512-rg9zJN+G4n2nfJl5MW3BMygZX56zKPNVEYYqq7adpmMh4Jn2QNEwhvQlFy6jPVdcod7txZtKHWnyZiA3a0zP7A==}
     hasBin: true
+
+  jose@6.2.3:
+    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -1483,6 +1508,11 @@ packages:
     resolution: {integrity: sha512-6b6gd/RUXKaw5keVdSEtqFVdzWnU5jMxTUjA2bVcMNPLwSQ08Sv/UodBVtETLCn7k4S1Ibxwh7k68IwLZPgKaA==}
     engines: {node: '>= 12.0.0'}
 
+  livekit-client@2.19.0:
+    resolution: {integrity: sha512-aolY1XDAtx0nHKBNm29W9OhzBnSz1CP5kq3phvRhFfi1NbvMXs8tcACjAkZTnIKgihkp+BiJScZZ3tZv0Gz8sA==}
+    peerDependencies:
+      '@types/dom-mediacapture-record': ^1
+
   lodash.castarray@4.4.0:
     resolution: {integrity: sha512-aVx8ztPv7/2ULbArGJ2Y42bG1mEQ5mGjpdvrbJcJFU3TbYybe+QlLS4pst9zV52ymy2in1KpFPiZnAOATxD4+Q==}
 
@@ -1494,6 +1524,10 @@ packages:
 
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
+
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
 
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
@@ -1712,8 +1746,21 @@ packages:
       '@react-email/render':
         optional: true
 
+  retell-client-js-sdk@2.0.7:
+    resolution: {integrity: sha512-56iFklXfqVZuniEioMPVKylhBqjN+Xk7Mmv8Q/lGyEnvBBi5B9R6WPJDInlcyXltWH1EsXPjLoVgJI9Xpje68w==}
+
+  rxjs@7.8.2:
+    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
+
   scheduler@0.25.0:
     resolution: {integrity: sha512-xFVuu11jh+xcO7JOAGJNOXld8/TcEHK/4CituBUeUb5hqxJLj9YuemAEuvm9gQ/+pgXYfbQuqAkiYu+u7YEsNA==}
+
+  sdp-transform@2.15.0:
+    resolution: {integrity: sha512-KrOH82c/W+GYQ0LHqtr3caRpM3ITglq3ljGUIb8LTki7ByacJZ9z+piSGiwZDsRyhQbYBOBJgr2k6X4BZXi3Kw==}
+    hasBin: true
+
+  sdp@3.2.2:
+    resolution: {integrity: sha512-xZocWwfyp4hkbN4hLWxMjmv2Q8aNa9MhmOZ7L9aCZPT+dZsgRr6wZRrSYE3HTdyk/2pZKPSgqI7ns7Een1xMSA==}
 
   semver@7.8.1:
     resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
@@ -1793,6 +1840,9 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  typed-emitter@2.1.0:
+    resolution: {integrity: sha512-g/KzbYKbH5C2vPkaXGu8DJlHrGKHLsM25Zg9WuC9pMGfuvT+X25tZQWo5fK1BjBm8+UrVE9LDCvaY0CQk+fXDA==}
+
   typescript@5.8.2:
     resolution: {integrity: sha512-aJn6wq13/afZp/jT9QZmwEjDqqvSGp1VT5GVg+f/t6/oVyrgXM6BY1h9BRh/O5p3PlUPAe+WuiEZOmb/49RqoQ==}
     engines: {node: '>=14.17'}
@@ -1832,6 +1882,10 @@ packages:
   victory-vendor@36.9.2:
     resolution: {integrity: sha512-PnpQQMuxlwYdocC8fIJqVXvkeViHYzotI+NJrCuav0ZYFoq912ZHBk3mCeuj+5/VpodOjPe1z0Fk2ihgzlXqjQ==}
 
+  webrtc-adapter@9.0.5:
+    resolution: {integrity: sha512-U9vjByy/sK2OMXu5mmfuZFKTMIUQe34c0JXRO+oDrxJTsntdYT2iIFwYMOV7HhMTuktcZLGf2W1N/OcSf9ssWg==}
+    engines: {node: '>=6.0.0', npm: '>=3.10.0'}
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
@@ -1855,6 +1909,8 @@ snapshots:
   '@alloc/quick-lru@5.2.0': {}
 
   '@babel/runtime@7.29.2': {}
+
+  '@bufbuild/protobuf@1.10.1': {}
 
   '@emnapi/runtime@1.10.0':
     dependencies:
@@ -1991,6 +2047,12 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
+
+  '@livekit/mutex@1.1.1': {}
+
+  '@livekit/protocol@1.45.8':
+    dependencies:
+      '@bufbuild/protobuf': 1.10.1
 
   '@next/env@15.3.9': {}
 
@@ -2789,6 +2851,8 @@ snapshots:
       '@types/d3-interpolate': 3.0.4
       '@types/d3-selection': 3.0.11
 
+  '@types/dom-mediacapture-record@1.0.22': {}
+
   '@types/node@22.13.10':
     dependencies:
       undici-types: 6.20.0
@@ -2979,6 +3043,10 @@ snapshots:
 
   eventemitter3@4.0.7: {}
 
+  eventemitter3@5.0.4: {}
+
+  events@3.3.0: {}
+
   fast-equals@5.4.0: {}
 
   fast-sha256@1.3.0: {}
@@ -3024,6 +3092,8 @@ snapshots:
   internmap@2.0.3: {}
 
   jiti@2.4.2: {}
+
+  jose@6.2.3: {}
 
   js-tokens@4.0.0: {}
 
@@ -3072,6 +3142,19 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.29.2
       lightningcss-win32-x64-msvc: 1.29.2
 
+  livekit-client@2.19.0(@types/dom-mediacapture-record@1.0.22):
+    dependencies:
+      '@livekit/mutex': 1.1.1
+      '@livekit/protocol': 1.45.8
+      '@types/dom-mediacapture-record': 1.0.22
+      events: 3.3.0
+      jose: 6.2.3
+      loglevel: 1.9.2
+      sdp-transform: 2.15.0
+      tslib: 2.8.1
+      typed-emitter: 2.1.0
+      webrtc-adapter: 9.0.5
+
   lodash.castarray@4.4.0: {}
 
   lodash.isplainobject@4.0.6: {}
@@ -3079,6 +3162,8 @@ snapshots:
   lodash.merge@4.6.2: {}
 
   lodash@4.18.1: {}
+
+  loglevel@1.9.2: {}
 
   loose-envify@1.4.0:
     dependencies:
@@ -3242,7 +3327,23 @@ snapshots:
       postal-mime: 2.7.4
       standardwebhooks: 1.0.0
 
+  retell-client-js-sdk@2.0.7(@types/dom-mediacapture-record@1.0.22):
+    dependencies:
+      eventemitter3: 5.0.4
+      livekit-client: 2.19.0(@types/dom-mediacapture-record@1.0.22)
+    transitivePeerDependencies:
+      - '@types/dom-mediacapture-record'
+
+  rxjs@7.8.2:
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   scheduler@0.25.0: {}
+
+  sdp-transform@2.15.0: {}
+
+  sdp@3.2.2: {}
 
   semver@7.8.1:
     optional: true
@@ -3343,6 +3444,10 @@ snapshots:
 
   tslib@2.8.1: {}
 
+  typed-emitter@2.1.0:
+    optionalDependencies:
+      rxjs: 7.8.2
+
   typescript@5.8.2: {}
 
   undici-types@6.20.0: {}
@@ -3384,6 +3489,10 @@ snapshots:
       d3-shape: 3.2.0
       d3-time: 3.1.0
       d3-timer: 3.0.1
+
+  webrtc-adapter@9.0.5:
+    dependencies:
+      sdp: 3.2.2
 
   zod@3.25.76: {}
 

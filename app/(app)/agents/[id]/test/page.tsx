@@ -12,6 +12,8 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
   const [callActive, setCallActive] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [muted, setMuted] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [retellClient, setRetellClient] = useState<any>(null);
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
   const [simulating, setSimulating] = useState(false);
   const [persona, setPersona] = useState('Interested business owner, slightly skeptical');
@@ -26,35 +28,28 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
       }
       const { access_token } = await res.json() as { access_token: string };
 
-      // Dynamically import Retell Web SDK if available
-      let RetellWebClient: new () => {
-        startCall: (opts: { accessToken: string }) => Promise<void>;
-        on: (event: string, cb: (data: unknown) => void) => void;
-      };
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mod = await import('retell-client-js-sdk' as any);
-        RetellWebClient = mod.RetellWebClient;
-      } catch {
-        toast.error('Retell Web SDK not installed. Run: pnpm add retell-client-js-sdk');
-        setConnecting(false);
-        return;
-      }
-
+      const { RetellWebClient } = await import('retell-client-js-sdk');
       const client = new RetellWebClient();
-      await client.startCall({ accessToken: access_token });
 
+      client.on('call_ended', () => {
+        setCallActive(false);
+        setRetellClient(null);
+        toast.success('Call ended');
+      });
       client.on('update', (update: unknown) => {
         const u = update as { transcript?: { role: string; content: string }[] };
         if (u.transcript) {
           setTranscript(u.transcript.map((t) => ({ role: t.role, text: t.content })));
         }
       });
-      client.on('call_ended', () => {
+      client.on('error', (err: unknown) => {
+        toast.error(`Call error: ${String(err)}`);
         setCallActive(false);
-        toast.success('Call ended');
+        setRetellClient(null);
       });
 
+      await client.startCall({ accessToken: access_token });
+      setRetellClient(client);
       setCallActive(true);
     } catch (e) {
       toast.error(String(e));
@@ -103,11 +98,15 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
               </Button>
             ) : (
               <>
-                <Button variant="outline" className="bg-[#0a0a0a] text-white hover:bg-[#262626]">
+                <Button variant="outline" className="bg-[#0a0a0a] text-white hover:bg-[#262626]"
+                  onClick={() => { retellClient?.stopCall(); }}>
                   <PhoneOff className="mr-2 h-4 w-4" />
                   End Call
                 </Button>
-                <Button variant="secondary" onClick={() => setMuted(!muted)}>
+                <Button variant="secondary" onClick={() => {
+                  if (muted) { retellClient?.unmute(); } else { retellClient?.mute(); }
+                  setMuted(!muted);
+                }}>
                   {muted ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
                   {muted ? 'Unmute' : 'Mute'}
                 </Button>
