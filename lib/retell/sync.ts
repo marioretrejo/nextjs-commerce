@@ -13,25 +13,24 @@ function buildSystemPrompt(agent: Partial<Agent>): string {
   return parts.length > 0 ? parts.join(' ') : 'You are a helpful voice assistant.';
 }
 
-// Retell voice IDs for Spanish/Latin America as language fallbacks
+// Cartesia voice fallbacks by language (used for legacy agents without a set voice_id)
 const LANGUAGE_VOICE_FALLBACK: Record<string, string> = {
-  'es': '11labs-Claudia',    // Mexican Spanish, female
-  'pt': '11labs-Elli',
-  'fr': '11labs-Elli',
-  'de': '11labs-Elli',
-  'en': '11labs-Elli',
+  'es': 'cartesia-846d6cb0-2301-48b6-9683-48f5618ea2f6', // Cartesia Spanish female
+  'pt': 'cartesia-a0e99841-438c-4a64-b679-ae501e7d6091',
+  'fr': 'cartesia-a0e99841-438c-4a64-b679-ae501e7d6091',
+  'de': 'cartesia-a0e99841-438c-4a64-b679-ae501e7d6091',
+  'en': 'cartesia-a0e99841-438c-4a64-b679-ae501e7d6091',
 };
 
 const RETELL_VOICE_PREFIXES = ['11labs-', 'openai-', 'cartesia-', 'retell-', 'minimax-', 'fish_audio-', 'qwen3-'];
 
 function resolveRetellVoiceId(voiceId: string | null | undefined, language?: string | null): string {
-  // If already a Retell voice ID (new agents from updated picker), use directly
   if (voiceId && RETELL_VOICE_PREFIXES.some((p) => voiceId.startsWith(p))) {
     return voiceId;
   }
-  // Fall back to language-appropriate voice
+  // Default to Cartesia voice when nothing valid is set
   const langCode = (language ?? 'en').split('-')[0]?.toLowerCase() ?? 'en';
-  return LANGUAGE_VOICE_FALLBACK[langCode] ?? '11labs-Elli';
+  return LANGUAGE_VOICE_FALLBACK[langCode] ?? 'cartesia-a0e99841-438c-4a64-b679-ae501e7d6091'; // Cartesia English female default
 }
 
 function buildVoicemailOption(agent: Partial<Agent>) {
@@ -64,16 +63,14 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
 
   const voicemailOption = buildVoicemailOption(agent);
 
-  // Pick voice model based on provider prefix
-  const isCartesia = voiceId.startsWith('cartesia-');
-  const voiceModel = isCartesia ? 'sonic-3.5' : 'eleven_v3';
-
   const retellAgent = await retellClient.agent.create({
     agent_name: agent.name,
     response_engine: { type: 'retell-llm', llm_id: llm.llm_id },
     voice_id: voiceId,
-    voice_model: voiceModel,
+    voice_model: 'sonic-3',          // Cartesia sonic-3 — emotion support
     voice_temperature: 1.0,
+    voice_emotion: (agent.voice_emotion ?? undefined) as Parameters<typeof retellClient.agent.create>[0]['voice_emotion'],
+    enable_dynamic_voice_speed: true,
     language: (agent.language ?? 'en-US') as 'en-US',
     interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
     enable_backchannel: true,

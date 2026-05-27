@@ -60,6 +60,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         voicemail_option: voicemailOption,
         ambient_sound: agent.ambient_sound ?? null,
         ambient_sound_volume: agent.ambient_sound != null ? (agent.ambient_sound_volume ?? 1.0) : undefined,
+        voice_emotion: agent.voice_emotion ?? null,
       });
     } catch (e) {
       console.error('Retell sync failed:', e);

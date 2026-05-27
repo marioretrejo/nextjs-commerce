@@ -181,13 +181,31 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
               <div className="space-y-1.5"><Label>Name</Label>
                 <Input value={form.name ?? ''} onChange={(e) => setField('name', e.target.value)} />
               </div>
-              <div className="space-y-1.5"><Label>Voice Engine</Label>
-                <Select value={form.voice_engine ?? 'standard'} onValueChange={(v) => setField('voice_engine', v as Agent['voice_engine'])}>
+              <div className="space-y-1.5"><Label>Voice ID</Label>
+                <Input
+                  value={form.voice_id ?? ''}
+                  onChange={(e) => setField('voice_id', e.target.value || null)}
+                  placeholder="cartesia-xxxx (from voice picker when creating)"
+                  className="font-mono text-xs"
+                />
+                {form.voice_id && <p className="text-xs text-[#6b6b6b]">Active: {form.voice_name ?? form.voice_id}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Voice Emotion <span className="text-xs font-normal text-[#6b6b6b]">(Cartesia sonic-3)</span></Label>
+                <Select
+                  value={form.voice_emotion ?? 'none'}
+                  onValueChange={(v) => setField('voice_emotion', v === 'none' ? null : v as Agent['voice_emotion'])}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="standard">Standard Voice</SelectItem>
-                    <SelectItem value="ultra_fast">Ultra-Fast Voice</SelectItem>
-                    <SelectItem value="premium">Premium Voice</SelectItem>
+                    <SelectItem value="none">None (neutral)</SelectItem>
+                    <SelectItem value="calm">😌 Calm</SelectItem>
+                    <SelectItem value="sympathetic">🤝 Sympathetic</SelectItem>
+                    <SelectItem value="happy">😊 Happy</SelectItem>
+                    <SelectItem value="sad">😢 Sad</SelectItem>
+                    <SelectItem value="angry">😠 Angry</SelectItem>
+                    <SelectItem value="fearful">😨 Fearful</SelectItem>
+                    <SelectItem value="surprised">😲 Surprised</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

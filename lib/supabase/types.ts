@@ -136,6 +136,7 @@ export interface Agent {
   amd_action: 'hangup' | 'leave_voicemail' | null;
   ambient_sound: 'coffee-shop' | 'convention-hall' | 'summer-outdoor' | 'mountain-outdoor' | 'static-noise' | 'call-center' | null;
   ambient_sound_volume: number;
+  voice_emotion: 'calm' | 'sympathetic' | 'happy' | 'sad' | 'angry' | 'fearful' | 'surprised' | null;
   dynamic_variables: Record<string, string>;
   status: AgentStatus;
   retell_agent_id: string | null;

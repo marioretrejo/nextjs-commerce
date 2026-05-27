@@ -296,6 +296,7 @@ export default function NewAgentPage() {
     emotional_speed: 1.0,
     emotional_pitch: 1.0,
     emotional_expressiveness: 0.7,
+    voice_emotion: null as string | null,
     objective: '',
     personality: '',
     system_prompt: '',
@@ -805,21 +806,33 @@ export default function NewAgentPage() {
                 ))}
               </div>
             </div>
-            <div className="space-y-4">
-              <Label>Emotional Controls <FieldTooltip text="Fine-tune how the agent sounds. Speed affects speaking pace, Pitch affects voice frequency, and Expressiveness controls emotional variation between sentences." /></Label>
-              {[
-                { key: 'emotional_speed' as const, label: 'Speed', min: 0.5, max: 2.0, step: 0.1 },
-                { key: 'emotional_pitch' as const, label: 'Pitch', min: 0.5, max: 2.0, step: 0.1 },
-                { key: 'emotional_expressiveness' as const, label: 'Expressiveness', min: 0, max: 1, step: 0.05 }
-              ].map(({ key, label, min, max, step: s }) => (
-                <div key={key} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>{label}</span>
-                    <span className="text-[#6b6b6b]">{form[key].toFixed(2)}</span>
-                  </div>
-                  <Slider min={min} max={max} step={s} value={[form[key]]} onValueChange={([v]) => setField(key, v ?? form[key])} />
-                </div>
-              ))}
+            <div className="space-y-3">
+              <Label>Voice Emotion <span className="text-xs font-normal text-[#6b6b6b]">(Cartesia sonic-3)</span></Label>
+              <div className="grid grid-cols-4 gap-2">
+                {([
+                  { value: null,          label: '😶 None' },
+                  { value: 'calm',        label: '😌 Calm' },
+                  { value: 'sympathetic', label: '🤝 Sympathetic' },
+                  { value: 'happy',       label: '😊 Happy' },
+                  { value: 'sad',         label: '😢 Sad' },
+                  { value: 'angry',       label: '😠 Angry' },
+                  { value: 'fearful',     label: '😨 Fearful' },
+                  { value: 'surprised',   label: '😲 Surprised' },
+                ] as { value: string | null; label: string }[]).map(({ value, label }) => (
+                  <button
+                    key={value ?? 'none'}
+                    type="button"
+                    onClick={() => setField('voice_emotion' as keyof typeof form, value as never)}
+                    className={`rounded-lg border p-2 text-xs text-center transition-colors ${
+                      (form as Record<string, unknown>)['voice_emotion'] === value
+                        ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white'
+                        : 'border-[#e0e0e0] hover:border-[#0a0a0a]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
