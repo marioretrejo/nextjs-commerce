@@ -30,10 +30,12 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function buildLoginRedirect(req: NextRequest, pathname: string): NextResponse {
+function buildLoginRedirect(req: NextRequest, pathname: string, reason?: string): NextResponse {
   const loginUrl = new URL('/login', req.url);
   loginUrl.searchParams.set('callbackUrl', pathname);
-  return NextResponse.redirect(loginUrl);
+  const res = NextResponse.redirect(loginUrl);
+  if (reason) res.headers.set('x-debug-auth-reason', reason);
+  return res;
 }
 
 export async function middleware(req: NextRequest) {
@@ -102,7 +104,7 @@ export async function middleware(req: NextRequest) {
   );
 
   if (!hasSessionCookie) {
-    return buildLoginRedirect(req, pathname);
+    return buildLoginRedirect(req, pathname, `no-session-cookie|cookies:${allCookies.map(c=>c.name).join(',')}`);
   }
 
   // Official Next.js 15 + Supabase SSR pattern — passes the request object so
@@ -127,10 +129,11 @@ export async function middleware(req: NextRequest) {
 
   const {
     data: { user },
+    error: getUserError,
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return buildLoginRedirect(req, pathname);
+    return buildLoginRedirect(req, pathname, `getUser-null|error:${getUserError?.message ?? 'none'}|cookies:${allCookies.map(c=>c.name).join(',')}`);
   }
 
   // Superadmin check for /admin routes
