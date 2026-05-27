@@ -31,11 +31,17 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
 
   const prompt = agent.system_prompt || buildSystemPrompt(agent);
 
+  // Retell rejects variable keys that contain dots — flatten them to underscores
+  const rawVars = (agent.dynamic_variables ?? {}) as Record<string, string>;
+  const safeVars = Object.fromEntries(
+    Object.entries(rawVars).map(([k, v]) => [k.replace(/\./g, '_'), v])
+  );
+
   const llm = await retell.createLLM({
     model: 'gpt-4.1',
     general_prompt: prompt,
     begin_message: agent.first_message ?? undefined,
-    default_dynamic_variables: (agent.dynamic_variables ?? {}) as Record<string, string>,
+    ...(Object.keys(safeVars).length > 0 ? { default_dynamic_variables: safeVars } : {}),
   });
 
   const retellAgent = await retell.createAgent({

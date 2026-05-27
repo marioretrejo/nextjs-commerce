@@ -27,13 +27,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   // Auto-sync if not yet connected to Retell
   if (!retellAgentId) {
+    let syncError: string | undefined;
     try {
       retellAgentId = await syncAgentToRetell(id);
     } catch (e) {
+      syncError = String(e);
       console.error('Auto-sync failed:', e);
     }
     if (!retellAgentId) {
-      return NextResponse.json({ error: 'Failed to sync agent to Retell. Check RETELL_API_KEY.' }, { status: 500 });
+      return NextResponse.json(
+        { error: syncError ?? 'Failed to sync agent to Retell. Check RETELL_API_KEY.' },
+        { status: 500 }
+      );
     }
   }
 
