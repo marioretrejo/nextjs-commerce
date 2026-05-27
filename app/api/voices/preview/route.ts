@@ -10,10 +10,11 @@ export async function GET(req: Request) {
   const url = searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 });
 
-  // Only allow ElevenLabs CDN URLs
+  // Allow ElevenLabs CDN and Retell's public S3 (for 11labs-* voice previews)
   if (!url.startsWith('https://storage.googleapis.com/eleven-') &&
       !url.startsWith('https://api.elevenlabs.io/') &&
-      !url.startsWith('https://elevenlabs.io/')) {
+      !url.startsWith('https://elevenlabs.io/') &&
+      !url.startsWith('https://retell-utils-public.s3.')) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 

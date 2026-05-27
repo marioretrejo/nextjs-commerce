@@ -1,5 +1,3 @@
-'use server';
-
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getRetellClient } from './client';
 import type { Agent } from '@/lib/supabase/types';
@@ -15,40 +13,22 @@ function buildSystemPrompt(agent: Partial<Agent>): string {
   return parts.length > 0 ? parts.join(' ') : 'You are a helpful voice assistant.';
 }
 
-// Map ElevenLabs voice names to Retell's catalog.
-// Only voices confirmed in Retell's catalog are listed — others fall back by language.
-const RETELL_VOICE_MAP: Record<string, string> = {
-  // English
-  'bella': '11labs-Bella', 'rachel': '11labs-Rachel', 'elli': '11labs-Elli',
-  'josh': '11labs-Josh', 'arnold': '11labs-Arnold', 'adam': '11labs-Adam',
-  'sam': '11labs-Sam', 'brian': '11labs-Brian', 'kate': '11labs-Kate',
-  'lily': '11labs-Lily', 'anna': '11labs-Anna', 'julia': '11labs-Julia',
-  'grace': '11labs-Grace', 'chloe': '11labs-Chloe', 'max': '11labs-Max',
-  'ethan': '11labs-Ethan', 'noah': '11labs-Noah', 'paul': '11labs-Paul',
-  'jessica': '11labs-Jessica', 'george': '11labs-George',
-  // Spanish / Latin America
-  'hailey': '11labs-Hailey-Latin-America-Spanish-localized',
-  'gaby': '11labs-Gaby',
-  'isabel': 'cartesia-Isabel',
-  'santiago': 'openai-Santiago',
-};
-
+// Retell voice IDs for Spanish/Latin America as language fallbacks
 const LANGUAGE_VOICE_FALLBACK: Record<string, string> = {
-  'es': '11labs-Hailey-Latin-America-Spanish-localized',
+  'es': '11labs-Claudia',    // Mexican Spanish, female
   'pt': '11labs-Elli',
   'fr': '11labs-Elli',
   'de': '11labs-Elli',
   'en': '11labs-Elli',
 };
 
-function toRetellVoiceId(voiceName: string | null | undefined, language?: string | null): string {
-  const base = (voiceName ?? '').split(' - ')[0] ?? '';
-  const simple = (base.split(' (')[0] ?? '').trim().toLowerCase();
+const RETELL_VOICE_PREFIXES = ['11labs-', 'openai-', 'cartesia-', 'retell-', 'minimax-', 'fish_audio-', 'qwen3-'];
 
-  if (simple && RETELL_VOICE_MAP[simple]) {
-    return RETELL_VOICE_MAP[simple]!;
+function resolveRetellVoiceId(voiceId: string | null | undefined, language?: string | null): string {
+  // If already a Retell voice ID (new agents from updated picker), use directly
+  if (voiceId && RETELL_VOICE_PREFIXES.some((p) => voiceId.startsWith(p))) {
+    return voiceId;
   }
-
   // Fall back to language-appropriate voice
   const langCode = (language ?? 'en').split('-')[0]?.toLowerCase() ?? 'en';
   return LANGUAGE_VOICE_FALLBACK[langCode] ?? '11labs-Elli';
@@ -64,6 +44,7 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
 
   const retellClient = getRetellClient();
   const prompt = agent.system_prompt || buildSystemPrompt(agent);
+  const voiceId = resolveRetellVoiceId(agent.voice_id, agent.language);
 
   const llm = await retellClient.llm.create({
     model: 'gpt-4.1',
@@ -74,7 +55,9 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
   const retellAgent = await retellClient.agent.create({
     agent_name: agent.name,
     response_engine: { type: 'retell-llm', llm_id: llm.llm_id },
-    voice_id: toRetellVoiceId(agent.voice_name, agent.language),
+    voice_id: voiceId,
+    voice_model: 'eleven_v3',       // ElevenLabs v3 — supports emotions
+    voice_temperature: 1.0,          // Natural expressiveness
     language: (agent.language ?? 'en-US') as 'en-US',
     interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
     enable_backchannel: true,
