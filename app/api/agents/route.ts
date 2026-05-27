@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { retell } from '@/lib/retell/client';
+import { syncAgentToRetell } from '@/lib/retell/sync';
 import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
@@ -140,33 +140,12 @@ export async function POST(req: Request) {
 
   const agentRow = agent as Agent;
 
-  // Sync to Retell for standard and ultra_fast engines
-  if ((agentRow.voice_engine === 'standard' || agentRow.voice_engine === 'ultra_fast') &&
-      process.env['RETELL_API_KEY']) {
-    try {
-      const llm = await retell.createLLM({
-        general_prompt: agentRow.system_prompt ?? '',
-        begin_message: agentRow.first_message ?? undefined,
-        default_dynamic_variables: agentRow.dynamic_variables as Record<string, string>
-      });
-
-      const retellAgent = await retell.createAgent({
-        agent_name: agentRow.name,
-        response_engine: { type: 'retell-llm', llm_id: llm.llm_id },
-        voice_id: agentRow.voice_id ?? 'eleven_labs-Elli',
-        language: agentRow.language as 'en-US',
-        interruption_sensitivity: agentRow.interruption_handling ? 0.8 : 0.1
-      });
-
-      await admin
-        .from('agents')
-        .update({ retell_agent_id: retellAgent.agent_id })
-        .eq('id', agentRow.id);
-
-      agentRow.retell_agent_id = retellAgent.agent_id;
-    } catch (e) {
-      console.error('Retell sync failed:', e);
-    }
+  // Always sync new agents to Retell
+  try {
+    const retellAgentId = await syncAgentToRetell(agentRow.id);
+    if (retellAgentId) agentRow.retell_agent_id = retellAgentId;
+  } catch (e) {
+    console.error('Retell sync failed (non-fatal):', e);
   }
 
   return apiOk(sanitizeAgentForClient(agentRow as unknown as Record<string, unknown>), 201);

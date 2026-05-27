@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { retell } from '@/lib/retell/client';
+import { syncAgentToRetell } from '@/lib/retell/sync';
 import { checkMinuteLimit, minuteLimitBlockedResponse } from '@/lib/checkMinuteLimit';
 import { NextResponse } from 'next/server';
 
@@ -22,9 +23,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!limit.allowed) return NextResponse.json(minuteLimitBlockedResponse(limit), { status: 402 });
   }
 
-  const retellAgentId = (agent as { retell_agent_id: string | null } | null)?.retell_agent_id;
+  let retellAgentId = (agent as { retell_agent_id: string | null } | null)?.retell_agent_id;
+
+  // Auto-sync if not yet connected to Retell
   if (!retellAgentId) {
-    return NextResponse.json({ error: 'Agent not synced to Retell yet' }, { status: 400 });
+    try {
+      retellAgentId = await syncAgentToRetell(id);
+    } catch (e) {
+      console.error('Auto-sync failed:', e);
+    }
+    if (!retellAgentId) {
+      return NextResponse.json({ error: 'Failed to sync agent to Retell. Check RETELL_API_KEY.' }, { status: 500 });
+    }
   }
 
   try {
