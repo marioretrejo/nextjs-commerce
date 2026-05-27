@@ -116,6 +116,9 @@ importers:
       retell-client-js-sdk:
         specifier: ^2.0.7
         version: 2.0.7(@types/dom-mediacapture-record@1.0.22)
+      retell-sdk:
+        specifier: ^5.28.0
+        version: 5.28.0
       sonner:
         specifier: ^2.0.1
         version: 2.0.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -1749,6 +1752,9 @@ packages:
   retell-client-js-sdk@2.0.7:
     resolution: {integrity: sha512-56iFklXfqVZuniEioMPVKylhBqjN+Xk7Mmv8Q/lGyEnvBBi5B9R6WPJDInlcyXltWH1EsXPjLoVgJI9Xpje68w==}
 
+  retell-sdk@5.28.0:
+    resolution: {integrity: sha512-uduPcoasHGRi89upGjXNBVWEYq6QSGh9N1Avley4tJwO4Z8daexN95+OV+kWyolaT5RV9MEuQneOg88yc2aYsg==}
+
   rxjs@7.8.2:
     resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
 
@@ -3333,6 +3339,8 @@ snapshots:
       livekit-client: 2.19.0(@types/dom-mediacapture-record@1.0.22)
     transitivePeerDependencies:
       - '@types/dom-mediacapture-record'
+
+  retell-sdk@5.28.0: {}
 
   rxjs@7.8.2:
     dependencies:

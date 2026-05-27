@@ -1,5 +1,7 @@
+'use server';
+
 import { createAdminClient } from '@/lib/supabase/admin';
-import { retell } from './client';
+import { getRetellClient } from './client';
 import type { Agent } from '@/lib/supabase/types';
 
 function buildSystemPrompt(agent: Partial<Agent>): string {
@@ -13,8 +15,6 @@ function buildSystemPrompt(agent: Partial<Agent>): string {
   return parts.length > 0 ? parts.join(' ') : 'You are a helpful voice assistant.';
 }
 
-// Maps ElevenLabs voice names (e.g. "George - Warm, Captivating Storyteller") to
-// Retell's 11labs-{Name} format. Falls back to 11labs-Elli if name is blank.
 function toRetellVoiceId(voiceName: string | null | undefined): string {
   const base = (voiceName ?? '').split(' - ')[0] ?? '';
   const simple = (base.split(' (')[0] ?? '').trim();
@@ -29,22 +29,16 @@ export async function syncAgentToRetell(agentId: string): Promise<string | null>
   if (!raw) return null;
   const agent = raw as unknown as Agent;
 
+  const retellClient = getRetellClient();
   const prompt = agent.system_prompt || buildSystemPrompt(agent);
 
-  // Retell rejects variable keys that contain dots — flatten them to underscores
-  const rawVars = (agent.dynamic_variables ?? {}) as Record<string, string>;
-  const safeVars = Object.fromEntries(
-    Object.entries(rawVars).map(([k, v]) => [k.replace(/\./g, '_'), v])
-  );
-
-  const llm = await retell.createLLM({
+  const llm = await retellClient.llm.create({
     model: 'gpt-4.1',
     general_prompt: prompt,
     begin_message: agent.first_message ?? undefined,
-    ...(Object.keys(safeVars).length > 0 ? { default_dynamic_variables: safeVars } : {}),
   });
 
-  const retellAgent = await retell.createAgent({
+  const retellAgent = await retellClient.agent.create({
     agent_name: agent.name,
     response_engine: { type: 'retell-llm', llm_id: llm.llm_id },
     voice_id: toRetellVoiceId(agent.voice_name),

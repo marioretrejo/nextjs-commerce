@@ -46,6 +46,7 @@
     "recharts": "^2.15.3",
     "resend": "^6.12.4",
     "retell-client-js-sdk": "^2.0.7",
+    "retell-sdk": "^5.28.0",
     "sonner": "^2.0.1",
     "stripe": "^17.7.0",
     "tailwind-merge": "^3.3.0",
