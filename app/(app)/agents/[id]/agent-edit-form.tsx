@@ -250,10 +250,10 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
           <Card><CardHeader><CardTitle>Advanced</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5"><Label>Phone Number</Label>
-                <Select value={form.phone_number_id ?? ''} onValueChange={(v) => setField('phone_number_id', v || null)}>
+                <Select value={form.phone_number_id ?? 'none'} onValueChange={(v) => setField('phone_number_id', v === 'none' ? null : v)}>
                   <SelectTrigger><SelectValue placeholder="Select phone number" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {phoneNumbers.map((p) => <SelectItem key={p.id} value={p.id}>{p.number}</SelectItem>)}
                   </SelectContent>
                 </Select>
