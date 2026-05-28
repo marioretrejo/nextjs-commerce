@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import {
   BarChart2,
   Bell,
+  BookOpen,
   Bot,
   Code2,
   Cpu,
@@ -33,6 +34,7 @@ const navItems = [
   { href: '/calls/live',      label: 'Live Monitor',  icon: Radio, pulse: true },
   { href: '/analytics',       label: 'Analytics',     icon: BarChart2 },
   { href: '/analytics/costs', label: 'Usage',         icon: DollarSign },
+  { href: '/knowledge',       label: 'Knowledge',     icon: BookOpen },
   { href: '/quality',         label: 'Quality',       icon: Star },
   { href: '/numbers',         label: 'Numbers',       icon: Phone },
   { href: '/compliance',      label: 'Compliance',    icon: ShieldCheck },

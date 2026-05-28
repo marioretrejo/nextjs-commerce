@@ -4,6 +4,7 @@ import type { Agent, Workspace } from '@/lib/supabase/types';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { detectRegion, getRegionalWsUrl, getRegionalHttpUrl } from '@/lib/livekit/edge';
 import { traceRequest } from '@/lib/tracing';
+import { generateEmbedding } from '@/lib/embeddings';
 import { NextResponse } from 'next/server';
 
 function sanitizePrompt(raw: string | null | undefined): string | null {
@@ -98,6 +99,36 @@ export async function POST(req: Request) {
     );
   }
 
+  // ── RAG: inject relevant knowledge-base context into system prompt ────────
+  let ragContext: string | null = null;
+  try {
+    const queryText = [agent?.name, agent?.system_prompt].filter(Boolean).join(' ').slice(0, 1000);
+    const queryEmbedding = await generateEmbedding(queryText);
+    if (queryEmbedding) {
+      const { data: chunks } = await admin.rpc('match_document_chunks', {
+        query_embedding:  queryEmbedding as unknown as string,
+        p_workspace_id:   workspace.id,
+        match_threshold:  0.40,
+        match_count:      6,
+      });
+      if (chunks && (chunks as unknown[]).length > 0) {
+        const formatted = (chunks as { content: string; source_name: string; kb_name: string }[])
+          .map((c, i) => `[${i + 1}] (${c.kb_name} › ${c.source_name})\n${c.content}`)
+          .join('\n\n');
+        ragContext = `\n\n---\nKNOWLEDGE BASE CONTEXT (use this to answer questions accurately):\n${formatted}\n---`;
+      }
+    }
+  } catch {
+    // RAG is best-effort — never block call setup
+  }
+
+  const basePrompt = sanitizePrompt(agent?.system_prompt);
+  const augmentedPrompt = basePrompt
+    ? `${basePrompt}${ragContext ?? ''}`
+    : ragContext
+      ? `You are a helpful voice assistant.${ragContext}`
+      : null;
+
   const roomName = `agent-${agentId}-${Date.now()}`;
   const participantName = `user-${user.id.slice(0, 8)}`;
 
@@ -106,13 +137,14 @@ export async function POST(req: Request) {
     await roomService.createRoom({
       name: roomName,
       metadata: JSON.stringify({
-        agent_name: agent?.name ?? 'Assistant',
-        system_prompt: sanitizePrompt(agent?.system_prompt),
+        agent_name:  agent?.name ?? 'Assistant',
+        system_prompt: augmentedPrompt,
         first_message: agent?.first_message ?? null,
-        voice_id: agent?.voice_id ?? null,
+        voice_id:      agent?.voice_id ?? null,
         voice_emotion: agent?.voice_emotion ?? null,
-        workspace_id: workspace.id,
+        workspace_id:  workspace.id,
         transfer_number: (agent as unknown as Record<string, unknown>)?.['transfer_number'] ?? null,
+        has_rag:       ragContext !== null,
         region,
       }),
       departureTimeout: 600,
