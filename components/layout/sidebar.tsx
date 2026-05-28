@@ -5,6 +5,7 @@ import {
   BarChart2,
   Bell,
   Bot,
+  Code2,
   Cpu,
   CreditCard,
   DollarSign,
@@ -40,7 +41,7 @@ const navItems = [
   { href: '/team',            label: 'Team',          icon: Users },
   { href: '/billing',         label: 'Billing',       icon: CreditCard },
   { href: '/settings',        label: 'Settings',      icon: Settings },
-  { href: '/settings/api-keys', label: 'API Keys',    icon: Key },
+  { href: '/developers',      label: 'Developers',    icon: Code2 },
 ];
 
 const adminItems = [

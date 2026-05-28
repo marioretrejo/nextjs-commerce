@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Shield, ShieldOff, LogIn, ChevronDown, ChevronUp,
-  Settings2, Search, AlertTriangle, CheckCircle2, Users,
+  Settings2, Search, AlertTriangle, CheckCircle2, Users, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { ImpersonateConfirmModal } from '@/components/admin/ImpersonateConfirmModal';
 import { SuspendModal } from '@/components/admin/SuspendModal';
+
+const ABUSE_THRESHOLD = 100; // 429 rejections per hour to flag
 
 interface WorkspaceRow {
   id:                     string;
@@ -47,7 +49,18 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
   const [loading, setLoading]               = useState<Record<string, boolean>>({});
   const [impersonateTarget, setImpersonateTarget] = useState<WorkspaceRow | null>(null);
   const [suspendTarget, setSuspendTarget]         = useState<WorkspaceRow | null>(null);
+  const [rejectionCounts, setRejectionCounts]     = useState<Record<string, number>>({});
   const router = useRouter();
+
+  // Fetch 429 rejection counts from Redis (last hour) on mount
+  useEffect(() => {
+    const ids = initial.map(w => w.id);
+    if (!ids.length) return;
+    fetch(`/api/admin/rate-limit-stats?workspaceIds=${ids.join(',')}`)
+      .then(r => r.json())
+      .then((d: { counts: Record<string, number> }) => setRejectionCounts(d.counts ?? {}))
+      .catch(() => null);
+  }, [initial]);
 
   const setWsLoading = (id: string, v: boolean) =>
     setLoading((p) => ({ ...p, [id]: v }));
@@ -177,17 +190,18 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
         </div>
 
         {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           {[
-            { label: 'Total',     value: workspaces.length,                                icon: Users },
-            { label: 'Active',    value: workspaces.filter((w) => !w.is_suspended).length, icon: CheckCircle2 },
-            { label: 'Suspended', value: workspaces.filter((w) => w.is_suspended).length,  icon: AlertTriangle },
-          ].map(({ label, value, icon: Icon }) => (
+            { label: 'Total',              value: workspaces.length,                                                             icon: Users,         color: '' },
+            { label: 'Active',             value: workspaces.filter((w) => !w.is_suspended).length,                             icon: CheckCircle2,  color: '' },
+            { label: 'Suspended',          value: workspaces.filter((w) => w.is_suspended).length,                              icon: AlertTriangle,  color: 'text-red-500' },
+            { label: 'High Rejection Rate', value: Object.values(rejectionCounts).filter(c => c >= ABUSE_THRESHOLD).length,     icon: Zap,           color: 'text-amber-500' },
+          ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="rounded-xl border border-[#e5e5e5] bg-white p-4">
               <p className="text-xs text-[#a0a0a0] uppercase tracking-wider">{label}</p>
               <div className="mt-1 flex items-end gap-2">
                 <span className="text-2xl font-bold text-[#1a1a1a]">{value}</span>
-                <Icon className="mb-0.5 h-4 w-4 text-[#a0a0a0]" />
+                <Icon className={`mb-0.5 h-4 w-4 ${color || 'text-[#a0a0a0]'}`} />
               </div>
             </div>
           ))}
@@ -212,6 +226,15 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                     </Badge>
                     {ws.is_suspended && (
                       <Badge variant="destructive" className="text-[10px]">Suspended</Badge>
+                    )}
+                    {(rejectionCounts[ws.id] ?? 0) >= ABUSE_THRESHOLD && (
+                      <span
+                        title={`${rejectionCounts[ws.id]} API rate-limit rejections in the last hour`}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200"
+                      >
+                        <Zap className="h-2.5 w-2.5" />
+                        High API Rejection Rate ({rejectionCounts[ws.id]}/hr)
+                      </span>
                     )}
                   </div>
                   <p className="text-xs text-[#a0a0a0] mt-0.5 truncate">

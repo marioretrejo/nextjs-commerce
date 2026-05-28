@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { checkRateLimit, recordRejection } from '@/lib/ratelimit';
 
 const PUBLIC_PATHS = [
   '/',
@@ -51,7 +52,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // API key authentication for programmatic access (Bearer vos_xxx)
+  // API key authentication + rate limiting for programmatic access (Bearer vos_xxx)
   const authHeader = req.headers.get('authorization');
   if (pathname.startsWith('/api/') && authHeader?.startsWith('Bearer vos_')) {
     const rawKey = authHeader.slice(7);
@@ -61,12 +62,37 @@ export async function middleware(req: NextRequest) {
     if (supabaseUrl && serviceKey) {
       const keyHash = await sha256Hex(rawKey);
       const res = await fetch(
-        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&status=eq.active&select=id,workspace_id`,
+        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&is_active=eq.true&select=id,workspace_id,workspace:workspaces(api_rate_limit_rps)`,
         { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
       );
       if (res.ok) {
-        const rows = await res.json() as { id: string; workspace_id: string }[];
+        const rows = await res.json() as { id: string; workspace_id: string; workspace?: { api_rate_limit_rps?: number | null } }[];
         if (rows.length > 0) {
+          const workspaceId = rows[0]!.workspace_id;
+          const customRps = rows[0]!.workspace?.api_rate_limit_rps ?? undefined;
+
+          // ── Rate limiting (only for /api/v1/* routes) ────────────────
+          let rlResult: Awaited<ReturnType<typeof checkRateLimit>> | null = null;
+          if (pathname.startsWith('/api/v1/')) {
+            rlResult = await checkRateLimit(`ws:${workspaceId}`, customRps ?? undefined);
+            if (!rlResult.allowed) {
+              void recordRejection(workspaceId);
+              return NextResponse.json(
+                { error: 'Rate limit exceeded. See Retry-After header.', code: 'RATE_LIMIT' },
+                {
+                  status: 429,
+                  headers: {
+                    'X-RateLimit-Limit':     String(rlResult.limit),
+                    'X-RateLimit-Remaining': '0',
+                    'X-RateLimit-Reset':     String(rlResult.reset),
+                    'Retry-After':           String(rlResult.retryAfter ?? 1),
+                  },
+                }
+              );
+            }
+          }
+
+          // Update last_used_at fire-and-forget
           fetch(`${supabaseUrl}/rest/v1/api_keys?id=eq.${rows[0]!.id}`, {
             method: 'PATCH',
             headers: {
@@ -77,8 +103,15 @@ export async function middleware(req: NextRequest) {
             },
             body: JSON.stringify({ last_used_at: new Date().toISOString() }),
           }).catch(() => {});
+
           const response = NextResponse.next({ request: req });
-          response.headers.set('x-api-workspace-id', rows[0]!.workspace_id);
+          response.headers.set('x-api-workspace-id', workspaceId);
+          // Attach rate limit headers to allowed responses
+          if (rlResult) {
+            response.headers.set('X-RateLimit-Limit',     String(rlResult.limit));
+            response.headers.set('X-RateLimit-Remaining', String(rlResult.remaining));
+            response.headers.set('X-RateLimit-Reset',     String(rlResult.reset));
+          }
           return response;
         }
       }
