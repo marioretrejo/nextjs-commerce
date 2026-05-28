@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import type { Call, Agent } from '@/lib/supabase/types';
-import { Phone, Clock, TrendingUp, Target, Bot, DollarSign } from 'lucide-react';
+import { Phone, Clock, TrendingUp, Target, Bot, DollarSign, Smile, Meh, Frown } from 'lucide-react';
 import Link from 'next/link';
 import {
   BarChart,
@@ -95,6 +95,15 @@ export default function AnalyticsPage() {
   const contactRate = totalCalls > 0 ? (contacted / totalCalls) * 100 : 0;
   const converted = calls.filter(c => c.outcome === 'converted').length;
   const conversionRate = totalCalls > 0 ? (converted / totalCalls) * 100 : 0;
+
+  // Sentiment breakdown
+  const analyzedCalls = calls.filter(c => c.sentiment != null);
+  const sentimentCounts = {
+    positive: analyzedCalls.filter(c => c.sentiment === 'positive').length,
+    neutral:  analyzedCalls.filter(c => c.sentiment === 'neutral').length,
+    negative: analyzedCalls.filter(c => c.sentiment === 'negative').length,
+  };
+  const sentimentTotal = analyzedCalls.length;
 
   // Bar chart: calls per day
   const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90;
@@ -261,6 +270,43 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sentiment breakdown */}
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Sentiment Breakdown</CardTitle>
+          <CardDescription>AI-analyzed call sentiment from post-call intelligence</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="h-20 bg-[#f5f5f5] rounded animate-pulse" />
+          ) : sentimentTotal === 0 ? (
+            <p className="text-sm text-[#6b6b6b] py-4 text-center">No analyzed calls yet — sentiment is extracted automatically after each call.</p>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { key: 'positive' as const, label: 'Positive', icon: <Smile className="w-4 h-4 text-green-600" />, color: 'bg-green-500' },
+                { key: 'neutral'  as const, label: 'Neutral',  icon: <Meh  className="w-4 h-4 text-yellow-600" />, color: 'bg-yellow-400' },
+                { key: 'negative' as const, label: 'Negative', icon: <Frown className="w-4 h-4 text-red-500" />,  color: 'bg-red-500' },
+              ].map(({ key, label, icon, color }) => {
+                const count = sentimentCounts[key];
+                const pct   = sentimentTotal > 0 ? Math.round((count / sentimentTotal) * 100) : 0;
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    {icon}
+                    <span className="w-16 text-sm text-[#6b6b6b]">{label}</span>
+                    <div className="flex-1 h-2 rounded-full bg-[#f5f5f5] overflow-hidden">
+                      <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-16 text-right text-sm font-medium text-[#0a0a0a]">{count.toLocaleString()} ({pct}%)</span>
+                  </div>
+                );
+              })}
+              <p className="text-xs text-[#6b6b6b] pt-1">{sentimentTotal.toLocaleString()} of {totalCalls.toLocaleString()} calls analyzed</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Agent comparison table */}
       <Card>

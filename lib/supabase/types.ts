@@ -250,6 +250,7 @@ export interface Call {
   qa_score: number | null;
   retell_call_id: string | null;
   cost_usd: number;
+  tokens_used: number | null;
   created_at: string;
   agent?: Agent;
   campaign?: Campaign;

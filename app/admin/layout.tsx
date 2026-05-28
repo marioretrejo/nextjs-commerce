@@ -6,6 +6,7 @@ import {
   Activity,
   BarChart2,
   Building2,
+  Calculator,
   CreditCard,
   ExternalLink,
   LayoutDashboard,
@@ -22,6 +23,7 @@ const NAV = [
   { href: '/admin/billing',     label: 'Billing Audits',icon: CreditCard },
   { href: '/admin/metrics',     label: 'Metrics',       icon: BarChart2 },
   { href: '/admin/infrastructure', label: 'Infrastructure', icon: Activity },
+  { href: '/admin/calculator',  label: 'Unit Economics',  icon: Calculator },
   { href: '/admin/settings',    label: 'Global Settings', icon: Settings },
 ];
 

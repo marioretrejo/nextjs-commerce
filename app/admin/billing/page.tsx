@@ -41,10 +41,24 @@ export default async function AdminBillingPage() {
     : { data: [] };
   const wsNameMap = Object.fromEntries((wsNames ?? []).map((w) => [w.id, w.name]));
 
-  // Recent calls with cost
+  // Provider costs for COGS computation
+  const { data: providerCosts } = await admin
+    .from('provider_costs')
+    .select('*')
+    .eq('label', 'default')
+    .single() as { data: Record<string, number> | null };
+
+  const pc = {
+    twilio_outbound_per_min: Number(providerCosts?.['twilio_outbound_per_min'] ?? 0.85),
+    stt_per_min:             Number(providerCosts?.['stt_per_min']             ?? 0.59),
+    llm_per_1k_tokens:       Number(providerCosts?.['llm_per_1k_tokens']       ?? 0.06),
+    tts_per_1k_chars:        Number(providerCosts?.['tts_per_1k_chars']        ?? 0.65),
+  };
+
+  // Recent calls with cost + tokens
   const { data: recentCalls } = await admin
     .from('calls')
-    .select('id, workspace_id, agent_id, duration_seconds, status, cost_usd, created_at')
+    .select('id, workspace_id, agent_id, direction, duration_seconds, status, cost_usd, tokens_used, created_at')
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -142,32 +156,43 @@ export default async function AdminBillingPage() {
           </CardContent>
         </Card>
 
-        {/* Recent calls */}
+        {/* Recent calls — with COGS + gross profit */}
         <Card className="bg-white border-[#e5e5e5]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Calls</CardTitle>
+            <CardTitle className="text-base">Recent Calls — Unit Economics</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="grid grid-cols-[1fr_60px_60px] gap-3 px-5 py-3 border-t border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
-              <span>Workspace</span><span>Min</span><span>Status</span>
+            <div className="grid grid-cols-[1fr_44px_64px_64px_56px] gap-2 px-5 py-3 border-t border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
+              <span>Workspace</span><span>Min</span><span>Real Cost</span><span>Gross $</span><span>Status</span>
             </div>
             <div className="divide-y divide-[#f0f0f0]">
               {(recentCalls ?? []).map((c) => {
-                const call = c as { id: string; workspace_id: string; duration_seconds: number; status: string; created_at: string };
+                const call = c as { id: string; workspace_id: string; duration_seconds: number; status: string; cost_usd: number; tokens_used: number | null; created_at: string };
+                const durMin = call.duration_seconds / 60;
+                // COGS: telephony + STT + LLM + TTS (estimating 800 chars/min for TTS)
+                const cogs =
+                  pc.twilio_outbound_per_min * durMin +
+                  pc.stt_per_min             * durMin +
+                  pc.llm_per_1k_tokens       * ((call.tokens_used ?? 0) / 1000) +
+                  pc.tts_per_1k_chars        * (800 * durMin / 1000);
+                const revenue   = Number(call.cost_usd ?? 0) * 100; // cents
+                const gross     = revenue - cogs;
                 return (
-                  <div key={call.id} className="grid grid-cols-[1fr_60px_60px] gap-3 px-5 py-2.5 text-sm items-center hover:bg-[#f9f9f9]">
+                  <div key={call.id} className="grid grid-cols-[1fr_44px_64px_64px_56px] gap-2 px-5 py-2.5 text-sm items-center hover:bg-[#f9f9f9]">
                     <div>
                       <p className="text-xs font-mono text-[#6b6b6b] truncate">{call.workspace_id.slice(0, 8)}…</p>
                       <p className="text-[11px] text-[#a0a0a0]">{format(new Date(call.created_at), 'MMM d, HH:mm')}</p>
                     </div>
-                    <span className="text-xs text-[#0a0a0a]">
-                      {(call.duration_seconds / 60).toFixed(1)}
+                    <span className="text-xs text-[#0a0a0a]">{durMin.toFixed(1)}</span>
+                    <span className="text-xs text-red-600 font-mono">{cogs < 1 ? `${cogs.toFixed(2)}¢` : `$${(cogs / 100).toFixed(3)}`}</span>
+                    <span className={`text-xs font-mono font-medium ${gross >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {gross < 1 && gross > -1 ? `${gross.toFixed(2)}¢` : `$${(gross / 100).toFixed(3)}`}
                     </span>
                     <Badge
                       variant={call.status === 'completed' ? 'secondary' : 'destructive'}
                       className="text-[10px] justify-center"
                     >
-                      {call.status}
+                      {call.status?.slice(0, 6)}
                     </Badge>
                   </div>
                 );

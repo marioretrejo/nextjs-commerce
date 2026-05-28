@@ -35,7 +35,9 @@ Respond with ONLY the raw JSON object — no markdown, no code fences, no explan
 TRANSCRIPT:
 `;
 
-async function runGroqAnalysis(transcript: string): Promise<AnalysisResult | null> {
+type AnalysisResponse = AnalysisResult & { _tokensUsed: number | null };
+
+async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | null> {
   const groqKey = process.env['GROQ_API_KEY'];
   if (!groqKey) return null;
 
@@ -63,10 +65,12 @@ async function runGroqAnalysis(transcript: string): Promise<AnalysisResult | nul
 
   const data = (await res.json()) as {
     choices: { message: { content: string } }[];
+    usage?: { total_tokens?: number };
   };
 
   try {
-    return JSON.parse(data.choices[0]?.message?.content ?? '{}') as AnalysisResult;
+    const result = JSON.parse(data.choices[0]?.message?.content ?? '{}') as AnalysisResult;
+    return { ...result, _tokensUsed: data.usage?.total_tokens ?? null };
   } catch {
     return null;
   }
@@ -115,7 +119,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Analysis failed — Groq unavailable' }, { status: 502 });
   }
 
-  // Write structured results back to the calls table
   const { error } = await admin
     .from('calls')
     .update({
@@ -127,9 +130,8 @@ export async function POST(req: Request) {
       extracted_email: analysis.extracted_email ?? null,
       extracted_interest: analysis.extracted_interest ?? null,
       extracted_objections: analysis.extracted_objections ?? null,
-      // Store full intent in summary if there's room, else in a custom field
-      // For now we prepend it to the summary block
       task_completed: analysis.sentiment === 'positive',
+      tokens_used: analysis._tokensUsed ?? null,
     })
     .eq('id', callRecord.id);
 
