@@ -44,3 +44,6 @@ prisma/prisma/
 
 # Supabase CLI temp files
 supabase/.temp/
+
+# pnpm auto-generated
+.pnpm-build-config.json
