@@ -27,6 +27,7 @@ export default defineAgent({
     let agentName = 'Assistant';
     let voiceId = 'a0e99841-438c-4a64-b679-ae501e7d6091'; // Cartesia "Helpful Woman" (English)
     let voiceEmotion: string | null = null;
+    let firstMessage: string | null = null;
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
@@ -34,7 +35,7 @@ export default defineAgent({
         agent_name?: string;
         voice_id?: string;
         voice_emotion?: string | null;
-        first_message?: string;
+        first_message?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -43,6 +44,7 @@ export default defineAgent({
         voiceId = meta.voice_id.replace(/^cartesia-/, '');
       }
       if (meta.voice_emotion) voiceEmotion = meta.voice_emotion;
+      if (meta.first_message) firstMessage = meta.first_message;
     } catch { /* use defaults */ }
 
     const groqKey = process.env['GROQ_API_KEY'];
@@ -56,7 +58,7 @@ export default defineAgent({
       apiKey: process.env['DEEPGRAM_API_KEY'],
     });
 
-    // LLM: Groq primary (Llama 4 Scout — ultra-fast), OpenAI fallback
+    // LLM: Groq primary (Llama 4 Scout — ultra-fast ~200ms TTFT), OpenAI fallback
     const lm = new LLM({
       model: groqKey
         ? 'meta-llama/llama-4-scout-17b-16e-instruct'
@@ -80,6 +82,26 @@ export default defineAgent({
       stt,
       llm: lm,
       tts,
+      turnHandling: {
+        turnDetection: undefined, // auto-select: realtime_llm → vad → stt
+        // Dynamic endpointing adapts to conversation pace — snappy but not premature
+        endpointing: {
+          mode: 'dynamic',
+          minDelay: 300,   // 300ms silence floor — fast but tolerates brief pauses
+          maxDelay: 2500,  // 2.5s ceiling — catches long thoughtful pauses
+        },
+        // Aggressive barge-in: react to even a single syllable
+        interruption: {
+          enabled: true,
+          minDuration: 200,               // 200ms speech to trigger interruption
+          minWords: 0,                    // no word-count gate — single syllable is enough
+          falseInterruptionTimeout: 1200, // 1.2s before resuming on false positive
+          resumeFalseInterruption: true,  // auto-resume if user goes silent after interruption
+          // Suppress backchannels ("uh-huh", "yeah") near turn boundaries
+          backchannelBoundary: [600, 2500],
+        },
+        preemptiveGeneration: {}, // use SDK defaults
+      },
     });
 
     const session = new voice.AgentSession({
@@ -89,7 +111,10 @@ export default defineAgent({
     });
 
     await session.start({ agent, room: ctx.room });
-    await session.say('Hello! How can I help you today?');
+
+    // Use agent-configured greeting if available, otherwise generic
+    const greeting = firstMessage?.trim() || 'Hello! How can I help you today?';
+    await session.say(greeting);
   },
 });
 
