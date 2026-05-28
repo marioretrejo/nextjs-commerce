@@ -397,7 +397,6 @@ export default function NewAgentPage() {
       if (voice.preview_url) {
         audioUrl = `/api/voices/preview?url=${encodeURIComponent(voice.preview_url)}`;
       } else {
-        // Generate live Cartesia TTS sample with current emotion
         const res = await fetch('/api/voices/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -407,7 +406,17 @@ export default function NewAgentPage() {
             language: form.language,
           }),
         });
-        if (!res.ok) throw new Error('Preview unavailable');
+        if (!res.ok) {
+          // Bubble up the real server error so users see exactly what's wrong
+          let errMsg = `Preview failed (${res.status})`;
+          try {
+            const body = await res.json() as { error?: string };
+            if (body.error) errMsg = body.error;
+          } catch {
+            errMsg = (await res.text().catch(() => errMsg)) || errMsg;
+          }
+          throw new Error(errMsg);
+        }
         const blob = await res.blob();
         audioUrl = URL.createObjectURL(blob);
       }
@@ -415,9 +424,9 @@ export default function NewAgentPage() {
       audio.onended = () => { setPlayingVoice(null); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
       audio.onerror = () => { setPlayingVoice(null); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
       await audio.play();
-    } catch {
+    } catch (e) {
       setPlayingVoice(null);
-      toast.error('Voice preview unavailable');
+      toast.error(e instanceof Error ? e.message : 'Voice preview unavailable');
     }
   }
 
