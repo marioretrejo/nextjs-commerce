@@ -1,19 +1,31 @@
 /**
- * VoiceOS Tool Registry
+ * VoiceOS Tool Registry — Enterprise Edition
  *
- * Tools give the LLM the ability to take real actions during a call (look up
- * data, book appointments, transfer to human, etc.). Each tool's `execute`
- * function runs async; the agent speaks a contingency phrase while it waits.
+ * Each tool:
+ *   - Fires a contingency phrase via session.say() before awaiting async work
+ *   - Has a hard timeout so a slow API never blocks the conversation
+ *   - Returns a structured result the LLM uses to compose its reply
  *
- * To add a new tool: define it here and include it in `buildTools()`.
+ * To add a custom tool: define it, export from buildTools().
  * Parameters use raw JSON Schema — no Zod required.
  */
 import { llm } from '@livekit/agents';
+import { SipClient, RoomServiceClient } from 'livekit-server-sdk';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolOpts = Parameters<llm.FunctionTool<any>['execute']>[1];
 
-/** Milliseconds the agent waits for a tool response before giving up. */
+/** Context injected at call start — provides room/SIP coordinates for transfer. */
+export interface ToolConfig {
+  enableTransfer?: boolean;
+  enableOrders?: boolean;
+  roomName?: string;
+  transferNumber?: string | null;  // E.164: "+18005551234"
+  livekitWsUrl?: string;
+  livekitApiKey?: string;
+  livekitApiSecret?: string;
+}
+
 const TOOL_TIMEOUT_MS = 8000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -52,7 +64,7 @@ const checkAvailability = llm.tool({
         TOOL_TIMEOUT_MS
       );
     } catch {
-      return { error: 'Unable to retrieve availability right now. I\'ll have someone follow up.' };
+      return { error: 'Unable to retrieve availability right now. Someone will follow up.' };
     }
   },
 });
@@ -74,7 +86,7 @@ function getMockAvailability(serviceType: string, preferredDate?: string) {
 
 const bookAppointment = llm.tool({
   description:
-    'Book an appointment for the user after they confirm a specific date and time. Always confirm the slot with the user before calling this.',
+    'Book an appointment after the user confirms a specific date and time. Always confirm the slot verbally before calling this.',
   parameters: {
     type: 'object' as const,
     properties: {
@@ -83,7 +95,7 @@ const bookAppointment = llm.tool({
       name: { type: 'string', description: 'Full name of the person booking' },
       email: { type: 'string', description: 'Contact email for the booking confirmation' },
       service_type: { type: 'string', description: 'Type of appointment or service' },
-      notes: { type: 'string', description: 'Any additional notes or preferences' },
+      notes: { type: 'string', description: 'Any additional notes' },
     },
     required: ['date', 'time', 'name', 'service_type'],
   },
@@ -91,12 +103,9 @@ const bookAppointment = llm.tool({
     args: { date: string; time: string; name: string; email?: string; service_type: string; notes?: string },
     opts: ToolOpts
   ) => {
-    opts.ctx.session.say('Perfect, I\'m booking that for you right now.');
+    opts.ctx.session.say('Perfect, I\'m confirming that booking for you right now.');
     try {
-      return await withTimeout(
-        Promise.resolve(createMockBooking(args)),
-        TOOL_TIMEOUT_MS
-      );
+      return await withTimeout(Promise.resolve(createMockBooking(args)), TOOL_TIMEOUT_MS);
     } catch {
       return { error: 'Booking failed. Our team will follow up to confirm manually.' };
     }
@@ -117,36 +126,117 @@ function createMockBooking(params: {
 }
 
 // ─── transfer_to_human ─────────────────────────────────────────────────────────
+//
+// Feature 3: Real SIP REFER transfer.
+//
+// When this tool is invoked:
+//   1. Agent speaks the transfer announcement immediately (non-blocking)
+//   2. Discovers any SIP participant in the current room via RoomServiceClient
+//   3. Issues a SIP REFER to the support number via SipClient.transferSipParticipant
+//      — this hands the PSTN call to the support agent and removes AI from the loop
+//   4. For WebRTC-only calls (no SIP participant): logs the request and returns a
+//      graceful response so the LLM can tell the user what happened
 
-const transferToHuman = llm.tool({
-  description:
-    'Transfer the user to a live human agent. Use when: user explicitly asks for a human, the issue is too complex, or you cannot resolve it after 2 attempts.',
-  parameters: {
-    type: 'object' as const,
-    properties: {
-      reason: { type: 'string', description: 'Brief reason for the transfer' },
-      urgency: {
-        type: 'string',
-        enum: ['low', 'normal', 'high'],
-        description: 'Urgency level',
+function buildTransferToHuman(config: ToolConfig) {
+  return llm.tool({
+    description:
+      'Transfer the call to a live human agent. Use when: user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        reason: { type: 'string', description: 'Brief reason for the transfer (used for routing)' },
+        urgency: {
+          type: 'string',
+          enum: ['low', 'normal', 'high'],
+          description: 'Urgency level of the request',
+        },
       },
+      required: ['reason'],
     },
-    required: ['reason'],
-  },
-  execute: async (args: { reason: string; urgency?: string }, opts: ToolOpts) => {
-    opts.ctx.session.say(
-      'Of course, let me connect you with one of our team members right away. Please hold on for just a moment.'
-    );
-    // TODO: trigger actual SIP REFER or CRM webhook here
-    console.log(`[transfer_to_human] reason="${args.reason}" urgency="${args.urgency ?? 'normal'}"`);
-    return {
-      transfer_initiated: true,
-      reason: args.reason,
-      urgency: args.urgency ?? 'normal',
-      estimated_wait: '< 2 minutes',
-    };
-  },
-});
+    execute: async (args: { reason: string; urgency?: string }, opts: ToolOpts) => {
+      // Speak immediately so the user hears something while the transfer completes
+      opts.ctx.session.say(
+        'Of course. I\'m transferring your call to one of our team members right now. Please hold on for just a moment.'
+      );
+
+      const {
+        roomName, transferNumber,
+        livekitWsUrl, livekitApiKey, livekitApiSecret,
+      } = config;
+
+      if (!roomName || !transferNumber || !livekitApiKey || !livekitApiSecret || !livekitWsUrl) {
+        // WebRTC call or SIP not configured — graceful degradation
+        console.warn('[transfer_to_human] SIP transfer not configured; logging escalation only');
+        return {
+          transfer_initiated: false,
+          reason: args.reason,
+          urgency: args.urgency ?? 'normal',
+          message: 'A team member will call you back shortly.',
+        };
+      }
+
+      try {
+        const httpUrl = livekitWsUrl
+          .replace('wss://', 'https://')
+          .replace('ws://', 'http://');
+
+        const roomService = new RoomServiceClient(httpUrl, livekitApiKey, livekitApiSecret);
+
+        // Find the SIP participant in the current room (the caller on PSTN)
+        const participants = await withTimeout(
+          roomService.listParticipants(roomName),
+          5000
+        );
+
+        const sipParticipant = participants.find(
+          (p) => p.identity?.startsWith('sip_') || p.kind === 3 // ParticipantInfo_Kind.SIP = 3
+        );
+
+        if (sipParticipant?.identity) {
+          // Issue SIP REFER — the telephony carrier bridges the call to the support number.
+          // The AI participant stays in the room until LiveKit removes it, but the user
+          // is already talking to the human agent. Session.Close fires shortly after.
+          const sipClient = new SipClient(httpUrl, livekitApiKey, livekitApiSecret);
+
+          // SIP URI for the support number (Twilio-style)
+          const transferTo = transferNumber.startsWith('sip:')
+            ? transferNumber
+            : `sip:${transferNumber.replace('+', '')}@sip.twilio.com`;
+
+          await withTimeout(
+            sipClient.transferSipParticipant(roomName, sipParticipant.identity, transferTo),
+            8000
+          );
+
+          console.log(`[transfer_to_human] SIP REFER sent to ${transferTo} for participant ${sipParticipant.identity}`);
+          return {
+            transfer_initiated: true,
+            transfer_type: 'sip_refer',
+            destination: transferTo,
+            reason: args.reason,
+            urgency: args.urgency ?? 'normal',
+          };
+        }
+
+        // No SIP participant found (pure WebRTC call)
+        console.warn('[transfer_to_human] No SIP participant found in room; cannot issue REFER');
+        return {
+          transfer_initiated: false,
+          reason: args.reason,
+          message: 'A team member will reach out to you within a few minutes.',
+        };
+
+      } catch (err) {
+        console.error('[transfer_to_human] Transfer failed:', err);
+        return {
+          transfer_initiated: false,
+          reason: args.reason,
+          error: 'Transfer encountered an issue. A team member will contact you shortly.',
+        };
+      }
+    },
+  });
+}
 
 // ─── check_order_status ────────────────────────────────────────────────────────
 
@@ -161,12 +251,9 @@ const checkOrderStatus = llm.tool({
     required: ['order_id'],
   },
   execute: async (args: { order_id: string; customer_email?: string }, opts: ToolOpts) => {
-    opts.ctx.session.say('Give me just a second while I pull up that order.');
+    opts.ctx.session.say('Give me just a second while I pull that up.');
     try {
-      return await withTimeout(
-        Promise.resolve(getMockOrderStatus(args.order_id)),
-        TOOL_TIMEOUT_MS
-      );
+      return await withTimeout(Promise.resolve(getMockOrderStatus(args.order_id)), TOOL_TIMEOUT_MS);
     } catch {
       return { error: 'Unable to retrieve order status. Please check the website or contact support.' };
     }
@@ -186,14 +273,15 @@ function getMockOrderStatus(orderId: string) {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-export function buildTools(opts?: {
-  enableTransfer?: boolean;
-  enableOrders?: boolean;
-}): llm.ToolContext {
+export function buildTools(config: ToolConfig = {}): llm.ToolContext {
   return {
     check_availability: checkAvailability,
     book_appointment: bookAppointment,
-    ...(opts?.enableTransfer !== false ? { transfer_to_human: transferToHuman } : {}),
-    ...(opts?.enableOrders ? { check_order_status: checkOrderStatus } : {}),
+    ...(config.enableTransfer !== false
+      ? { transfer_to_human: buildTransferToHuman(config) }
+      : {}),
+    ...(config.enableOrders
+      ? { check_order_status: checkOrderStatus }
+      : {}),
   };
 }
