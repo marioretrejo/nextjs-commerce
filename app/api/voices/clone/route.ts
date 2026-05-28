@@ -1,102 +1,87 @@
 /**
  * POST /api/voices/clone
  *
- * Clones a voice using ElevenLabs Instant Voice Cloning API, then saves the
- * resulting voice_id to our `custom_voices` table.
+ * Clones a voice using Cartesia Voice Cloning, then saves the resulting
+ * voice_id to our `custom_voices` table with provider = 'cartesia'.
  *
  * FormData fields:
  *   name        string   — display name
- *   description string?  — optional description
  *   language    string?  — ISO 639-1 code (default 'en')
  *   gender      string?  — 'male' | 'female' | 'neutral'
- *   file        File     — audio sample (.mp3 or .wav, max 25 MB)
+ *   mode        string?  — 'similarity' (default) | 'reconstruction'
+ *   file        File     — audio clip (.mp3 / .wav / .m4a, ≥10s, ≤25 MB)
+ *
+ * GET  → list workspace custom voices
+ * DELETE { id } → remove from Cartesia + DB
  */
-import { elevenlabs } from '@/lib/elevenlabs/client';
+import { cloneCartesiaVoice, deleteCartesiaVoice } from '@/lib/cartesia';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+
+async function resolveWorkspaceId(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from('workspaces').select('id').eq('owner_id', userId).single();
+  return (data as { id: string } | null)?.id ?? null;
+}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const admin = createAdminClient();
-
-  // Resolve workspace for this user
-  const { data: ws } = await admin
-    .from('workspaces')
-    .select('id')
-    .eq('owner_id', user.id)
-    .single();
-
-  if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
-  const workspaceId = (ws as { id: string }).id;
+  const workspaceId = await resolveWorkspaceId(user.id);
+  if (!workspaceId) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
 
   const formData = await req.formData();
-  const name     = formData.get('name') as string | null;
-  const desc     = formData.get('description') as string | null;
+  const name     = formData.get('name')     as string | null;
   const language = (formData.get('language') as string | null) ?? 'en';
   const gender   = (formData.get('gender')   as string | null) ?? null;
-  const file     = formData.get('file') as File | null;
+  const mode     = ((formData.get('mode')    as string | null) ?? 'similarity') as 'similarity' | 'reconstruction';
+  const file     = formData.get('file')     as File | null;
 
   if (!name?.trim() || !file) {
     return NextResponse.json({ error: 'name and file are required' }, { status: 400 });
   }
 
-  // Insert a "cloning" row immediately so the UI can show progress
+  const admin = createAdminClient();
+
+  // Insert a 'cloning' placeholder so the UI shows progress immediately
   const { data: voiceRow, error: insertErr } = await admin
     .from('custom_voices')
     .insert({
-      workspace_id:     workspaceId,
-      name:             name.trim(),
-      provider:         'elevenlabs',
+      workspace_id:      workspaceId,
+      name:              name.trim(),
+      provider:          'cartesia',
       provider_voice_id: 'pending',
       language,
-      gender:           gender ?? null,
-      status:           'cloning',
+      gender:            gender ?? null,
+      status:            'cloning',
     })
     .select()
     .single();
 
   if (insertErr || !voiceRow) {
-    return NextResponse.json({ error: insertErr?.message ?? 'DB error' }, { status: 500 });
+    return NextResponse.json({ error: insertErr?.message ?? 'DB insert error' }, { status: 500 });
   }
 
   const rowId = (voiceRow as { id: string }).id;
 
   try {
-    // Build ElevenLabs form
-    const elForm = new FormData();
-    elForm.append('name', name.trim());
-    if (desc) elForm.append('description', desc);
-    elForm.append('files', file);
+    const result = await cloneCartesiaVoice({ name: name.trim(), language, mode, file });
 
-    const result = await elevenlabs.cloneVoice(elForm);
-    const voiceId = result.voice_id;
-
-    // Fetch preview URL from ElevenLabs
-    let previewUrl: string | null = null;
-    try {
-      const voice = await elevenlabs.getVoice(voiceId);
-      previewUrl = voice.preview_url ?? null;
-    } catch { /* preview is optional */ }
-
-    // Update our DB record with the real voice_id + preview
     await admin
       .from('custom_voices')
-      .update({ provider_voice_id: voiceId, preview_url: previewUrl, status: 'ready' })
+      .update({ provider_voice_id: result.id, status: 'ready' })
       .eq('id', rowId);
 
     return NextResponse.json({
-      id:               rowId,
-      provider_voice_id: voiceId,
-      preview_url:      previewUrl,
-      status:           'ready',
+      id:                rowId,
+      provider_voice_id: result.id,
+      status:            'ready',
     }, { status: 201 });
 
   } catch (e) {
-    // Mark the row as errored
     await admin
       .from('custom_voices')
       .update({ status: 'error', error_message: String(e) })
@@ -111,14 +96,14 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const admin = createAdminClient();
-  const { data: ws } = await admin.from('workspaces').select('id').eq('owner_id', user.id).single();
-  if (!ws) return NextResponse.json([]);
+  const workspaceId = await resolveWorkspaceId(user.id);
+  if (!workspaceId) return NextResponse.json([]);
 
+  const admin = createAdminClient();
   const { data } = await admin
     .from('custom_voices')
     .select('*')
-    .eq('workspace_id', (ws as { id: string }).id)
+    .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
 
   return NextResponse.json(data ?? []);
@@ -133,13 +118,12 @@ export async function DELETE(req: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const admin = createAdminClient();
+  const { data: voice } = await admin.from('custom_voices').select('provider_voice_id, status').eq('id', id).single();
 
-  // Fetch record to get provider_voice_id for cleanup
-  const { data: voice } = await admin.from('custom_voices').select('*').eq('id', id).single();
   if (voice) {
-    const v = voice as { provider: string; provider_voice_id: string };
-    if (v.provider === 'elevenlabs' && v.provider_voice_id !== 'pending') {
-      try { await elevenlabs.deleteVoice(v.provider_voice_id); } catch { /* non-fatal */ }
+    const v = voice as { provider_voice_id: string; status: string };
+    if (v.provider_voice_id !== 'pending' && v.status === 'ready') {
+      try { await deleteCartesiaVoice(v.provider_voice_id); } catch { /* non-fatal */ }
     }
   }
 

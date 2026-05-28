@@ -80,6 +80,7 @@ export default function VoiceStudioPage() {
   const [cloneName,    setCloneName]    = useState('');
   const [cloneGender,  setCloneGender]  = useState<string>('neutral');
   const [cloneLang,    setCloneLang]    = useState('en');
+  const [cloneMode,    setCloneMode]    = useState<'similarity' | 'reconstruction'>('similarity');
   const [cloneFile,    setCloneFile]    = useState<File | null>(null);
   const [cloning,      setCloning]      = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -141,6 +142,7 @@ export default function VoiceStudioPage() {
       fd.append('name',     cloneName.trim());
       fd.append('language', cloneLang);
       fd.append('gender',   cloneGender);
+      fd.append('mode',     cloneMode);
       fd.append('file',     cloneFile);
 
       const res = await fetch('/api/voices/clone', { method: 'POST', body: fd });
@@ -149,7 +151,7 @@ export default function VoiceStudioPage() {
 
       toast.success('Voice cloned! Processing in background…');
       setCloneOpen(false);
-      setCloneName(''); setCloneFile(null); setCloneGender('neutral');
+      setCloneName(''); setCloneFile(null); setCloneGender('neutral'); setCloneMode('similarity');
       loadData();
     } catch (e) { toast.error(String(e)); }
     finally { setCloning(false); }
@@ -272,8 +274,8 @@ export default function VoiceStudioPage() {
       {/* Built-in Cartesia voice gallery */}
       <section>
         <h2 className="text-sm font-semibold text-[#6b6b6b] uppercase tracking-wide mb-3 flex items-center gap-2">
-          <Zap className="h-3.5 w-3.5" /> Built-in Voices — Cartesia Sonic-3
-          <span className="font-normal text-[#a0a0a0]">({builtInVoices.length} available)</span>
+          <Zap className="h-3.5 w-3.5" /> Cartesia Sonic-3 Voice Library
+          <span className="font-normal text-[#a0a0a0]">({builtInVoices.length} voices)</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -331,14 +333,14 @@ export default function VoiceStudioPage() {
                 <Select value={cloneLang} onValueChange={setCloneLang}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {([['en','English'],['es','Spanish'],['fr','French'],['de','German'],['pt','Portuguese'],['it','Italian']] as [string,string][]).map(([v,l]) => (
+                    {([['en','English'],['es','Spanish'],['fr','French'],['de','German'],['pt','Portuguese'],['it','Italian'],['ja','Japanese'],['zh','Chinese']] as [string,string][]).map(([v,l]) => (
                       <SelectItem key={v} value={v}>{l}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Gender</Label>
+                <Label>Gender (metadata)</Label>
                 <Select value={cloneGender} onValueChange={setCloneGender}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -351,7 +353,28 @@ export default function VoiceStudioPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Audio sample <span className="text-red-500">*</span></Label>
+              <Label>Clone mode</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { v: 'similarity',     label: 'Similarity',     desc: 'Fastest · ≥10s clip' },
+                  { v: 'reconstruction', label: 'Reconstruction',  desc: 'Best quality · ≥30s' },
+                ] as const).map(({ v, label, desc }) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setCloneMode(v)}
+                    className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors
+                      ${cloneMode === v ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white' : 'border-[#e0e0e0] hover:border-[#6b6b6b]'}`}
+                  >
+                    <p className="font-semibold">{label}</p>
+                    <p className={cloneMode === v ? 'text-white/60' : 'text-[#6b6b6b]'}>{desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Audio clip <span className="text-red-500">*</span></Label>
               <div
                 className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-colors
                   ${cloneFile ? 'border-green-400 bg-green-50' : 'border-[#e0e0e0] hover:border-[#0a0a0a]'}`}
@@ -361,13 +384,13 @@ export default function VoiceStudioPage() {
                   <>
                     <CheckCircle2 className="h-6 w-6 text-green-500 mb-2" />
                     <p className="text-sm font-medium text-green-700">{cloneFile.name}</p>
-                    <p className="text-xs text-green-600">{(cloneFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                    <p className="text-xs text-green-600">{(cloneFile.size / 1024 / 1024).toFixed(1)} MB · {cloneMode} mode</p>
                   </>
                 ) : (
                   <>
                     <Upload className="h-6 w-6 text-[#6b6b6b] mb-2" />
                     <p className="text-sm text-[#6b6b6b]">Click to upload .mp3 or .wav</p>
-                    <p className="text-xs text-[#a0a0a0] mt-0.5">1–25 MB · at least 30 seconds recommended</p>
+                    <p className="text-xs text-[#a0a0a0] mt-0.5">Max 25 MB · {cloneMode === 'similarity' ? '≥10 seconds' : '≥30 seconds recommended'}</p>
                   </>
                 )}
                 <input
@@ -380,13 +403,13 @@ export default function VoiceStudioPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800 space-y-1">
-              <p className="font-semibold">Tips for best results:</p>
-              <ul className="space-y-0.5 list-disc list-inside text-blue-700">
-                <li>Use 30–300 seconds of clear speech</li>
-                <li>Minimize background noise and music</li>
-                <li>One speaker only — no other voices</li>
-                <li>Requires <code className="bg-blue-100 rounded px-0.5">ELEVENLABS_API_KEY</code> to be set</li>
+            <div className="rounded-lg border border-[#e0e0e0] bg-[#f9f9f9] px-3 py-2.5 text-xs text-[#6b6b6b] space-y-1">
+              <p className="font-semibold text-[#0a0a0a]">Cartesia Voice Cloning tips:</p>
+              <ul className="space-y-0.5 list-disc list-inside">
+                <li>One speaker only, no background music</li>
+                <li>Similarity mode: fast clone from any clear clip ≥10s</li>
+                <li>Reconstruction: highest quality, needs 30s+ of speech</li>
+                <li>Requires <code className="bg-[#f0f0f0] rounded px-0.5">CARTESIA_API_KEY</code> env var</li>
               </ul>
             </div>
           </div>
