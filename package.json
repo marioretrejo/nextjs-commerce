@@ -69,6 +69,7 @@
     "swagger-ui-react": "^5.32.6",
     "tailwind-merge": "^3.3.0",
     "twilio": "^6.0.2",
+    "wavesurfer.js": "^7.12.7",
     "zod": "^3.25.30"
   },
   "pnpm": {

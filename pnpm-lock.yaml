@@ -179,6 +179,9 @@ importers:
       twilio:
         specifier: ^6.0.2
         version: 6.0.2
+      wavesurfer.js:
+        specifier: ^7.12.7
+        version: 7.12.7
       zod:
         specifier: ^3.25.30
         version: 3.25.76
@@ -3457,6 +3460,9 @@ packages:
 
   victory-vendor@36.9.2:
     resolution: {integrity: sha512-PnpQQMuxlwYdocC8fIJqVXvkeViHYzotI+NJrCuav0ZYFoq912ZHBk3mCeuj+5/VpodOjPe1z0Fk2ihgzlXqjQ==}
+
+  wavesurfer.js@7.12.7:
+    resolution: {integrity: sha512-TIe7hB6OCZysNOZ2cn2NR8Qpko22POWel6rauNcqOammFoH65NYQUM35unNLLMIlUMVYvjJ6w/TTl/G/m+w0nA==}
 
   web-tree-sitter@0.24.5:
     resolution: {integrity: sha512-+J/2VSHN8J47gQUAvF8KDadrfz6uFYVjxoxbKWDoXVsH2u7yLdarCnIURnrMA6uSRkgX3SdmqM5BOoQjPdSh5w==}
@@ -6991,6 +6997,8 @@ snapshots:
       d3-shape: 3.2.0
       d3-time: 3.1.0
       d3-timer: 3.0.1
+
+  wavesurfer.js@7.12.7: {}
 
   web-tree-sitter@0.24.5:
     optional: true

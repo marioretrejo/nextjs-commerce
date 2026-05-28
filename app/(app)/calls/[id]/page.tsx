@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { WaveformPlayer } from '@/components/calls/WaveformPlayer';
 import { createClient } from '@/lib/supabase/server';
 import { formatDuration } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
@@ -89,21 +90,50 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
         ))}
       </div>
 
-      {call.recording_url && (
+      {/* Waveform player + synced transcript (replaces plain <audio> + separate transcript card) */}
+      {call.recording_url ? (
         <Card>
-          <CardHeader><CardTitle>Recording</CardTitle></CardHeader>
-          <CardContent>
-            <audio controls className="w-full" src={call.recording_url}>
-              Your browser does not support audio.
-            </audio>
+          <CardHeader>
+            <CardTitle>Recording &amp; Transcript</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pb-0">
+            <div className="px-5 pb-5">
+              <WaveformPlayer
+                url={call.recording_url}
+                transcript={call.transcript}
+                duration={call.duration_seconds}
+              />
+            </div>
           </CardContent>
         </Card>
-      )}
+      ) : call.transcript ? (
+        <Card>
+          <CardHeader><CardTitle>Transcript</CardTitle></CardHeader>
+          <CardContent>
+            <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
+              {call.transcript.split('\n').filter(Boolean).map((line, i) => {
+                const isAgent = /^(agent|ai|assistant)\s*:/i.test(line);
+                const text = line.replace(/^(agent|ai|assistant|user|caller|contact)\s*:/i, '').trim();
+                return (
+                  <div key={i} className={`flex gap-3 ${isAgent ? 'flex-row' : 'flex-row-reverse'}`}>
+                    <div className={`max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm ${isAgent ? 'bg-[#0a0a0a] text-white' : 'bg-[#f5f5f5] text-[#0a0a0a]'}`}>
+                      <p className={`mb-1 text-xs font-medium ${isAgent ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
+                        {isAgent ? 'Agent' : 'Contact'}
+                      </p>
+                      {text}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {call.summary && (
         <Card>
-          <CardHeader><CardTitle>Summary</CardTitle></CardHeader>
-          <CardContent><p className="text-sm text-[#6b6b6b]">{call.summary}</p></CardContent>
+          <CardHeader><CardTitle>AI Summary</CardTitle></CardHeader>
+          <CardContent><p className="text-sm text-[#6b6b6b] whitespace-pre-line">{call.summary}</p></CardContent>
         </Card>
       )}
 
@@ -123,30 +153,6 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
                 <span className="font-medium max-w-[60%] text-right">{value}</span>
               </div>
             ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {call.transcript && (
-        <Card>
-          <CardHeader><CardTitle>Transcript</CardTitle></CardHeader>
-          <CardContent>
-            <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
-              {call.transcript.split('\n').filter(Boolean).map((line, i) => {
-                const isAgent = line.toLowerCase().startsWith('agent:');
-                const text = line.replace(/^(agent:|user:|caller:)/i, '').trim();
-                return (
-                  <div key={i} className={`flex gap-3 ${isAgent ? 'flex-row' : 'flex-row-reverse'}`}>
-                    <div className={`max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm ${isAgent ? 'bg-[#0a0a0a] text-white' : 'bg-[#f5f5f5] text-[#0a0a0a]'}`}>
-                      <p className={`mb-1 text-xs font-medium ${isAgent ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
-                        {isAgent ? 'Agent' : 'Contact'}
-                      </p>
-                      {text}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </CardContent>
         </Card>
       )}
