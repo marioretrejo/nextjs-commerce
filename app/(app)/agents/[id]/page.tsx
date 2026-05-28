@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Agent } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
-import { Bot, ArrowLeft } from 'lucide-react';
+import { Bot, ArrowLeft, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AgentEditForm } from './agent-edit-form';
@@ -43,6 +43,12 @@ export default async function AgentEditPage({ params }: { params: Promise<{ id: 
         </Link>
         <Link href={`/agents/${agent.id}/flow`}>
           <Button variant="outline" size="sm">Flow Builder</Button>
+        </Link>
+        <Link href={`/agents/${agent.id}/workflow`}>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Workflow className="h-3.5 w-3.5" />
+            Workflow
+          </Button>
         </Link>
         <Link href={`/agents/${agent.id}/widget`}>
           <Button variant="outline" size="sm">Widget</Button>

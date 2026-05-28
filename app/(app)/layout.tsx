@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
 import { MinuteAlerts } from '@/components/minute-usage/minute-alerts';
+import { AnalyticsCopilot } from '@/components/copilot/AnalyticsCopilot';
 import type { User, WorkspaceBranding } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
 import { getUserWorkspaces } from '@/lib/workspace';
@@ -66,6 +67,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         limit={Number(workspace.minutes_limit)}
         plan={workspace.plan}
       />
+      <AnalyticsCopilot workspaceId={workspace.id} />
     </div>
   );
 }

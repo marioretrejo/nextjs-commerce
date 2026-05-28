@@ -134,6 +134,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      openai:
+        specifier: ^6.39.0
+        version: 6.39.0(ws@8.21.0)(zod@3.25.76)
       papaparse:
         specifier: ^5.5.3
         version: 5.5.3

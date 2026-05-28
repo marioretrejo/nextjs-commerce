@@ -7,6 +7,8 @@
  *   2. LLM + TTS Fallbacks — Groq → OpenAI (LLM), Cartesia → OpenAI TTS (automatic)
  *   3. Human Transfer      — SIP REFER via LiveKit when transfer_to_human is invoked
  *   4. Pronunciation Dicts — Custom keywords (Deepgram) + TTS map (Cartesia) from Supabase
+ *   5. Backchanneling      — Listening acknowledgments injected during long user speech
+ *   6. Filler Suppression  — "uhm", "uh", "er" utterances never trigger premature turn-end
  *
  * Start: node --import tsx/esm agent/worker.ts dev
  * Prod:  node --import tsx/esm agent/worker.ts start
@@ -18,6 +20,7 @@ import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
 import { loadPronunciationConfig } from './pronunciation.js';
+import { BackchannelManager, isFillerOnly } from './backchannel.js';
 import { startSpan, endSpan, checkLatencyThreshold, log } from '../lib/tracing.js';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
@@ -187,17 +190,22 @@ export default defineAgent({
       turnHandling: {
         turnDetection: undefined,
         endpointing: {
+          // 'dynamic' adjusts the silence threshold based on speech complexity:
+          // short answers get a fast 450ms cut-off; long complex thoughts get
+          // up to 3 s before the agent treats the pause as a turn-end.
           mode: 'dynamic',
-          minDelay: 300,
-          maxDelay: 2500,
+          minDelay: 450,   // was 300ms — extra 150ms prevents cutting off mid-thought pauses
+          maxDelay: 3000,  // was 2500ms — gives complex multi-clause sentences more breathing room
         },
         interruption: {
           enabled: true,
-          minDuration: 200,
-          minWords: 0,
-          falseInterruptionTimeout: 1200,
+          minDuration: 250,  // ignore sub-250ms noises (clicks, breath) as interruptions
+          minWords: 1,       // at least one word required — suppresses single-phoneme false triggers
+          falseInterruptionTimeout: 1500,
           resumeFalseInterruption: true,
-          backchannelBoundary: [600, 2500],
+          // backchannelBoundary: agent may emit a listening sound when user speech
+          // falls within this ms range (600–3000ms of agent speaking before user interjects)
+          backchannelBoundary: [600, 3000],
         },
         preemptiveGeneration: {},
       },
@@ -220,22 +228,45 @@ export default defineAgent({
       }
     });
 
+    // ─── Backchanneling: active-listening sounds during long user speech ──────
+    // Fires "Mhm.", "I see.", etc. when the user speaks continuously for > 3.2s.
+    // Filler-only finals ("uhm", "er", "yeah") are suppressed so they never
+    // advance the LLM clock or generate a premature agent response.
+    const backchannel = new BackchannelManager(session, 3200, 8000);
+
     // ─── Distributed tracing: capture pipeline latency per stage ─────────────
     let sttSpan = startSpan('stt');
     let llmSpan = startSpan('llm.first_token');
     let ttsSpan = startSpan('tts.first_chunk');
 
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
-      if ((ev as { isFinal?: boolean }).isFinal) {
-        const result = endSpan(sttSpan, {
-          agent_id: agentId,
-          workspace_id: workspaceId,
-          transcript_chars: ((ev as { transcript?: string }).transcript ?? '').length,
-        });
-        checkLatencyThreshold(result);
-        sttSpan = startSpan('stt'); // reset for next utterance
-        llmSpan = startSpan('llm.first_token'); // start LLM clock
+      const typed = ev as { isFinal?: boolean; transcript?: string };
+      const text = typed.transcript ?? '';
+
+      if (!typed.isFinal) {
+        // Non-final (partial) transcript — user is still speaking
+        backchannel.onPartial();
+        return;
       }
+
+      // Final transcript — user finished a thought
+      backchannel.onFinal();
+
+      // Suppress filler-only utterances: don't advance spans or log them as
+      // real turns — "uh", "hmm", "ok" alone should never trigger a full LLM response.
+      if (isFillerOnly(text)) {
+        log('info', { message: 'stt.filler_suppressed', text, agent_id: agentId });
+        return;
+      }
+
+      const result = endSpan(sttSpan, {
+        agent_id: agentId,
+        workspace_id: workspaceId,
+        transcript_chars: text.length,
+      });
+      checkLatencyThreshold(result);
+      sttSpan = startSpan('stt'); // reset for next utterance
+      llmSpan = startSpan('llm.first_token'); // start LLM clock
     });
 
     session.on(voice.AgentSessionEventTypes.SpeechCreated, () => {
@@ -278,6 +309,7 @@ export default defineAgent({
 
     // ─── Session close — write transcript + duration to Supabase ─────────────
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
+      backchannel.destroy();
       log('info', {
         message: 'call.ended',
         agent_id: agentId,
