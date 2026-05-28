@@ -1,56 +1,120 @@
 'use client';
 
+import '@livekit/components-styles';
+import type { AgentState } from '@livekit/components-react';
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useConnectionState,
+  useLocalParticipant,
+  useRemoteParticipants,
+  useVoiceAssistant,
+  BarVisualizer,
+} from '@livekit/components-react';
+import { ConnectionState } from 'livekit-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Mic, MicOff, Phone, PhoneOff } from 'lucide-react';
+import { ArrowLeft, Loader2, Mic, MicOff, Phone, PhoneOff, Bot } from 'lucide-react';
 import Link from 'next/link';
-import { use, useState } from 'react';
+import { use, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
+// --- Inner room UI (mounted only when token/wsUrl are ready) ---
+function CallControls({ onEnd }: { onEnd: () => void }) {
+  const connectionState = useConnectionState();
+  const { localParticipant } = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
+  const { state: agentState, audioTrack } = useVoiceAssistant();
+
+  const isConnected = connectionState === ConnectionState.Connected;
+  const agentJoined = remoteParticipants.length > 0;
+  const isMuted = localParticipant.isMicrophoneEnabled === false;
+
+  const toggleMic = useCallback(() => {
+    localParticipant.setMicrophoneEnabled(isMuted);
+  }, [localParticipant, isMuted]);
+
+  const stateLabel: Partial<Record<AgentState, string>> = {
+    disconnected: 'Disconnected',
+    connecting: 'Connecting…',
+    initializing: 'Initializing…',
+    listening: 'Listening',
+    thinking: 'Thinking…',
+    speaking: 'Speaking',
+    idle: 'Ready',
+    failed: 'Failed',
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Visualizer */}
+      <div className="h-20 rounded-lg bg-[#0a0a0a] flex items-center justify-center overflow-hidden px-4">
+        {agentJoined && audioTrack ? (
+          <BarVisualizer
+            state={agentState}
+            trackRef={audioTrack}
+            barCount={32}
+            className="h-full w-full"
+            options={{ minHeight: 3 }}
+          />
+        ) : (
+          <div className="flex items-center gap-2 text-[#6b6b6b] text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {isConnected ? 'Waiting for agent…' : 'Connecting…'}
+          </div>
+        )}
+      </div>
+
+      {/* State badge */}
+      {agentJoined && (
+        <div className="flex items-center gap-2 text-sm text-[#6b6b6b]">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+          </span>
+          {stateLabel[agentState] ?? agentState}
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          className="bg-[#0a0a0a] text-white hover:bg-[#262626]"
+          onClick={onEnd}
+        >
+          <PhoneOff className="mr-2 h-4 w-4" /> End Call
+        </Button>
+        <Button variant="secondary" onClick={toggleMic}>
+          {isMuted ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
+          {isMuted ? 'Unmute' : 'Mute'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// --- Main page ---
 export default function TestAgentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [callActive, setCallActive] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [wsUrl, setWsUrl] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState('Agent');
   const [connecting, setConnecting] = useState(false);
-  const [muted, setMuted] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [retellClient, setRetellClient] = useState<any>(null);
-  const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
-  const [simulating, setSimulating] = useState(false);
-  const [persona, setPersona] = useState('Interested business owner, slightly skeptical');
 
   async function startCall() {
     setConnecting(true);
     try {
-      const res = await fetch(`/api/agents/${id}/test-call`, { method: 'POST' });
-      if (!res.ok) {
-        const e = await res.json() as { error: string };
-        throw new Error(e.error);
-      }
-      const { access_token } = await res.json() as { access_token: string };
-
-      const { RetellWebClient } = await import('retell-client-js-sdk');
-      const client = new RetellWebClient();
-
-      client.on('call_ended', () => {
-        setCallActive(false);
-        setRetellClient(null);
-        toast.success('Call ended');
+      const res = await fetch('/api/livekit/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: id }),
       });
-      client.on('update', (update: unknown) => {
-        const u = update as { transcript?: { role: string; content: string }[] };
-        if (u.transcript) {
-          setTranscript(u.transcript.map((t) => ({ role: t.role, text: t.content })));
-        }
-      });
-      client.on('error', (err: unknown) => {
-        toast.error(`Call error: ${String(err)}`);
-        setCallActive(false);
-        setRetellClient(null);
-      });
-
-      await client.startCall({ accessToken: access_token });
-      setRetellClient(client);
-      setCallActive(true);
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      const data = await res.json() as { token: string; wsUrl: string; agentName: string };
+      setWsUrl(data.wsUrl);
+      setAgentName(data.agentName);
+      setToken(data.token);
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -58,22 +122,9 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
     }
   }
 
-  async function runSimulation() {
-    setSimulating(true);
-    setTranscript([]);
-    try {
-      const res = await fetch(`/api/agents/${id}/simulate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona })
-      });
-      const data = await res.json() as { transcript: { role: string; text: string }[] };
-      setTranscript(data.transcript ?? []);
-    } catch (e) {
-      toast.error(String(e));
-    } finally {
-      setSimulating(false);
-    }
+  function endCall() {
+    setToken(null);
+    setWsUrl(null);
   }
 
   return (
@@ -82,87 +133,52 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
         <Link href={`/agents/${id}`}>
           <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
-        <h1 className="text-xl font-bold">Test Agent</h1>
+        <div className="flex items-center gap-2">
+          <Bot className="h-5 w-5" />
+          <h1 className="text-xl font-bold">Test Agent — {agentName}</h1>
+        </div>
       </div>
 
-      {/* Live call */}
       <Card>
-        <CardHeader><CardTitle>Live Browser Call</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Live Browser Call</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-[#6b6b6b]">Start a real WebRTC call with your agent directly from the browser.</p>
-          <div className="flex items-center gap-3">
-            {!callActive ? (
-              <Button onClick={startCall} disabled={connecting}>
-                {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}
-                {connecting ? 'Connecting…' : 'Start Call'}
-              </Button>
-            ) : (
-              <>
-                <Button variant="outline" className="bg-[#0a0a0a] text-white hover:bg-[#262626]"
-                  onClick={() => { retellClient?.stopCall(); }}>
-                  <PhoneOff className="mr-2 h-4 w-4" />
-                  End Call
-                </Button>
-                <Button variant="secondary" onClick={() => {
-                  if (muted) { retellClient?.unmute(); } else { retellClient?.mute(); }
-                  setMuted(!muted);
-                }}>
-                  {muted ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-                  {muted ? 'Unmute' : 'Mute'}
-                </Button>
-              </>
-            )}
-            {callActive && (
-              <div className="flex items-center gap-2 text-sm text-[#6b6b6b]">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#0a0a0a] opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#0a0a0a]" />
-                </span>
-                Live
-              </div>
-            )}
-          </div>
+          <p className="text-sm text-[#6b6b6b]">
+            Real-time WebRTC call powered by{' '}
+            <strong>Deepgram</strong> (STT) · <strong>Groq / Llama 4</strong> (LLM) · <strong>Cartesia sonic-3</strong> (TTS)
+          </p>
+
+          {!token || !wsUrl ? (
+            <Button onClick={startCall} disabled={connecting}>
+              {connecting
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting…</>
+                : <><Phone className="mr-2 h-4 w-4" />Start Call</>}
+            </Button>
+          ) : (
+            <LiveKitRoom
+              token={token}
+              serverUrl={wsUrl}
+              connect={true}
+              audio={true}
+              video={false}
+              onDisconnected={endCall}
+            >
+              <RoomAudioRenderer />
+              <CallControls onEnd={endCall} />
+            </LiveKitRoom>
+          )}
         </CardContent>
       </Card>
 
-      {/* Simulation */}
       <Card>
-        <CardHeader><CardTitle>Conversation Simulation</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-[#6b6b6b]">Simulate a conversation with a virtual prospect — no minutes used.</p>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Prospect Persona</label>
-            <input
-              className="flex h-9 w-full rounded-md border border-[#e0e0e0] bg-white px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0a0a0a]"
-              value={persona}
-              onChange={(e) => setPersona(e.target.value)}
-              placeholder="Describe the prospect personality..."
-            />
-          </div>
-          <Button variant="secondary" onClick={runSimulation} disabled={simulating}>
-            {simulating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Simulating…</> : 'Run Simulation'}
-          </Button>
+        <CardContent className="pt-5">
+          <p className="text-xs text-[#6b6b6b]">
+            <strong>Stack:</strong> LiveKit (WebRTC transport) · Deepgram nova-3 (Speech-to-Text) ·
+            Groq Llama 4 Scout (LLM, ~200ms) · Cartesia sonic-3 (Text-to-Speech with emotion)
+          </p>
         </CardContent>
       </Card>
-
-      {/* Transcript */}
-      {transcript.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Transcript</CardTitle></CardHeader>
-          <CardContent className="space-y-3 max-h-96 overflow-y-auto">
-            {transcript.map((t, i) => (
-              <div key={i} className={`flex gap-3 ${t.role === 'agent' ? 'flex-row' : 'flex-row-reverse'}`}>
-                <div className={`max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm ${t.role === 'agent' ? 'bg-[#0a0a0a] text-white' : 'bg-[#f5f5f5] text-[#0a0a0a]'}`}>
-                  <p className={`mb-1 text-xs font-medium ${t.role === 'agent' ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
-                    {t.role === 'agent' ? 'Agent' : 'Prospect'}
-                  </p>
-                  {t.text}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
