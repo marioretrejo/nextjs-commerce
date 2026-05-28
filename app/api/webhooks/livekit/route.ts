@@ -45,18 +45,17 @@ export async function POST(req: Request) {
     if (!agent) return NextResponse.json({ received: true });
     const workspaceId = (agent as { workspace_id: string }).workspace_id;
 
-    // Run all updates in parallel — minute increment, slot release, call upsert
+    // ── Atomic billing: single UPDATE that increments minutes AND releases the
+    // concurrent slot in one round-trip, preventing the race where two
+    // simultaneous room_finished events both read a stale minutes_used value.
+    const { data: billing } = await admin.rpc('finalize_call_billing', {
+      p_workspace_id: workspaceId,
+      p_minutes:      durationMinutes,
+    });
+    const billingRow = (billing as { new_minutes_used: number; minutes_limit: number; is_over_limit: boolean }[] | null)?.[0];
+
+    // Remaining updates can run in parallel
     await Promise.allSettled([
-      // ── Minute billing ──────────────────────────────────────────────────────
-      admin.rpc('increment_workspace_minutes', {
-        p_workspace_id: workspaceId,
-        p_minutes: durationMinutes,
-      }),
-
-      // ── Kill switch: release the concurrent call slot ───────────────────────
-      // This decrements active_calls, allowing the next caller through the gate.
-      admin.rpc('release_call_slot', { p_workspace_id: workspaceId }),
-
       // ── Upsert call record (worker may have already created one) ────────────
       admin.from('calls').upsert(
         {
@@ -74,6 +73,23 @@ export async function POST(req: Request) {
       // ── Agent total_calls counter ───────────────────────────────────────────
       admin.rpc('increment_agent_total_calls', { p_agent_id: agentId }),
     ]);
+
+    // If the atomic billing detected a limit breach, log it so the admin can
+    // see which call pushed the workspace over the edge.
+    if (billingRow?.is_over_limit) {
+      void Promise.resolve(
+        admin.from('workspace_events').insert({
+          workspace_id: workspaceId,
+          event_type: 'limit_reached',
+          details: {
+            room_name: roomName,
+            new_minutes_used: billingRow.new_minutes_used,
+            minutes_limit: billingRow.minutes_limit,
+            duration_minutes: durationMinutes,
+          },
+        })
+      ).catch(() => null);
+    }
 
     // ── Async post-call analysis (non-blocking) ─────────────────────────────
     const appUrl = process.env['NEXT_PUBLIC_APP_URL'];
