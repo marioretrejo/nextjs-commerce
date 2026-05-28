@@ -18,6 +18,7 @@ import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
 import { loadPronunciationConfig } from './pronunciation.js';
+import { startSpan, endSpan, checkLatencyThreshold, log } from '../lib/tracing.js';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
@@ -204,9 +205,58 @@ export default defineAgent({
 
     const session = new voice.AgentSession({ stt, llm: lm, tts });
 
+    // ─── Kill switch: handle graceful disconnect if room is deleted mid-call ──
+    // When the webhook detects zero credits, it calls RoomServiceClient.deleteRoom().
+    // The worker gets a disconnect signal — say goodbye before the line drops.
+    ctx.room.on('disconnected', async () => {
+      const reason = (ctx.room as unknown as { disconnectReason?: string }).disconnectReason;
+      if (reason === 'ROOM_DELETED' || reason === 'SERVER_SHUTDOWN') {
+        try {
+          // Best-effort — room may already be gone
+          await session.say(
+            "I'm sorry, we need to end our call now due to account limits. Please contact support to continue."
+          );
+        } catch { /* ignore — room is closing */ }
+      }
+    });
+
+    // ─── Distributed tracing: capture pipeline latency per stage ─────────────
+    let sttSpan = startSpan('stt');
+    let llmSpan = startSpan('llm.first_token');
+    let ttsSpan = startSpan('tts.first_chunk');
+
+    session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
+      if ((ev as { isFinal?: boolean }).isFinal) {
+        const result = endSpan(sttSpan, {
+          agent_id: agentId,
+          workspace_id: workspaceId,
+          transcript_chars: ((ev as { transcript?: string }).transcript ?? '').length,
+        });
+        checkLatencyThreshold(result);
+        sttSpan = startSpan('stt'); // reset for next utterance
+        llmSpan = startSpan('llm.first_token'); // start LLM clock
+      }
+    });
+
+    session.on(voice.AgentSessionEventTypes.SpeechCreated, () => {
+      const llmResult = endSpan(llmSpan, { agent_id: agentId });
+      checkLatencyThreshold(llmResult);
+      llmSpan = startSpan('llm.first_token'); // reset
+      ttsSpan = startSpan('tts.first_chunk');  // start TTS clock
+    });
+
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
+      if ((ev as { state?: string }).state === 'speaking') {
+        const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
+        checkLatencyThreshold(ttsResult);
+        ttsSpan = startSpan('tts.first_chunk'); // reset
+      }
+    });
+
     // ─── Transcript accumulation ──────────────────────────────────────────────
     const transcriptLines: string[] = [];
     const callStartedAt = Date.now();
+    log('info', { message: 'call.started', agent_id: agentId, workspace_id: workspaceId, room: roomName });
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (ev) => {
       const msg = ev.item;
@@ -227,7 +277,15 @@ export default defineAgent({
     });
 
     // ─── Session close — write transcript + duration to Supabase ─────────────
-    session.on(voice.AgentSessionEventTypes.Close, async () => {
+    session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
+      log('info', {
+        message: 'call.ended',
+        agent_id: agentId,
+        workspace_id: workspaceId,
+        room: roomName,
+        duration_seconds: Math.round((Date.now() - callStartedAt) / 1000),
+        close_reason: (ev as { reason?: string })?.reason,
+      });
       const supabase = getSupabaseAdmin();
       if (!supabase || !agentId || !workspaceId) return;
 
@@ -247,7 +305,7 @@ export default defineAgent({
         },
         { onConflict: 'retell_call_id', ignoreDuplicates: false }
       );
-    });
+    });  // end Close handler
 
     await session.start({ agent, room: ctx.room });
 
