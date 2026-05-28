@@ -55,8 +55,9 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
         role:    'assistant',
         content: data.reply ?? data.error ?? 'Something went wrong.',
       }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Connection error — please try again.' }]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Connection error — please try again.';
+      setMessages((prev) => [...prev, { role: 'assistant', content: msg }]);
     } finally {
       setLoading(false);
     }

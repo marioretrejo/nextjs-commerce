@@ -95,12 +95,13 @@ async function executeTool(name: string, args: Record<string, unknown>, workspac
 }
 
 export async function POST(req: Request) {
+  try {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   if (!process.env['OPENAI_API_KEY']) {
-    return NextResponse.json({ error: 'OpenAI not configured' }, { status: 503 });
+    return NextResponse.json({ error: 'OpenAI not configured — add OPENAI_API_KEY to Vercel env vars' }, { status: 503 });
   }
 
   const admin = createAdminClient();
@@ -144,4 +145,8 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ reply: 'Unable to retrieve data at this time. Please try again.' });
+  } catch (e) {
+    console.error('[copilot] Unhandled error:', e);
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
 }
