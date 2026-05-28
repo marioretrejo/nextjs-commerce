@@ -69,15 +69,33 @@ export async function POST(req: Request) {
         .eq('id', workspaceId);
     }
 
-    // Insert call record for the dashboard history
-    await admin.from('calls').insert({
-      workspace_id: workspaceId,
-      agent_id: agentId,
-      direction: 'inbound',
-      duration_seconds: durationSeconds,
-      status: 'completed',
-      cost_usd: 0,
-    });
+    // Upsert call record — the worker may have already inserted one via retell_call_id
+    await admin.from('calls').upsert(
+      {
+        workspace_id: workspaceId,
+        agent_id: agentId,
+        retell_call_id: roomName, // room name acts as the LiveKit call identifier
+        direction: 'inbound',
+        duration_seconds: durationSeconds,
+        status: 'completed',
+        cost_usd: 0,
+      },
+      { onConflict: 'retell_call_id', ignoreDuplicates: false }
+    );
+
+    // Fire post-call analysis job asynchronously (don't await — keep webhook response fast)
+    const appUrl = process.env['NEXT_PUBLIC_APP_URL'];
+    const internalSecret = process.env['INTERNAL_API_SECRET'];
+    if (appUrl && internalSecret) {
+      fetch(`${appUrl}/api/jobs/analyze-call`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': internalSecret,
+        },
+        body: JSON.stringify({ room_name: roomName }),
+      }).catch((err) => console.error('[livekit-webhook] analyze-call trigger failed:', err));
+    }
 
     // Increment the agent's total_calls counter
     try {
