@@ -44,6 +44,7 @@ const navItems = [
 
 const adminItems = [
   { href: '/admin',                label: 'Superadmin',    icon: Shield },
+  { href: '/admin/workspaces',     label: 'Workspaces',    icon: Cpu },
   { href: '/admin/infrastructure', label: 'Infrastructure', icon: Cpu },
 ];
 

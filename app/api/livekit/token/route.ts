@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     admin.from('agents').select('*').eq('id', agentId).single(),
     admin
       .from('workspaces')
-      .select('id, minutes_used, minutes_limit, plan, active_calls, concurrent_calls_limit')
+      .select('id, minutes_used, minutes_limit, plan, active_calls, concurrent_calls_limit, is_suspended')
       .eq('owner_id', user.id)
       .single(),
   ]);
@@ -56,6 +56,15 @@ export async function POST(req: Request) {
 
   if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+  }
+
+  // ── Workspace suspension kill switch ─────────────────────────────────────
+  if ((workspace as unknown as { is_suspended?: boolean }).is_suspended) {
+    trace.end({ blocked: 'workspace_suspended', workspace_id: workspace.id });
+    return NextResponse.json(
+      { error: 'This account has been suspended. Please contact support.' },
+      { status: 403 }
+    );
   }
 
   // ── Financial kill switch: block if out of minutes ───────────────────────

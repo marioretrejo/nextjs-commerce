@@ -149,6 +149,27 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // ── Impersonation cookie ────────────────────────────────────────────────
+  // When a superadmin clicks "Login as client", the browser receives a
+  // vos-impersonation=<token> cookie. We validate it here and attach
+  // x-impersonation-workspace-id so the app layout renders the correct workspace.
+  const impToken = req.cookies.get('vos-impersonation')?.value;
+  if (impToken && supabaseUrl && process.env['SUPABASE_SERVICE_ROLE_KEY']) {
+    const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+    try {
+      const impRes = await fetch(
+        `${supabaseUrl}/rest/v1/impersonation_sessions?token=eq.${impToken}&ended_at=is.null&select=id,target_workspace_id,expires_at`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+      );
+      if (impRes.ok) {
+        const rows = await impRes.json() as { id: string; target_workspace_id: string; expires_at: string }[];
+        if (rows.length > 0 && new Date(rows[0]!.expires_at) > new Date()) {
+          supabaseResponse.headers.set('x-impersonation-workspace-id', rows[0]!.target_workspace_id);
+        }
+      }
+    } catch { /* non-fatal — impersonation simply won't activate */ }
+  }
+
   return supabaseResponse;
 }
 
