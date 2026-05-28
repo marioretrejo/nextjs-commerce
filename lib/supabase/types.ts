@@ -300,6 +300,38 @@ export interface BillingInvoice {
   created_at: string;
 }
 
+export interface KnowledgeBase {
+  id:           string;
+  workspace_id: string;
+  name:         string;
+  description:  string | null;
+  created_at:   string;
+}
+
+export interface DocumentChunk {
+  id:           string;
+  kb_id:        string;
+  workspace_id: string;
+  source_name:  string;
+  chunk_index:  number;
+  content:      string;
+  created_at:   string;
+}
+
+export interface CustomVoice {
+  id:                string;
+  workspace_id:      string;
+  name:              string;
+  provider:          string;
+  provider_voice_id: string;
+  preview_url:       string | null;
+  language:          string;
+  gender:            string | null;
+  status:            'cloning' | 'ready' | 'error';
+  error_message:     string | null;
+  created_at:        string;
+}
+
 export interface ApiKey {
   id: string;
   workspace_id: string;
