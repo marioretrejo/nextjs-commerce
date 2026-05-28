@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import type { Campaign, CampaignStatus, CampaignTemplate } from '@/lib/supabase/types';
 import { Plus, PlayCircle, PauseCircle, Users, CheckCircle, TrendingUp, Calendar, BookmarkPlus, Bot } from 'lucide-react';
 import { format } from 'date-fns';
+import { OutboundDialer } from '@/components/outbound/OutboundDialer';
 
 function statusBadge(status: CampaignStatus) {
   const map: Record<CampaignStatus, { label: string; className: string }> = {
@@ -36,9 +37,10 @@ export default async function CampaignsPage() {
 
   let campaigns: Campaign[] = [];
   let templates: (CampaignTemplate & { agent?: { name: string } })[] = [];
+  let dialerAgents: { id: string; name: string }[] = [];
   if (workspace) {
     const supabase = await createClient();
-    const [{ data: campaignData }, { data: templateData }] = await Promise.all([
+    const [{ data: campaignData }, { data: templateData }, { data: agentData }] = await Promise.all([
       supabase
         .from('campaigns')
         .select('*, agent:agents!campaigns_agent_id_fkey(id, name, status)')
@@ -49,13 +51,25 @@ export default async function CampaignsPage() {
         .select('*, agent:agents!campaign_templates_agent_id_fkey(id, name)')
         .eq('workspace_id', workspace.id)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('agents')
+        .select('id, name')
+        .eq('workspace_id', workspace.id)
+        .eq('status', 'active')
+        .order('name'),
     ]);
     campaigns = (campaignData as Campaign[]) ?? [];
     templates = (templateData as (CampaignTemplate & { agent?: { name: string } })[]) ?? [];
+    dialerAgents = (agentData as { id: string; name: string }[]) ?? [];
   }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Quick Outbound Dialer */}
+      <div className="mb-6">
+        <OutboundDialer agents={dialerAgents} />
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

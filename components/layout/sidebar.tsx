@@ -36,6 +36,7 @@ const navItems = [
   { href: '/numbers',         label: 'Numbers',       icon: Phone },
   { href: '/compliance',      label: 'Compliance',    icon: ShieldCheck },
   { href: '/integrations',    label: 'Integrations',  icon: Globe },
+  { href: '/integrations/webhooks', label: 'Webhooks', icon: Bell },
   { href: '/team',            label: 'Team',          icon: Users },
   { href: '/billing',         label: 'Billing',       icon: CreditCard },
   { href: '/settings',        label: 'Settings',      icon: Settings },
