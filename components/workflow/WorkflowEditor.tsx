@@ -35,11 +35,11 @@ const NODE_TYPES: NodeTypes = {
 };
 
 const PALETTE = [
-  { type: 'message',   label: 'Message',   color: '#3b82f6' },
-  { type: 'condition', label: 'Condition', color: '#f59e0b' },
-  { type: 'api_call',  label: 'API Call',  color: '#8b5cf6' },
-  { type: 'transfer',  label: 'Transfer',  color: '#06b6d4' },
-  { type: 'end',       label: 'End',       color: '#ef4444' },
+  { type: 'message',   label: 'Message',   color: '#3b82f6', bg: '#eff6ff',  icon: '💬' },
+  { type: 'condition', label: 'Condition', color: '#f59e0b', bg: '#fffbeb',  icon: '🔀' },
+  { type: 'api_call',  label: 'API Call',  color: '#8b5cf6', bg: '#f5f3ff',  icon: '⚡' },
+  { type: 'transfer',  label: 'Transfer',  color: '#06b6d4', bg: '#ecfeff',  icon: '📲' },
+  { type: 'end',       label: 'End Call',  color: '#ef4444', bg: '#fef2f2',  icon: '📵' },
 ] as const;
 
 const SEED_NODES: Node[] = [
@@ -69,7 +69,7 @@ export function WorkflowEditor({ agentId, initialNodes, initialEdges, onSave }: 
 
   const onConnect = useCallback(
     (connection: Connection) =>
-      setEdges((eds) => addEdge({ ...connection, animated: true, style: { strokeWidth: 2, stroke: '#a1a1aa' } }, eds)),
+      setEdges((eds) => addEdge({ ...connection, animated: true, style: { strokeWidth: 2.5, stroke: '#6366f1' }, markerEnd: { type: 'arrow' as never } }, eds)),
     [setEdges],
   );
 
@@ -160,27 +160,35 @@ export function WorkflowEditor({ agentId, initialNodes, initialEdges, onSave }: 
 
       <div className="flex flex-1 overflow-hidden">
         {/* Palette */}
-        <div className="flex w-40 shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-[#e5e5e5] bg-[#fafafa] p-3">
-          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
-            Drag / Click
+        <div className="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto border-r border-[#e5e5e5] bg-[#f8f8f8] p-3">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-[#a0a0a0]">
+            Add Node
           </p>
           {PALETTE.map((n) => (
             <button
               key={n.type}
               onClick={() => addNode(n.type)}
-              className="flex items-center gap-2 rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-2 text-left transition-shadow hover:shadow-sm"
+              className="group flex items-center gap-2.5 rounded-xl border-2 bg-white px-3 py-2.5 text-left transition-all hover:shadow-md active:scale-95"
+              style={{ borderColor: n.color + '44' }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = n.color; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = n.color + '44'; }}
             >
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: n.color }} />
-              <span className="text-xs font-medium text-[#1a1a1a]">{n.label}</span>
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm"
+                style={{ background: n.bg, border: `1.5px solid ${n.color}44` }}
+              >
+                {n.icon}
+              </span>
+              <span className="text-xs font-semibold text-[#1a1a1a]">{n.label}</span>
             </button>
           ))}
           <div className="mt-auto border-t border-[#e5e5e5] pt-3">
             <button
               onClick={() => { setNodes(SEED_NODES); setEdges(SEED_EDGES); }}
-              className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-[#ef4444] transition-colors hover:bg-red-50"
+              className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-[#ef4444] transition-colors hover:bg-red-50"
             >
               <Trash2 className="h-3 w-3" />
-              Clear
+              Reset Canvas
             </button>
           </div>
         </div>
@@ -196,7 +204,7 @@ export function WorkflowEditor({ agentId, initialNodes, initialEdges, onSave }: 
             nodeTypes={NODE_TYPES}
             fitView
             proOptions={{ hideAttribution: true }}
-            defaultEdgeOptions={{ animated: true, style: { strokeWidth: 2, stroke: '#a1a1aa' } }}
+            defaultEdgeOptions={{ animated: true, style: { strokeWidth: 2.5, stroke: '#6366f1' }, markerEnd: { type: 'arrow' as never } }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e5e5e5" />
             <Controls showInteractive={false} className="!border-[#e5e5e5] !shadow-sm" />

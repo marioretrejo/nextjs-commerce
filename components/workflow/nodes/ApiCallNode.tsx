@@ -9,7 +9,8 @@ export function ApiCallNode({ data }: NodeProps) {
   return (
     <NodeShell
       color="#8b5cf6"
-      icon={<Zap className="h-3 w-3" />}
+      bgColor="#f5f3ff"
+      icon={<Zap className="h-3.5 w-3.5" />}
       label={d.label ?? 'API Call'}
       detail={detail}
     />

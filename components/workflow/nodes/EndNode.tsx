@@ -8,7 +8,8 @@ export function EndNode({ data }: NodeProps) {
   return (
     <NodeShell
       color="#ef4444"
-      icon={<PhoneOff className="h-3 w-3" />}
+      bgColor="#fef2f2"
+      icon={<PhoneOff className="h-3.5 w-3.5" />}
       label={d.label ?? 'End Call'}
       topHandle
       bottomHandle={false}

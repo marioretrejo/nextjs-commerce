@@ -1,89 +1,75 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat';
+import Anthropic from '@anthropic-ai/sdk';
 
-const TOOLS: ChatCompletionTool[] = [
+type ToolInput = Record<string, unknown>;
+
+const TOOLS: Anthropic.Tool[] = [
   {
-    type: 'function',
-    function: {
-      name: 'get_workspace_stats',
-      description: 'Get overall workspace stats: total calls, minutes used/limit, plan, active agents count.',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          period_days: { type: 'number', description: 'Days to look back (default 30)' },
-        },
-        required: [],
+    name: 'get_workspace_stats',
+    description: 'Get overall workspace stats: total calls, minutes used/limit, plan, active agents count.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        period_days: { type: 'number', description: 'Days to look back (default 30)' },
       },
+      required: [],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_campaign_metrics',
-      description: 'Get campaign performance: call volume, completion rate, status breakdown.',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          campaign_id: { type: 'string', description: 'Filter to a specific campaign (optional)' },
-          period_days: { type: 'number', description: 'Days to look back (default 30)' },
-        },
-        required: [],
+    name: 'get_campaign_metrics',
+    description: 'Get campaign performance: call volume, completion rate, status breakdown.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        campaign_id: { type: 'string', description: 'Filter to a specific campaign (optional)' },
+        period_days: { type: 'number', description: 'Days to look back (default 30)' },
       },
+      required: [],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_call_durations',
-      description: 'Get call duration statistics: avg, p50, p95 in seconds.',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          agent_id: { type: 'string', description: 'Filter to a specific agent (optional)' },
-          period_days: { type: 'number', description: 'Days to look back (default 30)' },
-        },
-        required: [],
+    name: 'get_call_durations',
+    description: 'Get call duration statistics: avg, p50, p95 in seconds.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        agent_id: { type: 'string', description: 'Filter to a specific agent (optional)' },
+        period_days: { type: 'number', description: 'Days to look back (default 30)' },
       },
+      required: [],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_success_rates',
-      description: 'Get task-completion % and sentiment breakdown (positive/neutral/negative).',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          agent_id: { type: 'string', description: 'Filter to a specific agent (optional)' },
-          period_days: { type: 'number', description: 'Days to look back (default 30)' },
-        },
-        required: [],
+    name: 'get_success_rates',
+    description: 'Get task-completion % and sentiment breakdown (positive/neutral/negative).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        agent_id: { type: 'string', description: 'Filter to a specific agent (optional)' },
+        period_days: { type: 'number', description: 'Days to look back (default 30)' },
       },
+      required: [],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_top_agents',
-      description: 'List top-performing agents ranked by call volume or success rate.',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          limit:   { type: 'number', description: 'How many agents to return (default 5)' },
-          rank_by: { type: 'string', enum: ['call_volume', 'success_rate'], description: 'Ranking criterion' },
-        },
-        required: [],
+    name: 'get_top_agents',
+    description: 'List top-performing agents ranked by call volume or success rate.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        limit:   { type: 'number', description: 'How many agents to return (default 5)' },
+        rank_by: { type: 'string', enum: ['call_volume', 'success_rate'], description: 'Ranking criterion' },
       },
+      required: [],
     },
   },
 ];
 
 async function executeTool(
   name: string,
-  args: Record<string, unknown>,
+  args: ToolInput,
   workspaceId: string,
 ): Promise<string> {
   const admin = createAdminClient();
@@ -178,8 +164,8 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  if (!process.env['OPENAI_API_KEY']) {
-    return NextResponse.json({ error: 'OpenAI not configured' }, { status: 503 });
+  if (!process.env['ANTHROPIC_API_KEY']) {
+    return NextResponse.json({ error: 'AI assistant not configured' }, { status: 503 });
   }
 
   const admin = createAdminClient();
@@ -188,57 +174,49 @@ export async function POST(req: Request) {
   if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   const workspaceId = (ws as { id: string }).id;
 
-  const { messages } = await req.json() as { messages: ChatCompletionMessageParam[] };
+  const { messages } = await req.json() as { messages: { role: 'user' | 'assistant'; content: string }[] };
 
-  const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+  const client = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
 
-  const history: ChatCompletionMessageParam[] = [
-    {
-      role: 'system',
-      content: `You are an analytics copilot for VoiceOS, a voice-AI SaaS platform.
+  const systemPrompt = `You are an analytics copilot for VoiceOS, a voice-AI SaaS platform.
 Help workspace owners understand their call performance with concise answers and real numbers.
 Always call the appropriate tool before answering — never guess metrics.
-Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`,
-    },
-    ...messages,
-  ];
+Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
+
+  const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
 
   // Agentic loop — up to 4 tool-calling rounds
   for (let round = 0; round < 4; round++) {
-    const response = await openai.chat.completions.create({
-      model:      'gpt-4o',
-      messages:   history,
-      tools:      TOOLS,
-      tool_choice: 'auto',
+    const response = await client.messages.create({
+      model:      'claude-haiku-4-5-20251001',
       max_tokens: 1024,
+      system:     systemPrompt,
+      messages:   anthropicMessages,
+      tools:      TOOLS,
     });
 
-    const choice = response.choices[0];
-    if (!choice) break;
-    history.push(choice.message);
+    anthropicMessages.push({ role: 'assistant', content: response.content });
 
-    if (choice.finish_reason !== 'tool_calls' || !choice.message.tool_calls?.length) {
-      return NextResponse.json({ reply: choice.message.content ?? '' });
+    if (response.stop_reason !== 'tool_use') {
+      const textBlock = response.content.find((b) => b.type === 'text');
+      const text = textBlock && 'text' in textBlock ? textBlock.text : '';
+      return NextResponse.json({ reply: text });
     }
 
-    // Filter to standard function tool calls (not custom tool calls which lack .function)
-    const fnCalls = choice.message.tool_calls.filter(
-      (tc): tc is typeof tc & { function: { name: string; arguments: string } } =>
-        'function' in tc && tc.type === 'function'
+    const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+      response.content
+        .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+        .map(async (b) => ({
+          type:        'tool_result' as const,
+          tool_use_id: b.id,
+          content:     await executeTool(b.name, b.input as ToolInput, workspaceId),
+        }))
     );
 
-    const results = await Promise.all(
-      fnCalls.map(async (tc) => ({
-        role: 'tool' as const,
-        tool_call_id: tc.id,
-        content: await executeTool(
-          tc.function.name,
-          JSON.parse(tc.function.arguments) as Record<string, unknown>,
-          workspaceId,
-        ),
-      }))
-    );
-    history.push(...results);
+    anthropicMessages.push({ role: 'user', content: toolResults });
   }
 
   return NextResponse.json({ reply: 'Unable to retrieve data at this time. Please try again.' });

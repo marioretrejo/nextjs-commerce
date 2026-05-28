@@ -8,9 +8,11 @@ export function GreetingNode({ data }: NodeProps) {
   return (
     <NodeShell
       color="#10b981"
-      icon={<Mic className="h-3 w-3" />}
+      bgColor="#ecfdf5"
+      icon={<Mic className="h-3.5 w-3.5" />}
       label={d.label ?? 'Greeting'}
       detail={d.text}
+      badge="START"
       topHandle={false}
     />
   );

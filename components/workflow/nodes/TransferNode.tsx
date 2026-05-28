@@ -8,7 +8,8 @@ export function TransferNode({ data }: NodeProps) {
   return (
     <NodeShell
       color="#06b6d4"
-      icon={<PhoneForwarded className="h-3 w-3" />}
+      bgColor="#ecfeff"
+      icon={<PhoneForwarded className="h-3.5 w-3.5" />}
       label={d.label ?? 'Transfer'}
       detail={d.phoneNumber}
       bottomHandle={false}

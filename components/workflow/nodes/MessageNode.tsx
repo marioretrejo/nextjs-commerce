@@ -8,7 +8,8 @@ export function MessageNode({ data }: NodeProps) {
   return (
     <NodeShell
       color="#3b82f6"
-      icon={<MessageSquare className="h-3 w-3" />}
+      bgColor="#eff6ff"
+      icon={<MessageSquare className="h-3.5 w-3.5" />}
       label={d.label ?? 'Message'}
       detail={d.text}
     />

@@ -8,10 +8,12 @@ export function ConditionNode({ data }: NodeProps) {
   return (
     <NodeShell
       color="#f59e0b"
-      icon={<GitBranch className="h-3 w-3" />}
+      bgColor="#fffbeb"
+      icon={<GitBranch className="h-3.5 w-3.5" />}
       label={d.label ?? 'Condition'}
       detail={d.condition}
       rightHandle
+      rightHandle2
     />
   );
 }

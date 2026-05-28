@@ -391,16 +391,33 @@ export default function NewAgentPage() {
   }
 
   async function playPreview(voice: Voice) {
-    if (!voice.preview_url) return;
     setPlayingVoice(voice.voice_id);
     try {
-      const proxied = `/api/voices/preview?url=${encodeURIComponent(voice.preview_url)}`;
-      const audio = new Audio(proxied);
-      audio.onended = () => setPlayingVoice(null);
-      audio.onerror = () => setPlayingVoice(null);
+      let audioUrl: string;
+      if (voice.preview_url) {
+        audioUrl = `/api/voices/preview?url=${encodeURIComponent(voice.preview_url)}`;
+      } else {
+        // Generate live Cartesia TTS sample with current emotion
+        const res = await fetch('/api/voices/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voice_id: voice.voice_id,
+            emotion: (form as Record<string, unknown>)['voice_emotion'] ?? null,
+            language: form.language,
+          }),
+        });
+        if (!res.ok) throw new Error('Preview unavailable');
+        const blob = await res.blob();
+        audioUrl = URL.createObjectURL(blob);
+      }
+      const audio = new Audio(audioUrl);
+      audio.onended = () => { setPlayingVoice(null); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
+      audio.onerror = () => { setPlayingVoice(null); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
       await audio.play();
     } catch {
       setPlayingVoice(null);
+      toast.error('Voice preview unavailable');
     }
   }
 
@@ -424,6 +441,7 @@ export default function NewAgentPage() {
 
   async function handleSave() {
     if (!form.name) { toast.error('Agent name is required'); return; }
+    if (!workspaceId) { toast.error('Workspace not loaded yet — please wait a moment.'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/agents', {
@@ -436,8 +454,10 @@ export default function NewAgentPage() {
         throw new Error(e.error);
       }
       const agent = await res.json() as { id: string };
+      if (!agent.id) { router.push('/agents'); return; }
       localStorage.removeItem(AUTOSAVE_KEY);
       toast.success('Agent created!');
+      router.refresh();
       router.push(`/agents/${agent.id}`);
     } catch (e) {
       toast.error(String(e));
@@ -448,6 +468,7 @@ export default function NewAgentPage() {
 
   async function handleWorkflowCreate() {
     if (!workflowName.trim()) { toast.error('Agent name is required'); return; }
+    if (!workspaceId) { toast.error('Workspace not loaded yet — please wait a moment.'); return; }
     setWorkflowSaving(true);
     try {
       const res = await fetch('/api/agents', {
@@ -457,7 +478,7 @@ export default function NewAgentPage() {
           name: workflowName,
           language: workflowLanguage,
           workspace_id: workspaceId,
-          voice_engine: 'retell',
+          voice_engine: 'standard',
           objective: fromTemplate?.objective ?? '',
           system_prompt: fromTemplate?.system_prompt ?? '',
           first_message: fromTemplate?.first_message ?? '',
@@ -474,7 +495,9 @@ export default function NewAgentPage() {
         throw new Error(e.error);
       }
       const agent = await res.json() as { id: string };
+      if (!agent.id) { router.push('/agents'); return; }
       toast.success('Workflow agent created!');
+      router.refresh();
       router.push(`/agents/${agent.id}/flow`);
     } catch (e) {
       toast.error(String(e));
@@ -797,11 +820,9 @@ export default function NewAgentPage() {
                         {v.labels?.['gender'] ?? ''} {v.labels?.['accent'] ? `· ${v.labels['accent']}` : ''}
                       </p>
                     </div>
-                    {v.preview_url && (
-                      <button onClick={(ev) => { ev.stopPropagation(); playPreview(v); }} className="p-1.5 rounded-md hover:bg-white/20">
-                        {playingVoice === v.voice_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                      </button>
-                    )}
+                    <button onClick={(ev) => { ev.stopPropagation(); playPreview(v); }} disabled={playingVoice === v.voice_id} className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-60">
+                      {playingVoice === v.voice_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    </button>
                   </div>
                 ))}
               </div>
