@@ -62,11 +62,11 @@ export async function middleware(req: NextRequest) {
     if (supabaseUrl && serviceKey) {
       const keyHash = await sha256Hex(rawKey);
       const res = await fetch(
-        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&is_active=eq.true&select=id,workspace_id,workspace:workspaces(api_rate_limit_rps)`,
+        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&is_active=eq.true&select=id,workspace_id,workspace:workspaces(api_rate_limit_rps,billing_status)`,
         { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
       );
       if (res.ok) {
-        const rows = await res.json() as { id: string; workspace_id: string; workspace?: { api_rate_limit_rps?: number | null } }[];
+        const rows = await res.json() as { id: string; workspace_id: string; workspace?: { api_rate_limit_rps?: number | null; billing_status?: string } }[];
         if (rows.length > 0) {
           const workspaceId = rows[0]!.workspace_id;
           const customRps = rows[0]!.workspace?.api_rate_limit_rps ?? undefined;
@@ -103,6 +103,15 @@ export async function middleware(req: NextRequest) {
             },
             body: JSON.stringify({ last_used_at: new Date().toISOString() }),
           }).catch(() => {});
+
+          // Block API access for workspaces suspended for non-payment
+          const wsBillingStatus = rows[0]!.workspace?.billing_status;
+          if (wsBillingStatus === 'suspended_for_nonpayment') {
+            return NextResponse.json(
+              { error: 'Workspace suspended for non-payment. Contact support.', code: 'WORKSPACE_SUSPENDED' },
+              { status: 403 }
+            );
+          }
 
           const response = NextResponse.next({ request: req });
           response.headers.set('x-api-workspace-id', workspaceId);

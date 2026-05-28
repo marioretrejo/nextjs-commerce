@@ -5,9 +5,14 @@ import { useRouter } from 'next/navigation';
 import {
   Shield, ShieldOff, LogIn, ChevronDown, ChevronUp,
   Settings2, Search, AlertTriangle, CheckCircle2, Users, Zap,
+  Building2, BanknoteIcon, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ImpersonateConfirmModal } from '@/components/admin/ImpersonateConfirmModal';
 import { SuspendModal } from '@/components/admin/SuspendModal';
@@ -28,6 +33,10 @@ interface WorkspaceRow {
   created_at:             string;
   owner:                  { id: string; name: string; email: string } | null;
   flags:                  { flag: string; enabled: boolean; value: unknown }[];
+  // Enterprise billing (migration 020)
+  minute_cap?:            number | null;
+  billing_status?:        'active' | 'suspended_for_nonpayment';
+  stripe_balance_cents?:  number;
 }
 
 const FLAG_LABELS: Record<string, string> = {
@@ -47,9 +56,13 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
   const [search, setSearch]                 = useState('');
   const [expanded, setExpanded]             = useState<string | null>(null);
   const [loading, setLoading]               = useState<Record<string, boolean>>({});
-  const [impersonateTarget, setImpersonateTarget] = useState<WorkspaceRow | null>(null);
-  const [suspendTarget, setSuspendTarget]         = useState<WorkspaceRow | null>(null);
-  const [rejectionCounts, setRejectionCounts]     = useState<Record<string, number>>({});
+  const [impersonateTarget, setImpersonateTarget]   = useState<WorkspaceRow | null>(null);
+  const [suspendTarget, setSuspendTarget]           = useState<WorkspaceRow | null>(null);
+  const [quotaTarget, setQuotaTarget]               = useState<WorkspaceRow | null>(null);
+  const [quotaInput, setQuotaInput]                 = useState('');
+  const [quotaLoading, setQuotaLoading]             = useState(false);
+  const [nonpayTarget, setNonpayTarget]             = useState<WorkspaceRow | null>(null);
+  const [rejectionCounts, setRejectionCounts]       = useState<Record<string, number>>({});
   const router = useRouter();
 
   // Fetch 429 rejection counts from Redis (last hour) on mount
@@ -132,6 +145,70 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
     }
   }, []);
 
+  // ─── Enterprise Quota ───────────────────────────────────────────────────────
+  const openQuotaModal = (ws: WorkspaceRow) => {
+    setQuotaInput(ws.minute_cap != null ? String(ws.minute_cap) : '');
+    setQuotaTarget(ws);
+  };
+
+  const saveQuota = useCallback(async () => {
+    if (!quotaTarget) return;
+    setQuotaLoading(true);
+    const minuteCap = quotaInput.trim() === '' ? null : Number(quotaInput);
+    try {
+      const res = await fetch(`/api/admin/workspaces/${quotaTarget.id}/enterprise-quota`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minute_cap: minuteCap }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      setWorkspaces(prev => prev.map(w =>
+        w.id === quotaTarget.id ? { ...w, minute_cap: minuteCap } : w
+      ));
+      toast.success(minuteCap === null
+        ? `Enterprise quota cleared for "${quotaTarget.name}"`
+        : `Enterprise quota set to ${minuteCap.toLocaleString()} min for "${quotaTarget.name}"`
+      );
+      setQuotaTarget(null);
+    } catch (e) { toast.error(String(e)); }
+    finally { setQuotaLoading(false); }
+  }, [quotaTarget, quotaInput]);
+
+  // ─── Suspend for Non-Payment ─────────────────────────────────────────────────
+  const runNonPaymentSuspend = useCallback(async (ws: WorkspaceRow) => {
+    setWsLoading(ws.id, true);
+    try {
+      const res = await fetch(`/api/admin/workspaces/${ws.id}/billing-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'suspended_for_nonpayment' }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      setWorkspaces(prev => prev.map(w =>
+        w.id === ws.id ? { ...w, billing_status: 'suspended_for_nonpayment' } : w
+      ));
+      toast.success(`"${ws.name}" suspended for non-payment`);
+    } catch (e) { toast.error(String(e)); }
+    finally { setWsLoading(ws.id, false); setNonpayTarget(null); }
+  }, []);
+
+  const runNonPaymentUnsuspend = useCallback(async (ws: WorkspaceRow) => {
+    setWsLoading(ws.id, true);
+    try {
+      const res = await fetch(`/api/admin/workspaces/${ws.id}/billing-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      setWorkspaces(prev => prev.map(w =>
+        w.id === ws.id ? { ...w, billing_status: 'active' } : w
+      ));
+      toast.success(`"${ws.name}" billing status restored`);
+    } catch (e) { toast.error(String(e)); }
+    finally { setWsLoading(ws.id, false); }
+  }, []);
+
   const toggleFlag = useCallback(async (ws: WorkspaceRow, flag: string, enabled: boolean) => {
     try {
       const res = await fetch(`/api/admin/workspaces/${ws.id}/flags`, {
@@ -169,6 +246,69 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
         onConfirm={(reason) => runSuspend(suspendTarget!, reason)}
         onClose={() => setSuspendTarget(null)}
       />
+
+      {/* Enterprise Quota Modal */}
+      <Dialog open={!!quotaTarget} onOpenChange={(o) => { if (!o) setQuotaTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              Assign Enterprise Quota
+            </DialogTitle>
+            <DialogDescription>
+              Set a prepaid minute cap for <strong>{quotaTarget?.name}</strong>.
+              When set, Stripe balance is ignored and minutes are consumed from this pool.
+              Leave empty to clear (revert to standard Stripe billing).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Minute Cap</Label>
+            <Input
+              type="number"
+              min={0}
+              placeholder="e.g. 10000"
+              value={quotaInput}
+              onChange={e => setQuotaInput(e.target.value)}
+            />
+            <p className="text-xs text-[#6b6b6b]">
+              Leave blank to clear enterprise quota (back to Stripe pay-as-you-go).
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuotaTarget(null)}>Cancel</Button>
+            <Button onClick={saveQuota} disabled={quotaLoading}>
+              {quotaLoading ? 'Saving…' : 'Save Quota'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Non-payment suspend confirm */}
+      <Dialog open={!!nonpayTarget} onOpenChange={(o) => { if (!o) setNonpayTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <BanknoteIcon className="h-5 w-5" />
+              Suspend for Non-Payment
+            </DialogTitle>
+            <DialogDescription>
+              This will immediately block all dashboard access and API calls for{' '}
+              <strong>{nonpayTarget?.name}</strong>. Users will see a suspension message.
+              You can reinstate at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNonpayTarget(null)}>Cancel</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => runNonPaymentSuspend(nonpayTarget!)}
+              disabled={!!loading[nonpayTarget?.id ?? '']}
+            >
+              Suspend for Non-Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-between">
@@ -236,6 +376,18 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                         High API Rejection Rate ({rejectionCounts[ws.id]}/hr)
                       </span>
                     )}
+                    {ws.billing_status === 'suspended_for_nonpayment' && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">
+                        <BanknoteIcon className="h-2.5 w-2.5" />
+                        Non-Payment
+                      </span>
+                    )}
+                    {ws.minute_cap != null && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                        <Building2 className="h-2.5 w-2.5" />
+                        Enterprise {ws.minute_cap.toLocaleString()} min
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-[#a0a0a0] mt-0.5 truncate">
                     {ws.owner?.email ?? 'No owner'} · {ws.active_calls} active calls ·{' '}
@@ -270,6 +422,37 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
                       <Shield className="h-3.5 w-3.5" />Suspend
+                    </button>
+                  )}
+
+                  {/* Enterprise Quota */}
+                  <button
+                    onClick={() => openQuotaModal(ws)}
+                    disabled={loading[ws.id]}
+                    className="flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50"
+                    title="Assign or clear enterprise minute cap"
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    {ws.minute_cap != null ? 'Edit Quota' : 'Set Quota'}
+                  </button>
+
+                  {/* Non-payment suspend / reinstate */}
+                  {ws.billing_status === 'suspended_for_nonpayment' ? (
+                    <button
+                      onClick={() => runNonPaymentUnsuspend(ws)}
+                      disabled={loading[ws.id]}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      <X className="h-3.5 w-3.5" /> Reinstate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setNonpayTarget(ws)}
+                      disabled={loading[ws.id]}
+                      className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      title="Suspend for non-payment"
+                    >
+                      <BanknoteIcon className="h-3.5 w-3.5" /> Non-Pay
                     </button>
                   )}
 

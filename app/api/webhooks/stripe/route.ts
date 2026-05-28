@@ -96,6 +96,49 @@ export async function POST(req: Request) {
       break;
     }
 
+    // ── Top-up: credit balance when one-time payment completes ────────────
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.type !== 'voiceos_topup') break;
+
+      const workspaceId  = session.metadata.workspace_id;
+      const amountCents  = Number(session.metadata.amount_cents ?? 0);
+      if (!workspaceId || !amountCents) break;
+
+      // Increment balance atomically via RPC (safe against concurrent top-ups)
+      const { error } = await admin.rpc('increment_workspace_balance', {
+        p_workspace_id: workspaceId,
+        p_amount_cents: amountCents,
+      });
+
+      if (error) {
+        // Fallback: direct update if RPC doesn't exist yet
+        const { data: current } = await admin
+          .from('workspaces')
+          .select('stripe_balance_cents')
+          .eq('id', workspaceId)
+          .single();
+        const existing = (current as { stripe_balance_cents: number } | null)?.stripe_balance_cents ?? 0;
+        await admin
+          .from('workspaces')
+          .update({ stripe_balance_cents: existing + amountCents })
+          .eq('id', workspaceId);
+      }
+
+      // Log invoice (fire-and-forget)
+      void Promise.resolve(admin.from('billing_invoices').insert({
+        workspace_id:      workspaceId,
+        stripe_invoice_id: session.id,
+        amount:            amountCents,
+        currency:          session.currency ?? 'usd',
+        status:            'paid',
+        period_start:      new Date().toISOString(),
+        period_end:        new Date().toISOString(),
+        pdf_url:           null,
+      })).catch(() => null);
+      break;
+    }
+
     case 'invoice.payment_failed': {
       const inv = event.data.object as Stripe.Invoice;
       const { data: user } = await admin.from('users').select('id, email').eq('stripe_customer_id', inv.customer as string).single();

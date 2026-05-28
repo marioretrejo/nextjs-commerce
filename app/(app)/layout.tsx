@@ -6,6 +6,8 @@ import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
 import { MinuteAlerts } from '@/components/minute-usage/minute-alerts';
 import { AnalyticsCopilot } from '@/components/copilot/AnalyticsCopilot';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
+import { ActivationBanner } from '@/components/billing/ActivationBanner';
+import { EnterpriseQuotaBar } from '@/components/billing/EnterpriseQuotaBar';
 import type { User, WorkspaceBranding } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -57,10 +59,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const workspace = workspaces[0];
   if (!workspace) redirect('/onboarding');
 
-  // ── Workspace-level suspension ────────────────────────────────────────────
-  if ((workspace as unknown as { is_suspended: boolean }).is_suspended && !isImpersonating) {
+  // ── Workspace-level suspension (legacy is_suspended OR billing_status) ──────
+  const ws = workspace as unknown as { is_suspended?: boolean; billing_status?: string };
+  if ((ws.is_suspended || ws.billing_status === 'suspended_for_nonpayment') && !isImpersonating) {
     redirect('/suspended');
   }
+
+  // Billing state for standard vs enterprise clients
+  const minuteCap         = (workspace as { minute_cap?: number | null }).minute_cap ?? null;
+  const balanceCents      = (workspace as { stripe_balance_cents?: number }).stripe_balance_cents ?? 0;
+  const isEnterprise      = minuteCap !== null;
+  const needsActivation   = !isEnterprise && balanceCents === 0 && !isImpersonating;
 
   const unread = notifications.data?.length ?? 0;
 
@@ -84,7 +93,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       </div>
       <div className={`flex flex-1 flex-col md:pl-56 ${isImpersonating ? 'mt-10' : ''}`}>
         <Header user={userProfile} workspace={workspace} unreadNotifications={unread} />
-        <main className="flex-1 pt-14 pb-16 md:pb-0">
+        {/* Activation banner — standard clients with $0 balance */}
+        {needsActivation && userProfile.onboarding_completed && (
+          <div className="pt-14">
+            <ActivationBanner workspaceId={workspace.id} />
+          </div>
+        )}
+        {/* Enterprise quota bar — replaces Stripe balance for minute_cap clients */}
+        {isEnterprise && !isImpersonating && (
+          <div className="pt-14">
+            <EnterpriseQuotaBar
+              used={Number(workspace.minutes_used)}
+              cap={minuteCap!}
+            />
+          </div>
+        )}
+        <main className={`flex-1 pb-16 md:pb-0 ${needsActivation || isEnterprise ? '' : 'pt-14'}`}>
           {children}
         </main>
       </div>

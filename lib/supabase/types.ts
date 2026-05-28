@@ -46,6 +46,13 @@ export interface Workspace {
   custom_domain: string | null;
   branding: WorkspaceBranding | null;
   created_at: string;
+  // Enterprise billing fields (migration 020)
+  minute_cap: number | null;
+  billing_status: 'active' | 'suspended_for_nonpayment';
+  stripe_balance_cents: number;
+  // Legacy suspension (kept for backwards compat)
+  is_suspended?: boolean;
+  api_rate_limit_rps?: number | null;
 }
 
 export interface WorkspaceMember {
