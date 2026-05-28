@@ -289,6 +289,46 @@ export default defineAgent({
     const callStartedAt = Date.now();
     log('info', { message: 'call.started', agent_id: agentId, workspace_id: workspaceId, room: roomName });
 
+    // ─── Mid-call balance checker (every 60s) ─────────────────────────────────
+    // Catches the "start with $0.10, talk for 30min" scenario that the token
+    // endpoint and room_started webhook cannot prevent. Uses check_workspace_balance()
+    // RPC so the math is done DB-side in a single atomic read (no race).
+    let balanceCheckInterval: ReturnType<typeof setInterval> | null = null;
+    if (workspaceId) {
+      const supabaseForBalance = getSupabaseAdmin();
+      balanceCheckInterval = setInterval(async () => {
+        if (!supabaseForBalance) return;
+        const elapsedMin = (Date.now() - callStartedAt) / 60_000;
+        try {
+          const { data: shouldKill } = await supabaseForBalance.rpc('check_workspace_balance', {
+            p_workspace_id: workspaceId,
+            p_elapsed_min:  elapsedMin,
+          });
+          if (shouldKill) {
+            log('warn', { message: 'mid_call.balance_exhausted', workspace_id: workspaceId, room: roomName, elapsed_min: elapsedMin });
+            clearInterval(balanceCheckInterval!);
+            balanceCheckInterval = null;
+            // Say goodbye before LiveKit drops the connection
+            try {
+              await session.say(
+                "I'm sorry, your account has reached its minute limit. Please upgrade your plan to continue. Goodbye!",
+                { allowInterruptions: false }
+              );
+            } catch { /* room may already be closing */ }
+            // Force-end the room — the webhook will handle final billing
+            const wsUrl = process.env['LIVEKIT_URL'] ?? '';
+            const httpUrl = wsUrl.replace('wss://', 'https://');
+            const lkKey = process.env['LIVEKIT_API_KEY'];
+            const lkSecret = process.env['LIVEKIT_API_SECRET'];
+            if (httpUrl && lkKey && lkSecret) {
+              const { RoomServiceClient } = await import('livekit-server-sdk');
+              new RoomServiceClient(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+            }
+          }
+        } catch { /* non-fatal — let the call continue */ }
+      }, 60_000);
+    }
+
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (ev) => {
       const msg = ev.item;
       if (!msg || typeof msg !== 'object' || !('role' in msg)) return;
@@ -310,6 +350,7 @@ export default defineAgent({
     // ─── Session close — write transcript + duration to Supabase ─────────────
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
       backchannel.destroy();
+      if (balanceCheckInterval) { clearInterval(balanceCheckInterval); balanceCheckInterval = null; }
       log('info', {
         message: 'call.ended',
         agent_id: agentId,
