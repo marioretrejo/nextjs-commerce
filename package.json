@@ -2,8 +2,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "agent": "node --import tsx/esm agent/worker.ts dev",
-    "agent:prod": "node --import tsx/esm agent/worker.ts start",
+    "agent": "tsx agent/worker.ts dev",
+    "agent:prod": "tsx agent/worker.ts start",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

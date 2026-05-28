@@ -4,9 +4,7 @@
  *
  * Start: node --import tsx/esm agent/worker.ts dev
  */
-import { defineAgent, voice, cli } from '@livekit/agents';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { ServerOptions } = require('@livekit/agents/dist/worker.js') as { ServerOptions: new (opts: Record<string, unknown>) => unknown };
+import { defineAgent, voice, cli, ServerOptions } from '@livekit/agents';
 import { STT } from '@livekit/agents-plugin-deepgram';
 import { LLM } from '@livekit/agents-plugin-openai';
 import { TTS } from '@livekit/agents-plugin-cartesia';
@@ -95,9 +93,10 @@ export default defineAgent({
   },
 });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(import.meta.url),
   wsURL: process.env['LIVEKIT_URL'] ?? '',
   apiKey: process.env['LIVEKIT_API_KEY'],
   apiSecret: process.env['LIVEKIT_API_SECRET'],
-}) as Parameters<typeof cli.runApp>[0]);
+}) as any);
