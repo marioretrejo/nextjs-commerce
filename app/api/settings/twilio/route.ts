@@ -23,7 +23,7 @@ export async function GET() {
   // Return connected status + masked account SID (never expose auth token)
   const creds = data.credentials as { account_sid?: string } | null;
   return NextResponse.json({
-    connected: data.status === 'active',
+    connected: data.status === 'connected',
     account_sid: creds?.account_sid
       ? creds.account_sid.slice(0, 4) + '…' + creds.account_sid.slice(-4)
       : null,
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       {
         workspace_id: ws.id,
         type: 'twilio',
-        status: 'active',
+        status: 'connected',
         credentials: { account_sid: body.account_sid, auth_token: body.auth_token },
       },
       { onConflict: 'workspace_id,type' }
@@ -81,7 +81,7 @@ export async function DELETE() {
   const admin = createAdminClient();
   await admin
     .from('integrations')
-    .update({ status: 'inactive' })
+    .update({ status: 'disconnected' })
     .eq('workspace_id', ws.id)
     .eq('type', 'twilio');
 

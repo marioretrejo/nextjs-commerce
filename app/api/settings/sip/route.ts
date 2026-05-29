@@ -46,7 +46,7 @@ export async function GET() {
 
   const creds = data.credentials as SipCredentials | null;
   return NextResponse.json({
-    connected: data.status === 'active',
+    connected: data.status === 'connected',
     provider_name: creds?.provider_name ?? null,
     // Mask: show first 3 chars + ellipsis of username; never expose password
     username_hint: creds?.username
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
       {
         workspace_id: ws.id,
         type: 'sip_trunk',
-        status: 'active',
+        status: 'connected',
         credentials: {
           provider_name: body.provider_name.trim(),
           sip_host:      body.sip_host.trim(),
@@ -113,7 +113,7 @@ export async function DELETE() {
   const admin = createAdminClient();
   await admin
     .from('integrations')
-    .update({ status: 'inactive' })
+    .update({ status: 'disconnected' })
     .eq('workspace_id', ws.id)
     .eq('type', 'sip_trunk');
 

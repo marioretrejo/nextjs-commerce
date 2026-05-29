@@ -180,7 +180,7 @@ export async function POST(req: Request) {
     .select('id, credentials')
     .eq('workspace_id', workspace.id)
     .eq('type', 'sip_trunk')
-    .eq('status', 'active')
+    .eq('status', 'connected')
     .maybeSingle();
 
   if (sipIntegration) {
