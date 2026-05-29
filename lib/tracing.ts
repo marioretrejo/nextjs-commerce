@@ -78,7 +78,10 @@ export function endSpan(
     endedAt: Date.now(),
   };
 
-  log('trace', result as unknown as Record<string, unknown>);
+  // startedHr is a BigInt used only for duration math — exclude it from the
+  // JSON log so JSON.stringify never throws "Do not know how to serialize a BigInt"
+  const { startedHr: _hr, ...loggable } = result;
+  log('trace', loggable as unknown as Record<string, unknown>);
   return result;
 }
 
@@ -126,8 +129,9 @@ export function log(level: LogLevel, data: Record<string, unknown> | string): vo
     ...(typeof data === 'string' ? { message: data } : data),
   };
 
-  // Single JSON line — trivially parseable by any log aggregator
-  const line = JSON.stringify(entry);
+  // Single JSON line — trivially parseable by any log aggregator.
+  // The BigInt replacer is a backstop; startedHr is already stripped above.
+  const line = JSON.stringify(entry, (_, v) => typeof v === 'bigint' ? v.toString() : v);
 
   if (level === 'error') {
     console.error(line);
