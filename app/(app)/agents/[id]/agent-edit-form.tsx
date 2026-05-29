@@ -153,6 +153,8 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
         body: JSON.stringify(form)
       });
       if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      const updated = await res.json() as Partial<Agent>;
+      setForm(updated); // sync form with what the server actually saved
       toast.success('Agent saved');
       router.refresh();
     } catch (e) { toast.error(String(e)); }

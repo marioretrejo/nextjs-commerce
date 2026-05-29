@@ -58,9 +58,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const body = await req.json() as Partial<Agent>;
 
+  // Strip immutable/system fields that must never be overwritten by user input.
+  // Sending id/created_at/total_calls etc. in a Supabase UPDATE can cause
+  // PostgREST to silently skip or partially reject the update.
+  const {
+    id: _id,
+    workspace_id: _ws,
+    retell_agent_id: _rid,
+    elevenlabs_agent_id: _eid,
+    created_at: _ca,
+    total_calls: _tc,
+    avg_qa_score: _qa,
+    ...safeBody
+  } = body as Record<string, unknown>;
+  void _id; void _ws; void _rid; void _eid; void _ca; void _tc; void _qa;
+
   const { data, error } = await admin
     .from('agents')
-    .update(body)
+    .update(safeBody)
     .eq('id', id)
     .select()
     .single();
