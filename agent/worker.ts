@@ -51,6 +51,7 @@ export default defineAgent({
     let firstMessage: string | null = null;
     let workspaceId: string | null = null;
     let agentId: string | null = null;
+    let callDirection: 'inbound' | 'outbound' = 'inbound';
     let transferNumber: string | null = null; // E.164 support phone number for human transfer
 
     try {
@@ -62,6 +63,7 @@ export default defineAgent({
         first_message?: string | null;
         workspace_id?: string | null;
         transfer_number?: string | null;
+        call_direction?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -70,6 +72,7 @@ export default defineAgent({
       if (meta.first_message) firstMessage = meta.first_message;
       if (meta.workspace_id) workspaceId = meta.workspace_id;
       if (meta.transfer_number) transferNumber = meta.transfer_number;
+      if (meta.call_direction === 'outbound') callDirection = 'outbound';
     } catch { /* use defaults */ }
 
     const roomName = ctx.room.name ?? '';
@@ -371,7 +374,11 @@ export default defineAgent({
         close_reason: (ev as { reason?: string })?.reason,
       });
       const supabase = getSupabaseAdmin();
-      if (!supabase || !agentId || !workspaceId) return;
+      if (!supabase) {
+        log('error', { message: 'call.db_skip', reason: 'NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set in environment' });
+        return;
+      }
+      if (!agentId || !workspaceId) return;
 
       const durationSeconds = Math.round((Date.now() - callStartedAt) / 1000);
       const transcript = transcriptLines.join('\n');
@@ -381,7 +388,7 @@ export default defineAgent({
           workspace_id: workspaceId,
           agent_id: agentId,
           retell_call_id: roomName,
-          direction: 'inbound',
+          direction: callDirection,
           duration_seconds: durationSeconds,
           status: 'completed',
           transcript: transcript || null,
