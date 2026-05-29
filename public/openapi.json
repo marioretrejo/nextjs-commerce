@@ -1,0 +1,475 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "VoiceOS API",
+    "version": "1.0.0",
+    "description": "The VoiceOS API lets you programmatically trigger AI-powered voice calls, manage webhook endpoints, and integrate VoiceOS into your existing workflows.\n\n## Authentication\n\nAll API requests must include a valid API key in the `Authorization` header:\n\n```\nAuthorization: Bearer vos_live_...\n```\n\nGenerate API keys from your workspace dashboard under **Settings → API Keys**.\n\n## Webhook Signatures\n\nEvery webhook delivery includes an `X-VoiceOS-Signature` header you can use to verify the request genuinely came from VoiceOS:\n\n```\nX-VoiceOS-Signature: t=1716000000,v1=abc123def456...\n```\n\n**Verification algorithm:**\n\n1. Extract `t` (timestamp) and `v1` (HMAC) from the header.\n2. Reject if `t` is older than 5 minutes (replay protection).\n3. Build the signed payload: `{t}.{raw_request_body}`\n4. Compute `HMAC-SHA256(secret, signed_payload)` where `secret` is the key shown once at endpoint creation.\n5. Compare your digest to `v1` using a constant-time comparison.\n\n```js\n// Node.js verification example\nconst crypto = require('crypto');\n\nfunction verifyWebhook(body, signature, secret) {\n  const [tPart, vPart] = signature.split(',');\n  const ts = tPart.replace('t=', '');\n  const received = vPart.replace('v1=', '');\n  // Reject stale events\n  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;\n  const expected = crypto\n    .createHmac('sha256', secret)\n    .update(`${ts}.${body}`)\n    .digest('hex');\n  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));\n}\n```\n\n## Rate Limits\n\nRequests are rate-limited per workspace. Standard limits are:\n- **10 requests/second** per workspace\n- **Burst**: up to 50 requests\n\nRate limit headers are included in every response:\n- `X-RateLimit-Limit` — requests allowed per window\n- `X-RateLimit-Remaining` — requests remaining\n- `X-RateLimit-Reset` — Unix timestamp when the window resets\n\nExceeded limits return `429 Too Many Requests` with a `Retry-After` header.\n\n## Base URL\n\n```\nhttps://app.voiceos.ai\n```",
+    "contact": {
+      "name": "VoiceOS Support",
+      "email": "support@voiceos.ai"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://app.voiceos.ai",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Calls",
+      "description": "Initiate and manage outbound AI voice calls."
+    },
+    {
+      "name": "Webhooks",
+      "description": "Register endpoints to receive real-time call and campaign events."
+    }
+  ],
+  "paths": {
+    "/api/v1/calls/outbound": {
+      "post": {
+        "operationId": "initiateOutboundCall",
+        "summary": "Initiate an outbound call",
+        "description": "Triggers an AI-powered outbound call to the specified phone number. The call is connected to a LiveKit voice room where your configured agent runs inference in real time.\n\n**Flow:**\n1. VoiceOS validates your API key and workspace limits.\n2. A LiveKit room is created with your agent's configuration.\n3. Twilio dials the recipient.\n4. When they answer, they are bridged into the LiveKit room via SIP.\n5. Your agent's worker joins and begins the conversation.\n6. When the call ends, a `call.completed` webhook is fired (if configured).",
+        "tags": ["Calls"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutboundCallRequest"
+              },
+              "examples": {
+                "basic": {
+                  "summary": "Basic outbound call",
+                  "value": {
+                    "to": "+12025551234",
+                    "agentId": "3a1b2c4d-0000-0000-0000-000000000001"
+                  }
+                },
+                "with_variables": {
+                  "summary": "Call with dynamic variables",
+                  "value": {
+                    "to": "+12025551234",
+                    "agentId": "3a1b2c4d-0000-0000-0000-000000000001",
+                    "from": "+18005559876",
+                    "variables": {
+                      "customer_name": "Jane Smith",
+                      "appointment_date": "June 15 at 2pm",
+                      "product": "Enterprise Plan"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Call successfully initiated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboundCallResponse"
+                },
+                "example": {
+                  "call_id": "agent-3a1b2c4d-1716000000000",
+                  "room_name": "agent-3a1b2c4d-1716000000000",
+                  "twilio_call_sid": "CA1234567890abcdef1234567890abcdef",
+                  "status": "dialing"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request — missing or malformed fields.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "\"to\" must be a valid E.164 phone number." }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Invalid or missing API key." }
+              }
+            }
+          },
+          "403": {
+            "description": "Workspace suspended or minute limit reached.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "examples": {
+                  "suspended": { "value": { "error": "Workspace is suspended." } },
+                  "limit": { "value": { "error": "Minute limit reached. Upgrade your plan." } }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent or workspace not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Agent not found or access denied." }
+              }
+            }
+          },
+          "429": {
+            "description": "Concurrent call limit reached or rate limit exceeded.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Seconds to wait before retrying."
+              },
+              "X-RateLimit-Limit": { "schema": { "type": "integer" } },
+              "X-RateLimit-Remaining": { "schema": { "type": "integer" } },
+              "X-RateLimit-Reset": { "schema": { "type": "integer" } }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Concurrent call limit reached.", "code": "CONCURRENT_LIMIT" }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream telephony provider (Twilio) returned an error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Twilio failed to initiate call." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "operationId": "listWebhookEndpoints",
+        "summary": "List webhook endpoints",
+        "description": "Returns all webhook endpoints registered for your workspace. Secrets are never included in list responses.",
+        "tags": ["Webhooks"],
+        "responses": {
+          "200": {
+            "description": "List of webhook endpoints.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/WebhookEndpoint" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebhookEndpoint",
+        "summary": "Register a webhook endpoint",
+        "description": "Creates a new webhook endpoint. The signing `secret` is returned **only once** in this response — store it immediately in a secure vault. It cannot be retrieved again.\n\nVoiceOS will send a `POST` request with a JSON body and `X-VoiceOS-Signature` header to your URL for each subscribed event.",
+        "tags": ["Webhooks"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateWebhookRequest" },
+              "example": {
+                "url": "https://your-server.com/webhooks/voiceos",
+                "events": ["call.completed", "call.failed"],
+                "description": "Production webhook for CRM sync"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Endpoint created. Secret shown once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/WebhookEndpoint" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "secret": {
+                          "type": "string",
+                          "description": "HMAC signing secret. Shown only once — store it securely.",
+                          "example": "a3f9e1b2c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1"
+                        },
+                        "_note": {
+                          "type": "string",
+                          "example": "Store the secret securely. It will not be shown again. Use it to verify the X-VoiceOS-Signature header."
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid URL or events.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "401": {
+            "description": "Unauthorized.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/{id}": {
+      "get": {
+        "operationId": "getWebhookEndpoint",
+        "summary": "Get a webhook endpoint",
+        "tags": ["Webhooks"],
+        "parameters": [
+          { "$ref": "#/components/parameters/webhookId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook endpoint details.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WebhookEndpoint" }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "patch": {
+        "operationId": "updateWebhookEndpoint",
+        "summary": "Update a webhook endpoint",
+        "tags": ["Webhooks"],
+        "parameters": [
+          { "$ref": "#/components/parameters/webhookId" }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": { "type": "string", "format": "uri" },
+                  "events": { "type": "array", "items": { "$ref": "#/components/schemas/WebhookEvent" } },
+                  "description": { "type": "string" },
+                  "is_active": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated endpoint.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WebhookEndpoint" } } } },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWebhookEndpoint",
+        "summary": "Delete a webhook endpoint",
+        "tags": ["Webhooks"],
+        "parameters": [
+          { "$ref": "#/components/parameters/webhookId" }
+        ],
+        "responses": {
+          "200": { "description": "Endpoint deleted.", "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "boolean" } } } } } },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API Key",
+        "description": "API key generated from your VoiceOS dashboard. Format: `vos_live_...`"
+      }
+    },
+    "parameters": {
+      "webhookId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" },
+        "description": "Webhook endpoint UUID."
+      }
+    },
+    "schemas": {
+      "OutboundCallRequest": {
+        "type": "object",
+        "required": ["to", "agentId"],
+        "properties": {
+          "to": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{6,14}$",
+            "description": "Recipient phone number in E.164 format.",
+            "example": "+12025551234"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the VoiceOS agent to use for this call.",
+            "example": "3a1b2c4d-0000-0000-0000-000000000001"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{6,14}$",
+            "description": "Caller ID to display. Defaults to workspace default number.",
+            "example": "+18005559876"
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Dynamic variables injected into the agent's system prompt at runtime. Use `{{variable_name}}` placeholders in your agent's prompt.",
+            "example": {
+              "customer_name": "Jane Smith",
+              "appointment_date": "June 15 at 2pm"
+            }
+          }
+        }
+      },
+      "OutboundCallResponse": {
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "description": "Unique call identifier (also the LiveKit room name).",
+            "example": "agent-3a1b2c4d-1716000000000"
+          },
+          "room_name": {
+            "type": "string",
+            "description": "LiveKit room name.",
+            "example": "agent-3a1b2c4d-1716000000000"
+          },
+          "twilio_call_sid": {
+            "type": "string",
+            "description": "Twilio Call SID (present when telephony is via Twilio).",
+            "example": "CA1234567890abcdef1234567890abcdef"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["dialing"],
+            "description": "Initial call status.",
+            "example": "dialing"
+          }
+        }
+      },
+      "WebhookEndpoint": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "url": { "type": "string", "format": "uri", "example": "https://your-server.com/webhooks/voiceos" },
+          "events": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WebhookEvent" },
+            "example": ["call.completed", "call.failed"]
+          },
+          "description": { "type": "string", "nullable": true, "example": "Production CRM sync" },
+          "is_active": { "type": "boolean", "example": true },
+          "last_delivery_at": { "type": "string", "format": "date-time", "nullable": true },
+          "last_delivery_status": { "type": "string", "enum": ["success", "failed"], "nullable": true },
+          "last_delivery_status_code": { "type": "integer", "nullable": true, "example": 200 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateWebhookRequest": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "HTTPS endpoint that will receive POST requests.",
+            "example": "https://your-server.com/webhooks/voiceos"
+          },
+          "events": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WebhookEvent" },
+            "default": ["call.completed"],
+            "description": "List of events to subscribe to. Use `*` for all events."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional label to identify this endpoint.",
+            "example": "Production webhook for CRM sync"
+          }
+        }
+      },
+      "WebhookEvent": {
+        "type": "string",
+        "enum": ["call.completed", "call.started", "call.failed", "campaign.run_complete", "*"],
+        "description": "- `call.completed` — Fired when a call ends. Includes transcript, recording URL, and AI analysis.\n- `call.started` — Fired when a room is created and the call begins dialing.\n- `call.failed` — Fired when Twilio or LiveKit reports a failure.\n- `campaign.run_complete` — Fired when a campaign batch finishes processing.\n- `*` — Wildcard: receive all events."
+      },
+      "CallCompletedPayload": {
+        "type": "object",
+        "description": "Payload sent to your webhook URL for `call.completed` events.",
+        "properties": {
+          "event": { "type": "string", "example": "call.completed" },
+          "call_id": { "type": "string", "example": "agent-3a1b2c4d-1716000000000" },
+          "workspace_id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "direction": { "type": "string", "enum": ["inbound", "outbound"] },
+          "contact_phone": { "type": "string", "example": "+12025551234" },
+          "duration_seconds": { "type": "integer", "example": 127 },
+          "status": { "type": "string", "example": "completed" },
+          "cost_usd": { "type": "number", "example": 0.042 },
+          "transcript_json": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string", "enum": ["agent", "user"] },
+                "content": { "type": "string" },
+                "timestamp": { "type": "number" }
+              }
+            }
+          },
+          "recording_url": { "type": "string", "format": "uri", "nullable": true },
+          "analysis_result": { "type": "object", "nullable": true, "description": "AI-generated call analysis, sentiment, outcomes, etc." },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "description": "Human-readable error message." },
+          "code": { "type": "string", "description": "Machine-readable error code (present on some errors)." }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}

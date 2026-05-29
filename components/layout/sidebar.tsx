@@ -4,8 +4,11 @@ import { cn } from '@/lib/utils';
 import {
   BarChart2,
   Bell,
+  BookOpen,
   Bot,
+  Code2,
   Cpu,
+  Mic,
   CreditCard,
   DollarSign,
   Globe,
@@ -32,18 +35,22 @@ const navItems = [
   { href: '/calls/live',      label: 'Live Monitor',  icon: Radio, pulse: true },
   { href: '/analytics',       label: 'Analytics',     icon: BarChart2 },
   { href: '/analytics/costs', label: 'Usage',         icon: DollarSign },
+  { href: '/knowledge',       label: 'Knowledge',     icon: BookOpen },
+  { href: '/voice-studio',    label: 'Voice Studio',  icon: Mic },
   { href: '/quality',         label: 'Quality',       icon: Star },
   { href: '/numbers',         label: 'Numbers',       icon: Phone },
   { href: '/compliance',      label: 'Compliance',    icon: ShieldCheck },
   { href: '/integrations',    label: 'Integrations',  icon: Globe },
+  { href: '/integrations/webhooks', label: 'Webhooks', icon: Bell },
   { href: '/team',            label: 'Team',          icon: Users },
   { href: '/billing',         label: 'Billing',       icon: CreditCard },
   { href: '/settings',        label: 'Settings',      icon: Settings },
-  { href: '/settings/api-keys', label: 'API Keys',    icon: Key },
+  { href: '/developers',      label: 'Developers',    icon: Code2 },
 ];
 
 const adminItems = [
   { href: '/admin',                label: 'Superadmin',    icon: Shield },
+  { href: '/admin/workspaces',     label: 'Workspaces',    icon: Cpu },
   { href: '/admin/infrastructure', label: 'Infrastructure', icon: Cpu },
 ];
 

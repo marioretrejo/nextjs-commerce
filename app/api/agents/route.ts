@@ -40,6 +40,7 @@ const CreateAgentSchema = z.object({
   ivr_mode: z.boolean().optional(),
   dtmf_enabled: z.boolean().optional(),
   post_call_analysis_enabled: z.boolean().optional(),
+  voice_emotion: z.enum(['calm','sympathetic','happy','sad','angry','fearful','surprised']).nullable().optional(),
   dynamic_variables: z.record(z.unknown()).optional(),
 });
 
@@ -126,6 +127,7 @@ export async function POST(req: Request) {
       ivr_mode: body.ivr_mode ?? false,
       dtmf_enabled: body.dtmf_enabled ?? false,
       post_call_analysis_enabled: body.post_call_analysis_enabled ?? true,
+      voice_emotion: body.voice_emotion ?? null,
       dynamic_variables: body.dynamic_variables ?? {},
       status: 'active'
     })

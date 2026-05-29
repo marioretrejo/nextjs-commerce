@@ -46,6 +46,13 @@ export interface Workspace {
   custom_domain: string | null;
   branding: WorkspaceBranding | null;
   created_at: string;
+  // Enterprise billing fields (migration 020)
+  minute_cap: number | null;
+  billing_status: 'active' | 'suspended_for_nonpayment';
+  stripe_balance_cents: number;
+  // Legacy suspension (kept for backwards compat)
+  is_suspended?: boolean;
+  api_rate_limit_rps?: number | null;
 }
 
 export interface WorkspaceMember {
@@ -243,6 +250,7 @@ export interface Call {
   qa_score: number | null;
   retell_call_id: string | null;
   cost_usd: number;
+  tokens_used: number | null;
   created_at: string;
   agent?: Agent;
   campaign?: Campaign;
@@ -290,6 +298,38 @@ export interface BillingInvoice {
   period_end: string | null;
   pdf_url: string | null;
   created_at: string;
+}
+
+export interface KnowledgeBase {
+  id:           string;
+  workspace_id: string;
+  name:         string;
+  description:  string | null;
+  created_at:   string;
+}
+
+export interface DocumentChunk {
+  id:           string;
+  kb_id:        string;
+  workspace_id: string;
+  source_name:  string;
+  chunk_index:  number;
+  content:      string;
+  created_at:   string;
+}
+
+export interface CustomVoice {
+  id:                string;
+  workspace_id:      string;
+  name:              string;
+  provider:          string;
+  provider_voice_id: string;
+  preview_url:       string | null;
+  language:          string;
+  gender:            string | null;
+  status:            'cloning' | 'ready' | 'error';
+  error_message:     string | null;
+  created_at:        string;
 }
 
 export interface ApiKey {

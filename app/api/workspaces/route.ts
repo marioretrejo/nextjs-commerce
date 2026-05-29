@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { sendWelcomeEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 
 export async function POST() {
@@ -51,6 +52,15 @@ export async function POST() {
     status: 'active',
     joined_at: new Date().toISOString(),
   });
+
+  // Fire-and-forget welcome email
+  if (user.email) {
+    sendWelcomeEmail({
+      to: user.email,
+      name: displayName,
+      workspaceName: `${displayName}'s Workspace`,
+    }).catch(console.error);
+  }
 
   return NextResponse.json({ id: workspace.id });
 }

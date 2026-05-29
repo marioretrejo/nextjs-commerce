@@ -18,6 +18,18 @@
     },
     "app/api/qa/score/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/jobs/analyze-call/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/v1/calls/outbound/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/cron/data-retention/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/webhooks/livekit/route.ts": {
+      "maxDuration": 30
     }
   },
   "headers": [
@@ -40,6 +52,10 @@
     {
       "path": "/api/cron/reset-minutes",
       "schedule": "1 0 1 * *"
+    },
+    {
+      "path": "/api/cron/data-retention",
+      "schedule": "0 2 1 * *"
     }
   ]
 }

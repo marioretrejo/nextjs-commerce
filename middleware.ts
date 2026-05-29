@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { checkRateLimit, recordRejection } from '@/lib/ratelimit';
 
 const PUBLIC_PATHS = [
   '/',
@@ -51,7 +52,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // API key authentication for programmatic access (Bearer vos_xxx)
+  // API key authentication + rate limiting for programmatic access (Bearer vos_xxx)
   const authHeader = req.headers.get('authorization');
   if (pathname.startsWith('/api/') && authHeader?.startsWith('Bearer vos_')) {
     const rawKey = authHeader.slice(7);
@@ -61,12 +62,37 @@ export async function middleware(req: NextRequest) {
     if (supabaseUrl && serviceKey) {
       const keyHash = await sha256Hex(rawKey);
       const res = await fetch(
-        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&status=eq.active&select=id,workspace_id`,
+        `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${keyHash}&is_active=eq.true&select=id,workspace_id,workspace:workspaces(api_rate_limit_rps,billing_status)`,
         { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
       );
       if (res.ok) {
-        const rows = await res.json() as { id: string; workspace_id: string }[];
+        const rows = await res.json() as { id: string; workspace_id: string; workspace?: { api_rate_limit_rps?: number | null; billing_status?: string } }[];
         if (rows.length > 0) {
+          const workspaceId = rows[0]!.workspace_id;
+          const customRps = rows[0]!.workspace?.api_rate_limit_rps ?? undefined;
+
+          // ── Rate limiting (only for /api/v1/* routes) ────────────────
+          let rlResult: Awaited<ReturnType<typeof checkRateLimit>> | null = null;
+          if (pathname.startsWith('/api/v1/')) {
+            rlResult = await checkRateLimit(`ws:${workspaceId}`, customRps ?? undefined);
+            if (!rlResult.allowed) {
+              void recordRejection(workspaceId);
+              return NextResponse.json(
+                { error: 'Rate limit exceeded. See Retry-After header.', code: 'RATE_LIMIT' },
+                {
+                  status: 429,
+                  headers: {
+                    'X-RateLimit-Limit':     String(rlResult.limit),
+                    'X-RateLimit-Remaining': '0',
+                    'X-RateLimit-Reset':     String(rlResult.reset),
+                    'Retry-After':           String(rlResult.retryAfter ?? 1),
+                  },
+                }
+              );
+            }
+          }
+
+          // Update last_used_at fire-and-forget
           fetch(`${supabaseUrl}/rest/v1/api_keys?id=eq.${rows[0]!.id}`, {
             method: 'PATCH',
             headers: {
@@ -77,8 +103,24 @@ export async function middleware(req: NextRequest) {
             },
             body: JSON.stringify({ last_used_at: new Date().toISOString() }),
           }).catch(() => {});
+
+          // Block API access for workspaces suspended for non-payment
+          const wsBillingStatus = rows[0]!.workspace?.billing_status;
+          if (wsBillingStatus === 'suspended_for_nonpayment') {
+            return NextResponse.json(
+              { error: 'Workspace suspended for non-payment. Contact support.', code: 'WORKSPACE_SUSPENDED' },
+              { status: 403 }
+            );
+          }
+
           const response = NextResponse.next({ request: req });
-          response.headers.set('x-api-workspace-id', rows[0]!.workspace_id);
+          response.headers.set('x-api-workspace-id', workspaceId);
+          // Attach rate limit headers to allowed responses
+          if (rlResult) {
+            response.headers.set('X-RateLimit-Limit',     String(rlResult.limit));
+            response.headers.set('X-RateLimit-Remaining', String(rlResult.remaining));
+            response.headers.set('X-RateLimit-Reset',     String(rlResult.reset));
+          }
           return response;
         }
       }
@@ -147,6 +189,27 @@ export async function middleware(req: NextRequest) {
     if (!profile?.is_superadmin) {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
+  }
+
+  // ── Impersonation cookie ────────────────────────────────────────────────
+  // When a superadmin clicks "Login as client", the browser receives a
+  // vos-impersonation=<token> cookie. We validate it here and attach
+  // x-impersonation-workspace-id so the app layout renders the correct workspace.
+  const impToken = req.cookies.get('vos-impersonation')?.value;
+  if (impToken && supabaseUrl && process.env['SUPABASE_SERVICE_ROLE_KEY']) {
+    const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+    try {
+      const impRes = await fetch(
+        `${supabaseUrl}/rest/v1/impersonation_sessions?token=eq.${impToken}&ended_at=is.null&select=id,target_workspace_id,expires_at`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+      );
+      if (impRes.ok) {
+        const rows = await impRes.json() as { id: string; target_workspace_id: string; expires_at: string }[];
+        if (rows.length > 0 && new Date(rows[0]!.expires_at) > new Date()) {
+          supabaseResponse.headers.set('x-impersonation-workspace-id', rows[0]!.target_workspace_id);
+        }
+      }
+    } catch { /* non-fatal — impersonation simply won't activate */ }
   }
 
   return supabaseResponse;

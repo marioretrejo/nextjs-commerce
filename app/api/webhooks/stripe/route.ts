@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { stripe } from '@/lib/stripe/client';
-import { sendPaymentFailed } from '@/lib/email';
+import { sendPaymentFailed, sendTopUpReceipt } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { env } from '@/lib/env';
@@ -93,6 +93,65 @@ export async function POST(req: Request) {
         period_end: new Date((inv.period_end ?? 0) * 1000).toISOString(),
         pdf_url: inv.invoice_pdf
       });
+      break;
+    }
+
+    // ── Top-up: credit balance when one-time payment completes ────────────
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.type !== 'voiceos_topup') break;
+
+      const workspaceId  = session.metadata.workspace_id;
+      const amountCents  = Number(session.metadata.amount_cents ?? 0);
+      if (!workspaceId || !amountCents) break;
+
+      // Increment balance atomically via RPC (safe against concurrent top-ups)
+      const { error } = await admin.rpc('increment_workspace_balance', {
+        p_workspace_id: workspaceId,
+        p_amount_cents: amountCents,
+      });
+
+      if (error) {
+        // Fallback: direct update if RPC doesn't exist yet
+        const { data: current } = await admin
+          .from('workspaces')
+          .select('stripe_balance_cents')
+          .eq('id', workspaceId)
+          .single();
+        const existing = (current as { stripe_balance_cents: number } | null)?.stripe_balance_cents ?? 0;
+        await admin
+          .from('workspaces')
+          .update({ stripe_balance_cents: existing + amountCents })
+          .eq('id', workspaceId);
+      }
+
+      // Send receipt email (fire-and-forget)
+      void Promise.resolve(
+        admin.from('workspaces')
+          .select('owner_id, name')
+          .eq('id', workspaceId)
+          .single()
+          .then(async ({ data: ws }) => {
+            if (!ws) return;
+            const { data: owner } = await admin.from('users').select('email').eq('id', (ws as { owner_id: string; name: string }).owner_id).single();
+            if (owner?.email) {
+              const amountStr = `$${(amountCents / 100).toFixed(2)}`;
+              sendTopUpReceipt({ to: owner.email, workspaceName: (ws as { name: string }).name, amount: amountStr }).catch(console.error);
+            }
+          })
+      ).catch(() => null);
+
+      // Log invoice (fire-and-forget)
+      void Promise.resolve(admin.from('billing_invoices').insert({
+        workspace_id:      workspaceId,
+        stripe_invoice_id: session.id,
+        amount:            amountCents,
+        currency:          session.currency ?? 'usd',
+        status:            'paid',
+        period_start:      new Date().toISOString(),
+        period_end:        new Date().toISOString(),
+        pdf_url:           null,
+      })).catch(() => null);
       break;
     }
 

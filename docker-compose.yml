@@ -1,0 +1,10 @@
+services:
+  agent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.local         # local dev only — use secrets in production
+    restart: unless-stopped
+    # Scale horizontally: docker compose up --scale agent-worker=3
+    # Each container connects to LiveKit and receives job dispatches independently.

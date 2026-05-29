@@ -80,9 +80,9 @@ const INTEGRATIONS: IntegrationDef[] = [
   {
     type: 'webhook',
     name: 'Webhook',
-    description: 'Send real-time event notifications to your endpoint.',
+    description: 'Send real-time event notifications to your endpoint. Manage multiple endpoints →',
     logo: 'WH',
-    docsUrl: '',
+    docsUrl: '/integrations/webhooks',
     isWebhook: true,
   },
 ];

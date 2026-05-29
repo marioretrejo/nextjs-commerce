@@ -391,16 +391,42 @@ export default function NewAgentPage() {
   }
 
   async function playPreview(voice: Voice) {
-    if (!voice.preview_url) return;
     setPlayingVoice(voice.voice_id);
     try {
-      const proxied = `/api/voices/preview?url=${encodeURIComponent(voice.preview_url)}`;
-      const audio = new Audio(proxied);
-      audio.onended = () => setPlayingVoice(null);
-      audio.onerror = () => setPlayingVoice(null);
+      let audioUrl: string;
+      if (voice.preview_url) {
+        audioUrl = `/api/voices/preview?url=${encodeURIComponent(voice.preview_url)}`;
+      } else {
+        const res = await fetch('/api/voices/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voice_id: voice.voice_id,
+            emotion: (form as Record<string, unknown>)['voice_emotion'] ?? null,
+            language: form.language,
+          }),
+        });
+        if (!res.ok) {
+          // Bubble up the real server error so users see exactly what's wrong
+          let errMsg = `Preview failed (${res.status})`;
+          try {
+            const body = await res.json() as { error?: string };
+            if (body.error) errMsg = body.error;
+          } catch {
+            errMsg = (await res.text().catch(() => errMsg)) || errMsg;
+          }
+          throw new Error(errMsg);
+        }
+        const blob = await res.blob();
+        audioUrl = URL.createObjectURL(blob);
+      }
+      const audio = new Audio(audioUrl);
+      audio.onended = () => { setPlayingVoice(null); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
+      audio.onerror = () => { setPlayingVoice(null); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
       await audio.play();
-    } catch {
+    } catch (e) {
       setPlayingVoice(null);
+      toast.error(e instanceof Error ? e.message : 'Voice preview unavailable');
     }
   }
 
@@ -424,6 +450,7 @@ export default function NewAgentPage() {
 
   async function handleSave() {
     if (!form.name) { toast.error('Agent name is required'); return; }
+    if (!workspaceId) { toast.error('Workspace not loaded yet — please wait a moment.'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/agents', {
@@ -436,6 +463,7 @@ export default function NewAgentPage() {
         throw new Error(e.error);
       }
       const agent = await res.json() as { id: string };
+      if (!agent.id) { router.push('/agents'); return; }
       localStorage.removeItem(AUTOSAVE_KEY);
       toast.success('Agent created!');
       router.push(`/agents/${agent.id}`);
@@ -448,6 +476,7 @@ export default function NewAgentPage() {
 
   async function handleWorkflowCreate() {
     if (!workflowName.trim()) { toast.error('Agent name is required'); return; }
+    if (!workspaceId) { toast.error('Workspace not loaded yet — please wait a moment.'); return; }
     setWorkflowSaving(true);
     try {
       const res = await fetch('/api/agents', {
@@ -457,7 +486,7 @@ export default function NewAgentPage() {
           name: workflowName,
           language: workflowLanguage,
           workspace_id: workspaceId,
-          voice_engine: 'retell',
+          voice_engine: 'standard',
           objective: fromTemplate?.objective ?? '',
           system_prompt: fromTemplate?.system_prompt ?? '',
           first_message: fromTemplate?.first_message ?? '',
@@ -474,6 +503,7 @@ export default function NewAgentPage() {
         throw new Error(e.error);
       }
       const agent = await res.json() as { id: string };
+      if (!agent.id) { router.push('/agents'); return; }
       toast.success('Workflow agent created!');
       router.push(`/agents/${agent.id}/flow`);
     } catch (e) {
@@ -790,24 +820,22 @@ export default function NewAgentPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{v.name}</p>
                         {v.provider === 'cartesia' && (
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>Cartesia</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>AI Voice</span>
                         )}
                       </div>
                       <p className={`text-xs ${form.voice_id === v.voice_id ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
                         {v.labels?.['gender'] ?? ''} {v.labels?.['accent'] ? `· ${v.labels['accent']}` : ''}
                       </p>
                     </div>
-                    {v.preview_url && (
-                      <button onClick={(ev) => { ev.stopPropagation(); playPreview(v); }} className="p-1.5 rounded-md hover:bg-white/20">
-                        {playingVoice === v.voice_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                      </button>
-                    )}
+                    <button onClick={(ev) => { ev.stopPropagation(); playPreview(v); }} disabled={playingVoice === v.voice_id} className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-60">
+                      {playingVoice === v.voice_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    </button>
                   </div>
                 ))}
               </div>
             </div>
             <div className="space-y-3">
-              <Label>Voice Emotion <span className="text-xs font-normal text-[#6b6b6b]">(Cartesia sonic-3)</span></Label>
+              <Label>Voice Emotion</Label>
               <div className="grid grid-cols-4 gap-2">
                 {([
                   { value: null,          label: '😶 None' },
