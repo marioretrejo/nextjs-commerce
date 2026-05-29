@@ -820,7 +820,7 @@ export default function NewAgentPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{v.name}</p>
                         {v.provider === 'cartesia' && (
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>Cartesia</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>AI Voice</span>
                         )}
                       </div>
                       <p className={`text-xs ${form.voice_id === v.voice_id ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
@@ -835,7 +835,7 @@ export default function NewAgentPage() {
               </div>
             </div>
             <div className="space-y-3">
-              <Label>Voice Emotion <span className="text-xs font-normal text-[#6b6b6b]">(Cartesia sonic-3)</span></Label>
+              <Label>Voice Emotion</Label>
               <div className="grid grid-cols-4 gap-2">
                 {([
                   { value: null,          label: '😶 None' },

@@ -790,7 +790,7 @@ def handle_webhook():
               method="POST"
               path="/api/v1/calls/outbound"
               summary="Initiate an outbound call"
-              description="Triggers an AI-powered outbound call to the specified phone number. The agent joins a LiveKit room, Twilio dials the recipient, and bridges them in via SIP when they answer."
+              description="Triggers an AI-powered outbound call to the specified phone number using your configured agent."
             >
               {/* Code tabs */}
               <div>

@@ -163,8 +163,7 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-[#6b6b6b]">
-            Real-time WebRTC call powered by{' '}
-            <strong>Deepgram</strong> (STT) · <strong>Groq / Llama 4</strong> (LLM) · <strong>Cartesia sonic-3</strong> (TTS)
+            Real-time browser call — speak directly with your AI agent.
           </p>
 
           {/* Balance indicator */}
@@ -221,15 +220,6 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
               <CallControls onEnd={endCall} />
             </LiveKitRoom>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-5">
-          <p className="text-xs text-[#6b6b6b]">
-            <strong>Stack:</strong> LiveKit (WebRTC transport) · Deepgram nova-3 (Speech-to-Text) ·
-            Groq Llama 4 Scout (LLM, ~200ms) · Cartesia sonic-3 (Text-to-Speech with emotion)
-          </p>
         </CardContent>
       </Card>
 

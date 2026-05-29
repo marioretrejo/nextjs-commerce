@@ -271,10 +271,10 @@ export default function VoiceStudioPage() {
         )}
       </section>
 
-      {/* Built-in Cartesia voice gallery */}
+      {/* Built-in voice gallery */}
       <section>
         <h2 className="text-sm font-semibold text-[#6b6b6b] uppercase tracking-wide mb-3 flex items-center gap-2">
-          <Zap className="h-3.5 w-3.5" /> Cartesia Sonic-3 Voice Library
+          <Zap className="h-3.5 w-3.5" /> AI Voice Library
           <span className="font-normal text-[#a0a0a0]">({builtInVoices.length} voices)</span>
         </h2>
 
@@ -404,12 +404,12 @@ export default function VoiceStudioPage() {
             </div>
 
             <div className="rounded-lg border border-[#e0e0e0] bg-[#f9f9f9] px-3 py-2.5 text-xs text-[#6b6b6b] space-y-1">
-              <p className="font-semibold text-[#0a0a0a]">Cartesia Voice Cloning tips:</p>
+              <p className="font-semibold text-[#0a0a0a]">Voice Cloning tips:</p>
               <ul className="space-y-0.5 list-disc list-inside">
                 <li>One speaker only, no background music</li>
                 <li>Similarity mode: fast clone from any clear clip ≥10s</li>
                 <li>Reconstruction: highest quality, needs 30s+ of speech</li>
-                <li>Requires <code className="bg-[#f0f0f0] rounded px-0.5">CARTESIA_API_KEY</code> env var</li>
+                <li>Clear audio quality improves accuracy</li>
               </ul>
             </div>
           </div>

@@ -191,7 +191,7 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                 {form.voice_id && <p className="text-xs text-[#6b6b6b]">Active: {form.voice_name ?? form.voice_id}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label>Voice Emotion <span className="text-xs font-normal text-[#6b6b6b]">(Cartesia sonic-3)</span></Label>
+                <Label>Voice Emotion</Label>
                 <Select
                   value={form.voice_emotion ?? 'none'}
                   onValueChange={(v) => setField('voice_emotion', v === 'none' ? null : v as Agent['voice_emotion'])}
