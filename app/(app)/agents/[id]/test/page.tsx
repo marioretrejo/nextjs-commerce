@@ -142,8 +142,19 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
         throw new Error(errMsg);
       }
       const data = await res.json() as { token: string; wsUrl: string; agentName: string };
+
+      // Validate response fields before passing to LiveKit — prevents the
+      // "SyntaxError: The string did not match the expected pattern" that
+      // iOS Safari throws when LiveKitRoom receives an undefined/invalid URL.
+      if (!data.wsUrl || !data.wsUrl.startsWith('wss://')) {
+        throw new Error('Call setup failed — invalid server URL returned. Please try again.');
+      }
+      if (!data.token) {
+        throw new Error('Call setup failed — no token returned. Please try again.');
+      }
+
       setWsUrl(data.wsUrl);
-      setAgentName(data.agentName);
+      setAgentName(data.agentName ?? 'Agent');
       setToken(data.token);
     } catch (e) {
       toast.error(String(e));
