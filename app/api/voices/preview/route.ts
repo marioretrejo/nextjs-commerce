@@ -110,10 +110,6 @@ export async function GET(req: Request) {
   if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 });
 
   const ALLOWED = [
-    'https://storage.googleapis.com/eleven-',
-    'https://api.elevenlabs.io/',
-    'https://elevenlabs.io/',
-    'https://retell-utils-public.s3.',
     'https://cdn.cartesia.ai/',
     'https://storage.googleapis.com/cartesia-',
   ];

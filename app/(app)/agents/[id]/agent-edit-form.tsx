@@ -57,62 +57,32 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
     Object.entries(agent.dynamic_variables ?? {}).map(([key, value]) => ({ key, value }))
   );
 
-  // Ambient sound preview via Web Audio API (no external CDN needed)
-  const audioCtxRef = useRef<{ gain: GainNode; stop: () => void } | null>(null);
+  // Ambient sound preview
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingAmbient, setPlayingAmbient] = useState(false);
 
   useEffect(() => {
-    audioCtxRef.current?.stop(); audioCtxRef.current = null; setPlayingAmbient(false);
+    audioRef.current?.pause();
+    if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current = null; }
+    setPlayingAmbient(false);
   }, [form.ambient_sound]);
 
-  useEffect(() => { return () => { audioCtxRef.current?.stop(); }; }, []);
+  useEffect(() => { return () => { audioRef.current?.pause(); }; }, []);
 
   function toggleAmbientPreview() {
     if (playingAmbient) {
-      audioCtxRef.current?.stop(); audioCtxRef.current = null; setPlayingAmbient(false); return;
+      audioRef.current?.pause();
+      if (audioRef.current) audioRef.current.currentTime = 0;
+      setPlayingAmbient(false);
+      return;
     }
     if (!form.ambient_sound) return;
-    try {
-      const ctx = new AudioContext();
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = Math.min(1, (form.ambient_sound_volume ?? 1.0)) * 0.18;
-      gainNode.connect(ctx.destination);
-
-      // Generate 3-second pink noise buffer (loops seamlessly)
-      const rate = ctx.sampleRate;
-      const buf = ctx.createBuffer(1, rate * 3, rate);
-      const data = buf.getChannelData(0);
-      let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0;
-      for (let i = 0; i < data.length; i++) {
-        const w = Math.random() * 2 - 1;
-        b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759;
-        b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856;
-        b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
-        data[i] = form.ambient_sound === 'static-noise'
-          ? w
-          : (b0+b1+b2+b3+b4+b5+w*0.5362) * 0.11;
-      }
-
-      const filter = ctx.createBiquadFilter();
-      switch (form.ambient_sound) {
-        case 'coffee-shop': case 'call-center':
-          filter.type = 'bandpass'; filter.frequency.value = 500; filter.Q.value = 0.8; break;
-        case 'convention-hall':
-          filter.type = 'lowpass'; filter.frequency.value = 700; break;
-        case 'summer-outdoor':
-          filter.type = 'bandpass'; filter.frequency.value = 900; filter.Q.value = 0.4; break;
-        case 'mountain-outdoor':
-          filter.type = 'highpass'; filter.frequency.value = 250; break;
-        default: filter.type = 'allpass';
-      }
-
-      const src = ctx.createBufferSource();
-      src.buffer = buf; src.loop = true;
-      src.connect(filter); filter.connect(gainNode); src.start();
-
-      audioCtxRef.current = { gain: gainNode, stop: () => { src.stop(); ctx.close(); } };
-      setPlayingAmbient(true);
-    } catch { toast.error('Preview not available in this browser'); }
+    const audio = new Audio(`/soundscapes/${form.ambient_sound}.wav`);
+    audio.volume = Math.min(1, form.ambient_sound_volume ?? 1.0);
+    audio.loop = true;
+    audio.onerror = () => { setPlayingAmbient(false); };
+    audioRef.current = audio;
+    audio.play().then(() => setPlayingAmbient(true)).catch(() => setPlayingAmbient(false));
   }
 
   // Automation state
@@ -442,7 +412,7 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                       onChange={(e) => {
                         const vol = parseFloat(e.target.value);
                         setField('ambient_sound_volume', vol);
-                        if (audioCtxRef.current) audioCtxRef.current.gain.gain.value = Math.min(1, vol) * 0.18;
+                        if (audioRef.current) audioRef.current.volume = Math.min(1, vol);
                       }}
                       className="w-full accent-[#0a0a0a]"
                     />

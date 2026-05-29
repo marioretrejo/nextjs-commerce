@@ -109,7 +109,7 @@ export async function createCartesiaTTSStream({
 }
 
 export const VOICE_ENGINE_MAP: Record<string, string> = {
-  standard:   'elevenlabs_v2',
-  ultra_fast: 'cartesia_sonic3',
-  premium:    'elevenlabs_v3',
+  standard:   'sonic-2',
+  ultra_fast: 'sonic-2',
+  premium:    'sonic-3',
 };

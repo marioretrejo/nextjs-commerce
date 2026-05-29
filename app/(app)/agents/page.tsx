@@ -66,7 +66,7 @@ function AgentCard({ agent }: { agent: Agent }) {
             </div>
             <div>
               <p className="font-semibold text-sm">{agent.name}</p>
-              <p className="text-xs text-[#6b6b6b]">{agent.language} · {agent.voice_engine}</p>
+              <p className="text-xs text-[#6b6b6b]">{agent.language} · {agent.voice_name ?? 'Cartesia Voice'}</p>
             </div>
           </div>
           <Badge variant={agent.status === 'active' ? 'default' : 'secondary'}>{agent.status}</Badge>

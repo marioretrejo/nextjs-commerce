@@ -1,6 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { syncAgentToRetell } from '@/lib/retell/sync';
 import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
@@ -13,7 +12,7 @@ const CreateAgentSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   language: z.string().optional(),
   auto_language_detection: z.boolean().optional(),
-  voice_engine: z.enum(['retell', 'elevenlabs', 'hybrid', 'standard', 'ultra_fast', 'premium']).optional(),
+  voice_engine: z.enum(['standard', 'ultra_fast', 'premium']).optional(),
   voice_id: z.string().optional(),
   voice_name: z.string().optional(),
   emotional_speed: z.number().min(0.5).max(2).optional(),
@@ -92,7 +91,6 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Create in DB first
   const { data: agent, error: dbErr } = await admin
     .from('agents')
     .insert({
@@ -100,7 +98,7 @@ export async function POST(req: Request) {
       name: body.name ?? 'New Agent',
       language: body.language ?? 'en-US',
       auto_language_detection: body.auto_language_detection ?? false,
-      voice_engine: body.voice_engine ?? 'retell',
+      voice_engine: body.voice_engine ?? 'standard',
       voice_id: body.voice_id,
       voice_name: body.voice_name,
       emotional_speed: body.emotional_speed ?? 1.0,
@@ -141,16 +139,6 @@ export async function POST(req: Request) {
   }
   if (!agent) return apiError('Insert failed', 500);
 
-  const agentRow = agent as Agent;
-
-  // Always sync new agents to Retell
-  try {
-    const retellAgentId = await syncAgentToRetell(agentRow.id);
-    if (retellAgentId) agentRow.retell_agent_id = retellAgentId;
-  } catch (e) {
-    console.error('Retell sync failed (non-fatal):', e);
-  }
-
   revalidatePath('/agents');
-  return apiOk(sanitizeAgentForClient(agentRow as unknown as Record<string, unknown>), 201);
+  return apiOk(sanitizeAgentForClient(agent as unknown as Record<string, unknown>), 201);
 }

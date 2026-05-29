@@ -1,6 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { retell } from '@/lib/retell/client';
 import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
@@ -83,33 +82,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const agent = data as Agent;
 
-  // Sync to Retell
-  if (agent.retell_agent_id && process.env['RETELL_API_KEY']) {
-    try {
-      let voicemailOption: { action: { type: 'hangup' } | { type: 'static_text'; text: string } } | null = null;
-      if (agent.amd_enabled) {
-        if (agent.amd_action === 'hangup') {
-          voicemailOption = { action: { type: 'hangup' } };
-        } else if (agent.amd_action === 'leave_voicemail') {
-          const msg = agent.voicemail_message?.trim() || 'Thank you for your time. We\'ll try reaching you again soon.';
-          voicemailOption = { action: { type: 'static_text', text: msg } };
-        }
-      }
-      await retell.updateAgent(agent.retell_agent_id, {
-        agent_name: agent.name,
-        voice_id: agent.voice_id ?? undefined,
-        language: agent.language as 'en-US',
-        interruption_sensitivity: agent.interruption_handling ? 0.8 : 0.1,
-        voicemail_option: voicemailOption,
-        ambient_sound: agent.ambient_sound ?? null,
-        ambient_sound_volume: agent.ambient_sound != null ? (agent.ambient_sound_volume ?? 1.0) : undefined,
-        voice_emotion: agent.voice_emotion ?? null,
-      });
-    } catch (e) {
-      console.error('Retell sync failed:', e);
-    }
-  }
-
   revalidatePath('/agents');
   revalidatePath(`/agents/${id}`);
   return NextResponse.json(sanitizeAgentForClient(agent as unknown as Record<string, unknown>));
@@ -124,15 +96,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const admin = createAdminClient();
   const ownership = await verifyOwnership(id, supabase, admin);
   if ('error' in ownership) return ownership.error;
-
-  const retellAgentId = (ownership.agentRow['retell_agent_id'] as string | null) ?? null;
-  if (retellAgentId && process.env['RETELL_API_KEY']) {
-    try {
-      await retell.deleteAgent(retellAgentId);
-    } catch (e) {
-      console.error('Retell delete failed:', e);
-    }
-  }
 
   const { error } = await admin.from('agents').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
