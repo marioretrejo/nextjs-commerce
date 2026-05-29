@@ -52,6 +52,7 @@ export default defineAgent({
     let workspaceId: string | null = null;
     let agentId: string | null = null;
     let transferNumber: string | null = null; // E.164 support phone number for human transfer
+    let callDirection: 'inbound' | 'outbound' = 'inbound';
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
@@ -62,6 +63,7 @@ export default defineAgent({
         first_message?: string | null;
         workspace_id?: string | null;
         transfer_number?: string | null;
+        call_direction?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -70,6 +72,7 @@ export default defineAgent({
       if (meta.first_message) firstMessage = meta.first_message;
       if (meta.workspace_id) workspaceId = meta.workspace_id;
       if (meta.transfer_number) transferNumber = meta.transfer_number;
+      if (meta.call_direction === 'outbound') callDirection = 'outbound';
     } catch { /* use defaults */ }
 
     const roomName = ctx.room.name ?? '';
@@ -376,16 +379,17 @@ export default defineAgent({
       const durationSeconds = Math.round((Date.now() - callStartedAt) / 1000);
       const transcript = transcriptLines.join('\n');
 
+      const costUsd = parseFloat(((durationSeconds / 60) * 0.05).toFixed(4));
       await supabase.from('calls').upsert(
         {
           workspace_id: workspaceId,
           agent_id: agentId,
           retell_call_id: roomName,
-          direction: 'inbound',
+          direction: callDirection,
           duration_seconds: durationSeconds,
           status: 'completed',
           transcript: transcript || null,
-          cost_usd: 0,
+          cost_usd: costUsd,
         },
         { onConflict: 'retell_call_id', ignoreDuplicates: false }
       );

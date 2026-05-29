@@ -37,18 +37,24 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Find the call by routing_data->call_sid
-  const { data: calls } = await admin
-    .from('calls')
-    .select('id')
-    .contains('routing_data', { call_sid: callSid })
-    .limit(1);
+  // Find call by routing_data — inbound uses 'call_sid', outbound uses 'twilio_call_sid'
+  const [{ data: byCallSid }, { data: byTwilioCallSid }] = await Promise.all([
+    admin.from('calls').select('id').contains('routing_data', { call_sid: callSid }).limit(1),
+    admin.from('calls').select('id').contains('routing_data', { twilio_call_sid: callSid }).limit(1),
+  ]);
 
-  const callId = (calls as { id: string }[] | null)?.[0]?.id;
+  const callId =
+    (byCallSid       as { id: string }[] | null)?.[0]?.id ??
+    (byTwilioCallSid as { id: string }[] | null)?.[0]?.id;
+
   if (callId) {
+    const costUsd = callStatus === 'completed'
+      ? parseFloat(((callDuration / 60) * 0.05).toFixed(4))
+      : 0;
     await admin.from('calls').update({
       status:           ourStatus,
       duration_seconds: callDuration,
+      ...(costUsd > 0 ? { cost_usd: costUsd } : {}),
     }).eq('id', callId);
   }
 

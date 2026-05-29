@@ -54,22 +54,36 @@ export async function POST(req: Request) {
     });
     const billingRow = (billing as { new_minutes_used: number; minutes_limit: number; is_over_limit: boolean }[] | null)?.[0];
 
-    // Remaining updates can run in parallel
-    await Promise.allSettled([
-      // ── Upsert call record (worker may have already created one) ────────────
-      admin.from('calls').upsert(
-        {
-          workspace_id: workspaceId,
-          agent_id: agentId,
-          retell_call_id: roomName,
-          direction: 'inbound',
-          duration_seconds: durationSeconds,
-          status: 'completed',
-          cost_usd: 0,
-        },
-        { onConflict: 'retell_call_id', ignoreDuplicates: false }
-      ),
+    const costUsd = parseFloat(((durationSeconds / 60) * 0.05).toFixed(4));
 
+    // ── Finalize call record ───────────────────────────────────────────────────
+    // Check if a row already exists (created by the dial route).
+    // If yes: update only duration/status/cost — preserving the original direction.
+    // If no:  insert a new row (fallback for edge cases where the dial route failed).
+    const { data: existingCall } = await admin
+      .from('calls')
+      .select('id')
+      .eq('retell_call_id', roomName)
+      .maybeSingle();
+
+    if (existingCall) {
+      await admin
+        .from('calls')
+        .update({ duration_seconds: durationSeconds, status: 'completed', cost_usd: costUsd })
+        .eq('retell_call_id', roomName);
+    } else {
+      await admin.from('calls').insert({
+        workspace_id: workspaceId,
+        agent_id: agentId,
+        retell_call_id: roomName,
+        direction: 'inbound',
+        duration_seconds: durationSeconds,
+        status: 'completed',
+        cost_usd: costUsd,
+      });
+    }
+
+    await Promise.allSettled([
       // ── Agent total_calls counter ───────────────────────────────────────────
       admin.rpc('increment_agent_total_calls', { p_agent_id: agentId }),
     ]);
