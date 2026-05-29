@@ -9,7 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import type { PhoneNumber } from '@/lib/supabase/types';
-import { Phone, Search, Plus, Trash2, Server, ChevronRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Phone, Search, Plus, Trash2, Server, ChevronRight, ShieldCheck, Loader2, Plug } from 'lucide-react';
 import { toast } from 'sonner';
 
 // Convert ISO country code to emoji flag
@@ -47,7 +47,7 @@ function groupByTrunk(numbers: PhoneNumber[]): TrunkGroup[] {
   return Array.from(map.values());
 }
 
-type DialogMode = 'choose' | 'twilio' | 'sip' | 'connect-twilio';
+type DialogMode = 'choose' | 'twilio' | 'sip' | 'connect-twilio' | 'connect-sip';
 
 const COUNTRIES = [
   { code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' },
@@ -88,6 +88,14 @@ export default function NumbersPage() {
   const [twilioToken, setTwilioToken] = useState('');
   const [twilioConnecting, setTwilioConnecting] = useState(false);
 
+  // Connect SIP trunk
+  const [sipTrunkProvider, setSipTrunkProvider] = useState('');
+  const [sipTrunkHost, setSipTrunkHost] = useState('');
+  const [sipTrunkUser, setSipTrunkUser] = useState('');
+  const [sipTrunkPass, setSipTrunkPass] = useState('');
+  const [sipTrunkConnecting, setSipTrunkConnecting] = useState(false);
+  const [activeSipProvider, setActiveSipProvider] = useState<string | null>(null);
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchNumbers = useCallback(async () => {
@@ -102,7 +110,15 @@ export default function NumbersPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchNumbers(); }, [fetchNumbers]);
+  useEffect(() => {
+    fetchNumbers();
+    fetch('/api/settings/sip')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { connected?: boolean; provider_name?: string } | null) => {
+        if (d?.connected) setActiveSipProvider(d.provider_name ?? 'SIP Trunk');
+      })
+      .catch(() => null);
+  }, [fetchNumbers]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -150,6 +166,39 @@ export default function NumbersPage() {
       const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
       toast.error(err.error ?? 'Failed to connect Twilio.');
     }
+  }
+
+  async function connectSipTrunk() {
+    if (!sipTrunkProvider.trim()) { toast.error('Enter a provider name.'); return; }
+    if (!sipTrunkHost.trim())     { toast.error('Enter the SIP Host/URI.'); return; }
+    if (!sipTrunkUser.trim())     { toast.error('Enter a username.'); return; }
+    if (!sipTrunkPass.trim())     { toast.error('Enter a password.'); return; }
+    setSipTrunkConnecting(true);
+    const res = await fetch('/api/settings/sip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider_name: sipTrunkProvider.trim(),
+        sip_host:      sipTrunkHost.trim(),
+        username:      sipTrunkUser.trim(),
+        password:      sipTrunkPass.trim(),
+      }),
+    });
+    setSipTrunkConnecting(false);
+    if (res.ok) {
+      setActiveSipProvider(sipTrunkProvider.trim());
+      toast.success(`${sipTrunkProvider.trim()} connected as SIP trunk.`);
+      setDialogOpen(false);
+    } else {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+      toast.error(err.error ?? 'Failed to connect SIP trunk.');
+    }
+  }
+
+  async function disconnectSipTrunk() {
+    await fetch('/api/settings/sip', { method: 'DELETE' });
+    setActiveSipProvider(null);
+    toast.success('SIP trunk disconnected.');
   }
 
   async function requestTwilioNumber() {
@@ -225,6 +274,35 @@ export default function NumbersPage() {
               : <><ShieldCheck className="w-4 h-4 mr-1.5" />Check Spam</>
             }
           </Button>
+          {activeSipProvider ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-green-500 text-green-700 hover:bg-green-50"
+              onClick={() => {
+                setSipTrunkProvider(''); setSipTrunkHost('');
+                setSipTrunkUser(''); setSipTrunkPass('');
+                setMode('connect-sip'); setDialogOpen(true);
+              }}
+            >
+              <Plug className="w-4 h-4 mr-1.5" />
+              {activeSipProvider}
+              <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSipTrunkProvider(''); setSipTrunkHost('');
+                setSipTrunkUser(''); setSipTrunkPass('');
+                setMode('connect-sip'); setDialogOpen(true);
+              }}
+            >
+              <Plug className="w-4 h-4 mr-1.5" />
+              Add SIP Trunk
+            </Button>
+          )}
           <Button
             size="sm"
             className="bg-red-600 hover:bg-red-700 text-white"
@@ -380,7 +458,24 @@ export default function NumbersPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">Bring your own number</p>
-                    <p className="text-xs text-[#6b6b6b] mt-0.5">Connect via SIP trunk (CommPeak, Telnyx, etc.)</p>
+                    <p className="text-xs text-[#6b6b6b] mt-0.5">
+                      Register a DID from your SIP provider.
+                      {activeSipProvider ? ` Trunk: ${activeSipProvider}` : ' (Connect a SIP trunk first.)'}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-[#6b6b6b] shrink-0" />
+                </button>
+                <button onClick={() => { setSipTrunkProvider(''); setSipTrunkHost(''); setSipTrunkUser(''); setSipTrunkPass(''); setMode('connect-sip'); }} className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
+                    <Plug className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Configure SIP trunk</p>
+                    <p className="text-xs text-[#6b6b6b] mt-0.5">
+                      {activeSipProvider
+                        ? `Currently connected: ${activeSipProvider}. Click to update.`
+                        : 'Squaretalk, CommPeak, Telnyx, or any SIP provider.'}
+                    </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-[#6b6b6b] shrink-0" />
                 </button>
@@ -442,6 +537,77 @@ export default function NumbersPage() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setMode('choose')}>Back</Button>
                 <Button onClick={saveSip} disabled={sipSaving}>{sipSaving ? 'Saving…' : 'Add Number'}</Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {/* Connect SIP Trunk */}
+          {mode === 'connect-sip' && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Plug className="w-5 h-5" />
+                  {activeSipProvider ? `Update SIP Trunk` : 'Add SIP Trunk'}
+                </DialogTitle>
+                <DialogDescription>
+                  Connect any VoIP provider (Squaretalk, CommPeak, Telnyx, Vonage…).
+                  Outbound calls will route through this trunk automatically.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Provider Name</Label>
+                  <Input
+                    placeholder="e.g. Squaretalk, CommPeak, Telnyx"
+                    value={sipTrunkProvider}
+                    onChange={e => setSipTrunkProvider(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>SIP Host / URI</Label>
+                  <Input
+                    placeholder="sip.squaretalk.com"
+                    value={sipTrunkHost}
+                    onChange={e => setSipTrunkHost(e.target.value)}
+                  />
+                  <p className="text-xs text-[#6b6b6b]">Domain or IP of your SIP server (without sip: prefix).</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Username</Label>
+                  <Input
+                    placeholder="sip_username"
+                    autoComplete="off"
+                    value={sipTrunkUser}
+                    onChange={e => setSipTrunkUser(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••••••"
+                    autoComplete="new-password"
+                    value={sipTrunkPass}
+                    onChange={e => setSipTrunkPass(e.target.value)}
+                  />
+                </div>
+                {activeSipProvider && (
+                  <button
+                    onClick={disconnectSipTrunk}
+                    className="text-xs text-red-500 hover:text-red-700 underline"
+                  >
+                    Disconnect current trunk ({activeSipProvider})
+                  </button>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={connectSipTrunk} disabled={sipTrunkConnecting}>
+                  {sipTrunkConnecting
+                    ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Saving…</>
+                    : activeSipProvider ? 'Update' : 'Connect'
+                  }
+                </Button>
               </DialogFooter>
             </>
           )}

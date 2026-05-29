@@ -7,9 +7,90 @@
  */
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { RoomServiceClient } from 'livekit-server-sdk';
+import { RoomServiceClient, SipClient } from 'livekit-server-sdk';
 import { getRegionalHttpUrl } from '@/lib/livekit/edge';
 import { NextResponse } from 'next/server';
+
+// ── SIP Egress helpers ───────────────────────────────────────────────────────
+// When a workspace has an active 'sip_trunk' integration we dial through
+// LiveKit's SIP Outbound Egress instead of Twilio TwiML.
+//
+// Flow:
+//   1. Check integrations table for type='sip_trunk' + status='active'
+//   2. Retrieve (or lazily create) a LiveKit SipOutboundTrunk using the stored
+//      credentials (sip_host, username, password). Cache the trunk ID back into
+//      the credentials JSONB to avoid redundant trunk creation on every call.
+//   3. Call sipClient.createSipParticipant(trunkId, to, roomName) — this makes
+//      LiveKit dial `to` through the provider and join it into the already-
+//      created room, exactly like a Twilio SIP leg but provider-agnostic.
+//   4. Record the call in `calls` with method='livekit_sip_egress'.
+//
+// Prerequisites (one-time, done via POST /api/settings/sip in the UI):
+//   - Provider Name (e.g. "Squaretalk")
+//   - SIP Host/URI  (e.g. "sip.squaretalk.com" or "sip:user@host")
+//   - Username + Password  (SIP auth credentials from provider dashboard)
+
+interface SipTrunkCredentials {
+  provider_name: string;
+  sip_host: string;
+  username: string;
+  password: string;
+  livekit_trunk_id?: string;
+}
+
+async function dialViaSipEgress(params: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  creds: SipTrunkCredentials;
+  integrationId: string;
+  to: string;
+  from: string;
+  roomName: string;
+  apiKey: string;
+  apiSecret: string;
+  httpUrl: string;
+}): Promise<{ participantSid: string; trunkId: string }> {
+  const sipClient = new SipClient(params.httpUrl, params.apiKey, params.apiSecret);
+
+  // Resolve or create the LiveKit outbound trunk for this workspace
+  let trunkId = params.creds.livekit_trunk_id;
+  if (!trunkId) {
+    const trunk = await sipClient.createSipOutboundTrunk(
+      `voiceos-${params.workspaceId}`,
+      params.creds.sip_host,
+      [params.from],
+      {
+        transport:    0, // SIP_TRANSPORT_AUTO
+        authUsername: params.creds.username,
+        authPassword: params.creds.password,
+      }
+    );
+    trunkId = trunk.sipTrunkId;
+    // Cache trunk ID — fire-and-forget, non-fatal if it fails
+    void params.admin
+      .from('integrations')
+      .update({
+        credentials: { ...params.creds, livekit_trunk_id: trunkId },
+      })
+      .eq('id', params.integrationId)
+      .then(() => null, () => null);
+  }
+
+  const participant = await sipClient.createSipParticipant(
+    trunkId,
+    params.to,
+    params.roomName,
+    {
+      participantIdentity: `sip-${params.to}`,
+      participantName:     params.to,
+      waitUntilAnswered:   false,
+      playRingtone:        false,
+    }
+  );
+
+  return { participantSid: participant.participantId ?? '', trunkId };
+}
+// ── End SIP Egress helpers ───────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
 
@@ -79,20 +160,74 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create room.' }, { status: 500 });
   }
 
-  // Twilio REST dial
+  // Resolve caller ID (phone number owned by this workspace)
+  const { data: defaultNumber } = await admin
+    .from('phone_numbers')
+    .select('number')
+    .eq('workspace_id', workspace.id)
+    .eq('status', 'available')
+    .limit(1)
+    .single();
+  const callerId = (defaultNumber as { number: string } | null)?.number
+    ?? process.env['TWILIO_PHONE_NUMBER']
+    ?? '';
+
+  // ── SIP Egress path (Squaretalk / CommPeak / any SIP provider) ──────────
+  // If the workspace has an active SIP trunk integration, dial through LiveKit
+  // SIP Outbound Egress — no Twilio dependency required.
+  const { data: sipIntegration } = await admin
+    .from('integrations')
+    .select('id, credentials')
+    .eq('workspace_id', workspace.id)
+    .eq('type', 'sip_trunk')
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (sipIntegration) {
+    const creds = sipIntegration.credentials as SipTrunkCredentials;
+    if (!callerId) {
+      void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+      return NextResponse.json({ error: 'No caller ID configured. Add a phone number in /numbers.' }, { status: 503 });
+    }
+    try {
+      const { participantSid, trunkId } = await dialViaSipEgress({
+        admin, workspaceId: workspace.id, creds,
+        integrationId: sipIntegration.id as string,
+        to, from: callerId, roomName,
+        apiKey, apiSecret, httpUrl,
+      });
+      await admin.from('calls').insert({
+        workspace_id: workspace.id, agent_id: agentId,
+        retell_call_id: roomName, direction: 'outbound',
+        contact_phone: to, status: 'dialing', cost_usd: 0,
+        routing_data: {
+          method: 'livekit_sip_egress',
+          sip_provider: creds.provider_name,
+          livekit_trunk_id: trunkId,
+          livekit_participant_sid: participantSid,
+        },
+      });
+      return NextResponse.json({
+        call_id: roomName, room_name: roomName,
+        method: 'livekit_sip_egress',
+        sip_provider: creds.provider_name,
+        status: 'dialing',
+      });
+    } catch (err) {
+      void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+      return NextResponse.json({ error: `SIP egress error: ${String(err)}` }, { status: 502 });
+    }
+  }
+
+  // ── Twilio TwiML fallback ────────────────────────────────────────────────
   const twilioSid   = process.env['TWILIO_ACCOUNT_SID'];
   const twilioToken = process.env['TWILIO_AUTH_TOKEN'];
   const appUrl      = process.env['NEXT_PUBLIC_APP_URL'] ?? '';
   const livekitSipHost = process.env['LIVEKIT_SIP_HOST'] ?? 'sip.livekit.run';
 
-  let callerId = '';
-  const { data: defaultNumber } = await admin
-    .from('phone_numbers').select('number').eq('workspace_id', workspace.id).eq('status', 'available').limit(1).single();
-  callerId = (defaultNumber as { number: string } | null)?.number ?? process.env['TWILIO_PHONE_NUMBER'] ?? '';
-
   if (!twilioSid || !twilioToken || !callerId) {
     void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-    return NextResponse.json({ error: 'Twilio not configured. Check TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and a phone number.' }, { status: 503 });
+    return NextResponse.json({ error: 'No dialer configured. Connect a SIP trunk or Twilio in Settings.' }, { status: 503 });
   }
 
   const twimlCallbackUrl = `${appUrl}/api/v1/outbound/twiml?room=${encodeURIComponent(roomName)}&host=${encodeURIComponent(livekitSipHost)}`;
