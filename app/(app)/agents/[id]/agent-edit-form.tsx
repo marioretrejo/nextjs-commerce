@@ -10,10 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import type { Agent, AutomationRule } from '@/lib/supabase/types';
-import { Loader2, Plus, Trash2, Zap, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { Loader2, Plus, Trash2, Zap, ChevronDown, ChevronUp, Star, Play, Square } from 'lucide-react';
 import { AgentScorecard } from '@/components/agents/agent-scorecard';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -43,6 +43,15 @@ const ACTION_COLORS: Record<string, string> = {
 
 interface PhoneNumber { id: string; number: string; status: string }
 
+const AMBIENT_PREVIEW_URLS: Record<string, string> = {
+  'coffee-shop':      'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/coffee-shop.mp3',
+  'convention-hall':  'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/convention-hall.mp3',
+  'summer-outdoor':   'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/summer-outdoor.mp3',
+  'mountain-outdoor': 'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/mountain-outdoor.mp3',
+  'static-noise':     'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/static-noise.mp3',
+  'call-center':      'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/call-center.mp3',
+};
+
 export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumbers: PhoneNumber[] }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -56,6 +65,41 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
   const [dynVars, setDynVars] = useState<{ key: string; value: string }[]>(
     Object.entries(agent.dynamic_variables ?? {}).map(([key, value]) => ({ key, value }))
   );
+
+  // Ambient sound preview
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingAmbient, setPlayingAmbient] = useState(false);
+
+  // Stop preview when the selected sound changes
+  useEffect(() => {
+    ambientAudioRef.current?.pause();
+    ambientAudioRef.current = null;
+    setPlayingAmbient(false);
+  }, [form.ambient_sound]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { ambientAudioRef.current?.pause(); };
+  }, []);
+
+  function toggleAmbientPreview() {
+    if (playingAmbient) {
+      ambientAudioRef.current?.pause();
+      ambientAudioRef.current = null;
+      setPlayingAmbient(false);
+      return;
+    }
+    const url = AMBIENT_PREVIEW_URLS[form.ambient_sound ?? ''];
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.volume = Math.min(1, form.ambient_sound_volume ?? 1.0);
+    audio.loop = true;
+    ambientAudioRef.current = audio;
+    audio.onerror = () => { toast.error('Preview not available for this sound'); setPlayingAmbient(false); };
+    audio.play().then(() => setPlayingAmbient(true)).catch(() => {
+      toast.error('Preview not available'); setPlayingAmbient(false);
+    });
+  }
 
   // Automation state
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
@@ -340,21 +384,35 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                   <Label className="text-sm font-medium">Background Soundscape</Label>
                   <p className="text-xs text-[#6b6b6b] mt-0.5">Add ambient background sound to make the agent feel more natural during calls.</p>
                 </div>
-                <Select
-                  value={form.ambient_sound ?? 'none'}
-                  onValueChange={(v) => setField('ambient_sound', v === 'none' ? null : v as Agent['ambient_sound'])}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (silent)</SelectItem>
-                    <SelectItem value="coffee-shop">☕ Coffee Shop</SelectItem>
-                    <SelectItem value="convention-hall">🏛️ Convention Hall</SelectItem>
-                    <SelectItem value="summer-outdoor">🌿 Summer Outdoor</SelectItem>
-                    <SelectItem value="mountain-outdoor">⛰️ Mountain Outdoor</SelectItem>
-                    <SelectItem value="static-noise">📻 Static Noise</SelectItem>
-                    <SelectItem value="call-center">🎧 Call Center</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={form.ambient_sound ?? 'none'}
+                    onValueChange={(v) => setField('ambient_sound', v === 'none' ? null : v as Agent['ambient_sound'])}
+                  >
+                    <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None (silent)</SelectItem>
+                      <SelectItem value="coffee-shop">☕ Coffee Shop</SelectItem>
+                      <SelectItem value="convention-hall">🏛️ Convention Hall</SelectItem>
+                      <SelectItem value="summer-outdoor">🌿 Summer Outdoor</SelectItem>
+                      <SelectItem value="mountain-outdoor">⛰️ Mountain Outdoor</SelectItem>
+                      <SelectItem value="static-noise">📻 Static Noise</SelectItem>
+                      <SelectItem value="call-center">🎧 Call Center</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {form.ambient_sound && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={toggleAmbientPreview}
+                      title={playingAmbient ? 'Stop preview' : 'Preview sound'}
+                      className={playingAmbient ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white hover:bg-[#333]' : ''}
+                    >
+                      {playingAmbient ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                  )}
+                </div>
                 {form.ambient_sound && (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -367,7 +425,11 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                       max={2}
                       step={0.1}
                       value={form.ambient_sound_volume ?? 1.0}
-                      onChange={(e) => setField('ambient_sound_volume', parseFloat(e.target.value))}
+                      onChange={(e) => {
+                        const vol = parseFloat(e.target.value);
+                        setField('ambient_sound_volume', vol);
+                        if (ambientAudioRef.current) ambientAudioRef.current.volume = Math.min(1, vol);
+                      }}
                       className="w-full accent-[#0a0a0a]"
                     />
                     <div className="flex justify-between text-[10px] text-[#6b6b6b]">
