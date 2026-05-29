@@ -100,6 +100,7 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
   const [agentName, setAgentName] = useState('Agent');
   const [workspaceId, setWorkspaceId] = useState<string>('');
   const [connecting, setConnecting] = useState(false);
+  const [livekitUnavailable, setLivekitUnavailable] = useState(false);
 
   // Billing state — fetched client-side so we don't need SSR props
   const [balanceCents, setBalanceCents]   = useState<number | null>(null);
@@ -131,7 +132,11 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId: id }),
       });
-      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      if (!res.ok) {
+        const err = (await res.json() as { error: string }).error;
+        if (err === 'LiveKit not configured') { setLivekitUnavailable(true); return; }
+        throw new Error(err);
+      }
       const data = await res.json() as { token: string; wsUrl: string; agentName: string };
       setWsUrl(data.wsUrl);
       setAgentName(data.agentName);
@@ -178,9 +183,15 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
             </div>
           )}
 
+          {livekitUnavailable && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              Browser calls are not yet enabled for this account. Contact support to activate this feature.
+            </div>
+          )}
+
           {!token || !wsUrl ? (
             hasBalance || !billingLoaded ? (
-              <Button onClick={startCall} disabled={connecting || !billingLoaded}>
+              <Button onClick={startCall} disabled={connecting || !billingLoaded || livekitUnavailable}>
                 {connecting
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting…</>
                   : <><Phone className="mr-2 h-4 w-4" />Start Call</>}

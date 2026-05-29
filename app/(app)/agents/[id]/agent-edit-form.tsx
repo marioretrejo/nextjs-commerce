@@ -49,6 +49,10 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<Partial<Agent>>(agent);
 
+  // Keep form in sync when parent re-fetches after save (router.refresh())
+  const agentId = agent.id;
+  useEffect(() => { setForm(agent); }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [dynVars, setDynVars] = useState<{ key: string; value: string }[]>(
     Object.entries(agent.dynamic_variables ?? {}).map(([key, value]) => ({ key, value }))
   );
@@ -181,14 +185,14 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
               <div className="space-y-1.5"><Label>Name</Label>
                 <Input value={form.name ?? ''} onChange={(e) => setField('name', e.target.value)} />
               </div>
-              <div className="space-y-1.5"><Label>Voice ID</Label>
-                <Input
-                  value={form.voice_id ?? ''}
-                  onChange={(e) => setField('voice_id', e.target.value || null)}
-                  placeholder="cartesia-xxxx (from voice picker when creating)"
-                  className="font-mono text-xs"
-                />
-                {form.voice_id && <p className="text-xs text-[#6b6b6b]">Active: {form.voice_name ?? form.voice_id}</p>}
+              <div className="space-y-1.5"><Label>Voice</Label>
+                <div className="flex items-center gap-2 rounded-md border border-[#e0e0e0] bg-[#f5f5f5] px-3 py-2">
+                  <span className="text-sm font-medium flex-1">{form.voice_name ?? (form.voice_id ? 'Custom voice' : 'No voice selected')}</span>
+                  {form.voice_id && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">AI Voice</span>
+                  )}
+                </div>
+                <p className="text-xs text-[#6b6b6b]">To change voice, create a new agent or contact support.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Voice Emotion</Label>
