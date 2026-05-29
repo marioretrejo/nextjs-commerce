@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -181,6 +182,10 @@ export default function QualityPage() {
     if (res.ok) {
       await fetchData();
       setCriteriaDialogOpen(false);
+      toast.success(editingCriteria ? 'Criteria updated' : 'Criteria added');
+    } else {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+      toast.error(err.error ?? 'Failed to save criteria');
     }
     setSavingCriteria(false);
   }
