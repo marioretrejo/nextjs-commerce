@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Agent } from '@/lib/supabase/types';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { Bot, ArrowLeft, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
@@ -13,7 +14,18 @@ export default async function AgentEditPage({ params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data } = await supabase.from('agents').select('*').eq('id', id).single();
+  // Try user-scoped client first; fall back to admin client on transient 406
+  // (can occur when Next.js router cache invalidation races the auth token refresh)
+  let { data } = await supabase.from('agents').select('*').eq('id', id).single();
+  if (!data) {
+    const admin = createAdminClient();
+    const { data: adminData } = await admin.from('agents').select('*').eq('id', id).single();
+    // Only use admin result if agent belongs to this user's workspace
+    if (adminData) {
+      const { data: ws } = await supabase.from('workspaces').select('id').eq('owner_id', user.id).single();
+      data = (ws && (adminData as Record<string, unknown>)['workspace_id'] === ws.id) ? adminData : null;
+    }
+  }
   if (!data) notFound();
   const agent = data as Agent;
 

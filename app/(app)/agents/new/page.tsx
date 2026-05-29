@@ -466,7 +466,6 @@ export default function NewAgentPage() {
       if (!agent.id) { router.push('/agents'); return; }
       localStorage.removeItem(AUTOSAVE_KEY);
       toast.success('Agent created!');
-      router.refresh();
       router.push(`/agents/${agent.id}`);
     } catch (e) {
       toast.error(String(e));
@@ -506,7 +505,6 @@ export default function NewAgentPage() {
       const agent = await res.json() as { id: string };
       if (!agent.id) { router.push('/agents'); return; }
       toast.success('Workflow agent created!');
-      router.refresh();
       router.push(`/agents/${agent.id}/flow`);
     } catch (e) {
       toast.error(String(e));
