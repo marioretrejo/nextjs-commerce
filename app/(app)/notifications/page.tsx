@@ -48,8 +48,9 @@ export default function NotificationsPage() {
     setLoading(true);
     const res = await fetch('/api/notifications?limit=100');
     if (res.ok) {
-      const d = await res.json() as { notifications: Notification[] };
-      setNotifications(d.notifications ?? []);
+      const d = await res.json() as Notification[] | { notifications: Notification[] };
+      const list = Array.isArray(d) ? d : (d.notifications ?? []);
+      setNotifications(list);
     }
     setLoading(false);
   }, []);
