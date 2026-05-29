@@ -4,6 +4,7 @@ import { syncAgentToRetell } from '@/lib/retell/sync';
 import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { apiError, apiOk, parseBody } from '@/lib/api';
 
@@ -150,5 +151,6 @@ export async function POST(req: Request) {
     console.error('Retell sync failed (non-fatal):', e);
   }
 
+  revalidatePath('/agents');
   return apiOk(sanitizeAgentForClient(agentRow as unknown as Record<string, unknown>), 201);
 }
