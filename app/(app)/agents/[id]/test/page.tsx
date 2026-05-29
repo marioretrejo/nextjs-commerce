@@ -133,9 +133,13 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
         body: JSON.stringify({ agentId: id }),
       });
       if (!res.ok) {
-        const err = (await res.json() as { error: string }).error;
-        if (err === 'LiveKit not configured') { setLivekitUnavailable(true); return; }
-        throw new Error(err);
+        let errMsg = 'Call setup failed — please try again.';
+        try {
+          const body = await res.json() as { error?: string };
+          if (body.error) errMsg = body.error;
+        } catch { /* response was not JSON (e.g. gateway timeout) */ }
+        if (errMsg === 'LiveKit not configured') { setLivekitUnavailable(true); return; }
+        throw new Error(errMsg);
       }
       const data = await res.json() as { token: string; wsUrl: string; agentName: string };
       setWsUrl(data.wsUrl);

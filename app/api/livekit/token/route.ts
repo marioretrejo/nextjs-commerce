@@ -103,7 +103,10 @@ export async function POST(req: Request) {
   let ragContext: string | null = null;
   try {
     const queryText = [agent?.name, agent?.system_prompt].filter(Boolean).join(' ').slice(0, 1000);
-    const queryEmbedding = await generateEmbedding(queryText);
+    const queryEmbedding = await Promise.race([
+      generateEmbedding(queryText),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
     if (queryEmbedding) {
       const { data: chunks } = await admin.rpc('match_document_chunks', {
         query_embedding:  queryEmbedding as unknown as string,
@@ -133,7 +136,8 @@ export async function POST(req: Request) {
   const participantName = `user-${user.id.slice(0, 8)}`;
 
   try {
-    const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
+    // 8-second timeout keeps us well under Vercel's 10-second function limit
+    const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret, { requestTimeout: 8 });
     await roomService.createRoom({
       name: roomName,
       metadata: JSON.stringify({
@@ -153,16 +157,23 @@ export async function POST(req: Request) {
     // Room creation failed — release the slot we just claimed
     void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
     trace.end({ ok: false, error: String(err) });
-    return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
+    return NextResponse.json({ error: 'Call setup failed — please try again.' }, { status: 500 });
   }
 
-  const at = new AccessToken(apiKey, apiSecret, {
-    identity: participantName,
-    name: 'You',
-    ttl: '30m',
-  });
-  at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
-  const token = await at.toJwt();
+  let token: string;
+  try {
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: participantName,
+      name: 'You',
+      ttl: '30m',
+    });
+    at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+    token = await at.toJwt();
+  } catch (err) {
+    void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+    trace.end({ ok: false, error: String(err) });
+    return NextResponse.json({ error: 'Call setup failed — please try again.' }, { status: 500 });
+  }
 
   trace.end({ ok: true, workspace_id: workspace.id, agent_id: agentId, region });
   return NextResponse.json({ token, roomName, wsUrl, agentName: agent?.name ?? 'Assistant', region });
