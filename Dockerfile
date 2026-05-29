@@ -26,6 +26,7 @@ COPY --from=deps /app/package.json ./package.json
 
 # Copy only what the agent worker needs
 COPY agent/ ./agent/
+COPY lib/ ./lib/
 COPY tsconfig.json ./
 
 # ─── Runtime config ────────────────────────────────────────────────────────────
