@@ -134,13 +134,24 @@ export default defineAgent({
     // FallbackAdapter switches to OpenAI TTS if Cartesia returns a network error
     // or times out. maxRetryPerTTS: 2 gives Cartesia two chances before switching.
     // recoveryDelayMs: 5000 re-checks Cartesia every 5s to restore it.
+    // Maps our emotion names → Cartesia experimental_controls emotion tags
+    // (must match the same map used in /api/voices/preview for consistency)
+    const EMOTION_MAP: Record<string, string[]> = {
+      calm:        ['positivity:low'],
+      sympathetic: ['sadness:low'],
+      happy:       ['positivity:highest'],
+      sad:         ['sadness:high'],
+      angry:       ['anger:high'],
+      fearful:     ['fearfulness:high'],
+      surprised:   ['surprise:positive:high'],
+    };
     const cartesiaTTS = new CartesiaTTS({
       model: 'sonic-3',
       voice: voiceId,
       apiKey: process.env['CARTESIA_API_KEY'],
       language: 'en',
       speed: 'normal',
-      ...(voiceEmotion ? { emotion: [`${voiceEmotion}:high`] } : {}),
+      ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
     });
 
     const tts = openaiKey

@@ -4,6 +4,7 @@ import { retell } from '@/lib/retell/client';
 import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -67,6 +68,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  revalidatePath('/agents');
+  revalidatePath(`/agents/${id}`);
   return NextResponse.json(sanitizeAgentForClient(agent as unknown as Record<string, unknown>));
 }
 
