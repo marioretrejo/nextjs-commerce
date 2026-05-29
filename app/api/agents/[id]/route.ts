@@ -6,16 +6,44 @@ import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
+/** Verify the authenticated user owns the workspace that contains this agent.
+ *  Uses admin client to bypass RLS (mirrors the edit-page's admin fallback),
+ *  then checks workspace ownership via the user-scoped client. */
+async function verifyOwnership(
+  agentId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<{ agentRow: Record<string, unknown> } | { error: NextResponse }> {
+  const { data: agentRow } = await admin
+    .from('agents')
+    .select('*')
+    .eq('id', agentId)
+    .single();
+  if (!agentRow) {
+    return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) };
+  }
+  const { data: ws } = await supabase
+    .from('workspaces')
+    .select('id')
+    .eq('owner_id', (await supabase.auth.getUser()).data.user!.id)
+    .eq('id', (agentRow as Record<string, unknown>)['workspace_id'] as string)
+    .single();
+  if (!ws) {
+    return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) };
+  }
+  return { agentRow: agentRow as Record<string, unknown> };
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // RLS on the user client ensures only owned agents are returned
-  const { data, error } = await supabase.from('agents').select('*').eq('id', id).single();
-  if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(sanitizeAgentForClient(data as Record<string, unknown>));
+  const admin = createAdminClient();
+  const result = await verifyOwnership(id, supabase, admin);
+  if ('error' in result) return result.error;
+  return NextResponse.json(sanitizeAgentForClient(result.agentRow));
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -24,12 +52,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Verify ownership via RLS before using admin client for the write
-  const { data: existing } = await supabase.from('agents').select('id').eq('id', id).single();
-  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const admin = createAdminClient();
+  const ownership = await verifyOwnership(id, supabase, admin);
+  if ('error' in ownership) return ownership.error;
 
   const body = await req.json() as Partial<Agent>;
-  const admin = createAdminClient();
 
   const { data, error } = await admin
     .from('agents')
@@ -79,19 +106,19 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Verify ownership via RLS — also fetch retell_agent_id while we're at it
-  const { data: agent } = await supabase.from('agents').select('retell_agent_id').eq('id', id).single();
-  if (!agent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const admin = createAdminClient();
+  const ownership = await verifyOwnership(id, supabase, admin);
+  if ('error' in ownership) return ownership.error;
 
-  if ((agent as { retell_agent_id: string | null }).retell_agent_id && process.env['RETELL_API_KEY']) {
+  const retellAgentId = (ownership.agentRow['retell_agent_id'] as string | null) ?? null;
+  if (retellAgentId && process.env['RETELL_API_KEY']) {
     try {
-      await retell.deleteAgent((agent as { retell_agent_id: string }).retell_agent_id);
+      await retell.deleteAgent(retellAgentId);
     } catch (e) {
       console.error('Retell delete failed:', e);
     }
   }
 
-  const admin = createAdminClient();
   const { error } = await admin.from('agents').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return new NextResponse(null, { status: 204 });
