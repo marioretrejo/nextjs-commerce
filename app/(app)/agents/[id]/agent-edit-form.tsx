@@ -43,15 +43,6 @@ const ACTION_COLORS: Record<string, string> = {
 
 interface PhoneNumber { id: string; number: string; status: string }
 
-const AMBIENT_PREVIEW_URLS: Record<string, string> = {
-  'coffee-shop':      'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/coffee-shop.mp3',
-  'convention-hall':  'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/convention-hall.mp3',
-  'summer-outdoor':   'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/summer-outdoor.mp3',
-  'mountain-outdoor': 'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/mountain-outdoor.mp3',
-  'static-noise':     'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/static-noise.mp3',
-  'call-center':      'https://retell-utils-public.s3.us-west-2.amazonaws.com/ambient-sounds/call-center.mp3',
-};
-
 export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumbers: PhoneNumber[] }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -66,39 +57,62 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
     Object.entries(agent.dynamic_variables ?? {}).map(([key, value]) => ({ key, value }))
   );
 
-  // Ambient sound preview
-  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Ambient sound preview via Web Audio API (no external CDN needed)
+  const audioCtxRef = useRef<{ gain: GainNode; stop: () => void } | null>(null);
   const [playingAmbient, setPlayingAmbient] = useState(false);
 
-  // Stop preview when the selected sound changes
   useEffect(() => {
-    ambientAudioRef.current?.pause();
-    ambientAudioRef.current = null;
-    setPlayingAmbient(false);
+    audioCtxRef.current?.stop(); audioCtxRef.current = null; setPlayingAmbient(false);
   }, [form.ambient_sound]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => { ambientAudioRef.current?.pause(); };
-  }, []);
+  useEffect(() => { return () => { audioCtxRef.current?.stop(); }; }, []);
 
   function toggleAmbientPreview() {
     if (playingAmbient) {
-      ambientAudioRef.current?.pause();
-      ambientAudioRef.current = null;
-      setPlayingAmbient(false);
-      return;
+      audioCtxRef.current?.stop(); audioCtxRef.current = null; setPlayingAmbient(false); return;
     }
-    const url = AMBIENT_PREVIEW_URLS[form.ambient_sound ?? ''];
-    if (!url) return;
-    const audio = new Audio(url);
-    audio.volume = Math.min(1, form.ambient_sound_volume ?? 1.0);
-    audio.loop = true;
-    ambientAudioRef.current = audio;
-    audio.onerror = () => { toast.error('Preview not available for this sound'); setPlayingAmbient(false); };
-    audio.play().then(() => setPlayingAmbient(true)).catch(() => {
-      toast.error('Preview not available'); setPlayingAmbient(false);
-    });
+    if (!form.ambient_sound) return;
+    try {
+      const ctx = new AudioContext();
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = Math.min(1, (form.ambient_sound_volume ?? 1.0)) * 0.18;
+      gainNode.connect(ctx.destination);
+
+      // Generate 3-second pink noise buffer (loops seamlessly)
+      const rate = ctx.sampleRate;
+      const buf = ctx.createBuffer(1, rate * 3, rate);
+      const data = buf.getChannelData(0);
+      let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0;
+      for (let i = 0; i < data.length; i++) {
+        const w = Math.random() * 2 - 1;
+        b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759;
+        b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856;
+        b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
+        data[i] = form.ambient_sound === 'static-noise'
+          ? w
+          : (b0+b1+b2+b3+b4+b5+w*0.5362) * 0.11;
+      }
+
+      const filter = ctx.createBiquadFilter();
+      switch (form.ambient_sound) {
+        case 'coffee-shop': case 'call-center':
+          filter.type = 'bandpass'; filter.frequency.value = 500; filter.Q.value = 0.8; break;
+        case 'convention-hall':
+          filter.type = 'lowpass'; filter.frequency.value = 700; break;
+        case 'summer-outdoor':
+          filter.type = 'bandpass'; filter.frequency.value = 900; filter.Q.value = 0.4; break;
+        case 'mountain-outdoor':
+          filter.type = 'highpass'; filter.frequency.value = 250; break;
+        default: filter.type = 'allpass';
+      }
+
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      src.connect(filter); filter.connect(gainNode); src.start();
+
+      audioCtxRef.current = { gain: gainNode, stop: () => { src.stop(); ctx.close(); } };
+      setPlayingAmbient(true);
+    } catch { toast.error('Preview not available in this browser'); }
   }
 
   // Automation state
@@ -428,7 +442,7 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                       onChange={(e) => {
                         const vol = parseFloat(e.target.value);
                         setField('ambient_sound_volume', vol);
-                        if (ambientAudioRef.current) ambientAudioRef.current.volume = Math.min(1, vol);
+                        if (audioCtxRef.current) audioCtxRef.current.gain.gain.value = Math.min(1, vol) * 0.18;
                       }}
                       className="w-full accent-[#0a0a0a]"
                     />
