@@ -79,7 +79,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="flex min-h-screen bg-[#f5f5f5]"
+      className="flex min-h-screen app-bg"
       style={{ '--brand': primaryColor } as React.CSSProperties}
     >
       {isImpersonating && (

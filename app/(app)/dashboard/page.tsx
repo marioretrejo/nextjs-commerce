@@ -12,8 +12,9 @@ export default async function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-[#6b6b6b]">Overview of your voice operations</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#b0b0b0] mb-1">Overview</p>
+        <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]" style={{ letterSpacing: '-0.02em' }}>Dashboard</h1>
+        <p className="text-xs text-[#b0b0b0] mt-0.5">Voice operations at a glance</p>
       </div>
 
       <Suspense fallback={<DashboardSkeleton />}>
@@ -100,14 +101,19 @@ async function DashboardContent() {
 
 function MetricCard({ title, value, sub }: { title: string; value: string; sub: string }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-[#6b6b6b]">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-[#6b6b6b]">{sub}</p>
+    <Card className="relative overflow-hidden group">
+      {/* Top accent line */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#e0e0e0] to-transparent" />
+      <CardContent className="p-5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#b0b0b0] mb-3">{title}</p>
+        <div className="metric-value mb-1.5">{value}</div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-px flex-1 bg-[#f0f0f0]" />
+          <p className="text-[10px] text-[#c0c0c0] font-medium shrink-0">{sub}</p>
+        </div>
       </CardContent>
+      {/* Bottom hover glow */}
+      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[#0a0a0a]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
     </Card>
   );
 }
