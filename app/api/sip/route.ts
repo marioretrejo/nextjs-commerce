@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: agent } = await admin
     .from('agents')
-    .select('id, name, workspace_id, system_prompt, voice_id, first_message, voice_emotion')
+    .select('id, name, workspace_id, system_prompt, voice_id, first_message, voice_emotion, flow_json, transfer_number')
     .eq('id', agentId)
     .single();
 
@@ -59,13 +59,21 @@ export async function POST(req: Request) {
   // Create a dispatch rule: when a call arrives at `phoneNumber`, dispatch to
   // a new room prefixed "sip-agent-{agentId}" with the agent's metadata embedded.
   const roomPrefix = `sip-agent-${agentId}`;
+  const agentTyped = agent as {
+    name: string; system_prompt: string | null; first_message: string | null;
+    voice_id: string | null; voice_emotion: string | null; workspace_id: string;
+    flow_json: unknown | null; transfer_number: string | null;
+  };
   const metadata = JSON.stringify({
-    agent_name: (agent as { name: string }).name,
-    system_prompt: (agent as { system_prompt: string | null }).system_prompt,
-    first_message: (agent as { first_message: string | null }).first_message,
-    voice_id: (agent as { voice_id: string | null }).voice_id,
-    voice_emotion: (agent as { voice_emotion: string | null }).voice_emotion,
-    workspace_id: (agent as { workspace_id: string }).workspace_id,
+    agent_id: agentId,
+    agent_name: agentTyped.name,
+    system_prompt: agentTyped.system_prompt,
+    first_message: agentTyped.first_message,
+    voice_id: agentTyped.voice_id,
+    voice_emotion: agentTyped.voice_emotion,
+    workspace_id: agentTyped.workspace_id,
+    flow_json: agentTyped.flow_json ?? null,
+    transfer_number: agentTyped.transfer_number ?? null,
     source: 'sip',
   });
 

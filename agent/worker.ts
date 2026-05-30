@@ -9,11 +9,14 @@
  *   4. Pronunciation Dicts — Custom keywords (Deepgram) + TTS map (Cartesia) from Supabase
  *   5. Backchanneling      — Listening acknowledgments injected during long user speech
  *   6. Filler Suppression  — "uhm", "uh", "er" utterances never trigger premature turn-end
+ *   7. Flow Builder        — Converts agent flow_json graph into structured LLM instructions
+ *   8. Dynamic Tools       — Loads workspace-custom HTTP tools from DB at call start
+ *   9. Active RAG          — search_knowledge_base tool queries pgvector document chunks
  *
  * Start: node --import tsx/esm agent/worker.ts dev
  * Prod:  node --import tsx/esm agent/worker.ts start
  */
-import { defineAgent, voice, llm as agentLlm, tts as agentTts, cli, ServerOptions } from '@livekit/agents';
+import { defineAgent, voice, llm as agentLlm, llm, tts as agentTts, cli, ServerOptions } from '@livekit/agents';
 import { STT } from '@livekit/agents-plugin-deepgram';
 import { LLM, TTS as OpenAITTS } from '@livekit/agents-plugin-openai';
 import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
@@ -30,6 +33,188 @@ import * as fs from 'node:fs';
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.local');
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+
+// ── Pilar A: Flow Builder → LLM instructions ────────────────────────────────
+// Converts the ReactFlow graph stored in agents.flow_json into a structured
+// conversation script that the LLM follows step by step.
+interface FlowNodeData {
+  nodeType?: string;
+  label?: string;
+  message?: string;
+  variable?: string;
+  condition?: string;
+  transferNumber?: string;
+  [key: string]: unknown;
+}
+
+function buildFlowPrompt(flowJson: unknown): string | null {
+  if (!flowJson || typeof flowJson !== 'object') return null;
+  const { nodes, edges } = flowJson as {
+    nodes?: Array<{ id: string; data: FlowNodeData }>;
+    edges?: Array<{ source: string; target: string; label?: string }>;
+  };
+  if (!Array.isArray(nodes) || nodes.length === 0) return null;
+
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const adj = new Map<string, Array<{ target: string; label?: string }>>();
+  for (const e of (edges ?? [])) {
+    if (!adj.has(e.source)) adj.set(e.source, []);
+    adj.get(e.source)!.push({ target: e.target, label: e.label as string | undefined });
+  }
+
+  const startNode = nodes.find(n => n.data.nodeType === 'start');
+  if (!startNode) return null;
+
+  const lines: string[] = [
+    '## Structured Conversation Script',
+    'Follow this script precisely. Move through each step in order.',
+    '',
+  ];
+  const visited = new Set<string>();
+
+  function traverse(nodeId: string, depth = 0): void {
+    if (visited.has(nodeId) || depth > 50) return;
+    visited.add(nodeId);
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+    const d = node.data;
+    const indent = depth > 0 ? '  '.repeat(depth) : '';
+
+    switch (d.nodeType) {
+      case 'start':
+        lines.push(`${indent}- [START] Begin the conversation.`);
+        break;
+      case 'say':
+        lines.push(`${indent}- [SAY] "${d.message || d.label || '(speak a message)'}"`);
+        break;
+      case 'ask':
+        lines.push(`${indent}- [ASK] "${d.message || d.label || '(ask a question)'}"${d.variable ? ` — store their answer as: ${d.variable}` : ''}`);
+        break;
+      case 'branch':
+        lines.push(`${indent}- [BRANCH] ${d.condition || 'Route based on user response'}`);
+        break;
+      case 'transfer':
+        lines.push(`${indent}- [TRANSFER] Call transfer_to_human tool${d.transferNumber ? ` to reach ${d.transferNumber}` : ''}.`);
+        break;
+      case 'end':
+        lines.push(`${indent}- [END] Conclude the call and say goodbye.`);
+        break;
+    }
+
+    const nexts = adj.get(nodeId) ?? [];
+    if (nexts.length === 1 && !nexts[0]!.label) {
+      traverse(nexts[0]!.target, depth);
+    } else {
+      for (const next of nexts) {
+        if (next.label) lines.push(`${indent}  → If "${next.label}":`);
+        traverse(next.target, depth + 1);
+      }
+    }
+  }
+
+  traverse(startNode.id);
+  if (lines.length <= 4) return null;
+  return lines.join('\n');
+}
+
+// ── Pilar B: Dynamic HTTP tool factory ──────────────────────────────────────
+// Creates an llm.FunctionTool from a DB row (agent_tools table).
+// On invocation the tool calls the configured HTTP endpoint with the args
+// and returns the JSON response to the LLM.
+interface AgentToolRow {
+  name: string;
+  description: string;
+  parameter_schema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+  server_url: string;
+  method: string;
+  headers: Record<string, string>;
+}
+
+function buildDynamicTool(t: AgentToolRow) {
+  return llm.tool({
+    description: t.description || t.name,
+    parameters: t.parameter_schema,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    execute: async (args: any, opts: Parameters<llm.FunctionTool<any>['execute']>[1]) => {
+      opts.ctx.session.say('One moment, let me check that for you.');
+      try {
+        const res = await Promise.race([
+          fetch(t.server_url, {
+            method: t.method || 'POST',
+            headers: { 'Content-Type': 'application/json', ...t.headers },
+            body: t.method !== 'GET' ? JSON.stringify(args) : undefined,
+          }),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+        ]);
+        if (!res.ok) return { error: `Tool returned ${res.status}` };
+        return (await res.json()) as Record<string, unknown>;
+      } catch (err) {
+        return { error: `Tool failed: ${String(err)}` };
+      }
+    },
+  });
+}
+
+// ── Pilar C: Active RAG — search_knowledge_base tool ────────────────────────
+// Embeds the query with text-embedding-3-small, then calls match_document_chunks
+// RPC in Supabase to return the most relevant knowledge chunks.
+function buildRagTool(workspaceId: string, openaiKey: string, sbUrl: string, sbKey: string) {
+  return llm.tool({
+    description: 'Search the knowledge base for information relevant to the user\'s question. Use when you need specific facts, policies, product details, or procedures.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'The question or topic to search for in the knowledge base' },
+      },
+      required: ['query'],
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    execute: async (args: { query: string }, opts: Parameters<llm.FunctionTool<any>['execute']>[1]) => {
+      opts.ctx.session.say('Let me look that up for you.');
+      try {
+        // Embed the query using OpenAI text-embedding-3-small (1536 dims)
+        const embRes = await Promise.race([
+          fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'text-embedding-3-small', input: args.query }),
+          }),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('embed timeout')), 6000)),
+        ]);
+        if (!embRes.ok) return { found: false, message: 'Knowledge search unavailable.' };
+        const embJson = (await embRes.json()) as { data: Array<{ embedding: number[] }> };
+        const embedding = embJson.data[0]?.embedding;
+        if (!embedding) return { found: false, message: 'Could not generate search embedding.' };
+
+        // Query pgvector via Supabase RPC
+        const rpcRes = await fetch(`${sbUrl}/rest/v1/rpc/match_document_chunks`, {
+          method: 'POST',
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query_embedding: embedding,
+            p_workspace_id: workspaceId,
+            match_threshold: 0.40,
+            match_count: 4,
+          }),
+        });
+        if (!rpcRes.ok) return { found: false, message: 'Knowledge search failed.' };
+        const chunks = (await rpcRes.json()) as Array<{ content: string; source_name: string }>;
+        if (!chunks?.length) return { found: false, message: 'No relevant information found.' };
+
+        return {
+          found: true,
+          results: chunks.map(c => ({ content: c.content, source: c.source_name })),
+        };
+      } catch {
+        return { found: false, message: 'Knowledge search encountered an error.' };
+      }
+    },
+  });
+}
 
 function getSupabaseAdmin() {
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
@@ -54,6 +239,8 @@ export default defineAgent({
     let callDirection: 'inbound' | 'outbound' = 'inbound';
     let transferNumber: string | null = null; // E.164 support phone number for human transfer
 
+    let flowJson: unknown = null;
+
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
         system_prompt?: string;
@@ -64,6 +251,8 @@ export default defineAgent({
         workspace_id?: string | null;
         transfer_number?: string | null;
         call_direction?: string | null;
+        agent_id?: string | null;
+        flow_json?: unknown;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -73,11 +262,14 @@ export default defineAgent({
       if (meta.workspace_id) workspaceId = meta.workspace_id;
       if (meta.transfer_number) transferNumber = meta.transfer_number;
       if (meta.call_direction === 'outbound') callDirection = 'outbound';
+      if (meta.agent_id) agentId = meta.agent_id;
+      if (meta.flow_json) flowJson = meta.flow_json;
     } catch { /* use defaults */ }
 
     const roomName = ctx.room.name ?? '';
     const roomMatch = roomName.match(/^(?:agent|sip-agent)-([0-9a-f-]+)/i);
-    if (roomMatch) agentId = roomMatch[1]!;
+    // Room name pattern is fallback — metadata agent_id (set above) takes priority
+    if (!agentId && roomMatch) agentId = roomMatch[1]!;
 
     const groqKey = process.env['GROQ_API_KEY'];
     const openaiKey = process.env['OPENAI_API_KEY'];
@@ -87,6 +279,33 @@ export default defineAgent({
     // ─── 4. Load pronunciation dictionaries from Supabase ────────────────────
     // Non-blocking: awaited here but designed to never throw
     const pronunciation = await loadPronunciationConfig(agentId, supabaseUrl, supabaseKey);
+
+    // ─── Pilar B+C: Load agent tools + flow_json from DB ─────────────────────
+    // Load in parallel; both are non-fatal if they fail.
+    let agentToolRows: AgentToolRow[] = [];
+    if (agentId && supabaseUrl && supabaseKey) {
+      try {
+        const [toolsRes, flowRes] = await Promise.all([
+          fetch(`${supabaseUrl}/rest/v1/agent_tools?agent_id=eq.${agentId}&order=created_at.asc`, {
+            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+          }),
+          // Load flow_json from DB if it wasn't in the room metadata (inbound calls
+          // with older dispatch rules, or calls from the old API)
+          flowJson ? Promise.resolve(null) : fetch(
+            `${supabaseUrl}/rest/v1/agents?id=eq.${agentId}&select=flow_json`,
+            { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+          ),
+        ]);
+        if (toolsRes.ok) {
+          const rows = (await toolsRes.json()) as AgentToolRow[];
+          if (Array.isArray(rows)) agentToolRows = rows;
+        }
+        if (flowRes?.ok) {
+          const rows = (await flowRes.json()) as Array<{ flow_json: unknown }>;
+          if (Array.isArray(rows) && rows[0]?.flow_json) flowJson = rows[0].flow_json;
+        }
+      } catch { /* non-fatal — proceed without dynamic tools */ }
+    }
 
     // ─── 1. STT: Deepgram nova-3 + PII redaction + custom keywords ───────────
     //
@@ -177,30 +396,56 @@ export default defineAgent({
     // ttsPronunciationMap: text replacements applied before Cartesia synthesis.
     // The agent sees the original text in the transcript; only TTS gets the
     // phonetic version — so logs and analysis remain human-readable.
+
+    // ── Pilar A: Build flow prompt from flow_json ───────────────────────────
+    const flowPrompt = buildFlowPrompt(flowJson);
+
+    // ── Pilar B: Build dynamic tool registry from agent_tools rows ──────────
+    const dynamicTools: agentLlm.ToolContext = {};
+    for (const t of agentToolRows) {
+      try {
+        dynamicTools[t.name] = buildDynamicTool(t);
+      } catch { /* skip malformed tool */ }
+    }
+
+    // ── Pilar C: Add RAG tool when workspace has knowledge base data ─────────
+    const ragTool = (workspaceId && openaiKey && supabaseUrl && supabaseKey)
+      ? buildRagTool(workspaceId, openaiKey, supabaseUrl, supabaseKey)
+      : null;
+
+    const instructionParts = [
+      systemPrompt,
+      `Your name is ${agentName}. Always respond in the same language the user speaks to you.`,
+      'When you use a tool, speak your contingency phrase naturally — do not repeat what the tool already said.',
+      'Never mention that you are an AI unless directly asked.',
+      'If you need to transfer the call, use the transfer_to_human tool — do not attempt it yourself.',
+    ];
+    if (flowPrompt) instructionParts.push(flowPrompt);
+
     const agent = new voice.Agent({
-      instructions: [
-        systemPrompt,
-        `Your name is ${agentName}. Always respond in the same language the user speaks to you.`,
-        'When you use a tool, speak your contingency phrase naturally — do not repeat what the tool already said.',
-        'Never mention that you are an AI unless directly asked.',
-        'If you need to transfer the call, use the transfer_to_human tool — do not attempt it yourself.',
-      ].join('\n\n'),
+      instructions: instructionParts.join('\n\n'),
       stt,
       llm: lm,
       tts,
       // ── 4. Custom TTS pronunciation map ────────────────────────────────────
       // Replacements applied to agent speech before synthesis (e.g. brand names)
       ttsPronunciationMap: pronunciation.ttsMap,
-      tools: buildTools({
-        enableTransfer: true,
-        enableOrders: false,
-        // ── 3. Pass call context for SIP transfer ───────────────────────────
-        roomName,
-        transferNumber: transferNumber ?? process.env['SUPPORT_TRANSFER_NUMBER'] ?? null,
-        livekitWsUrl: process.env['LIVEKIT_URL'] ?? '',
-        livekitApiKey: process.env['LIVEKIT_API_KEY'] ?? '',
-        livekitApiSecret: process.env['LIVEKIT_API_SECRET'] ?? '',
-      }),
+      tools: {
+        ...buildTools({
+          enableTransfer: true,
+          enableOrders: false,
+          // ── 3. Pass call context for SIP transfer ─────────────────────────
+          roomName,
+          transferNumber: transferNumber ?? process.env['SUPPORT_TRANSFER_NUMBER'] ?? null,
+          livekitWsUrl: process.env['LIVEKIT_URL'] ?? '',
+          livekitApiKey: process.env['LIVEKIT_API_KEY'] ?? '',
+          livekitApiSecret: process.env['LIVEKIT_API_SECRET'] ?? '',
+        }),
+        // Pilar B: workspace-defined custom HTTP tools
+        ...dynamicTools,
+        // Pilar C: knowledge base search
+        ...(ragTool ? { search_knowledge_base: ragTool } : {}),
+      },
       turnHandling: {
         turnDetection: undefined,
         endpointing: {
