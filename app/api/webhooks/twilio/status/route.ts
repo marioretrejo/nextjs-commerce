@@ -23,6 +23,7 @@ export async function POST(req: Request) {
   const callSid      = params['CallSid'] ?? '';
   const callStatus   = params['CallStatus'] ?? '';   // completed | failed | no-answer | busy | canceled
   const callDuration = Number(params['CallDuration'] ?? '0'); // seconds, Twilio-reported
+  const answeredBy   = params['AnsweredBy'] ?? '';   // human | machine_start | machine_end_beep | fax | unknown
 
   if (!callSid) return NextResponse.json({ ok: true });
 
@@ -37,20 +38,42 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Find the call by routing_data->call_sid
+  // Find the call by routing_data->twilio_call_sid
   const { data: calls } = await admin
     .from('calls')
-    .select('id')
-    .contains('routing_data', { call_sid: callSid })
+    .select('id, routing_data')
+    .contains('routing_data', { twilio_call_sid: callSid })
     .limit(1);
 
-  const callId = (calls as { id: string }[] | null)?.[0]?.id;
-  if (callId) {
+  const callRow = (calls as { id: string; routing_data: Record<string, unknown> }[] | null)?.[0];
+  if (!callRow) return NextResponse.json({ ok: true });
+
+  // AMD: if answeredBy indicates a machine and amd_action is 'hangup', cancel the call
+  const isMachine = answeredBy.startsWith('machine_') || answeredBy === 'fax';
+  if (isMachine && callRow.routing_data?.amd_action === 'hangup') {
+    const twilioSid   = process.env['TWILIO_ACCOUNT_SID'];
+    const twilioToken = process.env['TWILIO_AUTH_TOKEN'];
+    if (twilioSid && twilioToken) {
+      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls/${callSid}.json`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ Status: 'completed' }).toString(),
+      }).catch(() => null);
+    }
     await admin.from('calls').update({
-      status:           ourStatus,
-      duration_seconds: callDuration,
-    }).eq('id', callId);
+      status: 'cancelled',
+      duration_seconds: 0,
+    }).eq('id', callRow.id);
+    return NextResponse.json({ ok: true });
   }
+
+  await admin.from('calls').update({
+    status:           ourStatus,
+    duration_seconds: callDuration,
+  }).eq('id', callRow.id);
 
   return NextResponse.json({ ok: true });
 }

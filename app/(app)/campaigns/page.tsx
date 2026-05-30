@@ -38,9 +38,10 @@ export default async function CampaignsPage() {
   let campaigns: Campaign[] = [];
   let templates: (CampaignTemplate & { agent?: { name: string } })[] = [];
   let dialerAgents: { id: string; name: string }[] = [];
+  let dialerPhoneNumbers: { number: string }[] = [];
   if (workspace) {
     const supabase = await createClient();
-    const [{ data: campaignData }, { data: templateData }, { data: agentData }] = await Promise.all([
+    const [{ data: campaignData }, { data: templateData }, { data: agentData }, { data: phoneData }] = await Promise.all([
       supabase
         .from('campaigns')
         .select('*, agent:agents!campaigns_agent_id_fkey(id, name, status)')
@@ -57,17 +58,24 @@ export default async function CampaignsPage() {
         .eq('workspace_id', workspace.id)
         .eq('status', 'active')
         .order('name'),
+      supabase
+        .from('phone_numbers')
+        .select('number')
+        .eq('workspace_id', workspace.id)
+        .eq('status', 'available')
+        .order('number'),
     ]);
     campaigns = (campaignData as Campaign[]) ?? [];
     templates = (templateData as (CampaignTemplate & { agent?: { name: string } })[]) ?? [];
     dialerAgents = (agentData as { id: string; name: string }[]) ?? [];
+    dialerPhoneNumbers = (phoneData as { number: string }[]) ?? [];
   }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Quick Outbound Dialer */}
       <div className="mb-6">
-        <OutboundDialer agents={dialerAgents} />
+        <OutboundDialer agents={dialerAgents} phoneNumbers={dialerPhoneNumbers} />
       </div>
 
       {/* Header */}

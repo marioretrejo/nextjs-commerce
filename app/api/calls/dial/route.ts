@@ -99,12 +99,28 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: { agentId?: string; to?: string; variables?: Record<string, unknown> };
+  let body: {
+    agentId?: string;
+    to?: string;
+    variables?: Record<string, unknown>;
+    amd_enabled?: boolean;
+    amd_action?: 'hangup' | 'leave_voicemail';
+    max_duration_min?: number;
+    ringing_timeout_sec?: number;
+    caller_id?: string;
+  };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 });
   }
 
-  const { agentId, to, variables = {} } = body;
+  const {
+    agentId, to, variables = {},
+    amd_enabled = false,
+    amd_action = 'hangup',
+    max_duration_min,
+    ringing_timeout_sec,
+    caller_id: requestedCallerId,
+  } = body;
   if (!to || !/^\+[1-9]\d{6,14}$/.test(to)) {
     return NextResponse.json({ error: '"to" must be a valid E.164 phone number.' }, { status: 400 });
   }
@@ -144,6 +160,8 @@ export async function POST(req: Request) {
   const agent = agentRow as { id: string; name: string; system_prompt: string | null; first_message: string | null; voice_id: string | null; voice_emotion: string | null; flow_json: unknown | null; transfer_number: string | null };
   const roomName = `agent-${agentId}-${Date.now()}`;
 
+  const maxDurationSec = max_duration_min ? max_duration_min * 60 : 600;
+
   try {
     await new RoomServiceClient(httpUrl, apiKey, apiSecret).createRoom({
       name: roomName,
@@ -156,24 +174,37 @@ export async function POST(req: Request) {
         flow_json: agent.flow_json ?? null,
         transfer_number: agent.transfer_number ?? null,
       }),
-      departureTimeout: 600,
+      departureTimeout: maxDurationSec,
     });
   } catch (err) {
     void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
     return NextResponse.json({ error: 'Failed to create room.' }, { status: 500 });
   }
 
-  // Resolve caller ID (phone number owned by this workspace)
-  const { data: defaultNumber } = await admin
-    .from('phone_numbers')
-    .select('number')
-    .eq('workspace_id', workspace.id)
-    .eq('status', 'available')
-    .limit(1)
-    .single();
-  const callerId = (defaultNumber as { number: string } | null)?.number
-    ?? process.env['TWILIO_PHONE_NUMBER']
-    ?? '';
+  // Resolve caller ID: prefer requestedCallerId if it belongs to this workspace
+  let callerId = '';
+  if (requestedCallerId) {
+    const { data: ownedNumber } = await admin
+      .from('phone_numbers')
+      .select('number')
+      .eq('workspace_id', workspace.id)
+      .eq('number', requestedCallerId)
+      .eq('status', 'available')
+      .maybeSingle();
+    if (ownedNumber) callerId = (ownedNumber as { number: string }).number;
+  }
+  if (!callerId) {
+    const { data: defaultNumber } = await admin
+      .from('phone_numbers')
+      .select('number')
+      .eq('workspace_id', workspace.id)
+      .eq('status', 'available')
+      .limit(1)
+      .single();
+    callerId = (defaultNumber as { number: string } | null)?.number
+      ?? process.env['TWILIO_PHONE_NUMBER']
+      ?? '';
+  }
 
   // ── SIP Egress path (Squaretalk / CommPeak / any SIP provider) ──────────
   // If the workspace has an active SIP trunk integration, dial through LiveKit
@@ -235,6 +266,20 @@ export async function POST(req: Request) {
 
   const twimlCallbackUrl = `${appUrl}/api/v1/outbound/twiml?room=${encodeURIComponent(roomName)}&host=${encodeURIComponent(livekitSipHost)}`;
 
+  const twilioParams = new URLSearchParams({
+    To: to, From: callerId,
+    Url: twimlCallbackUrl,
+    StatusCallback: `${appUrl}/api/webhooks/twilio/status`,
+    StatusCallbackMethod: 'POST',
+    StatusCallbackEvent: 'completed failed busy no-answer canceled',
+  });
+  if (ringing_timeout_sec) twilioParams.set('Timeout', String(ringing_timeout_sec));
+  if (max_duration_min) twilioParams.set('TimeLimit', String(maxDurationSec));
+  if (amd_enabled) {
+    twilioParams.set('MachineDetection', 'Enable');
+    twilioParams.set('MachineDetectionTimeout', '30');
+  }
+
   let twilioCallSid: string;
   try {
     const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`, {
@@ -243,13 +288,7 @@ export async function POST(req: Request) {
         Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        To: to, From: callerId,
-        Url: twimlCallbackUrl,
-        StatusCallback: `${appUrl}/api/webhooks/twilio/status`,
-        StatusCallbackMethod: 'POST',
-        MachineDetection: 'Enable',
-      }).toString(),
+      body: twilioParams.toString(),
     });
     if (!res.ok) throw new Error(`Twilio ${res.status}: ${await res.text()}`);
     const r = await res.json() as { sid: string };
@@ -263,7 +302,13 @@ export async function POST(req: Request) {
     workspace_id: workspace.id, agent_id: agentId,
     retell_call_id: roomName, direction: 'outbound',
     contact_phone: to, status: 'dialing', cost_usd: 0,
-    routing_data: { method: 'twilio_twiml', twilio_call_sid: twilioCallSid },
+    routing_data: {
+      method: 'twilio_twiml',
+      twilio_call_sid: twilioCallSid,
+      amd_action: amd_enabled ? amd_action : null,
+      max_duration_min: max_duration_min ?? null,
+      ringing_timeout_sec: ringing_timeout_sec ?? null,
+    },
   });
 
   return NextResponse.json({ call_id: roomName, room_name: roomName, twilio_call_sid: twilioCallSid, status: 'dialing' });

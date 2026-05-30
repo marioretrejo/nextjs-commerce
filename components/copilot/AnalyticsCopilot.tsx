@@ -70,7 +70,7 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-label="Analytics Copilot"
         className={[
-          'fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center',
+          'fixed bottom-20 right-6 z-50 flex h-14 w-14 items-center justify-center',
           'rounded-full bg-[#0a0a0a] text-white shadow-2xl',
           'transition-all duration-200 hover:scale-105 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]',
           'md:bottom-8 md:right-8',
@@ -86,7 +86,7 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
       {open && (
         <div
           className={[
-            'fixed bottom-24 right-6 z-50 flex flex-col overflow-hidden',
+            'fixed bottom-36 right-6 z-50 flex flex-col overflow-hidden',
             'h-[520px] w-[360px] md:bottom-28 md:right-8 md:w-[400px]',
             'rounded-2xl border border-[#e5e5e5] bg-white shadow-2xl',
           ].join(' ')}
