@@ -16,6 +16,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { data: key } = await admin.from('api_keys').select('id').eq('id', id).eq('workspace_id', ws.id).single();
   if (!key) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  await admin.from('api_keys').delete().eq('id', id);
+  // Soft-revoke: set is_active=false so the key stops working immediately
+  // but the audit record (created_at, last_used_at, prefix) is preserved.
+  await admin.from('api_keys').update({ is_active: false }).eq('id', id);
   return new NextResponse(null, { status: 204 });
 }

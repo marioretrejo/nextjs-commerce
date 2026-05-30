@@ -16,6 +16,7 @@ export async function GET() {
     .from('api_keys')
     .select('id, name, key_prefix, last_used_at, created_at')
     .eq('workspace_id', ws.id)
+    .eq('is_active', true)
     .order('created_at', { ascending: false });
 
   return NextResponse.json({ keys: data ?? [] });
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
     name: body.name,
     key_hash: keyHash,
     key_prefix: keyPrefix,
+    is_active: true,
   }).select('id, name, key_prefix, created_at').single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
