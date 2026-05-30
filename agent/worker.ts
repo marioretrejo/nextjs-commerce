@@ -97,7 +97,7 @@ function buildFlowPrompt(flowJson: unknown): string | null {
         lines.push(`${indent}- [TRANSFER] Call transfer_to_human tool${d.transferNumber ? ` to reach ${d.transferNumber}` : ''}.`);
         break;
       case 'end':
-        lines.push(`${indent}- [END] Conclude the call and say goodbye.`);
+        lines.push(`${indent}- [END] Say a natural farewell, then call the end_call tool with reason "flow_complete".`);
         break;
     }
 
@@ -413,12 +413,70 @@ export default defineAgent({
       ? buildRagTool(workspaceId, openaiKey, supabaseUrl, supabaseKey)
       : null;
 
+    // ── end_call tool: built here to close over roomName ────────────────────
+    // The LLM calls this when it determines the conversation should end.
+    // It speaks the farewell (awaited so audio completes), then deletes
+    // the LiveKit room which hangs up the PSTN call and triggers Close.
+    const endCallTool = llm.tool({
+      description:
+        'Hang up and end the call. Call this when: the conversation goal is complete, ' +
+        'the user says goodbye or "that\'s all I needed", the flow script reaches [END], ' +
+        'the user is unresponsive, or the user explicitly wants to stop. ' +
+        'Include a natural, warm farewell in the farewell parameter.',
+      parameters: {
+        type: 'object' as const,
+        properties: {
+          farewell: {
+            type: 'string',
+            description: 'A brief closing phrase to speak before hanging up, e.g. "Have a great day!" or "Thank you for calling, goodbye!"',
+          },
+          reason: {
+            type: 'string',
+            enum: ['goal_achieved', 'user_requested', 'flow_complete', 'no_response', 'transferred'],
+            description: 'Why the call is ending — used for call analytics',
+          },
+        },
+        required: ['farewell', 'reason'],
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      execute: async (args: { farewell: string; reason: string }, opts: Parameters<llm.FunctionTool<any>['execute']>[1]) => {
+        log('info', { message: 'end_call.invoked', reason: args.reason, agent_id: agentId, room: roomName });
+        // Speak the farewell before disconnecting so the caller hears it
+        try {
+          await opts.ctx.session.say(args.farewell, { allowInterruptions: false });
+        } catch { /* room may already be closing */ }
+        // Delete the room — disconnects SIP/WebRTC participant (hangs up the phone)
+        // and triggers the worker's Close handler which writes to DB
+        const wsUrl = process.env['LIVEKIT_URL'] ?? '';
+        const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+        const lkKey = process.env['LIVEKIT_API_KEY'];
+        const lkSecret = process.env['LIVEKIT_API_SECRET'];
+        if (httpUrl && lkKey && lkSecret) {
+          const { RoomServiceClient: RSC } = await import('livekit-server-sdk');
+          new RSC(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+        }
+        return { ended: true, reason: args.reason };
+      },
+    });
+
+    const CALL_TERMINATION_INSTRUCTIONS = [
+      '## Call Termination',
+      'Use the end_call tool to hang up when any of the following is true:',
+      '- The user says goodbye, "thanks that\'s all", "I\'m good", "no more questions", or equivalent',
+      '- The conversation goal has been fully achieved (appointment booked, question answered, issue resolved)',
+      '- The conversation flow script reaches an [END] node',
+      '- The user is repeatedly unresponsive or only producing filler sounds with no meaningful content',
+      '- The user explicitly asks to end the call',
+      'Always pass a warm, context-appropriate farewell. Never hang up silently.',
+    ].join('\n');
+
     const instructionParts = [
       systemPrompt,
       `Your name is ${agentName}. Always respond in the same language the user speaks to you.`,
       'When you use a tool, speak your contingency phrase naturally — do not repeat what the tool already said.',
       'Never mention that you are an AI unless directly asked.',
       'If you need to transfer the call, use the transfer_to_human tool — do not attempt it yourself.',
+      CALL_TERMINATION_INSTRUCTIONS,
     ];
     if (flowPrompt) instructionParts.push(flowPrompt);
 
@@ -445,6 +503,8 @@ export default defineAgent({
         ...dynamicTools,
         // Pilar C: knowledge base search
         ...(ragTool ? { search_knowledge_base: ragTool } : {}),
+        // Intelligent call termination
+        end_call: endCallTool,
       },
       turnHandling: {
         turnDetection: undefined,
