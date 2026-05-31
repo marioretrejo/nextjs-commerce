@@ -117,6 +117,106 @@ function buildFlowPrompt(flowJson: unknown): string | null {
   return lines.join('\n');
 }
 
+// ── Pilar E: AI State Machine (flow_config v2) ──────────────────────────────
+interface FC2NodeData {
+  state_name?: string;
+  system_instructions?: string;
+  intents?: Array<{ id: string; label: string; description: string }>;
+  url?: string;
+  method?: string;
+  extract_variables?: string;
+  transfer_number?: string;
+  farewell?: string;
+  label?: string;
+}
+
+interface FC2Node { id: string; type: string; data: FC2NodeData; }
+interface FC2Edge { id: string; source: string; sourceHandle?: string; target: string; label?: string; }
+interface FlowConfig2 { version: 2; nodes: FC2Node[]; edges: FC2Edge[]; }
+
+function isFlowConfig2(fc: unknown): fc is FlowConfig2 {
+  return (
+    typeof fc === 'object' && fc !== null &&
+    (fc as { version?: number }).version === 2 &&
+    Array.isArray((fc as { nodes?: unknown }).nodes)
+  );
+}
+
+interface StateMachine {
+  getCurrentNodeId(): string;
+  setCurrentNodeId(id: string): void;
+  getNode(id: string): FC2Node | undefined;
+  getOutEdges(nodeId: string): FC2Edge[];
+  buildStateInstructions(
+    nodeId: string,
+    hardConstraints: string,
+    baseSystemPrompt: string,
+    agentNameStr: string,
+    toolsGuidance: string,
+    callTermination: string,
+  ): string;
+}
+
+function buildStateMachine(config: FlowConfig2): StateMachine {
+  const nodeMap = new Map(config.nodes.map(n => [n.id, n]));
+  const edgesBySource = new Map<string, FC2Edge[]>();
+  for (const e of config.edges) {
+    if (!edgesBySource.has(e.source)) edgesBySource.set(e.source, []);
+    edgesBySource.get(e.source)!.push(e);
+  }
+
+  // Start after the start_node
+  const startNode = config.nodes.find(n => n.type === 'start_node');
+  let currentNodeId = startNode?.id ?? config.nodes[0]?.id ?? '';
+  if (startNode) {
+    const firstEdge = (edgesBySource.get(startNode.id) ?? [])[0];
+    if (firstEdge) currentNodeId = firstEdge.target;
+  }
+
+  return {
+    getCurrentNodeId: () => currentNodeId,
+    setCurrentNodeId: (id: string) => { currentNodeId = id; },
+    getNode: (id: string) => nodeMap.get(id),
+    getOutEdges: (nodeId: string) => edgesBySource.get(nodeId) ?? [],
+    buildStateInstructions: (
+      nodeId: string,
+      hardConstraints: string,
+      baseSystemPrompt: string,
+      agentNameStr: string,
+      toolsGuidance: string,
+      callTermination: string,
+    ): string => {
+      const node = nodeMap.get(nodeId);
+      const parts: string[] = [hardConstraints, '', '## Your Role', baseSystemPrompt];
+      parts.push(`Your name is ${agentNameStr}. Always respond in the same language the user speaks to you.`);
+      parts.push('When you use a tool, do not repeat what the tool already said. Continue the conversation naturally.');
+
+      if (node) {
+        if (node.data.state_name) parts.push('', `## Current State: ${node.data.state_name}`);
+        if (node.data.system_instructions) parts.push('', node.data.system_instructions);
+      }
+
+      parts.push('', toolsGuidance);
+      parts.push('', callTermination);
+
+      const outEdges = edgesBySource.get(nodeId) ?? [];
+      if (outEdges.length > 0) {
+        parts.push('', '## State Transitions');
+        parts.push('When the caller\'s intent matches a transition below, call transition_state immediately.');
+        parts.push('Available transitions:');
+        for (const edge of outEdges) {
+          const targetNode = nodeMap.get(edge.target);
+          const targetName = targetNode?.data?.state_name ?? targetNode?.data?.label ?? edge.target;
+          const intentId = edge.sourceHandle ?? edge.id;
+          const edgeLabel = edge.label ?? intentId;
+          parts.push(`- intent_id: "${intentId}" | condition: "${edgeLabel}" → next state: ${targetName}`);
+        }
+      }
+      return parts.join('\n');
+    },
+  };
+}
+
 // ── Pilar B: Dynamic HTTP tool factory ──────────────────────────────────────
 // Creates an llm.FunctionTool from a DB row (agent_tools table).
 // On invocation the tool calls the configured HTTP endpoint with the args
@@ -249,6 +349,7 @@ export default defineAgent({
     let transferNumber: string | null = null; // E.164 support phone number for human transfer
 
     let flowJson: unknown = null;
+    let flowConfig: unknown = null;
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
@@ -262,6 +363,7 @@ export default defineAgent({
         call_direction?: string | null;
         agent_id?: string | null;
         flow_json?: unknown;
+        flow_config?: unknown;
         dynamic_variables?: Record<string, string>;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
@@ -274,6 +376,7 @@ export default defineAgent({
       if (meta.call_direction === 'outbound') callDirection = 'outbound';
       if (meta.agent_id) agentId = meta.agent_id;
       if (meta.flow_json) flowJson = meta.flow_json;
+      if (meta.flow_config) flowConfig = meta.flow_config;
 
       // Pilar D: inject contact/campaign variables into prompt and greeting
       if (meta.dynamic_variables && Object.keys(meta.dynamic_variables).length > 0) {
@@ -306,10 +409,9 @@ export default defineAgent({
           fetch(`${supabaseUrl}/rest/v1/agent_tools?agent_id=eq.${agentId}&order=created_at.asc`, {
             headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
           }),
-          // Load flow_json from DB if it wasn't in the room metadata (inbound calls
-          // with older dispatch rules, or calls from the old API)
-          flowJson ? Promise.resolve(null) : fetch(
-            `${supabaseUrl}/rest/v1/agents?id=eq.${agentId}&select=flow_json`,
+          // Load flow_json + flow_config from DB if not in room metadata
+          (flowJson || flowConfig) ? Promise.resolve(null) : fetch(
+            `${supabaseUrl}/rest/v1/agents?id=eq.${agentId}&select=flow_json,flow_config`,
             { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
           ),
         ]);
@@ -318,8 +420,11 @@ export default defineAgent({
           if (Array.isArray(rows)) agentToolRows = rows;
         }
         if (flowRes?.ok) {
-          const rows = (await flowRes.json()) as Array<{ flow_json: unknown }>;
-          if (Array.isArray(rows) && rows[0]?.flow_json) flowJson = rows[0].flow_json;
+          const rows = (await flowRes.json()) as Array<{ flow_json: unknown; flow_config: unknown }>;
+          if (Array.isArray(rows) && rows[0]) {
+            if (rows[0].flow_config && !flowConfig) flowConfig = rows[0].flow_config;
+            if (rows[0].flow_json && !flowJson) flowJson = rows[0].flow_json;
+          }
         }
       } catch { /* non-fatal — proceed without dynamic tools */ }
     }
@@ -414,8 +519,13 @@ export default defineAgent({
     // The agent sees the original text in the transcript; only TTS gets the
     // phonetic version — so logs and analysis remain human-readable.
 
-    // ── Pilar A: Build flow prompt from flow_json ───────────────────────────
-    const flowPrompt = buildFlowPrompt(flowJson);
+    // ── Pilar A: Build flow prompt from flow_json (v1 IVR) ─────────────────
+    const flowPrompt = isFlowConfig2(flowConfig) ? null : buildFlowPrompt(flowJson);
+
+    // ── Pilar E: AI State Machine (flow_config v2) ──────────────────────────
+    const stateMachine: StateMachine | null = isFlowConfig2(flowConfig)
+      ? buildStateMachine(flowConfig)
+      : null;
 
     // ── Pilar B: Build dynamic tool registry from agent_tools rows ──────────
     const dynamicTools: agentLlm.ToolContext = {};
@@ -519,6 +629,9 @@ export default defineAgent({
     const TOOLS_GUIDANCE = [
       '## Available Tools',
       'Use these tools proactively when the situation calls for them:',
+      ...(stateMachine ? [
+        '- transition_state: Move to the next conversation state when the caller\'s intent matches a transition listed in the ## State Transitions section.',
+      ] : []),
       ...(transferNumber ? [
         '- transfer_to_human: Use when the caller asks for a human, asks to speak with support, or when their issue is beyond your ability to resolve. Do not attempt to manually transfer — always use this tool.',
       ] : []),
@@ -531,20 +644,147 @@ export default defineAgent({
       '- end_call: Use when the conversation is complete or the caller says goodbye.',
     ].join('\n');
 
-    const instructionParts = [
-      HARD_CONSTRAINTS,
-      '',
-      '## Your Role',
-      systemPrompt,
-      `Your name is ${agentName}. Always respond in the same language the user speaks to you.`,
-      'When you use a tool, do not repeat what the tool already said. Continue the conversation naturally.',
-      TOOLS_GUIDANCE,
-      CALL_TERMINATION_INSTRUCTIONS,
-    ];
-    if (flowPrompt) instructionParts.push(flowPrompt);
+    // ── Build initial instructions ───────────────────────────────────────────
+    let initialInstructions: string;
+    if (stateMachine) {
+      initialInstructions = stateMachine.buildStateInstructions(
+        stateMachine.getCurrentNodeId(),
+        HARD_CONSTRAINTS, systemPrompt, agentName, TOOLS_GUIDANCE, CALL_TERMINATION_INSTRUCTIONS,
+      );
+    } else {
+      const instructionParts = [
+        HARD_CONSTRAINTS, '', '## Your Role', systemPrompt,
+        `Your name is ${agentName}. Always respond in the same language the user speaks to you.`,
+        'When you use a tool, do not repeat what the tool already said. Continue the conversation naturally.',
+        TOOLS_GUIDANCE, CALL_TERMINATION_INSTRUCTIONS,
+      ];
+      if (flowPrompt) instructionParts.push(flowPrompt);
+      initialInstructions = instructionParts.join('\n\n');
+    }
+
+    // ── Pilar E: transition_state tool (state machine only) ─────────────────
+    // Uses a mutable `agentRef` holder so the tool can update agent.instructions
+    // after the agent object is created below.
+    // LiveKit types mark `instructions` as readonly, but it is a plain object property
+    // that the agent reads before each LLM call — a cast is required to update it.
+    const agentRef: { current: voice.Agent | null } = { current: null };
+    const setAgentInstructions = (instructions: string) => {
+      if (!agentRef.current) return;
+      (agentRef.current as unknown as { instructions: string }).instructions = instructions;
+    };
+
+    const transitionStateTool = stateMachine
+      ? llm.tool({
+          description:
+            'Transition to the next conversation state. The available transitions and their conditions ' +
+            'are listed in the ## State Transitions section of the system prompt. Call this tool when ' +
+            'the caller\'s intent matches one of the listed conditions.',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              intent_id: {
+                type: 'string',
+                description: 'The intent_id value of the matching transition from the ## State Transitions section.',
+              },
+            },
+            required: ['intent_id'],
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          execute: async (args: { intent_id: string }, opts: Parameters<llm.FunctionTool<any>['execute']>[1]) => {
+            const sm = stateMachine!;
+            const currentId = sm.getCurrentNodeId();
+            const outEdges = sm.getOutEdges(currentId);
+            // Find the edge matching the requested intent_id
+            const edge = outEdges.find(e => (e.sourceHandle ?? e.id) === args.intent_id)
+              ?? outEdges.find(e => e.label === args.intent_id);
+
+            if (!edge) {
+              const available = outEdges.map(e => e.sourceHandle ?? e.id).join(', ');
+              return { error: `Unknown intent_id "${args.intent_id}". Available: ${available || 'none'}` };
+            }
+
+            const targetNode = sm.getNode(edge.target);
+            if (!targetNode) return { error: `Target node "${edge.target}" not found in flow config.` };
+
+            log('info', { message: 'state_machine.transition', from: currentId, to: edge.target, intent: args.intent_id, agent_id: agentId });
+
+            // ── Handle terminal node types ─────────────────────────────────
+            if (targetNode.type === 'end_call_node') {
+              const farewell = targetNode.data.farewell ?? 'Thank you for calling. Have a great day!';
+              try { await opts.ctx.session.say(farewell, { allowInterruptions: false }); } catch { /* closing */ }
+              const wsUrl = process.env['LIVEKIT_URL'] ?? '';
+              const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+              const lkKey = process.env['LIVEKIT_API_KEY'];
+              const lkSecret = process.env['LIVEKIT_API_SECRET'];
+              if (httpUrl && lkKey && lkSecret) {
+                const { RoomServiceClient: RSC } = await import('livekit-server-sdk');
+                new RSC(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+              }
+              return { transitioned: true, new_state: 'end_call', ended: true };
+            }
+
+            if (targetNode.type === 'transfer_node') {
+              const tn = targetNode.data.transfer_number ?? transferNumber ?? null;
+              if (tn && agentRef.current) {
+                // Use the existing transfer tool via session
+                try { opts.ctx.session.say('One moment, let me transfer you now.'); } catch { /* ok */ }
+              }
+              // Fall through to update state (transfer_to_human tool handles the actual SIP REFER)
+              sm.setCurrentNodeId(edge.target);
+              setAgentInstructions(sm.buildStateInstructions(
+                edge.target, HARD_CONSTRAINTS, systemPrompt, agentName, TOOLS_GUIDANCE, CALL_TERMINATION_INSTRUCTIONS,
+              ));
+              return { transitioned: true, new_state: edge.target, action: 'transfer', transfer_number: tn };
+            }
+
+            if (targetNode.type === 'webhook_node') {
+              const webhookUrl = targetNode.data.url ?? '';
+              if (webhookUrl) {
+                try {
+                  const webhookRes = await Promise.race([
+                    fetch(webhookUrl, {
+                      method: targetNode.data.method ?? 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ call_room: roomName, agent_id: agentId, workspace_id: workspaceId, current_state: currentId }),
+                    }),
+                    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('webhook timeout')), 5000)),
+                  ]);
+                  if (webhookRes.ok) {
+                    const webhookData = (await webhookRes.json()) as Record<string, unknown>;
+                    // After webhook, advance to the first downstream node if this one has edges
+                    const nextEdges = sm.getOutEdges(edge.target);
+                    if (nextEdges[0]) {
+                      sm.setCurrentNodeId(nextEdges[0].target);
+                      setAgentInstructions(sm.buildStateInstructions(
+                        nextEdges[0].target, HARD_CONSTRAINTS, systemPrompt, agentName, TOOLS_GUIDANCE, CALL_TERMINATION_INSTRUCTIONS,
+                      ));
+                      return { transitioned: true, new_state: nextEdges[0].target, webhook_result: webhookData };
+                    }
+                    return { transitioned: true, new_state: edge.target, webhook_result: webhookData };
+                  }
+                } catch (err) {
+                  return { transitioned: false, error: `Webhook failed: ${String(err)}` };
+                }
+              }
+            }
+
+            // Default: update state and rebuild instructions (ai_state, semantic_router)
+            sm.setCurrentNodeId(edge.target);
+            setAgentInstructions(sm.buildStateInstructions(
+              edge.target, HARD_CONSTRAINTS, systemPrompt, agentName, TOOLS_GUIDANCE, CALL_TERMINATION_INSTRUCTIONS,
+            ));
+            const newNode = sm.getNode(edge.target);
+            return {
+              transitioned: true,
+              new_state: edge.target,
+              state_name: newNode?.data?.state_name ?? edge.target,
+            };
+          },
+        })
+      : null;
 
     const agent = new voice.Agent({
-      instructions: instructionParts.join('\n\n'),
+      instructions: initialInstructions,
       stt,
       llm: lm,
       tts,
@@ -566,6 +806,8 @@ export default defineAgent({
         ...dynamicTools,
         // Pilar C: knowledge base search
         ...(ragTool ? { search_knowledge_base: ragTool } : {}),
+        // Pilar E: state machine transition
+        ...(transitionStateTool ? { transition_state: transitionStateTool } : {}),
         // Intelligent call termination
         end_call: endCallTool,
       },
@@ -592,6 +834,9 @@ export default defineAgent({
         preemptiveGeneration: {},
       },
     });
+
+    // Wire mutable ref so transition_state tool can update agent.instructions
+    agentRef.current = agent;
 
     const session = new voice.AgentSession({ stt, llm: lm, tts });
 
