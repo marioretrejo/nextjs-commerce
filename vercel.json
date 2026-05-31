@@ -62,7 +62,7 @@
     },
     {
       "path": "/api/cron/campaign-dial",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
