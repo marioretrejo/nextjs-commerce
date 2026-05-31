@@ -20,7 +20,7 @@ export type MemberStatus = 'active' | 'pending';
 export type PhoneStatus = 'available' | 'in_use' | 'suspended';
 export type DocType = 'pdf' | 'docx' | 'text' | 'url';
 export type DocStatus = 'processing' | 'ready' | 'error';
-export type IntegrationType = 'hubspot' | 'gohighlevel' | 'salesforce' | 'zapier' | 'make' | 'calendly' | 'google_calendar' | 'twilio' | 'telnyx' | 'webhook';
+export type IntegrationType = 'hubspot' | 'gohighlevel' | 'salesforce' | 'zapier' | 'make' | 'calendly' | 'google_calendar' | 'twilio' | 'telnyx' | 'webhook' | 'telegram' | 'n8n' | 'teams';
 export type IntegrationStatus = 'connected' | 'disconnected';
 export type NotificationType = 'minutes_80' | 'minutes_100' | 'campaign_completed' | 'contact_converted' | 'qa_alert' | 'team_invite' | 'payment_failed' | 'broadcast';
 
@@ -261,6 +261,7 @@ export interface Call {
   retell_call_id: string | null;
   cost_usd: number;
   tokens_used: number | null;
+  extracted_data: Record<string, unknown> | null;
   created_at: string;
   agent?: Agent;
   campaign?: Campaign;
