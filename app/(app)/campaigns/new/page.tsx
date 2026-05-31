@@ -37,6 +37,7 @@ export default function NewCampaignPage() {
     max_concurrency: 5,
     retry_enabled: true,
     retry_interval_hours: 24,
+    max_retries: 3,
     respect_schedule: true,
     timezone: 'America/New_York',
     start_at: '',
@@ -107,6 +108,7 @@ export default function NewCampaignPage() {
         ...form,
         workspace_id: workspaceId,
         ab_agent_id: form.ab_enabled && form.ab_agent_id ? form.ab_agent_id : null,
+        max_retries: form.retry_enabled ? form.max_retries : 0,
       };
       const res = await fetch('/api/campaigns', {
         method: 'POST',
@@ -196,13 +198,19 @@ export default function NewCampaignPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Retry Interval (hours) <FieldTooltip text="How long to wait before retrying a contact who didn't answer. 24 hours is recommended to avoid appearing as spam." /></Label>
-                <Input type="number" min={1} value={form.retry_interval_hours} onChange={(e) => setForm((f) => ({ ...f, retry_interval_hours: Number(e.target.value) }))} />
+                <Input type="number" min={1} value={form.retry_interval_hours} onChange={(e) => setForm((f) => ({ ...f, retry_interval_hours: Number(e.target.value) }))} disabled={!form.retry_enabled} />
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={form.retry_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, retry_enabled: v }))} />
               <Label>Enable Auto-Retry</Label>
             </div>
+            {form.retry_enabled && (
+              <div className="space-y-1.5">
+                <Label>Max Retries per Contact <FieldTooltip text="Maximum number of retry attempts per contact. After this many no-answer calls, the contact is marked as 'max_attempts' and skipped." /></Label>
+                <Input type="number" min={1} max={10} value={form.max_retries} onChange={(e) => setForm((f) => ({ ...f, max_retries: Number(e.target.value) }))} />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -368,7 +376,7 @@ export default function NewCampaignPage() {
                 ] : []),
                 { label: 'Contacts', value: `${contacts.length} contacts` },
                 { label: 'Concurrency', value: `${form.max_concurrency} simultaneous calls` },
-                { label: 'Retry', value: form.retry_enabled ? `Yes, every ${form.retry_interval_hours}h` : 'No' },
+                { label: 'Retry', value: form.retry_enabled ? `Yes, every ${form.retry_interval_hours}h · max ${form.max_retries}× per contact` : 'No' },
                 { label: 'Timezone', value: form.timezone },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between px-4 py-2.5 text-sm">

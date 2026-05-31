@@ -210,6 +210,7 @@ export interface Campaign {
   max_concurrency: number;
   retry_enabled: boolean;
   retry_interval_hours: number;
+  max_retries: number;
   respect_schedule: boolean;
   total_contacts: number;
   completed_contacts: number;

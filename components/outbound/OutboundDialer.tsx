@@ -18,6 +18,7 @@ interface DialRow {
   status: CallStatus;
   callId?: string;
   error?:  string;
+  attempts: number;
 }
 
 interface Agent {
@@ -96,10 +97,17 @@ export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
   const [maxDuration, setMaxDuration]       = useState(10);   // minutes
   const [ringingTimeout, setRingingTimeout] = useState(25);  // seconds
   const [selectedCallerId, setSelectedCallerId] = useState('');
+  const [maxRetries, setMaxRetries]         = useState(2);   // retry attempts
+  const [retryIntervalMin, setRetryIntervalMin] = useState(5); // minutes between retries
 
   // ── Row mutation helper ───────────────────────────────────────────────────
+  const liveRowsRef = useRef<DialRow[]>([]);
   const updateRow = useCallback((index: number, patch: Partial<DialRow>) => {
-    setRows((prev) => prev.map((r, i) => i === index ? { ...r, ...patch } : r));
+    setRows((prev) => {
+      const next = prev.map((r, i) => i === index ? { ...r, ...patch } : r);
+      liveRowsRef.current = next;
+      return next;
+    });
   }, []);
 
   // ── Dial a single number ──────────────────────────────────────────────────
@@ -113,47 +121,87 @@ export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
         body: JSON.stringify({
           agentId,
           to: row.number,
-          // Advanced call settings
-          amd_enabled:        amdEnabled,
-          amd_action:         amdEnabled ? amdAction : undefined,
-          max_duration_min:   maxDuration,
+          amd_enabled:         amdEnabled,
+          amd_action:          amdEnabled ? amdAction : undefined,
+          max_duration_min:    maxDuration,
           ringing_timeout_sec: ringingTimeout,
-          caller_id:          selectedCallerId || undefined,
+          caller_id:           selectedCallerId || undefined,
         }),
       });
       const data = await res.json() as { call_id?: string; error?: string };
       if (!res.ok) {
-        updateRow(index, { status: 'failed', error: data.error ?? `HTTP ${res.status}` });
+        updateRow(index, { status: 'failed', error: data.error ?? `HTTP ${res.status}`, attempts: row.attempts + 1 });
       } else {
-        updateRow(index, { status: 'success', callId: data.call_id });
+        updateRow(index, { status: 'success', callId: data.call_id, attempts: row.attempts + 1 });
       }
     } catch (err) {
-      updateRow(index, { status: 'failed', error: String(err) });
+      updateRow(index, { status: 'failed', error: String(err), attempts: row.attempts + 1 });
     }
   }
 
-  // ── Start batched dialing ─────────────────────────────────────────────────
+  // ── Dial a batch of rows (indexed pairs so retries land on the right row) ──
+  async function dialBatch(indexed: Array<{ row: DialRow; index: number }>): Promise<void> {
+    for (let i = 0; i < indexed.length; i += concurrency) {
+      if (abortRef.current) break;
+      const slice = indexed.slice(i, i + concurrency);
+      await Promise.allSettled(slice.map(({ row, index }) => dialOne(row, index)));
+      if (i + concurrency < indexed.length && !abortRef.current) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+  }
+
+  // ── Start batched dialing with auto-retry ─────────────────────────────────
   async function startDial() {
     const numbers = parseNumbers(raw);
     if (!numbers.length) { toast.error('Enter at least one phone number.'); return; }
     if (!agentId)        { toast.error('Select an agent.'); return; }
 
-    const initialRows: DialRow[] = numbers.map((n) => ({ number: n, status: 'pending' }));
+    const initialRows: DialRow[] = numbers.map((n) => ({ number: n, status: 'pending', attempts: 0 }));
+    liveRowsRef.current = initialRows;
     setRows(initialRows);
     setRunning(true);
     abortRef.current = false;
 
-    for (let i = 0; i < initialRows.length; i += concurrency) {
+    // First pass
+    await dialBatch(initialRows.map((row, index) => ({ row, index })));
+
+    // Retry passes — use liveRowsRef to get up-to-date statuses without React state lag
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (abortRef.current) break;
-      const batch = initialRows.slice(i, i + concurrency).map((_, j) => dialOne(initialRows[i + j]!, i + j));
-      await Promise.allSettled(batch);
-      if (i + concurrency < initialRows.length && !abortRef.current) {
-        await new Promise((r) => setTimeout(r, 1500));
-      }
+
+      const failedIndexes = liveRowsRef.current
+        .map((r, i) => (r.status === 'failed' ? i : -1))
+        .filter((i) => i !== -1);
+
+      if (failedIndexes.length === 0) break;
+
+      // Show countdown toast and wait
+      const toastId = toast.loading(
+        `Retry ${attempt}/${maxRetries}: redialing ${failedIndexes.length} number${failedIndexes.length > 1 ? 's' : ''} in ${retryIntervalMin} min…`,
+        { duration: retryIntervalMin * 60 * 1000 }
+      );
+      await new Promise((r) => setTimeout(r, retryIntervalMin * 60 * 1000));
+      toast.dismiss(toastId);
+
+      if (abortRef.current) break;
+
+      // Reset failed rows to pending
+      setRows((prev) => {
+        const next = prev.map((r, i) =>
+          failedIndexes.includes(i) ? { ...r, status: 'pending' as CallStatus } : r
+        );
+        liveRowsRef.current = next;
+        return next;
+      });
+
+      // Re-dial the failed rows
+      const toRetry = failedIndexes.map((i) => ({ row: liveRowsRef.current[i]!, index: i }));
+      await dialBatch(toRetry);
     }
 
     setRunning(false);
-    toast.success(`Dial session complete.`);
+    toast.success('Dial session complete.');
   }
 
   function stopDial() { abortRef.current = true; }
@@ -394,6 +442,39 @@ export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
                   )}
                 </div>
 
+                {/* Retry settings */}
+                <div className="pt-2 border-t border-[#f0f0f0]">
+                  <p className="text-xs font-medium text-[#0a0a0a] mb-3">Auto-Retry (failed calls)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-[#0a0a0a]">Max Retries</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={5}
+                        value={maxRetries}
+                        onChange={(e) => setMaxRetries(Math.max(0, Math.min(5, Number(e.target.value))))}
+                        disabled={running}
+                        className={INPUT_CLS}
+                      />
+                      <p className="text-[11px] text-[#a0a0a0]">0 = no retry, max 5</p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-[#0a0a0a]">Retry Wait (min)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={retryIntervalMin}
+                        onChange={(e) => setRetryIntervalMin(Math.max(1, Math.min(60, Number(e.target.value))))}
+                        disabled={running || maxRetries === 0}
+                        className={INPUT_CLS}
+                      />
+                      <p className="text-[11px] text-[#a0a0a0]">Wait before each retry</p>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             )}
           </div>
@@ -446,17 +527,18 @@ export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
           {/* ── Per-number status list ── */}
           {rows.length > 0 && (
             <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
-              <div className="grid grid-cols-[1fr_100px_1fr] gap-3 px-4 py-2 border-b border-[#f0f0f0] text-[11px] font-medium text-[#a0a0a0] uppercase tracking-wide">
-                <span>Number</span><span>Status</span><span>Details</span>
+              <div className="grid grid-cols-[1fr_100px_50px_1fr] gap-3 px-4 py-2 border-b border-[#f0f0f0] text-[11px] font-medium text-[#a0a0a0] uppercase tracking-wide">
+                <span>Number</span><span>Status</span><span>Tries</span><span>Details</span>
               </div>
               <div className="max-h-64 overflow-y-auto divide-y divide-[#f5f5f5]">
                 {rows.map((row, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_100px_1fr] gap-3 px-4 py-2.5 items-center text-sm">
+                  <div key={i} className="grid grid-cols-[1fr_100px_50px_1fr] gap-3 px-4 py-2.5 items-center text-sm">
                     <span className="font-mono text-[13px] text-[#0a0a0a]">{row.number}</span>
                     <div className="flex items-center gap-1.5">
                       <StatusIcon status={row.status} />
                       {statusBadge(row.status)}
                     </div>
+                    <span className="text-xs text-center text-[#6b6b6b]">{row.attempts}</span>
                     <span className="text-xs text-[#6b6b6b] truncate">
                       {row.status === 'success' && row.callId ? (
                         <span className="font-mono text-green-700">{row.callId.slice(-12)}</span>

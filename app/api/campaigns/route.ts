@@ -15,6 +15,7 @@ const CreateCampaignSchema = z.object({
   max_concurrency: z.number().int().min(1).max(100).optional(),
   retry_enabled: z.boolean().optional(),
   retry_interval_hours: z.number().int().min(1).optional(),
+  max_retries: z.number().int().min(0).max(10).optional(),
   respect_schedule: z.boolean().optional(),
 });
 
@@ -63,6 +64,7 @@ export async function POST(req: Request) {
     max_concurrency: body.max_concurrency ?? 5,
     retry_enabled: body.retry_enabled ?? true,
     retry_interval_hours: body.retry_interval_hours ?? 24,
+    max_retries: body.max_retries ?? 3,
     respect_schedule: body.respect_schedule ?? true
   }).select().single();
 
