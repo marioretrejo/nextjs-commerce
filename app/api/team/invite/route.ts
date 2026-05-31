@@ -4,6 +4,7 @@ import { sendTeamInvite } from '@/lib/email';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { apiError, apiOk, parseBody } from '@/lib/api';
+import { notifyWorkspace } from '@/lib/notifications/activity';
 
 const InviteSchema = z.object({
   email: z.string().email(),
@@ -69,12 +70,21 @@ export async function POST(req: Request) {
   }
 
   // Send invite email for new (pending) members
+  const inviterName = (user.user_metadata?.['full_name'] as string | undefined) ?? user.email ?? 'A teammate';
   if (!inviteeId) {
-    const inviterName = (user.user_metadata?.['full_name'] as string | undefined) ?? user.email ?? 'A teammate';
     const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
     sendTeamInvite({ to: email, inviterName, workspaceName: workspace.name, inviteToken, appUrl })
       .catch(console.error);
   }
+
+  void notifyWorkspace({
+    workspaceId: wsId,
+    type: 'team_invite',
+    title: 'Team member invited',
+    message: `${inviterName} invited ${email} to the workspace as ${role}.`,
+    link: '/team',
+    actorName: inviterName,
+  });
 
   return apiOk(data, 201);
 }

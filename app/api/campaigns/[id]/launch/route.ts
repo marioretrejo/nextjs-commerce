@@ -4,6 +4,7 @@ import { retell } from '@/lib/retell/client';
 import { checkMinuteLimit, minuteLimitBlockedResponse } from '@/lib/checkMinuteLimit';
 import type { Agent, Campaign, CampaignContact } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
+import { notifyWorkspace } from '@/lib/notifications/activity';
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -73,6 +74,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         retell_batch_call_id: batch.batch_call_id
       }).eq('id', id);
 
+      void notifyWorkspace({
+        workspaceId: c.workspace_id,
+        title: 'Campaign launched',
+        message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
+        link: `/campaigns/${id}`,
+      });
+
       return NextResponse.json({ batch_call_id: batch.batch_call_id, contacts: contacts.length });
     } catch (e) {
       return NextResponse.json({ error: String(e) }, { status: 500 });
@@ -81,5 +89,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   // Fallback: mark as active
   await admin.from('campaigns').update({ status: 'active' }).eq('id', id);
+  void notifyWorkspace({
+    workspaceId: c.workspace_id,
+    title: 'Campaign launched',
+    message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
+    link: `/campaigns/${id}`,
+  });
   return NextResponse.json({ ok: true, contacts: contacts.length });
 }

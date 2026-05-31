@@ -15,34 +15,60 @@ import {
   TrendingUp,
   Volume2,
   BellOff,
+  Activity,
+  ChevronRight,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 
-function notificationIcon(type: NotificationType) {
-  const iconProps = { className: 'w-5 h-5 shrink-0' };
+function NotifIcon({ type }: { type: NotificationType }) {
+  const cls = 'w-4 h-4 shrink-0';
   const map: Record<NotificationType, React.ReactNode> = {
-    minutes_80:          <AlertTriangle {...iconProps} />,
-    minutes_100:         <AlertTriangle {...iconProps} />,
-    campaign_completed:  <CheckCircle {...iconProps} />,
-    contact_converted:   <TrendingUp {...iconProps} />,
-    qa_alert:            <Volume2 {...iconProps} />,
-    team_invite:         <UserPlus {...iconProps} />,
-    payment_failed:      <CreditCard {...iconProps} />,
-    broadcast:           <Megaphone {...iconProps} />,
+    minutes_80:          <AlertTriangle className={cls} />,
+    minutes_100:         <AlertTriangle className={cls} />,
+    campaign_completed:  <CheckCircle className={cls} />,
+    contact_converted:   <TrendingUp className={cls} />,
+    qa_alert:            <Volume2 className={cls} />,
+    team_invite:         <UserPlus className={cls} />,
+    payment_failed:      <CreditCard className={cls} />,
+    broadcast:           <Megaphone className={cls} />,
+    activity:            <Activity className={cls} />,
   };
-  return map[type] ?? <Bell {...iconProps} />;
+  return <>{map[type] ?? <Bell className={cls} />}</>;
 }
 
-function notificationAccent(type: NotificationType): string {
-  const warnings: NotificationType[] = ['minutes_80', 'minutes_100', 'payment_failed', 'qa_alert'];
-  if (warnings.includes(type)) return 'text-[#0a0a0a]';
+function accentClass(type: NotificationType): string {
+  if (['minutes_80', 'minutes_100', 'payment_failed', 'qa_alert'].includes(type))
+    return 'text-amber-500';
+  if (type === 'broadcast') return 'text-blue-500';
+  if (type === 'team_invite') return 'text-violet-500';
+  if (type === 'contact_converted' || type === 'campaign_completed') return 'text-emerald-500';
   return 'text-[#6b6b6b]';
 }
+
+function bgClass(type: NotificationType): string {
+  if (['minutes_80', 'minutes_100', 'payment_failed', 'qa_alert'].includes(type))
+    return 'bg-amber-50';
+  if (type === 'broadcast') return 'bg-blue-50';
+  if (type === 'team_invite') return 'bg-violet-50';
+  if (type === 'contact_converted' || type === 'campaign_completed') return 'bg-emerald-50';
+  return 'bg-[#f5f5f5]';
+}
+
+type Filter = 'all' | 'unread' | 'broadcast' | 'activity';
+
+const FILTERS: { label: string; value: Filter }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Unread', value: 'unread' },
+  { label: 'Broadcasts', value: 'broadcast' },
+  { label: 'Activity', value: 'activity' },
+];
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -69,104 +95,152 @@ export default function NotificationsPage() {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   }
 
+  const filtered = notifications.filter(n => {
+    if (filter === 'unread') return !n.read;
+    if (filter === 'broadcast') return n.type === 'broadcast';
+    if (filter === 'activity') return n.type === 'activity' || n.type === 'team_invite' || n.type === 'campaign_completed';
+    return true;
+  });
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-3xl mx-auto space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Notifications</h1>
             {unreadCount > 0 && (
-              <Badge className="bg-[#0a0a0a] text-white border-transparent">
+              <Badge className="bg-[#0a0a0a] text-white border-transparent text-xs">
                 {unreadCount}
               </Badge>
             )}
           </div>
-          <p className="mt-1 text-sm text-[#6b6b6b]">Stay up to date with your workspace activity.</p>
+          <p className="mt-0.5 text-sm text-[#6b6b6b]">
+            Platform broadcasts, activity log, and workspace alerts.
+          </p>
         </div>
         {unreadCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={markAllRead}
-            disabled={markingAll}
-          >
-            <CheckCircle className="w-4 h-4 mr-1" />
+          <Button variant="outline" size="sm" onClick={markAllRead} disabled={markingAll}>
+            <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
             {markingAll ? 'Marking…' : 'Mark All Read'}
           </Button>
         )}
       </div>
 
-      <Card>
+      {/* Filter tabs */}
+      <div className="flex gap-1 border-b border-[#e8e8e8]">
+        {FILTERS.map(f => (
+          <button
+            key={f.value}
+            onClick={() => setFilter(f.value)}
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+              filter === f.value
+                ? 'border-[#0a0a0a] text-[#0a0a0a]'
+                : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+            }`}
+          >
+            {f.label}
+            {f.value === 'unread' && unreadCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#0a0a0a] text-white text-[9px] font-bold">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <Card className="border-[#e8e8e8]">
         {loading ? (
           <CardContent className="p-0">
-            <div className="divide-y divide-[#e0e0e0]">
+            <div className="divide-y divide-[#f0f0f0]">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-start gap-3 px-5 py-4">
-                  <div className="w-5 h-5 bg-[#f5f5f5] rounded animate-pulse shrink-0 mt-0.5" />
-                  <div className="flex-1 space-y-2">
-                    <div className="w-48 h-4 bg-[#f5f5f5] rounded animate-pulse" />
+                  <div className="w-8 h-8 bg-[#f5f5f5] rounded-lg animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="w-48 h-3.5 bg-[#f5f5f5] rounded animate-pulse" />
                     <div className="w-full h-3 bg-[#f5f5f5] rounded animate-pulse" />
                   </div>
                 </div>
               ))}
             </div>
           </CardContent>
-        ) : notifications.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <CardContent className="flex flex-col items-center justify-center py-20">
-            <BellOff className="w-12 h-12 text-[#e0e0e0] mb-4" />
+            <BellOff className="w-10 h-10 text-[#e0e0e0] mb-3" />
             <p className="text-[#0a0a0a] font-medium mb-1">No notifications</p>
-            <p className="text-sm text-[#6b6b6b]">You're all caught up. Notifications will appear here.</p>
+            <p className="text-sm text-[#6b6b6b]">
+              {filter === 'unread' ? 'You\'re all caught up.' : 'Nothing here yet.'}
+            </p>
           </CardContent>
         ) : (
           <CardContent className="p-0">
-            <div className="divide-y divide-[#e0e0e0]">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`flex items-start gap-3 px-5 py-4 transition-colors cursor-pointer hover:bg-[#f5f5f5] ${
-                    !notification.read ? 'bg-[#fafafa]' : ''
-                  }`}
-                  onClick={() => { if (!notification.read) markRead(notification.id); }}
-                >
-                  {/* Unread dot */}
-                  <div className="relative shrink-0 mt-0.5">
-                    <span className={notificationAccent(notification.type)}>
-                      {notificationIcon(notification.type)}
-                    </span>
-                    {!notification.read && (
-                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#0a0a0a]" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className={`text-sm font-medium ${notification.read ? 'text-[#6b6b6b]' : 'text-[#0a0a0a]'}`}>
-                        {notification.title}
-                      </p>
-                      <span
-                        className="text-xs text-[#6b6b6b] shrink-0"
-                        title={format(new Date(notification.created_at), 'PPpp')}
-                      >
-                        {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+            <div className="divide-y divide-[#f0f0f0]">
+              {filtered.map((n) => {
+                const row = (
+                  <div
+                    key={n.id}
+                    className={`flex items-start gap-3 px-5 py-4 transition-colors ${
+                      !n.read ? 'bg-[#fafafa]' : ''
+                    } ${n.link ? 'cursor-pointer hover:bg-[#f5f5f5]' : ''}`}
+                    onClick={() => { if (!n.read) markRead(n.id); }}
+                  >
+                    {/* Icon badge */}
+                    <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ${bgClass(n.type)}`}>
+                      <span className={accentClass(n.type)}>
+                        <NotifIcon type={n.type} />
                       </span>
                     </div>
-                    <p className={`text-sm mt-0.5 ${notification.read ? 'text-[#6b6b6b]' : 'text-[#0a0a0a]'}`}>
-                      {notification.message}
-                    </p>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`text-sm font-semibold leading-tight ${n.read ? 'text-[#6b6b6b]' : 'text-[#0a0a0a]'}`}>
+                            {n.title}
+                          </p>
+                          {!n.read && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0a0a0a] shrink-0" />
+                          )}
+                        </div>
+                        <span
+                          className="text-[11px] text-[#9b9b9b] shrink-0 mt-0.5"
+                          title={format(new Date(n.created_at), 'PPpp')}
+                        >
+                          {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                        </span>
+                      </div>
+                      <p className={`text-sm mt-0.5 leading-snug ${n.read ? 'text-[#9b9b9b]' : 'text-[#3a3a3a]'}`}>
+                        {n.message}
+                      </p>
+                      {n.actor_name && (
+                        <p className="text-[11px] text-[#b0b0b0] mt-0.5">by {n.actor_name}</p>
+                      )}
+                    </div>
+
+                    {n.link && (
+                      <ChevronRight className="w-4 h-4 text-[#c0c0c0] shrink-0 mt-2" />
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+
+                return n.link ? (
+                  <Link key={n.id} href={n.link} onClick={() => { if (!n.read) markRead(n.id); }}>
+                    {row}
+                  </Link>
+                ) : (
+                  <div key={n.id}>{row}</div>
+                );
+              })}
             </div>
           </CardContent>
         )}
       </Card>
 
-      {!loading && notifications.length > 0 && (
-        <p className="mt-3 text-xs text-[#6b6b6b] text-center">
-          Showing {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
+      {!loading && filtered.length > 0 && (
+        <p className="text-xs text-[#9b9b9b] text-center">
+          {filtered.length} notification{filtered.length !== 1 ? 's' : ''}
+          {filter !== 'all' && ` · filtered by "${filter}"`}
         </p>
       )}
     </div>

@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { apiError, apiOk, parseBody } from '@/lib/api';
+import { notifyWorkspace } from '@/lib/notifications/activity';
 
 const CreateAgentSchema = z.object({
   workspace_id: z.string().uuid(),
@@ -140,5 +141,15 @@ export async function POST(req: Request) {
   if (!agent) return apiError('Insert failed', 500);
 
   revalidatePath('/agents');
+
+  const a = agent as unknown as { id: string; name: string; workspace_id: string };
+  void notifyWorkspace({
+    workspaceId: a.workspace_id,
+    title: 'Agent created',
+    message: `Agent "${a.name}" was created.`,
+    link: `/agents/${a.id}`,
+    actorName: (user as { email?: string }).email ?? undefined,
+  });
+
   return apiOk(sanitizeAgentForClient(agent as unknown as Record<string, unknown>), 201);
 }

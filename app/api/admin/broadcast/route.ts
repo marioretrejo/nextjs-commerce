@@ -12,20 +12,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { title, message } = await req.json() as { title: string; message: string };
-  if (!title || !message) return NextResponse.json({ error: 'title and message required' }, { status: 400 });
+  const body = await req.json() as { title?: string; message?: string };
+  const { title, message } = body;
+  if (!title?.trim() || !message?.trim()) {
+    return NextResponse.json({ error: 'title and message required' }, { status: 400 });
+  }
 
   const admin = createAdminClient();
 
   // Get all user IDs
-  const { data: users } = await admin.from('users').select('id');
+  const { data: users, error: usersErr } = await admin.from('users').select('id');
+  if (usersErr) return NextResponse.json({ error: usersErr.message }, { status: 500 });
   if (!users?.length) return NextResponse.json({ ok: true, sent: 0 });
 
   const notifications = (users as { id: string }[]).map((u) => ({
     user_id: u.id,
-    type: 'broadcast' as const,
-    title,
-    message
+    type: 'broadcast',
+    title: title.trim(),
+    message: message.trim(),
   }));
 
   const { error } = await admin.from('notifications').insert(notifications);

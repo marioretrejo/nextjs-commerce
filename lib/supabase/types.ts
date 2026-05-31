@@ -22,7 +22,7 @@ export type DocType = 'pdf' | 'docx' | 'text' | 'url';
 export type DocStatus = 'processing' | 'ready' | 'error';
 export type IntegrationType = 'hubspot' | 'gohighlevel' | 'salesforce' | 'zapier' | 'make' | 'calendly' | 'google_calendar' | 'twilio' | 'telnyx' | 'webhook' | 'telegram' | 'n8n' | 'teams';
 export type IntegrationStatus = 'connected' | 'disconnected';
-export type NotificationType = 'minutes_80' | 'minutes_100' | 'campaign_completed' | 'contact_converted' | 'qa_alert' | 'team_invite' | 'payment_failed' | 'broadcast';
+export type NotificationType = 'minutes_80' | 'minutes_100' | 'campaign_completed' | 'contact_converted' | 'qa_alert' | 'team_invite' | 'payment_failed' | 'broadcast' | 'activity';
 
 export interface User {
   id: string;
@@ -306,6 +306,8 @@ export interface Notification {
   message: string;
   read: boolean;
   created_at: string;
+  link: string | null;
+  actor_name: string | null;
 }
 
 export interface BillingInvoice {
