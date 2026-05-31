@@ -59,6 +59,11 @@ export interface Workspace {
   minute_cap: number | null;
   billing_status: 'active' | 'suspended_for_nonpayment';
   stripe_balance_cents: number;
+  // Stripe subscription fields (migration 036)
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_price_id: string | null;
+  subscription_status: string;
   // Legacy suspension (kept for backwards compat)
   is_suspended?: boolean;
   api_rate_limit_rps?: number | null;

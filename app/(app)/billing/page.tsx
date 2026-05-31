@@ -4,9 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import type { BillingInvoice, Plan } from '@/lib/supabase/types';
-import { CreditCard, FileText, Zap, Check, ExternalLink } from 'lucide-react';
+import { CreditCard, FileText, Zap, Check, ExternalLink, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { EnterpriseInquiryModal } from '@/components/billing/enterprise-inquiry-modal';
 
@@ -75,12 +74,16 @@ const PLANS: PlanDef[] = [
 
 async function handleUpgrade(plan: Plan) {
   'use server';
-  const res = await fetch(`${process.env['NEXT_PUBLIC_APP_URL'] ?? ''}/api/billing/checkout`, {
+  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? '';
+  const res = await fetch(`${appUrl}/api/stripe/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plan }),
   });
-  if (!res.ok) throw new Error('Checkout failed — please try again.');
+  if (!res.ok) {
+    const err = await res.json() as { error?: string };
+    throw new Error(err.error ?? 'Checkout failed — please try again.');
+  }
   const d = await res.json() as { url: string };
   if (d.url) {
     const { redirect } = await import('next/navigation');
@@ -91,10 +94,12 @@ async function handleUpgrade(plan: Plan) {
 
 async function handlePortal() {
   'use server';
-  const res = await fetch(`${process.env['NEXT_PUBLIC_APP_URL'] ?? ''}/api/billing/portal`, {
-    method: 'POST',
-  });
-  if (!res.ok) throw new Error('Portal access failed — please try again.');
+  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? '';
+  const res = await fetch(`${appUrl}/api/stripe/portal`, { method: 'POST' });
+  if (!res.ok) {
+    const err = await res.json() as { error?: string };
+    throw new Error(err.error ?? 'Portal access failed — please try again.');
+  }
   const d = await res.json() as { url: string };
   if (d.url) {
     const { redirect } = await import('next/navigation');
@@ -126,6 +131,10 @@ export default async function BillingPage() {
 
   const planDef: PlanDef = (PLANS.find(p => p.name === currentPlan) ?? PLANS[0]) as PlanDef;
 
+  const wsAny = workspace as (typeof workspace & { stripe_customer_id?: string | null; subscription_status?: string }) | undefined;
+  const hasStripeCustomer = !!(wsAny?.stripe_customer_id ?? user?.stripe_customer_id);
+  const subscriptionStatus = wsAny?.subscription_status ?? user?.subscription_status;
+
   function planBadge(plan: Plan) {
     const map: Record<Plan, string> = {
       free:  'border-[#e0e0e0] text-[#6b6b6b] bg-white',
@@ -143,14 +152,22 @@ export default async function BillingPage() {
           <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Billing</h1>
           <p className="mt-1 text-sm text-[#6b6b6b]">Manage your subscription, minutes, and invoices.</p>
         </div>
-        {user?.stripe_customer_id ? (
-          <form action={handlePortal}>
-            <Button variant="outline" type="submit">
-              <CreditCard className="w-4 h-4 mr-2" />
-              Manage Billing
-            </Button>
-          </form>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {subscriptionStatus && subscriptionStatus !== 'trialing' && subscriptionStatus !== 'canceled' && (
+            <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-xs font-medium text-emerald-700 capitalize">{subscriptionStatus}</span>
+            </div>
+          )}
+          {hasStripeCustomer ? (
+            <form action={handlePortal}>
+              <Button variant="outline" type="submit">
+                <CreditCard className="w-4 h-4 mr-2" />
+                Manage Billing
+              </Button>
+            </form>
+          ) : null}
+        </div>
       </div>
 
       {/* Current plan + usage */}
