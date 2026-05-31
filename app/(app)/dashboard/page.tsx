@@ -37,11 +37,11 @@ async function DashboardContent() {
   today.setHours(0, 0, 0, 0);
 
   const [
-    { count: totalAgents },
-    { count: activeAgents },
-    { count: callsToday },
-    { data: recentCalls },
-    { data: campaigns }
+    { count: totalAgents,  error: agentsErr },
+    { count: activeAgents, error: activeErr },
+    { count: callsToday,   error: todayErr },
+    { data: recentCalls,   error: recentErr },
+    { data: campaigns,     error: campaignsErr }
   ] = await Promise.all([
     supabase.from('agents').select('*', { count: 'exact', head: true }).eq('workspace_id', workspace.id),
     supabase.from('agents').select('*', { count: 'exact', head: true }).eq('workspace_id', workspace.id).eq('status', 'active'),
@@ -49,6 +49,9 @@ async function DashboardContent() {
     supabase.from('calls').select('id, duration_seconds, outcome, sentiment, created_at').eq('workspace_id', workspace.id).order('created_at', { ascending: false }).limit(100),
     supabase.from('campaigns').select('id, status').eq('workspace_id', workspace.id)
   ]);
+
+  const dashErr = agentsErr ?? activeErr ?? todayErr ?? recentErr ?? campaignsErr;
+  if (dashErr) console.error('dashboard: query error', dashErr.message);
 
   const totalCalls = recentCalls?.length ?? 0;
   const converted = recentCalls?.filter((c) => c.outcome === 'converted').length ?? 0;

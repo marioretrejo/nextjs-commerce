@@ -289,7 +289,7 @@ export default function FlowBuilderPage({
   // Load saved flow_config on mount
   useEffect(() => {
     fetch(`/api/agents/${id}/flow`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d: { flow_config: FlowConfig | null }) => {
         if (d.flow_config?.nodes?.length) {
           setNodes(d.flow_config.nodes);

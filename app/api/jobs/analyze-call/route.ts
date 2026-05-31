@@ -150,6 +150,7 @@ export async function POST(req: Request) {
   }
 
   if (!callRecord.transcript || callRecord.transcript.length < 50) {
+    console.warn('analyze-call: no transcript after 4 attempts', { room_name });
     return NextResponse.json({ skipped: true, reason: 'Transcript too short for analysis' });
   }
 

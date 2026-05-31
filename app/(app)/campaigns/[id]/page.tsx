@@ -68,7 +68,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     // Realtime for contacts
     const contactsChannel = supabase.channel(`campaign-contacts-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_contacts', filter: `campaign_id=eq.${id}` },
-        () => { refetchContacts(); refetchCampaign(); })
+        () => { void Promise.allSettled([refetchContacts(), refetchCampaign()]); })
       .subscribe();
 
     // Realtime for campaign row (metrics updates)

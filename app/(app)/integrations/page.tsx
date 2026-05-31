@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import type { Integration, IntegrationType, IntegrationStatus } from '@/lib/supabase/types';
 import { Link2, Link2Off, Webhook, RefreshCw, Send, CheckCircle2, Settings2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // ── Integration catalogue ─────────────────────────────────────────────────────
 
@@ -370,7 +371,7 @@ export default function IntegrationsPage() {
     fetch('/api/admin/workspace-id')
       .then(r => r.json())
       .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
-      .catch(() => {});
+      .catch(() => toast.error('Failed to load workspace'));
   }, []);
 
   const fetchIntegrations = useCallback(async () => {
@@ -423,6 +424,7 @@ export default function IntegrationsPage() {
 
   // ── Credential form save (for Telegram, Teams, n8n, Google Calendar) ─────
   async function saveCredentials(type: IntegrationType, fields: Record<string, string>) {
+    if (!workspaceId) { toast.error('Workspace not loaded — please refresh'); return; }
     const def = INTEGRATIONS.find(i => i.type === type)!;
     const webhookFieldId = def.webhookField;
 

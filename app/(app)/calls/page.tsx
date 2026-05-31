@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import type { Call, CallOutcome, CallSentiment, CallDisposition } from '@/lib/supabase/types';
 import { Phone, Search, Clock, User, Bot, ExternalLink, FileText } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 type OutcomeFilter = 'all' | CallOutcome;
 type DispositionFilter = 'all' | CallDisposition;
@@ -62,7 +63,7 @@ export default function CallsPage() {
     fetch('/api/admin/workspace-id')
       .then((r) => r.json())
       .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
-      .catch(() => setLoading(false));
+      .catch(() => { setLoading(false); toast.error('Failed to load workspace data'); });
   }, []);
 
   const fetchCalls = useCallback(async () => {

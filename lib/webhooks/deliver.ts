@@ -68,7 +68,7 @@ async function getCallEnrichment(
 }> {
   const { data: call } = await admin
     .from('calls')
-    .select('id, transcript_json, recording_url, analysis_result, duration_seconds')
+    .select('id, transcript, recording_url, summary, duration_seconds')
     .eq('retell_call_id', roomName)
     .limit(1)
     .single();
@@ -79,17 +79,17 @@ async function getCallEnrichment(
 
   const c = call as {
     id: string;
-    transcript_json: unknown;
+    transcript: string | null;
     recording_url: string | null;
-    analysis_result: unknown;
+    summary: string | null;
     duration_seconds: number;
   };
 
   return {
     call_id:          c.id,
-    transcript:       c.transcript_json ?? null,
-    recording_url:    c.recording_url   ?? null,
-    analysis:         c.analysis_result ?? null,
+    transcript:       c.transcript    ?? null,
+    recording_url:    c.recording_url ?? null,
+    analysis:         c.summary       ?? null,
     duration_seconds: c.duration_seconds ?? 0,
   };
 }

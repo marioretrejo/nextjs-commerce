@@ -133,7 +133,7 @@ export async function POST(req: Request) {
       .select('id, is_suspended, minutes_used, minutes_limit, active_calls, concurrent_calls_limit')
       .eq('owner_id', user.id)
       .single(),
-    admin.from('agents').select('id, name, system_prompt, first_message, voice_id, voice_emotion, flow_json, transfer_number').eq('id', agentId).single(),
+    admin.from('agents').select('id, name, system_prompt, first_message, voice_id, voice_emotion, flow_json, flow_config, transfer_number').eq('id', agentId).single(),
   ]);
 
   const workspace = ws as { id: string; is_suspended: boolean; minutes_used: number; minutes_limit: number } | null;
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'LiveKit not configured.' }, { status: 500 });
   }
 
-  const agent = agentRow as { id: string; name: string; system_prompt: string | null; first_message: string | null; voice_id: string | null; voice_emotion: string | null; flow_json: unknown | null; transfer_number: string | null };
+  const agent = agentRow as { id: string; name: string; system_prompt: string | null; first_message: string | null; voice_id: string | null; voice_emotion: string | null; flow_json: unknown | null; flow_config: unknown | null; transfer_number: string | null };
   const roomName = `agent-${agentId}-${Date.now()}`;
 
   const maxDurationSec = max_duration_min ? max_duration_min * 60 : 600;
@@ -171,7 +171,8 @@ export async function POST(req: Request) {
         first_message: agent.first_message, voice_id: agent.voice_id,
         voice_emotion: agent.voice_emotion, workspace_id: workspace.id,
         call_direction: 'outbound', dynamic_variables: variables, recipient_number: to,
-        flow_json: agent.flow_json ?? null,
+        flow_json:   agent.flow_json   ?? null,
+        flow_config: agent.flow_config ?? null,
         transfer_number: agent.transfer_number ?? null,
       }),
       departureTimeout: maxDurationSec,

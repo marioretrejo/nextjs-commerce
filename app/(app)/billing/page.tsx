@@ -80,13 +80,13 @@ async function handleUpgrade(plan: Plan) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plan }),
   });
-  if (res.ok) {
-    const d = await res.json() as { url: string };
-    if (d.url) {
-      const { redirect } = await import('next/navigation');
-      redirect(d.url);
-    }
+  if (!res.ok) throw new Error('Checkout failed — please try again.');
+  const d = await res.json() as { url: string };
+  if (d.url) {
+    const { redirect } = await import('next/navigation');
+    redirect(d.url);
   }
+  throw new Error('No checkout URL returned — please try again.');
 }
 
 async function handlePortal() {
@@ -94,13 +94,13 @@ async function handlePortal() {
   const res = await fetch(`${process.env['NEXT_PUBLIC_APP_URL'] ?? ''}/api/billing/portal`, {
     method: 'POST',
   });
-  if (res.ok) {
-    const d = await res.json() as { url: string };
-    if (d.url) {
-      const { redirect } = await import('next/navigation');
-      redirect(d.url);
-    }
+  if (!res.ok) throw new Error('Portal access failed — please try again.');
+  const d = await res.json() as { url: string };
+  if (d.url) {
+    const { redirect } = await import('next/navigation');
+    redirect(d.url);
   }
+  throw new Error('No portal URL returned — please try again.');
 }
 
 export default async function BillingPage() {

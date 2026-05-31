@@ -59,6 +59,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
 
+  // C1: verify agent belongs to this workspace — prevents cross-workspace token issuance
+  const agentWorkspaceId = (agent as unknown as { workspace_id?: string })?.workspace_id;
+  if (!agent || agentWorkspaceId !== workspace.id) {
+    return NextResponse.json({ error: 'Agent not found' }, { status: 403 });
+  }
+
   // ── Workspace suspension kill switch ─────────────────────────────────────
   if ((workspace as unknown as { is_suspended?: boolean }).is_suspended) {
     trace.end({ blocked: 'workspace_suspended', workspace_id: workspace.id });
@@ -141,13 +147,16 @@ export async function POST(req: Request) {
     await roomService.createRoom({
       name: roomName,
       metadata: JSON.stringify({
-        agent_name:  agent?.name ?? 'Assistant',
+        agent_id:      agentId,
+        agent_name:    agent?.name ?? 'Assistant',
         system_prompt: augmentedPrompt,
         first_message: agent?.first_message ?? null,
         voice_id:      agent?.voice_id ?? null,
         voice_emotion: agent?.voice_emotion ?? null,
         workspace_id:  workspace.id,
         transfer_number: (agent as unknown as Record<string, unknown>)?.['transfer_number'] ?? null,
+        flow_json:     (agent as unknown as Record<string, unknown>)?.['flow_json'] ?? null,
+        flow_config:   (agent as unknown as Record<string, unknown>)?.['flow_config'] ?? null,
         has_rag:       ragContext !== null,
         region,
       }),

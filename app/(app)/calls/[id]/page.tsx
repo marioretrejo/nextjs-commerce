@@ -58,13 +58,13 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('calls')
     .select('*, agent:agents(name), campaign:campaigns(name)')
     .eq('id', id)
     .single();
 
-  if (!data) notFound();
+  if (error || !data) notFound();
   const call = data as unknown as CallDetail;
 
   return (
@@ -82,7 +82,7 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
             </Badge>
           )}
           {call.sentiment && (
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${SENTIMENT_COLORS[call.sentiment] ?? ''}`}>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${SENTIMENT_COLORS[call.sentiment] ?? 'bg-gray-100 text-gray-700'}`}>
               {call.sentiment}
             </span>
           )}

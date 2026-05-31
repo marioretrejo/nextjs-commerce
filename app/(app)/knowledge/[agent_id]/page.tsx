@@ -25,6 +25,13 @@ export default function KnowledgeBasePage({ params }: { params: Promise<{ agent_
   const [workspaceId, setWorkspaceId] = useState('');
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -92,13 +99,17 @@ export default function KnowledgeBasePage({ params }: { params: Promise<{ agent_
       setForm({ name: '', type: 'text', content_text: '', url: '' });
       toast.success('PDF uploaded — processing…');
 
-      // Poll until status != 'processing'
-      const pollInterval = setInterval(async () => {
+      // Poll until status != 'processing'; ref ensures cleanup on unmount
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = setInterval(async () => {
         const r = await fetch(`/api/knowledge?agent_id=${agent_id}`);
         if (r.ok) {
           const updated = await r.json() as Doc[];
           setDocs(updated);
-          if (updated.every(d => d.status !== 'processing')) clearInterval(pollInterval);
+          if (updated.every(d => d.status !== 'processing')) {
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
+          }
         }
       }, 5000);
     } catch (e) { toast.error(String(e)); }
