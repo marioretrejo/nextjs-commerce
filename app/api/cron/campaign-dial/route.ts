@@ -43,6 +43,8 @@ interface AgentRow {
   flow_json: unknown | null;
   flow_config: unknown | null;
   transfer_number: string | null;
+  amd_enabled: boolean;
+  amd_action: 'hangup' | 'leave_voicemail' | null;
 }
 
 interface WorkspaceRow {
@@ -202,6 +204,16 @@ async function dialContact(params: {
     Timeout: '25',
   });
 
+  // AMD — always respect the agent's answering-machine-detection setting
+  if (agent.amd_enabled) {
+    twilioParams.set('MachineDetection', 'Enable');
+    twilioParams.set('MachineDetectionTimeout', '30');
+    // AsyncAMD sends a separate status callback when detection completes,
+    // so the main webhook still fires immediately and can act on AnsweredBy.
+    twilioParams.set('AsyncAmdStatusCallback', `${appUrl}/api/webhooks/twilio/status`);
+    twilioParams.set('AsyncAmdStatusCallbackMethod', 'POST');
+  }
+
   try {
     const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`, {
       method: 'POST',
@@ -223,7 +235,12 @@ async function dialContact(params: {
       contact_name: contact.name,
       status: 'dialing',
       cost_usd: 0,
-      routing_data: { method: 'twilio_twiml', twilio_call_sid: sid, campaign_dial: true },
+      routing_data: {
+        method: 'twilio_twiml',
+        twilio_call_sid: sid,
+        campaign_dial: true,
+        amd_action: agent.amd_enabled ? (agent.amd_action ?? 'hangup') : null,
+      },
     });
   } catch {
     void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
@@ -289,7 +306,7 @@ export async function GET(req: Request) {
     // ── 3. Load agent ────────────────────────────────────────────────────────
     const { data: agentData } = await admin
       .from('agents')
-      .select('id, name, system_prompt, first_message, voice_id, voice_emotion, flow_json, flow_config, transfer_number')
+      .select('id, name, system_prompt, first_message, voice_id, voice_emotion, flow_json, flow_config, transfer_number, amd_enabled, amd_action')
       .eq('id', campaign.agent_id)
       .single();
     if (!agentData) continue;
