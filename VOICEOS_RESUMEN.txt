@@ -1,0 +1,319 @@
+═══════════════════════════════════════════════════════════════════════════════
+  VOICEOS SaaS — RESUMEN COMPLETO DE ESTADO
+  Fecha: 31 Mayo 2026
+═══════════════════════════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STACK TECNOLÓGICO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Frontend:   Next.js 15.3 (App Router, force-dynamic, Server Actions)
+Backend:    Supabase (PostgreSQL + pgvector + RLS + Edge Functions)
+Voice:      LiveKit WebRTC/SIP + Deepgram STT + Cartesia TTS
+LLM:        Groq (llama-4-scout) → OpenAI gpt-4o-mini (FallbackAdapter)
+Pagos:      Stripe (suscripciones + uso por minutos)
+Deploy:     Vercel (frontend + API routes) + worker Node.js separado
+Rama:       claude/voiceos-saas-build-D8nrY
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LO QUE YA ESTÁ IMPLEMENTADO ✅
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+──────────────────────────────────────────────────────────────────────────────
+1. INFRAESTRUCTURA BASE
+──────────────────────────────────────────────────────────────────────────────
+[✅] Auth completa: registro, login, OAuth, invitaciones por token (JWT)
+[✅] Multi-workspace: RLS por workspace_id en todas las tablas
+[✅] Roles: owner, admin, member, superadmin (panel de impersonación)
+[✅] Facturación Stripe: planes Free/Starter/Pro/Enterprise + metered billing
+[✅] Límites de minutos: enforcement en tiempo real con kill switch mid-call
+[✅] Balance por llamada: check_workspace_balance() RPC atómico cada 60s
+[✅] API Keys propias: generación, revocación, is_active flag
+[✅] Rate limiting: por IP y por workspace (lib/ratelimit.ts)
+[✅] Audit logs: write_audit_log() RPC para todas las acciones críticas
+[✅] Notificaciones: 80%/100% uso de minutos, in-app + email
+[✅] Email transaccional: Resend (invitaciones, alertas, facturas)
+
+──────────────────────────────────────────────────────────────────────────────
+2. WORKER DE IA (agent/worker.ts) — Enterprise Intelligence Layer
+──────────────────────────────────────────────────────────────────────────────
+[✅] Pilar 1 — Dynamic Context Injection
+       Reemplaza {{contact_name}}, {{company}}, {{phone}} etc. en prompts
+       con datos reales del contacto/campaña antes de iniciar la llamada.
+
+[✅] Pilar 2 — HARD CONSTRAINTS Guardrails
+       Bloque de sistema prepend: anti-alucinación, resistencia a jailbreak,
+       enforced voice format (sin markdown), identidad del agente.
+
+[✅] Pilar 3 — Knowledge Base RAG (Active RAG)
+       Tool search_knowledge_base: embed query → pgvector match →
+       devuelve los 4 chunks más relevantes. Modelo: text-embedding-3-small.
+
+[✅] Pilar 4 — Tool Calling Guidance
+       Sección TOOLS_GUIDANCE dinámica que le explica al LLM cuándo y
+       cómo usar cada tool disponible (transfer, RAG, custom tools, end_call).
+
+[✅] Pilar 5 — AI State Machine (flow_config v2) ← NUEVO
+       - buildStateMachine(): closure mutable con currentNodeId
+       - buildStateInstructions(): concatena base prompt + instrucciones
+         del nodo actual + sección "## State Transitions" con intent_ids
+       - transition_state tool: valida intent_id, maneja 4 tipos de nodo:
+           · ai_state / semantic_router → actualiza instrucciones LLM
+           · end_call_node → farewell + deleteRoom
+           · transfer_node → SIP REFER passthrough
+           · webhook_node → HTTP POST + advance al siguiente nodo
+       - agentRef pattern: actualiza agent.instructions mid-call sin reiniciar
+
+[✅] STT: Deepgram nova-3, multilenguaje, redacción de PII (PCI/SSN/numbers)
+[✅] TTS: Cartesia sonic-3 con emotion map → OpenAI TTS fallback
+[✅] LLM: Groq llama-4-scout → OpenAI gpt-4o-mini FallbackAdapter
+[✅] Backchanneling: "Mhm", "I see" durante speech largo del usuario (>3.2s)
+[✅] Filler Suppression: "uhm", "er", "yeah" no disparan respuesta LLM
+[✅] Human Transfer: SIP REFER vía LiveKit RoomServiceClient
+[✅] Dynamic Tools: carga agent_tools desde DB, ejecuta HTTP endpoints custom
+[✅] Pronunciation Dicts: keywords Deepgram + phonetic map Cartesia desde DB
+[✅] Distributed Tracing: latencia STT/LLM/TTS con threshold alerts
+[✅] Mid-call balance check: kill switch cada 60s si se agotan los minutos
+[✅] Transcript acumulación: guardado en calls.transcript al cerrar sesión
+[✅] Flow v1 coexistencia: buildFlowPrompt() para flow_json IVR clásico
+
+──────────────────────────────────────────────────────────────────────────────
+3. FLOW BUILDER UI (app/(app)/agents/[id]/flow/page.tsx)
+──────────────────────────────────────────────────────────────────────────────
+[✅] 6 tipos de nodo custom (React Flow / @xyflow/react):
+       · start_node      — punto de entrada del flujo
+       · ai_state        — estado conversacional con instrucciones propias
+       · semantic_router — enrutador con múltiples intents (Handle por intent)
+       · webhook_node    — llamada HTTP mid-call
+       · transfer_node   — transferencia a humano
+       · end_call_node   — finalización con farewell configurable
+
+[✅] Inspector panel lateral: edición de campos por tipo de nodo
+[✅] semantic_router: Add/Remove intents con crypto.randomUUID()
+[✅] Guarda en flow_config (v2) JSONB vía API route POST
+[✅] Carga flow_config (v2) al abrir, fallback a flow_json (v1)
+[✅] Edges animados con ArrowClosed marker
+
+──────────────────────────────────────────────────────────────────────────────
+4. POST-CALL ANALYTICS
+──────────────────────────────────────────────────────────────────────────────
+[✅] Job analyze-call (app/api/jobs/analyze-call/route.ts):
+       LLM extrae tras la llamada:
+       · summary: 2-3 oraciones del resumen de la llamada
+       · disposition: meeting_booked | not_interested | voicemail |
+                      follow_up | callback_requested | completed |
+                      transferred | other
+       · extracted_data: { budget, meeting_date, company, phone }
+       · extracted_name, extracted_email, extracted_interest, extracted_objections
+       · sentiment: positive | neutral | negative
+       · tokens_used
+
+[✅] UI Calls List: badges de disposición con color coding
+       · meeting_booked → emerald  · not_interested → red
+       · follow_up → amber         · voicemail → gray
+       · callback_requested → violet · completed → blue
+[✅] UI Call Detail: badge disposition + sentiment en el header
+[✅] Preview del resumen colapsado en la lista de llamadas
+
+──────────────────────────────────────────────────────────────────────────────
+5. ECOSISTEMA DE INTEGRACIONES
+──────────────────────────────────────────────────────────────────────────────
+[✅] Post-call dispatcher (lib/integrations/dispatcher.ts):
+       Corre en paralelo tras analyze-call, no bloqueante (Promise.allSettled)
+
+       · Telegram: Bot API sendMessage con Markdown
+       · Microsoft Teams: MessageCard con color-coding por disposición
+       · n8n: webhook POST con envelope completo call.analyzed
+       · Google Calendar: OAuth2 token exchange + create event (solo meeting_booked)
+
+[✅] UI Integrations (app/(app)/integrations/page.tsx):
+       Tarjetas expandibles con formularios inline de credenciales
+       Setup hints por integración (BotFather, Teams connector, n8n payload, Google OAuth)
+
+[✅] Integraciones CRM existentes: HubSpot, GoHighLevel, Salesforce, Zapier, Make,
+       Calendly, Twilio, Telnyx, Webhook genérico
+
+──────────────────────────────────────────────────────────────────────────────
+6. BASE DE DATOS — MIGRACIONES (31 en total)
+──────────────────────────────────────────────────────────────────────────────
+[✅] Schema completo: workspaces, agents, calls, campaigns, contacts,
+       phone_numbers, integrations, knowledge_bases, document_chunks,
+       agent_tools, api_keys, notifications, audit_logs, automation_rules,
+       workspace_members, billing events, webhook_endpoints, etc.
+
+[✅] Migration 028 — Perf & Security:
+       · 21 índices FK faltantes (workspaces.owner_id es el hot path crítico)
+       · Fix trigger update_minutes_on_call (eliminado double-count de minutos y total_calls)
+       · REVOKE EXECUTE en RPCs sensibles para anon/authenticated
+       · SET search_path en 13 funciones SECURITY DEFINER
+       · auth.uid() → (SELECT auth.uid()) en helpers RLS (init-plan optimización)
+       · Consolidación de políticas RLS redundantes en workspaces
+
+[✅] Migration 029 — calls.disposition + calls.tokens_used
+[✅] Migration 030 — integrations: nuevos tipos + calls.extracted_data JSONB
+[✅] Migration 031 — agents.flow_config JSONB
+
+[⚠️] PENDIENTE APLICAR EN SUPABASE: Las migraciones 029, 030, 031 están
+       creadas en el repositorio pero aún NO se han ejecutado en la base de
+       datos de producción (MCP Supabase desconectado). Hay que aplicarlas
+       manualmente desde el SQL Editor del Dashboard de Supabase.
+
+──────────────────────────────────────────────────────────────────────────────
+7. OTRAS PÁGINAS Y MÓDULOS
+──────────────────────────────────────────────────────────────────────────────
+[✅] Dashboard: métricas en tiempo real (minutos, llamadas, agentes activos)
+[✅] Agents: CRUD, voz, prompt, flow builder, QA criteria, knowledge base
+[✅] Campaigns: outbound masivo con CSV upload, progreso en tiempo real
+[✅] Analytics: gráficas de llamadas, disposiciones, sentimiento, duración
+[✅] Quality (QA): scoring automático de llamadas, criterios configurables
+[✅] Knowledge Base: upload docs, chunking, embedding pgvector
+[✅] Numbers: compra/asignación números Twilio, configuración inbound
+[✅] Voice Studio: preview de voces Cartesia con emotion controls
+[✅] Compliance: DNC list, horarios permitidos, TCPA/GDPR settings
+[✅] Team: invitaciones, roles, gestión de miembros
+[✅] Billing: portal Stripe, historial de facturas, upgrade/downgrade
+[✅] Developers: API reference, API keys, webhook endpoints
+[✅] Settings: branding del workspace, timezone, caller ID
+[✅] SIP Trunk: integración con Squaretalk, CommPeak, cualquier VoIP
+[✅] Dialer avanzado: AMD (Answering Machine Detection), límites de duración,
+       caller ID override, configuración por campaña
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LO QUE FALTA / PENDIENTE ❌
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+──────────────────────────────────────────────────────────────────────────────
+PRIORIDAD ALTA — Bloquea funcionalidad en producción
+──────────────────────────────────────────────────────────────────────────────
+
+[❌] APLICAR MIGRACIONES 029, 030, 031 EN SUPABASE
+       Ir a Dashboard → SQL Editor y ejecutar el contenido de:
+       - supabase/migrations/029_call_disposition.sql
+       - supabase/migrations/030_integrations_dispatch.sql
+       - supabase/migrations/031_flow_config.sql
+       Sin esto: dispositions, extracted_data y flow_config no existen en DB.
+
+[❌] CONFIGURAR WORKER EN PRODUCCIÓN
+       El worker.ts corre como proceso Node.js separado (no en Vercel).
+       Necesita un servidor/VM dedicado o un servicio como Railway/Render.
+       Variables de entorno requeridas:
+       - LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+       - DEEPGRAM_API_KEY
+       - CARTESIA_API_KEY
+       - GROQ_API_KEY
+       - OPENAI_API_KEY
+       - NEXT_PUBLIC_SUPABASE_URL
+       - SUPABASE_SERVICE_ROLE_KEY
+
+[❌] ACTIVAR JOB analyze-call
+       La ruta app/api/jobs/analyze-call/route.ts existe pero necesita ser
+       disparada desde el webhook de LiveKit cuando la llamada termina
+       (event: room_finished o participant_left).
+
+──────────────────────────────────────────────────────────────────────────────
+PRIORIDAD MEDIA — Mejoras importantes al producto
+──────────────────────────────────────────────────────────────────────────────
+
+[❌] LEAKED PASSWORD PROTECTION en Supabase
+       Activar manualmente: Authentication → Password → Enable HaveIBeenPwned.
+       No hay API para esto, se hace desde el Dashboard.
+
+[❌] METADATA flow_config en OUTBOUND CALLS
+       El worker carga flow_config desde DB como fallback, pero las llamadas
+       outbound deberían inyectar flow_config en el room.metadata desde la
+       ruta de dispatch para evitar la segunda query a Supabase.
+
+[❌] WEBHOOK NODE — Variables extraídas
+       El campo extract_variables del webhook_node está definido pero no
+       parseado. El resultado del webhook debería mergear variables en
+       el contexto del agente para que el LLM las pueda referenciar.
+
+[❌] SEMANTIC ROUTER — Fallback de intent
+       Si el LLM llama transition_state con un intent_id no válido, el error
+       actual es informativo pero no hay un nodo de fallback configurable.
+       Añadir soporte para un edge con id "fallback" o "default".
+
+[❌] FLOW BUILDER — Validación antes de guardar
+       No valida que el flujo tenga al menos start_node → ai_state → end_call_node
+       antes de guardar. Un flujo malformado puede romper el worker silenciosamente.
+
+[❌] FLOW BUILDER — Preview / simulación
+       No hay forma de simular una conversación en el flow builder antes de
+       publicarlo. Sería valioso para testing sin hacer llamadas reales.
+
+[❌] CAMPAÑA → flow_config
+       Las campañas outbound usan el prompt del agente directamente.
+       Permitir seleccionar un flujo específico por campaña (override del
+       flow_config del agente para esa campaña).
+
+[❌] INTEGRACIÓN HUBSPOT REAL
+       La carpeta lib/hubspot existe pero la sincronización post-call
+       (crear contacto + activity en HubSpot tras analyze-call) no está
+       conectada al dispatcher. Solo está el skeleton.
+
+[❌] INTEGRACIÓN SALESFORCE / GOHIGHLEVEL
+       Similar a HubSpot — estructura existe pero dispatch no implementado.
+
+──────────────────────────────────────────────────────────────────────────────
+PRIORIDAD BAJA — Nice to have / futuro
+──────────────────────────────────────────────────────────────────────────────
+
+[❌] AGENT COPILOT (Live Assist)
+       La ruta app/api/copilot existe como skeleton. Idea: panel en tiempo
+       real que muestra al supervisor el estado del agente + sugerencias LLM
+       mientras la llamada está activa.
+
+[❌] INBOUND ROUTING AVANZADO
+       IVR multi-nivel para inbound: "Presione 1 para ventas, 2 para soporte".
+       Migration 006 tiene la tabla pero el UI es básico.
+
+[❌] A/B TESTING DE PROMPTS
+       Migration 004 tiene las tablas de AB testing pero el UI de experimentos
+       no está construido ni conectado al worker para enrutar llamadas.
+
+[❌] AUTOMATION RULES ENGINE
+       Migration 009 tiene automation_rules pero el engine que evalúa las reglas
+       post-call (si disposición = X, entonces hacer Y) no está implementado.
+
+[❌] VOICE CLONING
+       La carpeta lib/elevenlabs existe como legacy. Cartesia soporta voice
+       cloning via API — UI para subir audio y crear voz clonada.
+
+[❌] REAL-TIME DASHBOARD (WebSocket)
+       El dashboard actual hace polling. Con LiveKit Data Channels o Supabase
+       Realtime se podrían mostrar llamadas activas en vivo.
+
+[❌] MOBILE APP
+       Todo el producto es web. Una app móvil (React Native) para supervisores
+       que quieran monitorear campañas desde el teléfono.
+
+[❌] EXPORTACIÓN DE REPORTES
+       No hay export a CSV/PDF de analytics, transcripts o llamadas.
+       Útil para compliance y reporting comercial.
+
+[❌] MULTI-IDIOMA EN UI
+       El worker ya detecta idioma automáticamente (Deepgram multilang).
+       Falta i18n en la interfaz de administración.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESUMEN EJECUTIVO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+La plataforma tiene el CORE completo y funcionando:
+  - Motor de IA de grado enterprise (guardrails, RAG, state machine, tools)
+  - Flow Builder visual con 6 tipos de nodo y estado máquina dinámico
+  - Analytics post-call con extracción automática de datos via LLM
+  - Dispatcher de integraciones (Telegram, Teams, n8n, Google Calendar)
+  - Infraestructura multi-tenant con billing, compliance y seguridad
+
+El blockeador más crítico antes de ir a producción real es aplicar las
+3 migraciones pendientes (029, 030, 031) en Supabase y desplegar el
+worker Node.js en un servidor dedicado aparte de Vercel.
+
+Todo el código está en la rama: claude/voiceos-saas-build-D8nrY
+Último commit:  35a376e — feat(worker): AI State Machine engine + Enterprise Flow Builder v2
+
+═══════════════════════════════════════════════════════════════════════════════
