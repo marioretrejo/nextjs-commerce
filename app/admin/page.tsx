@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { BroadcastForm } from '@/components/admin/BroadcastForm';
 import type { User, Workspace, Plan } from '@/lib/supabase/types';
 import {
   Users,
@@ -29,17 +30,6 @@ const PLAN_PRICES: Record<Plan, number> = {
   scale: 299,
 };
 
-async function broadcastNotification(formData: FormData) {
-  'use server';
-  const title = formData.get('title') as string;
-  const message = formData.get('message') as string;
-  if (!title || !message) return;
-  await fetch(`${process.env['NEXT_PUBLIC_APP_URL'] ?? ''}/api/admin/broadcast`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, message }),
-  });
-}
 
 export default async function AdminPage() {
   const supabase = createAdminClient();
@@ -234,40 +224,7 @@ export default async function AdminPage() {
 
         {/* Right sidebar: broadcast + quick links */}
         <div className="space-y-6">
-          <Card className="bg-white border-[#e5e5e5]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Broadcast Notification</CardTitle>
-              <p className="text-xs text-[#6b6b6b]">Push a platform-wide announcement to all users.</p>
-            </CardHeader>
-            <CardContent>
-              <form action={broadcastNotification} className="space-y-3">
-                <div className="space-y-1">
-                  <label htmlFor="bc-title" className="text-xs font-medium text-[#0a0a0a]">Title</label>
-                  <input
-                    id="bc-title"
-                    name="title"
-                    required
-                    placeholder="Announcement title"
-                    className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="bc-msg" className="text-xs font-medium text-[#0a0a0a]">Message</label>
-                  <textarea
-                    id="bc-msg"
-                    name="message"
-                    required
-                    rows={4}
-                    placeholder="Your announcement…"
-                    className="w-full rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a] resize-none"
-                  />
-                </div>
-                <Button type="submit" size="sm" className="w-full text-xs">
-                  Send to All Users
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+          <BroadcastForm />
 
           <Card className="bg-white border-[#e5e5e5]">
             <CardHeader className="pb-3">
