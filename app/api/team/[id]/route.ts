@@ -19,12 +19,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!target) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const t = target as { id: string; workspace_id: string; role: string; user_id: string | null };
 
-  // Only superadmins can change roles and module visibility
+  // Only superadmins OR the workspace owner can manage roles and module visibility
   const { data: profile } = await supabase.from('users').select('is_superadmin').eq('id', user.id).single();
   const isSuperadmin = (profile as { is_superadmin: boolean } | null)?.is_superadmin ?? false;
 
-  if (!isSuperadmin) {
-    return NextResponse.json({ error: 'Only superadmins can manage roles and permissions.' }, { status: 403 });
+  const { data: ws } = await supabase.from('workspaces').select('owner_id').eq('id', t.workspace_id).single();
+  const isOwner = (ws as { owner_id: string } | null)?.owner_id === user.id;
+
+  if (!isSuperadmin && !isOwner) {
+    return NextResponse.json({ error: 'Only the workspace owner or a superadmin can manage roles.' }, { status: 403 });
   }
 
   const updates: Record<string, unknown> = {};

@@ -89,6 +89,7 @@ export default function TeamPage() {
   const [inviteError, setInviteError] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
   const [currentUserWeight, setCurrentUserWeight] = useState<number>(0);
+  const [isOwnerOrSuperadmin, setIsOwnerOrSuperadmin] = useState(false);
 
   // Permissions modal state
   const [permissionsOpen, setPermissionsOpen] = useState(false);
@@ -111,11 +112,11 @@ export default function TeamPage() {
     fetch(`/api/team/current-user-role?workspace_id=${workspaceId}`)
       .then((r) => r.ok ? r.json() as Promise<CurrentUserResponse> : Promise.resolve({}))
       .then((d: CurrentUserResponse) => {
-        if (d.is_superadmin) { setCurrentUserWeight(100); return; }
-        if (d.is_owner) { setCurrentUserWeight(80); return; }
+        if (d.is_superadmin) { setCurrentUserWeight(100); setIsOwnerOrSuperadmin(true); return; }
+        if (d.is_owner)      { setCurrentUserWeight(80);  setIsOwnerOrSuperadmin(true); return; }
         const role = d.role ?? '';
-        const weight = ROLE_WEIGHT[role] ?? 0;
-        setCurrentUserWeight(weight);
+        setCurrentUserWeight(ROLE_WEIGHT[role] ?? 0);
+        setIsOwnerOrSuperadmin(false);
       })
       .catch(() => setCurrentUserWeight(0));
   }, [workspaceId]);
@@ -271,7 +272,6 @@ export default function TeamPage() {
             </div>
             <div className="divide-y divide-[#e0e0e0]">
               {members.map((member) => {
-                const isSuperadmin = currentUserWeight >= 100;
                 const canRemove = currentUserWeight > getMemberWeight(member);
                 return (
                   <div
@@ -299,13 +299,13 @@ export default function TeamPage() {
                           : '—'}
                     </span>
                     <span className="flex items-center gap-1 justify-end">
-                      {isSuperadmin && (
+                      {isOwnerOrSuperadmin && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-[#6b6b6b] hover:text-[#0a0a0a]"
                           onClick={() => openPermissions(member)}
-                          title="Manage role & permissions (Superadmin only)"
+                          title="Manage role & permissions"
                         >
                           <Settings2 className="w-3.5 h-3.5" />
                         </Button>
