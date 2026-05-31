@@ -8,6 +8,8 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
+import type { CallDisposition } from '@/lib/supabase/types';
+
 interface CallDetail {
   id: string;
   contact_name: string | null;
@@ -17,6 +19,7 @@ interface CallDetail {
   status: string | null;
   outcome: string | null;
   sentiment: string | null;
+  disposition: CallDisposition | null;
   transcript: string | null;
   recording_url: string | null;
   summary: string | null;
@@ -33,9 +36,20 @@ interface CallDetail {
 }
 
 const SENTIMENT_COLORS: Record<string, string> = {
-  positive: 'bg-[#f5f5f5] text-[#0a0a0a]',
-  neutral: 'bg-[#f5f5f5] text-[#6b6b6b]',
-  negative: 'bg-[#0a0a0a] text-white'
+  positive: 'bg-emerald-50 text-emerald-700',
+  neutral:  'bg-[#f5f5f5] text-[#6b6b6b]',
+  negative: 'bg-red-50 text-red-700',
+};
+
+const DISPOSITION_CONFIG: Record<CallDisposition, { label: string; className: string }> = {
+  meeting_booked:    { label: 'Meeting Booked',    className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  completed:         { label: 'Completed',          className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  follow_up:         { label: 'Follow Up',          className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  callback_requested:{ label: 'Callback Requested', className: 'bg-violet-50 text-violet-700 border-violet-200' },
+  not_interested:    { label: 'Not Interested',     className: 'bg-red-50 text-red-700 border-red-200' },
+  voicemail:         { label: 'Voicemail',          className: 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e0e0e0]' },
+  transferred:       { label: 'Transferred',        className: 'bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0]' },
+  other:             { label: 'Other',              className: 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e0e0e0]' },
 };
 
 export default async function CallDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -61,8 +75,12 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
           <h1 className="text-xl font-bold">{call.contact_name ?? call.contact_phone ?? 'Unknown Contact'}</h1>
           <p className="text-sm text-[#6b6b6b]">{new Date(call.created_at).toLocaleString()}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {call.outcome && <Badge variant="outline">{call.outcome}</Badge>}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {call.disposition && DISPOSITION_CONFIG[call.disposition] && (
+            <Badge className={`${DISPOSITION_CONFIG[call.disposition].className} text-xs`}>
+              {DISPOSITION_CONFIG[call.disposition].label}
+            </Badge>
+          )}
           {call.sentiment && (
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${SENTIMENT_COLORS[call.sentiment] ?? ''}`}>
               {call.sentiment}

@@ -6,6 +6,15 @@ export type ContactStatus = 'pending' | 'calling' | 'converted' | 'no_answer' | 
 export type CallOutcome = 'converted' | 'no_answer' | 'rejected' | 'transferred' | 'voicemail';
 export type CallSentiment = 'positive' | 'neutral' | 'negative';
 export type CallDirection = 'inbound' | 'outbound';
+export type CallDisposition =
+  | 'meeting_booked'
+  | 'not_interested'
+  | 'voicemail'
+  | 'follow_up'
+  | 'callback_requested'
+  | 'completed'
+  | 'transferred'
+  | 'other';
 export type MemberRole = 'admin' | 'editor' | 'viewer';
 export type MemberStatus = 'active' | 'pending';
 export type PhoneStatus = 'available' | 'in_use' | 'suspended';
@@ -239,6 +248,7 @@ export interface Call {
   status: string | null;
   outcome: CallOutcome | null;
   sentiment: CallSentiment | null;
+  disposition: CallDisposition | null;
   transcript: string | null;
   recording_url: string | null;
   summary: string | null;

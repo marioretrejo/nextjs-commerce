@@ -10,20 +10,45 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
+type CallDisposition =
+  | 'meeting_booked'
+  | 'not_interested'
+  | 'voicemail'
+  | 'follow_up'
+  | 'callback_requested'
+  | 'completed'
+  | 'transferred'
+  | 'other';
+
 interface AnalysisResult {
-  summary: string[];          // 3 bullet points
+  summary: string[];
   sentiment: 'positive' | 'neutral' | 'negative';
-  intent: string;             // user's primary goal in ≤10 words
+  disposition: CallDisposition;
+  intent: string;
   extracted_name: string | null;
   extracted_email: string | null;
   extracted_interest: string | null;
   extracted_objections: string | null;
 }
 
+const VALID_DISPOSITIONS = new Set<CallDisposition>([
+  'meeting_booked', 'not_interested', 'voicemail',
+  'follow_up', 'callback_requested', 'completed', 'transferred', 'other',
+]);
+
 const EXTRACTION_PROMPT = `You are a call analysis expert. Analyze the following voice call transcript and return a JSON object with EXACTLY these fields:
 
 - "summary": array of exactly 3 strings, each a bullet point summarizing a key moment (≤15 words each)
 - "sentiment": exactly one of "positive", "neutral", or "negative" — the user's overall emotional tone
+- "disposition": the AI-extracted sales/call outcome — MUST be exactly one of:
+    "meeting_booked"     → prospect agreed to a meeting or appointment
+    "not_interested"     → prospect declined or showed clear disinterest
+    "voicemail"          → reached voicemail or an automated answering system
+    "follow_up"          → conversation ended but a follow-up is needed
+    "callback_requested" → caller explicitly asked to be called back later
+    "completed"          → goal achieved without a more specific categorical outcome
+    "transferred"        → call was handed off to a human agent
+    "other"              → none of the above categories apply
 - "intent": the user's primary objective or reason for calling, in ≤10 words
 - "extracted_name": the user's full name if explicitly stated, otherwise null
 - "extracted_email": the user's email address if mentioned, otherwise null
@@ -49,13 +74,8 @@ async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | n
     },
     body: JSON.stringify({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-      messages: [
-        {
-          role: 'user',
-          content: `${EXTRACTION_PROMPT}${transcript}`,
-        },
-      ],
-      temperature: 0.1, // low temp for consistent structured output
+      messages: [{ role: 'user', content: `${EXTRACTION_PROMPT}${transcript}` }],
+      temperature: 0.1,
       max_tokens: 512,
       response_format: { type: 'json_object' },
     }),
@@ -70,6 +90,8 @@ async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | n
 
   try {
     const result = JSON.parse(data.choices[0]?.message?.content ?? '{}') as AnalysisResult;
+    // Sanitize: ensure disposition is a valid enum value
+    if (!VALID_DISPOSITIONS.has(result.disposition)) result.disposition = 'other';
     return { ...result, _tokensUsed: data.usage?.total_tokens ?? null };
   } catch {
     return null;
@@ -77,7 +99,6 @@ async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | n
 }
 
 export async function POST(req: Request) {
-  // Verify internal secret — this endpoint must not be publicly accessible
   const secret = req.headers.get('x-internal-secret');
   if (secret !== process.env['INTERNAL_API_SECRET']) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -119,28 +140,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Analysis failed — Groq unavailable' }, { status: 502 });
   }
 
+  const summaryText = Array.isArray(analysis.summary)
+    ? analysis.summary.join('\n• ').replace(/^/, '• ')
+    : analysis.summary;
+
+  // Step 1: core fields — exist in schema from migration 001
   const { error } = await admin
     .from('calls')
     .update({
-      summary: Array.isArray(analysis.summary)
-        ? analysis.summary.join('\n• ').replace(/^/, '• ')
-        : analysis.summary,
-      sentiment: analysis.sentiment ?? null,
-      extracted_name: analysis.extracted_name ?? null,
-      extracted_email: analysis.extracted_email ?? null,
-      extracted_interest: analysis.extracted_interest ?? null,
+      summary:              summaryText,
+      sentiment:            analysis.sentiment ?? null,
+      extracted_name:       analysis.extracted_name ?? null,
+      extracted_email:      analysis.extracted_email ?? null,
+      extracted_interest:   analysis.extracted_interest ?? null,
       extracted_objections: analysis.extracted_objections ?? null,
-      task_completed: analysis.sentiment === 'positive',
-      tokens_used: analysis._tokensUsed ?? null,
+      task_completed:       analysis.disposition === 'meeting_booked' || analysis.sentiment === 'positive',
     })
     .eq('id', callRecord.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Step 2: disposition + tokens_used — added in migration 029 (fails gracefully if not yet applied)
+  await admin
+    .from('calls')
+    .update({
+      disposition:  analysis.disposition ?? 'other',
+      tokens_used:  analysis._tokensUsed ?? null,
+    })
+    .eq('id', callRecord.id)
+    .then(({ error: e }) => {
+      if (e) console.warn('[analyze-call] disposition update failed — run migration 029:', e.message);
+    });
+
   return NextResponse.json({
-    analyzed: true,
-    call_id: callRecord.id,
-    sentiment: analysis.sentiment,
-    intent: analysis.intent,
+    analyzed:    true,
+    call_id:     callRecord.id,
+    sentiment:   analysis.sentiment,
+    disposition: analysis.disposition,
+    intent:      analysis.intent,
   });
 }
