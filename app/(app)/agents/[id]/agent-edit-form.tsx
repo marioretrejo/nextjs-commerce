@@ -322,6 +322,36 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                 </div>
               ))}
 
+              {/* Core Engine timing */}
+              <div className="space-y-3 rounded-lg border border-[#e0e0e0] p-4">
+                <div>
+                  <Label className="text-sm font-medium">Core Engine Settings</Label>
+                  <p className="text-xs text-[#6b6b6b] mt-0.5">Control response timing and call initiation behavior.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Response Delay (ms)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3000}
+                      step={100}
+                      value={form.response_delay_ms ?? 500}
+                      onChange={(e) => setField('response_delay_ms', parseInt(e.target.value) || 0)}
+                    />
+                    <p className="text-[10px] text-[#6b6b6b]">Pause before agent speaks after caller stops (0–3000 ms).</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Speak First</Label>
+                    <div className="flex items-center gap-2 h-10">
+                      <Switch checked={!!form.speak_first} onCheckedChange={(v) => setField('speak_first', v)} />
+                      <span className="text-xs text-[#6b6b6b]">{form.speak_first ? 'Agent speaks first' : 'Wait for caller'}</span>
+                    </div>
+                    <p className="text-[10px] text-[#6b6b6b]">Agent delivers greeting immediately on connect without waiting.</p>
+                  </div>
+                </div>
+              </div>
+
               {/* AMD — Answer Machine Detection */}
               <div className="space-y-3 rounded-lg border border-[#e0e0e0] p-4">
                 <div className="flex items-center justify-between">

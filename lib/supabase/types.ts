@@ -151,6 +151,8 @@ export interface Agent {
   post_call_analysis_enabled: boolean;
   amd_enabled: boolean;
   amd_action: 'hangup' | 'leave_voicemail' | null;
+  response_delay_ms: number;
+  speak_first: boolean;
   ambient_sound: 'coffee-shop' | 'convention-hall' | 'summer-outdoor' | 'mountain-outdoor' | 'static-noise' | 'call-center' | null;
   ambient_sound_volume: number;
   voice_emotion: 'calm' | 'sympathetic' | 'happy' | 'sad' | 'angry' | 'fearful' | 'surprised' | null;
@@ -260,6 +262,7 @@ export interface Call {
   extracted_interest: string | null;
   extracted_objections: string | null;
   qa_score: number | null;
+  qa_feedback: string | null;
   retell_call_id: string | null;
   cost_usd: number;
   tokens_used: number | null;

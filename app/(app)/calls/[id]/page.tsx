@@ -29,6 +29,7 @@ interface CallDetail {
   extracted_interest: string | null;
   extracted_objections: string | null;
   qa_score: number | null;
+  qa_feedback: string | null;
   cost_usd: number;
   created_at: string;
   agent: { name: string } | null;
@@ -162,6 +163,26 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
         <Card>
           <CardHeader><CardTitle>AI Summary</CardTitle></CardHeader>
           <CardContent><p className="text-sm text-[#6b6b6b] whitespace-pre-line">{call.summary}</p></CardContent>
+        </Card>
+      )}
+
+      {call.qa_score !== null && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Quality Score</CardTitle>
+              <span className={`text-2xl font-bold ${call.qa_score >= 80 ? 'text-emerald-600' : call.qa_score >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                {call.qa_score}<span className="text-sm font-normal text-[#6b6b6b]">/100</span>
+              </span>
+            </div>
+          </CardHeader>
+          {call.qa_feedback && (
+            <CardContent>
+              <div className={`rounded-lg px-4 py-3 text-sm ${call.qa_score >= 80 ? 'bg-emerald-50 text-emerald-800' : call.qa_score >= 50 ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-red-800'}`}>
+                {call.qa_feedback}
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
 

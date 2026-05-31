@@ -31,8 +31,12 @@ interface AnalysisResult {
   extracted_email: string | null;
   extracted_interest: string | null;
   extracted_objections: string | null;
-  // Structured data for n8n/webhook payloads (budgets, dates, any custom fields)
   extracted_data: Record<string, unknown> | null;
+}
+
+interface QAResult {
+  score: number;
+  feedback: string;
 }
 
 const VALID_DISPOSITIONS = new Set<CallDisposition>([
@@ -71,6 +75,48 @@ TRANSCRIPT:
 `;
 
 type AnalysisResponse = AnalysisResult & { _tokensUsed: number | null };
+
+async function runQAScoring(transcript: string, systemPrompt: string): Promise<QAResult | null> {
+  const groqKey = process.env['GROQ_API_KEY'];
+  if (!groqKey) return null;
+
+  const prompt = `You are a QA evaluator for AI voice agents. Score how well the AI agent followed its instructions.
+
+AGENT INSTRUCTIONS (system prompt):
+${systemPrompt.slice(0, 1500)}
+
+CALL TRANSCRIPT:
+${transcript.slice(0, 3000)}
+
+Return ONLY a JSON object with:
+- "score": integer 0-100 (100 = perfectly followed instructions)
+- "feedback": one sentence explaining the score, noting what was done well or what could improve
+
+Respond with ONLY the raw JSON.`;
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      max_tokens: 200,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!res.ok) return null;
+  try {
+    const data = (await res.json()) as { choices: { message: { content: string } }[] };
+    const result = JSON.parse(data.choices[0]?.message?.content ?? '{}') as QAResult;
+    if (typeof result.score !== 'number') return null;
+    result.score = Math.max(0, Math.min(100, Math.round(result.score)));
+    return result;
+  } catch {
+    return null;
+  }
+}
 
 async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | null> {
   const groqKey = process.env['GROQ_API_KEY'];
@@ -128,6 +174,10 @@ export async function POST(req: Request) {
     created_at: string;
   }
 
+  interface AgentRow {
+    system_prompt: string | null;
+  }
+
   // Retry loop — the worker may still be writing the transcript when this fires
   let callRecord: CallRow | null = null;
 
@@ -154,7 +204,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ skipped: true, reason: 'Transcript too short for analysis' });
   }
 
-  const analysis = await runGroqAnalysis(callRecord.transcript);
+  const [analysis, agentData] = await Promise.all([
+    runGroqAnalysis(callRecord.transcript),
+    callRecord.agent_id
+      ? admin.from('agents').select('system_prompt').eq('id', callRecord.agent_id).single()
+          .then(r => (r.data as unknown as AgentRow | null))
+      : Promise.resolve(null),
+  ]);
+
   if (!analysis) {
     return NextResponse.json({ error: 'Analysis failed — Groq unavailable' }, { status: 502 });
   }
@@ -179,7 +236,7 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Step 2: new columns from migrations 029 + 030 (fails gracefully if not yet applied)
+  // Step 2: extended columns from later migrations
   await admin
     .from('calls')
     .update({
@@ -189,10 +246,25 @@ export async function POST(req: Request) {
     })
     .eq('id', callRecord.id)
     .then(({ error: e }) => {
-      if (e) console.warn('[analyze-call] extended update failed — run migrations 029+030:', e.message);
+      if (e) console.warn('[analyze-call] extended update failed:', e.message);
     });
 
-  // Step 3: fire integration dispatchers (Telegram, Teams, n8n, Google Calendar)
+  // Step 3: Auto-QA — score transcript vs agent system prompt
+  const systemPrompt = agentData?.system_prompt;
+  if (systemPrompt && systemPrompt.length > 20) {
+    const qa = await runQAScoring(callRecord.transcript, systemPrompt);
+    if (qa) {
+      await admin
+        .from('calls')
+        .update({ qa_score: qa.score, qa_feedback: qa.feedback })
+        .eq('id', callRecord.id)
+        .then(({ error: e }) => {
+          if (e) console.warn('[analyze-call] qa update failed:', e.message);
+        });
+    }
+  }
+
+  // Step 4: fire integration dispatchers (Telegram, Teams, n8n, Google Calendar)
   // Non-blocking — dispatch runs in background, never delays the HTTP response
   dispatchPostCallEvents(callRecord.workspace_id, {
     call_id:              callRecord.id,
