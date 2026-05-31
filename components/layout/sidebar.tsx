@@ -20,6 +20,7 @@ interface NavItem {
     : string;
   icon: LucideIcon;
   pulse?: boolean;
+  module?: string;
 }
 
 interface NavGroup {
@@ -36,48 +37,49 @@ const adminItems = [
 interface SidebarProps {
   isSuperadmin?: boolean;
   appName?: string;
+  visibleModules?: string[];
 }
 
-export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarProps) {
+export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModules }: SidebarProps) {
   const pathname = usePathname();
   const t = useTranslations('nav');
 
   const navGroups: NavGroup[] = [
     {
       items: [
-        { href: '/dashboard',  labelKey: 'dashboard',  icon: LayoutDashboard },
-        { href: '/agents',     labelKey: 'agents',     icon: Bot },
-        { href: '/campaigns',  labelKey: 'campaigns',  icon: Megaphone },
+        { href: '/dashboard',  labelKey: 'dashboard',  icon: LayoutDashboard, module: 'dashboard' },
+        { href: '/agents',     labelKey: 'agents',     icon: Bot,             module: 'agents' },
+        { href: '/campaigns',  labelKey: 'campaigns',  icon: Megaphone,       module: 'campaigns' },
       ]
     },
     {
       label: 'CALLS',
       items: [
-        { href: '/calls',      labelKey: 'callHistory', icon: PhoneCall },
-        { href: '/calls/live', labelKey: 'liveMonitor', icon: Radio, pulse: true },
+        { href: '/calls',      labelKey: 'callHistory', icon: PhoneCall, module: 'calls' },
+        { href: '/calls/live', labelKey: 'liveMonitor', icon: Radio, pulse: true, module: 'calls' },
       ]
     },
     {
       label: 'INTELLIGENCE',
       items: [
-        { href: '/analytics',       labelKey: 'analytics',   icon: BarChart2 },
-        { href: '/analytics/costs', labelKey: 'usage',       icon: DollarSign },
-        { href: '/knowledge',       labelKey: 'knowledge',   icon: BookOpen },
-        { href: '/voice-studio',    labelKey: 'voiceStudio', icon: Mic },
-        { href: '/quality',         labelKey: 'quality',     icon: Star },
+        { href: '/analytics',       labelKey: 'analytics',   icon: BarChart2,  module: 'analytics' },
+        { href: '/analytics/costs', labelKey: 'usage',       icon: DollarSign, module: 'analytics' },
+        { href: '/knowledge',       labelKey: 'knowledge',   icon: BookOpen,   module: 'knowledge' },
+        { href: '/voice-studio',    labelKey: 'voiceStudio', icon: Mic,        module: 'agents' },
+        { href: '/quality',         labelKey: 'quality',     icon: Star,       module: 'quality' },
       ]
     },
     {
       label: 'WORKSPACE',
       items: [
-        { href: '/numbers',               labelKey: 'numbers',      icon: Phone },
-        { href: '/compliance',            labelKey: 'compliance',   icon: ShieldCheck },
-        { href: '/integrations',          labelKey: 'integrations', icon: Globe },
-        { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell },
-        { href: '/team',                  labelKey: 'team',         icon: Users },
-        { href: '/billing',               labelKey: 'billing',      icon: CreditCard },
-        { href: '/settings',              labelKey: 'settings',     icon: Settings },
-        { href: '/developers',            labelKey: 'developers',   icon: Code2 },
+        { href: '/numbers',               labelKey: 'numbers',      icon: Phone,      module: 'numbers' },
+        { href: '/compliance',            labelKey: 'compliance',   icon: ShieldCheck, module: 'compliance' },
+        { href: '/integrations',          labelKey: 'integrations', icon: Globe,      module: 'integrations' },
+        { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell,       module: 'integrations' },
+        { href: '/team',                  labelKey: 'team',         icon: Users,      module: 'team' },
+        { href: '/billing',               labelKey: 'billing',      icon: CreditCard, module: 'billing' },
+        { href: '/settings',              labelKey: 'settings',     icon: Settings,   module: 'settings' },
+        { href: '/developers',            labelKey: 'developers',   icon: Code2,      module: 'developers' },
       ]
     }
   ];
@@ -119,7 +121,10 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
                 </p>
               )}
               <div className="space-y-0.5">
-                {group.items.map(({ href, labelKey, icon: Icon, pulse }) => {
+                {group.items.filter(({ module }) => {
+                  if (!module || !visibleModules) return true;
+                  return visibleModules.includes(module);
+                }).map(({ href, labelKey, icon: Icon, pulse }) => {
                   const active = isActive(href);
                   return (
                     <Link

@@ -74,6 +74,7 @@ export interface WorkspaceMember {
   invite_token: string | null;
   invited_at: string;
   joined_at: string | null;
+  visible_modules: string[];
   user?: User;
 }
 

@@ -16,8 +16,26 @@ import {
 } from '@/components/ui/dialog';
 import { Avatar } from '@/components/ui/avatar';
 import type { WorkspaceMember, MemberRole, MemberStatus } from '@/lib/supabase/types';
-import { Users, Plus, Trash2, Mail, Shield, Eye, Pencil } from 'lucide-react';
+import { Users, Plus, Trash2, Mail, Shield, Eye, Pencil, Settings2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { ROLE_WEIGHT, ALL_MODULES } from '@/lib/team/permissions';
+
+const MODULE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  agents: 'Agents',
+  campaigns: 'Campaigns',
+  calls: 'Calls & Recordings',
+  analytics: 'Analytics',
+  knowledge: 'Knowledge Base',
+  quality: 'QA Scoring',
+  numbers: 'Phone Numbers',
+  compliance: 'Compliance',
+  integrations: 'Integrations',
+  team: 'Team',
+  billing: 'Billing',
+  settings: 'Settings',
+  developers: 'Developers',
+};
 
 const ROLES: { value: MemberRole; label: string; description: string }[] = [
   { value: 'admin',  label: 'Admin',  description: 'Full access including billing and settings.' },
@@ -52,6 +70,14 @@ function memberInitials(member: WorkspaceMember): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+interface WorkspaceIdResponse { workspace_id: string }
+interface TeamResponse { members: WorkspaceMember[] }
+interface CurrentUserResponse {
+  is_superadmin?: boolean;
+  is_owner?: boolean;
+  role?: string;
+}
+
 export default function TeamPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,20 +88,43 @@ export default function TeamPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
+  const [currentUserWeight, setCurrentUserWeight] = useState<number>(0);
+
+  // Permissions modal state
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [permissionsMember, setPermissionsMember] = useState<WorkspaceMember | null>(null);
+  const [permModules, setPermModules] = useState<string[]>([]);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+  const [permissionsError, setPermissionsError] = useState('');
 
   useEffect(() => {
     fetch('/api/admin/workspace-id')
       .then((r) => r.json())
-      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
+      .then((d: WorkspaceIdResponse) => setWorkspaceId(d.workspace_id ?? ''))
       .catch(() => setLoading(false));
   }, []);
+
+  // Fetch current user's weight once we have workspaceId
+  useEffect(() => {
+    if (!workspaceId) return;
+    fetch(`/api/team/current-user-role?workspace_id=${workspaceId}`)
+      .then((r) => r.ok ? r.json() as Promise<CurrentUserResponse> : Promise.resolve({}))
+      .then((d: CurrentUserResponse) => {
+        if (d.is_superadmin) { setCurrentUserWeight(100); return; }
+        if (d.is_owner) { setCurrentUserWeight(80); return; }
+        const role = d.role ?? '';
+        const weight = ROLE_WEIGHT[role] ?? 0;
+        setCurrentUserWeight(weight);
+      })
+      .catch(() => setCurrentUserWeight(0));
+  }, [workspaceId]);
 
   const fetchMembers = useCallback(async () => {
     if (!workspaceId) return;
     setLoading(true);
     const res = await fetch(`/api/team?workspace_id=${workspaceId}`);
     if (res.ok) {
-      const d = await res.json() as { members: WorkspaceMember[] };
+      const d = await res.json() as TeamResponse;
       setMembers(d.members ?? []);
     }
     setLoading(false);
@@ -109,6 +158,46 @@ export default function TeamPage() {
     await fetch(`/api/team/${id}`, { method: 'DELETE' });
     await fetchMembers();
     setRemovingId(null);
+  }
+
+  function getMemberWeight(member: WorkspaceMember): number {
+    return ROLE_WEIGHT[member.role] ?? 0;
+  }
+
+  function openPermissions(member: WorkspaceMember) {
+    setPermissionsMember(member);
+    setPermModules(member.visible_modules ?? [...ALL_MODULES]);
+    setPermissionsError('');
+    setPermissionsOpen(true);
+  }
+
+  function toggleModule(mod: string) {
+    setPermModules((prev) =>
+      prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod]
+    );
+  }
+
+  async function savePermissions(memberId: string) {
+    setSavingPermissions(true);
+    setPermissionsError('');
+    try {
+      const res = await fetch(`/api/team/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible_modules: permModules }),
+      });
+      if (res.ok) {
+        await fetchMembers();
+        setPermissionsOpen(false);
+        setPermissionsMember(null);
+      } else {
+        const err = await res.json() as { error?: string };
+        setPermissionsError(err.error ?? 'Failed to save permissions.');
+      }
+    } catch {
+      setPermissionsError('Network error. Please try again.');
+    }
+    setSavingPermissions(false);
   }
 
   return (
@@ -170,7 +259,7 @@ export default function TeamPage() {
           </CardContent>
         ) : (
           <CardContent className="p-0">
-            <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_60px] gap-3 px-5 py-3 border-b border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
+            <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] gap-3 px-5 py-3 border-b border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
               <span className="w-8" />
               <span>Member</span>
               <span>Role</span>
@@ -179,45 +268,62 @@ export default function TeamPage() {
               <span />
             </div>
             <div className="divide-y divide-[#e0e0e0]">
-              {members.map((member) => (
-                <div
-                  key={member.id}
-                  className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_60px] gap-3 px-5 py-4 text-sm items-center hover:bg-[#f5f5f5]"
-                >
-                  <Avatar className="w-8 h-8 bg-[#0a0a0a] text-white text-xs flex items-center justify-center shrink-0">
-                    <span>{memberInitials(member)}</span>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="font-medium text-[#0a0a0a] truncate">
-                      {member.user?.name ?? member.invite_email ?? '—'}
-                    </p>
-                    <p className="text-xs text-[#6b6b6b] truncate">
-                      {member.user?.email ?? member.invite_email ?? ''}
-                    </p>
+              {members.map((member) => {
+                const memberWeight = getMemberWeight(member);
+                const canModify = currentUserWeight > memberWeight;
+                return (
+                  <div
+                    key={member.id}
+                    className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] gap-3 px-5 py-4 text-sm items-center hover:bg-[#f5f5f5]"
+                  >
+                    <Avatar className="w-8 h-8 bg-[#0a0a0a] text-white text-xs flex items-center justify-center shrink-0">
+                      <span>{memberInitials(member)}</span>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-medium text-[#0a0a0a] truncate">
+                        {member.user?.name ?? member.invite_email ?? '—'}
+                      </p>
+                      <p className="text-xs text-[#6b6b6b] truncate">
+                        {member.user?.email ?? member.invite_email ?? ''}
+                      </p>
+                    </div>
+                    <span>{roleBadge(member.role)}</span>
+                    <span>{statusBadge(member.status)}</span>
+                    <span className="text-[#6b6b6b] text-xs">
+                      {member.joined_at
+                        ? format(new Date(member.joined_at), 'MMM d, yyyy')
+                        : member.status === 'pending'
+                          ? `Invited ${format(new Date(member.invited_at), 'MMM d')}`
+                          : '—'}
+                    </span>
+                    <span className="flex items-center gap-1 justify-end">
+                      {canModify && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-[#6b6b6b] hover:text-[#0a0a0a]"
+                          onClick={() => openPermissions(member)}
+                          title="Edit permissions"
+                        >
+                          <Settings2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      {canModify && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-[#6b6b6b] hover:text-[#0a0a0a]"
+                          disabled={removingId === member.id}
+                          onClick={() => removeMember(member.id)}
+                          title="Remove member"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </span>
                   </div>
-                  <span>{roleBadge(member.role)}</span>
-                  <span>{statusBadge(member.status)}</span>
-                  <span className="text-[#6b6b6b] text-xs">
-                    {member.joined_at
-                      ? format(new Date(member.joined_at), 'MMM d, yyyy')
-                      : member.status === 'pending'
-                        ? `Invited ${format(new Date(member.invited_at), 'MMM d')}`
-                        : '—'}
-                  </span>
-                  <span className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-[#6b6b6b] hover:text-[#0a0a0a]"
-                      disabled={removingId === member.id}
-                      onClick={() => removeMember(member.id)}
-                      title="Remove member"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         )}
@@ -277,6 +383,67 @@ export default function TeamPage() {
               disabled={inviting || !inviteEmail.trim()}
             >
               {inviting ? 'Sending…' : 'Send Invitation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permissions dialog */}
+      <Dialog open={permissionsOpen} onOpenChange={(open) => {
+        if (!open) { setPermissionsOpen(false); setPermissionsMember(null); }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Module Permissions</DialogTitle>
+            <DialogDescription>
+              {permissionsMember
+                ? `Choose which modules ${permissionsMember.user?.name ?? permissionsMember.invite_email ?? 'this member'} can access.`
+                : 'Choose which modules this member can access.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2 py-2">
+            {ALL_MODULES.map((mod) => {
+              const checked = permModules.includes(mod);
+              return (
+                <label
+                  key={mod}
+                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                    checked
+                      ? 'border-[#0a0a0a] bg-[#0a0a0a]/5'
+                      : 'border-[#e0e0e0] hover:bg-[#f5f5f5]'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleModule(mod)}
+                    className="h-3.5 w-3.5 accent-[#0a0a0a]"
+                  />
+                  <span className="text-sm text-[#0a0a0a]">{MODULE_LABELS[mod] ?? mod}</span>
+                </label>
+              );
+            })}
+          </div>
+
+          {permissionsError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              {permissionsError}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setPermissionsOpen(false); setPermissionsMember(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => permissionsMember && savePermissions(permissionsMember.id)}
+              disabled={savingPermissions || !permissionsMember}
+            >
+              {savingPermissions ? 'Saving…' : 'Save Permissions'}
             </Button>
           </DialogFooter>
         </DialogContent>

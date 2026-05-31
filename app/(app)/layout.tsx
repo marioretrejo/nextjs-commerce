@@ -1,6 +1,7 @@
 import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { Sidebar } from '@/components/layout/sidebar';
+import { RouteGuard } from '@/components/layout/route-guard';
 import { CommandPalette } from '@/components/command-palette';
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
 import { MinuteAlerts } from '@/components/minute-usage/minute-alerts';
@@ -65,6 +66,20 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     redirect('/suspended');
   }
 
+  // ── Visible modules for the current member ────────────────────────────────
+  const { data: memberRecord } = await supabase
+    .from('workspace_members')
+    .select('visible_modules, role')
+    .eq('workspace_id', workspace.id)
+    .eq('user_id', authUser.id)
+    .maybeSingle();
+
+  // Owners and superadmins see everything
+  const visibleModules: string[] | undefined =
+    isImpersonating || userProfile.is_superadmin || (workspace as { owner_id?: string }).owner_id === authUser.id
+      ? undefined  // undefined = show all
+      : (memberRecord as { visible_modules: string[] } | null)?.visible_modules ?? undefined;
+
   // Billing state for standard vs enterprise clients
   const minuteCap         = (workspace as { minute_cap?: number | null }).minute_cap ?? null;
   const balanceCents      = (workspace as { stripe_balance_cents?: number }).stripe_balance_cents ?? 0;
@@ -89,8 +104,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         />
       )}
       <div className="hidden md:block">
-        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} />
+        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} visibleModules={visibleModules} />
       </div>
+      <RouteGuard visibleModules={visibleModules} />
       <div className={`flex flex-1 flex-col md:pl-56 ${isImpersonating ? 'mt-10' : ''}`}>
         <Header user={userProfile} workspace={workspace} unreadNotifications={unread} />
         {/* Activation banner — standard clients with $0 balance */}

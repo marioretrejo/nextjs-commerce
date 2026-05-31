@@ -27,18 +27,18 @@ export function ImpersonationBanner({ workspaceId, workspaceName }: Props) {
   };
 
   return (
-    <div className="fixed inset-x-0 top-0 z-[100] flex h-10 items-center justify-between bg-amber-500 px-4 text-sm font-medium text-amber-950">
+    <div className="fixed inset-x-0 top-0 z-[100] flex h-10 items-center justify-between bg-red-600 px-4 text-sm font-medium text-white">
       <div className="flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 shrink-0" />
         <span>
-          You are impersonating workspace: <strong>{workspaceName}</strong>
+          God Mode Active — Impersonating: <strong>{workspaceName}</strong>
           {' '}— changes you make are real.
         </span>
       </div>
       <button
         onClick={exit}
         disabled={exiting}
-        className="flex items-center gap-1.5 rounded-md bg-amber-800/20 px-3 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-800/30 transition-colors disabled:opacity-60"
+        className="flex items-center gap-1.5 rounded-md bg-red-800/30 px-3 py-1 text-xs font-semibold text-white hover:bg-red-800/40 transition-colors disabled:opacity-60"
       >
         {exiting ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
         Exit Impersonation
