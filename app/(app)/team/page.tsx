@@ -271,8 +271,8 @@ export default function TeamPage() {
             </div>
             <div className="divide-y divide-[#e0e0e0]">
               {members.map((member) => {
-                const memberWeight = getMemberWeight(member);
-                const canModify = currentUserWeight > memberWeight;
+                const isSuperadmin = currentUserWeight >= 100;
+                const canRemove = currentUserWeight > getMemberWeight(member);
                 return (
                   <div
                     key={member.id}
@@ -299,18 +299,18 @@ export default function TeamPage() {
                           : '—'}
                     </span>
                     <span className="flex items-center gap-1 justify-end">
-                      {canModify && (
+                      {isSuperadmin && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-[#6b6b6b] hover:text-[#0a0a0a]"
                           onClick={() => openPermissions(member)}
-                          title="Edit permissions"
+                          title="Manage role & permissions (Superadmin only)"
                         >
                           <Settings2 className="w-3.5 h-3.5" />
                         </Button>
                       )}
-                      {canModify && (
+                      {canRemove && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -409,9 +409,8 @@ export default function TeamPage() {
             <Label className="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wider">Role</Label>
             <div className="grid grid-cols-3 gap-2">
               {ROLES.map((r) => {
-                const roleWeight = ROLE_WEIGHT[r.value] ?? 0;
-                const canAssign = currentUserWeight > roleWeight;
                 const selected = permRole === r.value;
+                const canAssign = true; // superadmin can assign any role (admin/editor/viewer)
                 return (
                   <button
                     key={r.value}

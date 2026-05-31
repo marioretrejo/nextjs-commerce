@@ -19,26 +19,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!target) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const t = target as { id: string; workspace_id: string; role: string; user_id: string | null };
 
-  // Resolve actor weight
+  // Only superadmins can change roles and module visibility
   const { data: profile } = await supabase.from('users').select('is_superadmin').eq('id', user.id).single();
   const isSuperadmin = (profile as { is_superadmin: boolean } | null)?.is_superadmin ?? false;
-  const { data: ws } = await supabase.from('workspaces').select('owner_id').eq('id', t.workspace_id).single();
-  const isOwner = (ws as { owner_id: string } | null)?.owner_id === user.id;
 
-  // Get actor's role in workspace_members
-  const { data: actorMember } = await supabase
-    .from('workspace_members')
-    .select('role')
-    .eq('workspace_id', t.workspace_id)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  const { ROLE_WEIGHT } = await import('@/lib/team/permissions');
-  const actorWeight = isSuperadmin ? 100 : isOwner ? 80 : ROLE_WEIGHT[(actorMember as { role: string } | null)?.role ?? ''] ?? 0;
-  const targetWeight = isOwner && t.user_id && (ws as { owner_id: string } | null)?.owner_id === t.user_id ? 80 : ROLE_WEIGHT[t.role] ?? 0;
-
-  if (actorWeight <= targetWeight) {
-    return NextResponse.json({ error: 'Cannot modify a member with equal or higher role.' }, { status: 403 });
+  if (!isSuperadmin) {
+    return NextResponse.json({ error: 'Only superadmins can manage roles and permissions.' }, { status: 403 });
   }
 
   const updates: Record<string, unknown> = {};
