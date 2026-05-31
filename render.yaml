@@ -1,3 +1,18 @@
+# ─── VoiceOS Render deployment ─────────────────────────────────────────────────
+#
+# Deploys the LiveKit agent worker as a persistent background worker.
+# The Next.js frontend is deployed separately on Vercel.
+#
+# Usage:
+#   1. Push this repo to GitHub
+#   2. New → Blueprint in Render dashboard → connect repo
+#   3. Fill in the env var values marked "sync: false" in the Render UI
+#   4. Deploy
+#
+# Recommended plan: "starter plus" ($14/mo) or "standard" ($25/mo)
+# The worker is always-on and handles concurrent voice calls.
+# ───────────────────────────────────────────────────────────────────────────────
+
 services:
   - type: worker
     name: voiceos-agent-worker
@@ -5,13 +20,18 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter
     autoDeploy: true
+    # LiveKit agent workers are stateless — scale horizontally for more concurrent calls
+    numInstances: 1
     envVars:
+      # ── LiveKit (required) ────────────────────────────────────────────────────
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+
+      # ── AI providers (required) ───────────────────────────────────────────────
       - key: DEEPGRAM_API_KEY
         sync: false
       - key: GROQ_API_KEY
@@ -19,10 +39,18 @@ services:
       - key: CARTESIA_API_KEY
         sync: false
       - key: OPENAI_API_KEY
-        sync: false
+        sync: false          # Used for LLM fallback, TTS fallback, and RAG embeddings
+
+      # ── Supabase (required) ───────────────────────────────────────────────────
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+
+      # ── Optional ─────────────────────────────────────────────────────────────
+      - key: SUPPORT_TRANSFER_NUMBER
+        sync: false          # E.164 fallback transfer number, e.g. +12125550100
+
+      # ── Runtime ──────────────────────────────────────────────────────────────
       - key: NODE_ENV
         value: production

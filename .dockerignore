@@ -1,0 +1,29 @@
+# Build artifacts
+.next
+out
+
+# Dependencies (rebuilt inside Docker)
+node_modules
+
+# Dev tooling
+.git
+.github
+.vscode
+*.md
+
+# Env files (secrets must come from the host, never baked into the image)
+.env
+.env.*
+
+# Vercel / Supabase local config
+.vercel
+supabase/.temp
+supabase/seed.sql
+
+# Test / lint artifacts
+coverage
+.turbo
+
+# OS noise
+.DS_Store
+Thumbs.db

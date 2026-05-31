@@ -4,6 +4,7 @@
     "dev": "next dev --turbopack",
     "agent": "tsx agent/worker.ts dev",
     "agent:prod": "tsx agent/worker.ts start",
+    "start:worker": "node --import tsx/esm agent/worker.ts start",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
