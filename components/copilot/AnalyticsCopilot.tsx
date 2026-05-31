@@ -99,7 +99,7 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold leading-none text-white">Analytics Copilot</p>
-              <p className="mt-0.5 text-xs text-white/50">GPT-4o · real-time data</p>
+              <p className="mt-0.5 text-xs text-white/50">real-time data</p>
             </div>
             <button
               onClick={() => setOpen(false)}

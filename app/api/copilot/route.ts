@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat';
+import Groq from 'groq-sdk';
+import type { ChatCompletionMessageParam, ChatCompletionTool } from 'groq-sdk/resources/chat/completions';
 
 const TOOLS: ChatCompletionTool[] = [
   {
@@ -100,8 +100,8 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  if (!process.env['OPENAI_API_KEY']) {
-    return NextResponse.json({ error: 'OpenAI not configured — add OPENAI_API_KEY to Vercel env vars' }, { status: 503 });
+  if (!process.env['GROQ_API_KEY']) {
+    return NextResponse.json({ error: 'Groq not configured — add GROQ_API_KEY to Vercel env vars' }, { status: 503 });
   }
 
   const admin = createAdminClient();
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
   const workspaceId = (ws as { id: string }).id;
 
   const { messages } = await req.json() as { messages: ChatCompletionMessageParam[] };
-  const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+  const groq = new Groq({ apiKey: process.env['GROQ_API_KEY'] });
 
   const history: ChatCompletionMessageParam[] = [
     {
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
   ];
 
   for (let round = 0; round < 4; round++) {
-    const response = await openai.chat.completions.create({ model: 'gpt-4o', messages: history, tools: TOOLS, tool_choice: 'auto', max_tokens: 1024 });
+    const response = await groq.chat.completions.create({ model: 'llama-3.3-70b-versatile', messages: history, tools: TOOLS, tool_choice: 'auto', max_tokens: 1024 });
     const choice = response.choices[0];
     if (!choice) break;
     history.push(choice.message);
