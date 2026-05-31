@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "agents": "エージェント",
+    "campaigns": "キャンペーン",
+    "callHistory": "通話履歴",
+    "liveMonitor": "ライブモニター",
+    "analytics": "分析",
+    "usage": "使用状況",
+    "knowledge": "ナレッジ",
+    "voiceStudio": "ボイススタジオ",
+    "quality": "品質",
+    "numbers": "番号",
+    "compliance": "コンプライアンス",
+    "integrations": "インテグレーション",
+    "webhooks": "Webhooks",
+    "team": "チーム",
+    "billing": "請求",
+    "settings": "設定",
+    "developers": "開発者"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "loading": "読み込み中…",
+    "delete": "削除",
+    "add": "追加",
+    "edit": "編集",
+    "connect": "接続",
+    "disconnect": "切断",
+    "refresh": "更新",
+    "back": "戻る",
+    "close": "閉じる",
+    "confirm": "確認"
+  }
+}

@@ -3,57 +3,34 @@
 import { cn } from '@/lib/utils';
 import {
   BarChart2, Bell, BookOpen, Bot, Code2, Cpu, Mic,
-  CreditCard, DollarSign, Globe, Key, LayoutDashboard,
+  CreditCard, DollarSign, Globe, LayoutDashboard,
   Megaphone, Phone, PhoneCall, Radio, Settings, Shield,
   ShieldCheck, Star, Users
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import type { LucideIcon } from 'lucide-react';
+import { LanguageSwitcher } from './language-switcher';
 
-const navGroups = [
-  {
-    items: [
-      { href: '/dashboard',       label: 'Dashboard',     icon: LayoutDashboard },
-      { href: '/agents',          label: 'Agents',         icon: Bot },
-      { href: '/campaigns',       label: 'Campaigns',      icon: Megaphone },
-    ]
-  },
-  {
-    label: 'CALLS',
-    items: [
-      { href: '/calls',           label: 'Call History',   icon: PhoneCall },
-      { href: '/calls/live',      label: 'Live Monitor',   icon: Radio, pulse: true },
-    ]
-  },
-  {
-    label: 'INTELLIGENCE',
-    items: [
-      { href: '/analytics',       label: 'Analytics',      icon: BarChart2 },
-      { href: '/analytics/costs', label: 'Usage',          icon: DollarSign },
-      { href: '/knowledge',       label: 'Knowledge',      icon: BookOpen },
-      { href: '/voice-studio',    label: 'Voice Studio',   icon: Mic },
-      { href: '/quality',         label: 'Quality',        icon: Star },
-    ]
-  },
-  {
-    label: 'WORKSPACE',
-    items: [
-      { href: '/numbers',         label: 'Numbers',        icon: Phone },
-      { href: '/compliance',      label: 'Compliance',     icon: ShieldCheck },
-      { href: '/integrations',    label: 'Integrations',   icon: Globe },
-      { href: '/integrations/webhooks', label: 'Webhooks', icon: Bell },
-      { href: '/team',            label: 'Team',           icon: Users },
-      { href: '/billing',         label: 'Billing',        icon: CreditCard },
-      { href: '/settings',        label: 'Settings',       icon: Settings },
-      { href: '/developers',      label: 'Developers',     icon: Code2 },
-    ]
-  }
-];
+interface NavItem {
+  href: string;
+  labelKey: keyof ReturnType<ReturnType<typeof useTranslations<'nav'>>['raw']> extends never
+    ? string
+    : string;
+  icon: LucideIcon;
+  pulse?: boolean;
+}
+
+interface NavGroup {
+  label?: string;
+  items: NavItem[];
+}
 
 const adminItems = [
-  { href: '/admin',                label: 'Superadmin',     icon: Shield },
-  { href: '/admin/workspaces',     label: 'Workspaces',     icon: Cpu },
-  { href: '/admin/infrastructure', label: 'Infrastructure', icon: Cpu },
+  { href: '/admin',                labelKey: 'Superadmin',     icon: Shield },
+  { href: '/admin/workspaces',     labelKey: 'Workspaces',     icon: Cpu },
+  { href: '/admin/infrastructure', labelKey: 'Infrastructure', icon: Cpu },
 ];
 
 interface SidebarProps {
@@ -63,6 +40,47 @@ interface SidebarProps {
 
 export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarProps) {
   const pathname = usePathname();
+  const t = useTranslations('nav');
+
+  const navGroups: NavGroup[] = [
+    {
+      items: [
+        { href: '/dashboard',  labelKey: 'dashboard',  icon: LayoutDashboard },
+        { href: '/agents',     labelKey: 'agents',     icon: Bot },
+        { href: '/campaigns',  labelKey: 'campaigns',  icon: Megaphone },
+      ]
+    },
+    {
+      label: 'CALLS',
+      items: [
+        { href: '/calls',      labelKey: 'callHistory', icon: PhoneCall },
+        { href: '/calls/live', labelKey: 'liveMonitor', icon: Radio, pulse: true },
+      ]
+    },
+    {
+      label: 'INTELLIGENCE',
+      items: [
+        { href: '/analytics',       labelKey: 'analytics',   icon: BarChart2 },
+        { href: '/analytics/costs', labelKey: 'usage',       icon: DollarSign },
+        { href: '/knowledge',       labelKey: 'knowledge',   icon: BookOpen },
+        { href: '/voice-studio',    labelKey: 'voiceStudio', icon: Mic },
+        { href: '/quality',         labelKey: 'quality',     icon: Star },
+      ]
+    },
+    {
+      label: 'WORKSPACE',
+      items: [
+        { href: '/numbers',               labelKey: 'numbers',      icon: Phone },
+        { href: '/compliance',            labelKey: 'compliance',   icon: ShieldCheck },
+        { href: '/integrations',          labelKey: 'integrations', icon: Globe },
+        { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell },
+        { href: '/team',                  labelKey: 'team',         icon: Users },
+        { href: '/billing',               labelKey: 'billing',      icon: CreditCard },
+        { href: '/settings',              labelKey: 'settings',     icon: Settings },
+        { href: '/developers',            labelKey: 'developers',   icon: Code2 },
+      ]
+    }
+  ];
 
   function isActive(href: string) {
     if (href === '/calls') return pathname === '/calls';
@@ -72,12 +90,10 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 w-56">
-      {/* Floating inner panel */}
       <div className="m-3 flex h-[calc(100vh-24px)] flex-col rounded-2xl bg-white sidebar-panel overflow-hidden">
 
         {/* Logo */}
         <div className="px-5 pt-5 pb-4">
-          {/* Decorative accent bar */}
           <div className="flex items-center gap-1.5 mb-4">
             <span className="h-4 w-1 rounded-full bg-[#0a0a0a]" />
             <span className="h-3 w-1 rounded-full bg-[#d4d4d4]" />
@@ -91,7 +107,6 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
           </p>
         </div>
 
-        {/* Separator */}
         <div className="mx-4 mb-2 h-px bg-[#f0f0f0]" />
 
         {/* Nav */}
@@ -104,8 +119,7 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
                 </p>
               )}
               <div className="space-y-0.5">
-                {group.items.map(({ href, label, icon: Icon, ...rest }) => {
-                const pulse = 'pulse' in rest ? rest.pulse : false;
+                {group.items.map(({ href, labelKey, icon: Icon, pulse }) => {
                   const active = isActive(href);
                   return (
                     <Link
@@ -122,7 +136,7 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
                         'h-3.5 w-3.5 shrink-0 transition-transform duration-150',
                         active ? 'text-white' : 'text-[#b0b0b0] group-hover:text-[#0a0a0a] group-hover:scale-110'
                       )} />
-                      <span className="truncate">{label}</span>
+                      <span className="truncate">{t(labelKey as Parameters<typeof t>[0])}</span>
                       {pulse && !active && (
                         <span className="ml-auto flex h-1.5 w-1.5 shrink-0">
                           <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75" />
@@ -143,7 +157,7 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
                 Admin
               </p>
               <div className="space-y-0.5">
-                {adminItems.map(({ href, label, icon: Icon }) => {
+                {adminItems.map(({ href, labelKey, icon: Icon }) => {
                   const active = isActive(href);
                   return (
                     <Link
@@ -160,7 +174,7 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
                         'h-3.5 w-3.5 shrink-0',
                         active ? 'text-white' : 'text-[#b0b0b0] group-hover:text-[#0a0a0a]'
                       )} />
-                      {label}
+                      {labelKey}
                     </Link>
                   );
                 })}
@@ -169,13 +183,16 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS' }: SidebarPr
           )}
         </nav>
 
-        {/* Bottom status strip */}
-        <div className="mx-3 mb-3 rounded-xl bg-[#f8f8f8] px-3 py-2.5 border border-[#efefef]">
-          <div className="flex items-center gap-2">
-            <span className="flex h-1.5 w-1.5 rounded-full bg-green-500">
-              <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75" />
-            </span>
-            <span className="text-[10px] font-medium text-[#9b9b9b]">All systems operational</span>
+        {/* Bottom: language switcher + status strip */}
+        <div className="px-3 pb-3 space-y-2">
+          <LanguageSwitcher />
+          <div className="rounded-xl bg-[#f8f8f8] px-3 py-2.5 border border-[#efefef]">
+            <div className="flex items-center gap-2">
+              <span className="flex h-1.5 w-1.5 rounded-full bg-green-500">
+                <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75" />
+              </span>
+              <span className="text-[10px] font-medium text-[#9b9b9b]">All systems operational</span>
+            </div>
           </div>
         </div>
       </div>

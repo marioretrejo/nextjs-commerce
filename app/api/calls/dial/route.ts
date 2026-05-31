@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { RoomServiceClient, SipClient } from 'livekit-server-sdk';
+import { parsePhoneNumber } from 'libphonenumber-js';
 import { getRegionalHttpUrl } from '@/lib/livekit/edge';
 import { NextResponse } from 'next/server';
 
@@ -93,6 +94,13 @@ async function dialViaSipEgress(params: {
 // ── End SIP Egress helpers ───────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
+
+function buildLocalPresenceWarning(missingCountry: string | null) {
+  if (!missingCountry) return null;
+  const displayName = new Intl.DisplayNames(['en'], { type: 'region' });
+  const countryName = displayName.of(missingCountry) ?? missingCountry;
+  return { warning: 'missing_local_number', missingCountry: countryName };
+}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -182,6 +190,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create room.' }, { status: 500 });
   }
 
+  // ── Local Presence: extract destination country → match workspace number ───
+  let destinationCountry: string | null = null;
+  let missingLocalCountry: string | null = null;
+  try { destinationCountry = parsePhoneNumber(to).country ?? null; } catch { /* invalid format */ }
+
   // Resolve caller ID: prefer requestedCallerId if it belongs to this workspace
   let callerId = '';
   if (requestedCallerId) {
@@ -194,6 +207,29 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (ownedNumber) callerId = (ownedNumber as { number: string }).number;
   }
+
+  // Local presence: if no explicit caller ID, find a workspace number in same country
+  if (!callerId && destinationCountry) {
+    const { data: allNumbers } = await admin
+      .from('phone_numbers')
+      .select('number')
+      .eq('workspace_id', workspace.id)
+      .eq('status', 'available');
+
+    if (allNumbers) {
+      for (const row of allNumbers as { number: string }[]) {
+        try {
+          if (parsePhoneNumber(row.number).country === destinationCountry) {
+            callerId = row.number;
+            console.log(`[local-presence] matched local number ${callerId} for ${destinationCountry} destination`);
+            break;
+          }
+        } catch { /* unparseable number — skip */ }
+      }
+    }
+    if (!callerId) missingLocalCountry = destinationCountry;
+  }
+
   if (!callerId) {
     const { data: defaultNumber } = await admin
       .from('phone_numbers')
@@ -205,6 +241,11 @@ export async function POST(req: Request) {
     callerId = (defaultNumber as { number: string } | null)?.number
       ?? process.env['TWILIO_PHONE_NUMBER']
       ?? '';
+    if (missingLocalCountry) {
+      const displayName = new Intl.DisplayNames(['en'], { type: 'region' });
+      const countryName = displayName.of(missingLocalCountry) ?? missingLocalCountry;
+      console.log(`[local-presence] no local number for ${countryName} — falling back to ${callerId}`);
+    }
   }
 
   // ── SIP Egress path (Squaretalk / CommPeak / any SIP provider) ──────────
@@ -242,11 +283,13 @@ export async function POST(req: Request) {
           livekit_participant_sid: participantSid,
         },
       });
+      const sipWarning = buildLocalPresenceWarning(missingLocalCountry);
       return NextResponse.json({
         call_id: roomName, room_name: roomName,
         method: 'livekit_sip_egress',
         sip_provider: creds.provider_name,
         status: 'dialing',
+        ...(sipWarning ?? {}),
       });
     } catch (err) {
       void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
@@ -312,5 +355,10 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({ call_id: roomName, room_name: roomName, twilio_call_sid: twilioCallSid, status: 'dialing' });
+  const twilioWarning = buildLocalPresenceWarning(missingLocalCountry);
+  return NextResponse.json({
+    call_id: roomName, room_name: roomName,
+    twilio_call_sid: twilioCallSid, status: 'dialing',
+    ...(twilioWarning ?? {}),
+  });
 }

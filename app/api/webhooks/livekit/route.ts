@@ -1,4 +1,4 @@
-import { WebhookReceiver, RoomServiceClient } from 'livekit-server-sdk';
+import { WebhookReceiver, RoomServiceClient, EgressClient, EncodedFileOutput, EncodedFileType, S3Upload } from 'livekit-server-sdk';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { deliverWebhook } from '@/lib/webhooks/deliver';
 import { NextResponse } from 'next/server';
@@ -133,9 +133,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // ─── Kill switch: mid-call balance check ──────────────────────────────────
-  // If a workspace runs out of minutes DURING an active call, forcibly end the room.
-  // Triggered by checking after each room_started event.
+  // ─── Kill switch + recording egress start ─────────────────────────────────
   if (event.event === 'room_started') {
     const roomName = event.room?.name ?? '';
     const match = roomName.match(/^(?:agent|sip-agent)-([0-9a-f-]+)/i);
@@ -156,17 +154,44 @@ export async function POST(req: Request) {
         .eq('id', workspaceId)
         .single();
 
-      // If workspace is already at 100%, kill the room before it consumes more API credits
-      if (ws && Number((ws as { minutes_used: number }).minutes_used) >= Number((ws as { minutes_limit: number }).minutes_limit)) {
-        const wsUrl = process.env['LIVEKIT_URL'] ?? '';
-        const httpUrl = wsUrl.replace('wss://', 'https://');
-        const lkApiKey = process.env['LIVEKIT_API_KEY'];
-        const lkApiSecret = process.env['LIVEKIT_API_SECRET'];
+      const wsUrl = process.env['LIVEKIT_URL'] ?? '';
+      const httpUrl = wsUrl.replace('wss://', 'https://');
+      const lkApiKey = process.env['LIVEKIT_API_KEY'];
+      const lkApiSecret = process.env['LIVEKIT_API_SECRET'];
 
-        if (httpUrl && lkApiKey && lkApiSecret) {
+      if (httpUrl && lkApiKey && lkApiSecret) {
+        // Kill switch: workspace at 100% → delete room
+        if (ws && Number((ws as { minutes_used: number }).minutes_used) >= Number((ws as { minutes_limit: number }).minutes_limit)) {
           const roomService = new RoomServiceClient(httpUrl, lkApiKey, lkApiSecret);
-          // Delete the room — the worker detects disconnection and plays a goodbye
           roomService.deleteRoom(roomName).catch(() => null);
+        } else {
+          // ── Start audio-only egress → Supabase Storage S3 ─────────────────
+          const s3Key    = process.env['SUPABASE_S3_ACCESS_KEY'];
+          const s3Secret = process.env['SUPABASE_S3_SECRET_KEY'];
+          const s3Url    = process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '';
+
+          if (s3Key && s3Secret && s3Url) {
+            const egressClient = new EgressClient(httpUrl, lkApiKey, lkApiSecret);
+            const s3 = new S3Upload({
+              accessKey: s3Key,
+              secret: s3Secret,
+              region: 'us-east-1',
+              endpoint: `${s3Url}/storage/v1/s3`,
+              bucket: 'call_recordings',
+              forcePathStyle: true,
+            });
+            const fileOutput = new EncodedFileOutput({
+              fileType: EncodedFileType.MP3,
+              filepath: `${roomName}/${roomName}.mp3`,
+              disableManifest: true,
+              output: { case: 's3', value: s3 },
+            });
+
+            egressClient.startRoomCompositeEgress(roomName, fileOutput, {
+              audioOnly: true,
+              layout: '',
+            }).catch(() => null); // non-fatal if egress fails
+          }
         }
       }
     }

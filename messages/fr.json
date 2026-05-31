@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "agents": "Agents",
+    "campaigns": "Campagnes",
+    "callHistory": "Historique des appels",
+    "liveMonitor": "Moniteur en direct",
+    "analytics": "Analytiques",
+    "usage": "Utilisation",
+    "knowledge": "Connaissances",
+    "voiceStudio": "Studio vocal",
+    "quality": "Qualité",
+    "numbers": "Numéros",
+    "compliance": "Conformité",
+    "integrations": "Intégrations",
+    "webhooks": "Webhooks",
+    "team": "Équipe",
+    "billing": "Facturation",
+    "settings": "Paramètres",
+    "developers": "Développeurs"
+  },
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "loading": "Chargement…",
+    "delete": "Supprimer",
+    "add": "Ajouter",
+    "edit": "Modifier",
+    "connect": "Connecter",
+    "disconnect": "Déconnecter",
+    "refresh": "Actualiser",
+    "back": "Retour",
+    "close": "Fermer",
+    "confirm": "Confirmer"
+  }
+}

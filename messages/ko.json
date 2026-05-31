@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "dashboard": "대시보드",
+    "agents": "에이전트",
+    "campaigns": "캠페인",
+    "callHistory": "통화 기록",
+    "liveMonitor": "실시간 모니터",
+    "analytics": "분석",
+    "usage": "사용량",
+    "knowledge": "지식 베이스",
+    "voiceStudio": "음성 스튜디오",
+    "quality": "품질",
+    "numbers": "번호",
+    "compliance": "컴플라이언스",
+    "integrations": "통합",
+    "webhooks": "Webhooks",
+    "team": "팀",
+    "billing": "청구",
+    "settings": "설정",
+    "developers": "개발자"
+  },
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "loading": "로딩 중…",
+    "delete": "삭제",
+    "add": "추가",
+    "edit": "편집",
+    "connect": "연결",
+    "disconnect": "연결 해제",
+    "refresh": "새로고침",
+    "back": "뒤로",
+    "close": "닫기",
+    "confirm": "확인"
+  }
+}

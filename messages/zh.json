@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "dashboard": "仪表板",
+    "agents": "代理",
+    "campaigns": "活动",
+    "callHistory": "通话记录",
+    "liveMonitor": "实时监控",
+    "analytics": "分析",
+    "usage": "使用情况",
+    "knowledge": "知识库",
+    "voiceStudio": "语音工作室",
+    "quality": "质量",
+    "numbers": "号码",
+    "compliance": "合规",
+    "integrations": "集成",
+    "webhooks": "Webhooks",
+    "team": "团队",
+    "billing": "账单",
+    "settings": "设置",
+    "developers": "开发者"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "loading": "加载中…",
+    "delete": "删除",
+    "add": "添加",
+    "edit": "编辑",
+    "connect": "连接",
+    "disconnect": "断开",
+    "refresh": "刷新",
+    "back": "返回",
+    "close": "关闭",
+    "confirm": "确认"
+  }
+}

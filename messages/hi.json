@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "agents": "एजेंट",
+    "campaigns": "अभियान",
+    "callHistory": "कॉल इतिहास",
+    "liveMonitor": "लाइव मॉनिटर",
+    "analytics": "विश्लेषण",
+    "usage": "उपयोग",
+    "knowledge": "ज्ञानकोष",
+    "voiceStudio": "वॉइस स्टूडियो",
+    "quality": "गुणवत्ता",
+    "numbers": "नंबर",
+    "compliance": "अनुपालन",
+    "integrations": "एकीकरण",
+    "webhooks": "Webhooks",
+    "team": "टीम",
+    "billing": "बिलिंग",
+    "settings": "सेटिंग्स",
+    "developers": "डेवलपर्स"
+  },
+  "common": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "loading": "लोड हो रहा है…",
+    "delete": "हटाएं",
+    "add": "जोड़ें",
+    "edit": "संपादित करें",
+    "connect": "कनेक्ट करें",
+    "disconnect": "डिसकनेक्ट करें",
+    "refresh": "रीफ्रेश करें",
+    "back": "वापस",
+    "close": "बंद करें",
+    "confirm": "पुष्टि करें"
+  }
+}

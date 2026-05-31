@@ -6,7 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import type { Call, CallOutcome, CallSentiment, CallDisposition } from '@/lib/supabase/types';
-import { Phone, Search, Clock, User, Bot, ExternalLink, FileText } from 'lucide-react';
+import { Phone, Search, Clock, User, Bot, ExternalLink, FileText, PhoneOutgoing, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -51,6 +53,8 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
+interface Agent { id: string; name: string }
+
 export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,11 +63,23 @@ export default function CallsPage() {
   const [dispositionFilter, setDispositionFilter] = useState<DispositionFilter>('all');
   const [workspaceId, setWorkspaceId] = useState('');
 
+  // Manual outbound dial
+  const [dialOpen, setDialOpen] = useState(false);
+  const [dialTo, setDialTo] = useState('');
+  const [dialAgentId, setDialAgentId] = useState('');
+  const [dialAgents, setDialAgents] = useState<Agent[]>([]);
+  const [dialing, setDialing] = useState(false);
+
   useEffect(() => {
     fetch('/api/admin/workspace-id')
       .then((r) => r.json())
       .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
       .catch(() => { setLoading(false); toast.error('Failed to load workspace data'); });
+    // Preload agents for manual dial
+    fetch('/api/agents')
+      .then(r => r.ok ? r.json() : { agents: [] })
+      .then((d: { agents?: Agent[] }) => setDialAgents(d.agents ?? []))
+      .catch(() => null);
   }, []);
 
   const fetchCalls = useCallback(async () => {
@@ -93,6 +109,30 @@ export default function CallsPage() {
     return () => clearTimeout(timer);
   }, [fetchCalls, workspaceId]);
 
+  async function startOutboundCall() {
+    if (!dialTo.trim() || !dialAgentId) { toast.error('Phone number and agent are required'); return; }
+    setDialing(true);
+    try {
+      const res = await fetch('/api/calls/dial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: dialAgentId, to: dialTo.trim() }),
+      });
+      const d = await res.json() as { call_id?: string; error?: string; warning?: string; missingCountry?: string };
+      if (!res.ok) { toast.error(d.error ?? 'Call failed'); return; }
+      toast.success('Call dialing…');
+      if (d.warning === 'missing_local_number' && d.missingCountry) {
+        toast(`Estás intentando llamar a ${d.missingCountry}, y no tienes un número local. Te recomendamos adquirir uno para mejorar la conectividad.`, {
+          duration: 8000,
+          action: { label: 'Comprar número', onClick: () => { window.location.href = '/numbers'; } },
+        });
+      }
+      setDialOpen(false);
+      setDialTo('');
+    } catch (e) { toast.error(String(e)); }
+    finally { setDialing(false); }
+  }
+
   const outcomes: { value: OutcomeFilter; label: string }[] = [
     { value: 'all',         label: 'All Outcomes' },
     { value: 'converted',   label: 'Converted' },
@@ -116,6 +156,48 @@ export default function CallsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Dial modal */}
+      {dialOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDialOpen(false)} />
+          <div className="relative bg-white rounded-2xl border border-[#e0e0e0] shadow-xl p-6 w-full max-w-sm mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-base">New Outbound Call</h2>
+              <button onClick={() => setDialOpen(false)} className="text-[#6b6b6b] hover:text-[#0a0a0a]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="dial-to" className="text-xs">Destination Number (E.164)</Label>
+              <Input
+                id="dial-to"
+                placeholder="+14155551234"
+                value={dialTo}
+                onChange={e => setDialTo(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && startOutboundCall()}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="dial-agent" className="text-xs">Agent</Label>
+              <select
+                id="dial-agent"
+                value={dialAgentId}
+                onChange={e => setDialAgentId(e.target.value)}
+                className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
+              >
+                <option value="">Select agent…</option>
+                {dialAgents.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+            <Button className="w-full" onClick={startOutboundCall} disabled={dialing || !dialTo.trim() || !dialAgentId}>
+              {dialing ? 'Dialing…' : 'Start Call'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -124,6 +206,10 @@ export default function CallsPage() {
             Browse call recordings, AI summaries, and dispositions.
           </p>
         </div>
+        <Button size="sm" onClick={() => setDialOpen(true)} className="flex items-center gap-1.5">
+          <PhoneOutgoing className="h-3.5 w-3.5" />
+          New Call
+        </Button>
       </div>
 
       {/* Filters */}

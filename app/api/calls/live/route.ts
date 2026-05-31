@@ -21,12 +21,13 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('calls')
-    .select('*, agent:agents(name)')
+    .select('id, workspace_id, agent_id, contact_name, contact_phone, created_at, transcript, sentiment, retell_call_id, agent:agents(name)')
     .eq('workspace_id', workspaceId)
     .eq('status', 'in_progress')
     .gte('created_at', fourHoursAgo)
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ calls: (data ?? []).map(c => sanitizeCallForClient(c as Record<string, unknown>)) });
+  // Return raw data (no sanitize) so retell_call_id (room name) is available for Listen In
+  return NextResponse.json({ calls: data ?? [] });
 }

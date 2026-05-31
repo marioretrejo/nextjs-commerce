@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WaveformPlayer } from '@/components/calls/WaveformPlayer';
 import { createClient } from '@/lib/supabase/server';
 import { formatDuration } from '@/lib/utils';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
@@ -112,7 +112,17 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
       {call.recording_url ? (
         <Card>
           <CardHeader>
-            <CardTitle>Recording &amp; Transcript</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Recording &amp; Transcript</CardTitle>
+              <a
+                href={call.recording_url}
+                download={`call-${call.id}.mp3`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] bg-white px-3 py-1.5 text-xs font-medium text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download MP3
+              </a>
+            </div>
           </CardHeader>
           <CardContent className="p-0 pb-0">
             <div className="px-5 pb-5">

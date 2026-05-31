@@ -1,10 +1,13 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
-import { Phone, Radio } from 'lucide-react';
+import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import { Phone, Radio, Headphones, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 interface LiveCall {
   id: string;
@@ -16,6 +19,7 @@ interface LiveCall {
   agent?: { name: string } | null;
   agent_id: string | null;
   workspace_id: string;
+  retell_call_id: string | null;
 }
 
 function ElapsedTimer({ since }: { since: string }) {
@@ -42,6 +46,13 @@ export default function LiveMonitorPage() {
   const [loading, setLoading] = useState(true);
   const [workspaceId, setWorkspaceId] = useState('');
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Listen-In state
+  const [listenToken, setListenToken] = useState<string | null>(null);
+  const [listenWsUrl, setListenWsUrl] = useState<string>('');
+  const [listenRoomName, setListenRoomName] = useState<string | null>(null);
+  const [listeningCallId, setListeningCallId] = useState<string | null>(null);
+  const [connectingListen, setConnectingListen] = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/workspace-id')
@@ -94,12 +105,62 @@ export default function LiveMonitorPage() {
     });
   }
 
+  async function listenIn(call: LiveCall) {
+    if (!call.retell_call_id) {
+      toast.error('Room not available for listening');
+      return;
+    }
+    if (listeningCallId === call.id) {
+      // Stop listening
+      setListenToken(null);
+      setListeningCallId(null);
+      setListenRoomName(null);
+      return;
+    }
+    setConnectingListen(true);
+    try {
+      const res = await fetch(`/api/calls/live/${encodeURIComponent(call.retell_call_id)}/token`);
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      const d = await res.json() as { token: string; wsUrl: string };
+      setListenToken(d.token);
+      setListenWsUrl(d.wsUrl);
+      setListenRoomName(call.retell_call_id);
+      setListeningCallId(call.id);
+      toast.success(`Listening to call with ${call.contact_name ?? 'unknown contact'}`);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setConnectingListen(false);
+    }
+  }
+
+  function stopListening() {
+    setListenToken(null);
+    setListeningCallId(null);
+    setListenRoomName(null);
+    toast('Stopped listening');
+  }
+
   const transcriptLines = parseTranscript(selected?.transcript ?? null);
   const lastLine = transcriptLines[transcriptLines.length - 1];
   const speakingLabel = lastLine?.role === 'agent' ? 'Agent speaking' : lastLine?.role === 'user' ? 'User speaking' : 'Listening';
 
   return (
     <div className="flex h-[calc(100vh-56px)] overflow-hidden">
+      {/* Hidden LiveKit audio renderer — only mounted when listening */}
+      {listenToken && listenWsUrl && listenRoomName && (
+        <LiveKitRoom
+          serverUrl={listenWsUrl}
+          token={listenToken}
+          connect={true}
+          audio={false}
+          video={false}
+          onDisconnected={stopListening}
+        >
+          <RoomAudioRenderer />
+        </LiveKitRoom>
+      )}
+
       {/* Left: active call list */}
       <div className="w-72 border-r border-[#e0e0e0] flex flex-col">
         <div className="p-4 border-b border-[#e0e0e0]">
@@ -184,8 +245,44 @@ export default function LiveMonitorPage() {
                   <p className="text-xs text-[#6b6b6b]">Status</p>
                   <p className="text-sm font-medium text-green-600">{speakingLabel}</p>
                 </div>
+
+                {/* Listen In button */}
+                {listeningCallId === selected.id ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={stopListening}
+                    className="flex items-center gap-1.5"
+                  >
+                    <PhoneOff className="h-3.5 w-3.5" />
+                    Stop Listening
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => listenIn(selected)}
+                    disabled={connectingListen || !selected.retell_call_id}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Headphones className="h-3.5 w-3.5" />
+                    {connectingListen ? 'Connecting…' : 'Listen In'}
+                  </Button>
+                )}
               </div>
             </div>
+
+            {/* Listening indicator */}
+            {listeningCallId === selected.id && (
+              <div className="bg-emerald-50 border-b border-emerald-100 px-5 py-2 flex items-center gap-2">
+                <span className="flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <p className="text-xs text-emerald-700 font-medium">
+                  Live audio active — you are listening as a hidden observer
+                </p>
+              </div>
+            )}
 
             {/* Transcript */}
             <div ref={transcriptRef} className="flex-1 overflow-y-auto p-5 space-y-3">
