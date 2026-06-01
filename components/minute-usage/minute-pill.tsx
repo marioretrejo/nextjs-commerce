@@ -41,7 +41,7 @@ export function MinutePill({ workspaceId, initialUsed, limit }: MinutePillProps)
   return (
     <Link href="/analytics/costs">
       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${pillClass}`}>
-        {remaining.toFixed(0)} min left
+        {remaining >= 10 ? remaining.toFixed(0) : remaining >= 1 ? remaining.toFixed(1) : remaining > 0 ? `${Math.round(remaining * 60)}s` : '0'} min left
       </span>
     </Link>
   );

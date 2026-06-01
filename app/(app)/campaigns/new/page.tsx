@@ -109,6 +109,9 @@ export default function NewCampaignPage() {
         workspace_id: workspaceId,
         ab_agent_id: form.ab_enabled && form.ab_agent_id ? form.ab_agent_id : null,
         max_retries: form.retry_enabled ? form.max_retries : 0,
+        // datetime-local inputs return '' when empty; API requires null not ''
+        start_at: form.start_at ? new Date(form.start_at).toISOString() : null,
+        end_at:   form.end_at   ? new Date(form.end_at).toISOString()   : null,
       };
       const res = await fetch('/api/campaigns', {
         method: 'POST',

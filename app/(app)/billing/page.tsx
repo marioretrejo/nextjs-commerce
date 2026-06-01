@@ -8,6 +8,7 @@ import type { BillingInvoice, Plan } from '@/lib/supabase/types';
 import { CreditCard, FileText, Zap, Check, ExternalLink, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { EnterpriseInquiryModal } from '@/components/billing/enterprise-inquiry-modal';
+import { handleUpgrade, handlePortal } from './actions';
 
 interface PlanDef {
   name: Plan;
@@ -72,41 +73,6 @@ const PLANS: PlanDef[] = [
   },
 ];
 
-async function handleUpgrade(plan: Plan) {
-  'use server';
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? '';
-  const res = await fetch(`${appUrl}/api/stripe/checkout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan }),
-  });
-  if (!res.ok) {
-    const err = await res.json() as { error?: string };
-    throw new Error(err.error ?? 'Checkout failed — please try again.');
-  }
-  const d = await res.json() as { url: string };
-  if (d.url) {
-    const { redirect } = await import('next/navigation');
-    redirect(d.url);
-  }
-  throw new Error('No checkout URL returned — please try again.');
-}
-
-async function handlePortal() {
-  'use server';
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? '';
-  const res = await fetch(`${appUrl}/api/stripe/portal`, { method: 'POST' });
-  if (!res.ok) {
-    const err = await res.json() as { error?: string };
-    throw new Error(err.error ?? 'Portal access failed — please try again.');
-  }
-  const d = await res.json() as { url: string };
-  if (d.url) {
-    const { redirect } = await import('next/navigation');
-    redirect(d.url);
-  }
-  throw new Error('No portal URL returned — please try again.');
-}
 
 export default async function BillingPage() {
   const [workspaces, user] = await Promise.all([getUserWorkspaces(), getUser()]);
