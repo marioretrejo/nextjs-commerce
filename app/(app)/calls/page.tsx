@@ -80,8 +80,8 @@ export default function CallsPage() {
         // Fetch agents for the manual dial dropdown
         const r = await fetch(`/api/agents?workspace_id=${wsId}`);
         if (r.ok) {
-          const data = await r.json() as { agents?: Agent[] };
-          setDialAgents(data.agents ?? []);
+          const data = await r.json() as Agent[];
+          setDialAgents(Array.isArray(data) ? data : []);
         }
       })
       .catch(() => { setLoading(false); toast.error('Failed to load workspace data'); });
