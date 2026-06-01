@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { apiError, apiOk, parseBody } from '@/lib/api';
 import { notifyWorkspace } from '@/lib/notifications/activity';
+import { writeAuditLog } from '@/lib/admin-audit';
 
 const CreateAgentSchema = z.object({
   workspace_id: z.string().uuid(),
@@ -149,6 +150,12 @@ export async function POST(req: Request) {
     message: `Agent "${a.name}" was created.`,
     link: `/agents/${a.id}`,
     actorName: (user as { email?: string }).email ?? undefined,
+  });
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'agent.create',
+    targetType: 'agent', targetId: a.id,
+    workspaceId: a.workspace_id,
+    metadata: { agent_name: a.name },
   });
 
   return apiOk(sanitizeAgentForClient(agent as unknown as Record<string, unknown>), 201);

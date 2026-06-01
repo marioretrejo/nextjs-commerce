@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { notifyWorkspace } from '@/lib/notifications/activity';
+import { writeAuditLog } from '@/lib/admin-audit';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -52,6 +53,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       link: '/team',
       actorName,
     });
+    void writeAuditLog({
+      actorId: user.id, actorType: 'user', action: 'team.role_change',
+      targetType: 'workspace_member', targetId: id,
+      workspaceId: t.workspace_id,
+      metadata: { new_role: body.role, actor_name: actorName },
+    });
   }
 
   return NextResponse.json(updated);
@@ -100,6 +107,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     message: `${actorName} removed a member from the workspace.`,
     link: '/team',
     actorName,
+  });
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'team.remove',
+    targetType: 'workspace_member', targetId: id,
+    workspaceId: m.workspace_id,
+    metadata: { actor_name: actorName },
   });
 
   return new NextResponse(null, { status: 204 });

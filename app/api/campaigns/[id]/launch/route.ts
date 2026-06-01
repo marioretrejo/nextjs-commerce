@@ -5,6 +5,7 @@ import { checkMinuteLimit, minuteLimitBlockedResponse } from '@/lib/checkMinuteL
 import type { Agent, Campaign, CampaignContact } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
 import { notifyWorkspace } from '@/lib/notifications/activity';
+import { writeAuditLog } from '@/lib/admin-audit';
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -80,6 +81,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
         link: `/campaigns/${id}`,
       });
+      void writeAuditLog({
+        actorId: user.id, actorType: 'user', action: 'campaign.launch',
+        targetType: 'campaign', targetId: id,
+        workspaceId: c.workspace_id,
+        metadata: { campaign_name: c.name, contacts: contacts.length },
+      });
 
       return NextResponse.json({ batch_call_id: batch.batch_call_id, contacts: contacts.length });
     } catch (e) {
@@ -94,6 +101,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     title: 'Campaign launched',
     message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
     link: `/campaigns/${id}`,
+  });
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'campaign.launch',
+    targetType: 'campaign', targetId: id,
+    workspaceId: c.workspace_id,
+    metadata: { campaign_name: c.name, contacts: contacts.length },
   });
   return NextResponse.json({ ok: true, contacts: contacts.length });
 }

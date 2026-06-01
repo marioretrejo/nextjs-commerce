@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { apiError, apiOk, parseBody } from '@/lib/api';
 import { notifyWorkspace } from '@/lib/notifications/activity';
+import { writeAuditLog } from '@/lib/admin-audit';
 
 const InviteSchema = z.object({
   email: z.string().email(),
@@ -84,6 +85,11 @@ export async function POST(req: Request) {
     message: `${inviterName} invited ${email} to the workspace as ${role}.`,
     link: '/team',
     actorName: inviterName,
+  });
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'team.invite',
+    targetType: 'user', workspaceId: wsId,
+    metadata: { invited_email: email, role, workspace_name: workspace.name },
   });
 
   return apiOk(data, 201);

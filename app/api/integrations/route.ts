@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { writeAuditLog } from '@/lib/admin-audit';
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -10,7 +11,6 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const workspaceId = searchParams.get('workspace_id');
 
-  // RLS scopes to user's workspaces; optional filter narrows to one workspace
   let query = supabase.from('integrations').select('*').order('type');
   if (workspaceId) query = query.eq('workspace_id', workspaceId);
 
@@ -42,5 +42,12 @@ export async function POST(req: Request) {
   }, { onConflict: 'workspace_id,type' }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'integration.connect',
+    targetType: 'integration', workspaceId: body['workspace_id'] as string,
+    metadata: { type: body['type'] },
+  });
+
   return NextResponse.json(data);
 }

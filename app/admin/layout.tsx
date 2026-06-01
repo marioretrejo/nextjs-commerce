@@ -19,10 +19,10 @@ import { usePathname } from 'next/navigation';
 
 const NAV = [
   { href: '/admin',             label: 'Overview',      icon: LayoutDashboard, exact: true },
+  { href: '/admin/activity',    label: 'User Activity',  icon: Activity },
   { href: '/admin/workspaces',  label: 'Workspaces',    icon: Building2 },
   { href: '/admin/billing',     label: 'Billing Audits',icon: CreditCard },
   { href: '/admin/metrics',     label: 'Metrics',       icon: BarChart2 },
-  { href: '/admin/infrastructure', label: 'Infrastructure', icon: Activity },
   { href: '/admin/calculator',  label: 'Unit Economics',  icon: Calculator },
   { href: '/admin/settings',    label: 'Global Settings', icon: Settings },
 ];

@@ -4,6 +4,7 @@ import { sanitizeAgentForClient } from '@/lib/sanitize';
 import type { Agent } from '@/lib/supabase/types';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { writeAuditLog } from '@/lib/admin-audit';
 
 /** Verify the authenticated user owns the workspace that contains this agent.
  *  Uses admin client to bypass RLS (mirrors the edit-page's admin fallback),
@@ -82,6 +83,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const agent = data as Agent;
 
+  const agentRecord = ownership.agentRow as { workspace_id: string; name?: string };
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'agent.update',
+    targetType: 'agent', targetId: id,
+    workspaceId: agentRecord.workspace_id,
+    metadata: { agent_name: agentRecord.name ?? id },
+  });
+
   revalidatePath('/agents');
   revalidatePath(`/agents/${id}`);
   return NextResponse.json(sanitizeAgentForClient(agent as unknown as Record<string, unknown>));
@@ -97,7 +106,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const ownership = await verifyOwnership(id, supabase, admin);
   if ('error' in ownership) return ownership.error;
 
+  const agentRecord = ownership.agentRow as { workspace_id: string; name?: string };
   const { error } = await admin.from('agents').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  void writeAuditLog({
+    actorId: user.id, actorType: 'user', action: 'agent.delete',
+    targetType: 'agent', targetId: id,
+    workspaceId: agentRecord.workspace_id,
+    metadata: { agent_name: agentRecord.name ?? id },
+  });
+
   return new NextResponse(null, { status: 204 });
 }
