@@ -10,7 +10,7 @@ const TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_workspace_stats',
       description: 'Get overall workspace stats: total calls, minutes used/limit, plan, active agents count.',
-      parameters: { type: 'object' as const, properties: { period_days: { type: 'number', description: 'Days to look back (default 30)' } }, required: [] },
+      parameters: { type: 'object' as const, properties: { period_days: { type: 'string', description: 'Days to look back, e.g. "30" (default 30)' } }, required: [] },
     },
   },
   {
@@ -18,7 +18,7 @@ const TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_campaign_metrics',
       description: 'Get campaign performance: call volume, completion rate, status breakdown.',
-      parameters: { type: 'object' as const, properties: { campaign_id: { type: 'string' }, period_days: { type: 'number' } }, required: [] },
+      parameters: { type: 'object' as const, properties: { campaign_id: { type: 'string' }, period_days: { type: 'string', description: 'Days to look back, e.g. "30"' } }, required: [] },
     },
   },
   {
@@ -26,7 +26,7 @@ const TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_call_durations',
       description: 'Get call duration statistics: avg, p50, p95 in seconds.',
-      parameters: { type: 'object' as const, properties: { agent_id: { type: 'string' }, period_days: { type: 'number' } }, required: [] },
+      parameters: { type: 'object' as const, properties: { agent_id: { type: 'string' }, period_days: { type: 'string', description: 'Days to look back, e.g. "30"' } }, required: [] },
     },
   },
   {
@@ -34,7 +34,7 @@ const TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_success_rates',
       description: 'Get task-completion % and sentiment breakdown (positive/neutral/negative).',
-      parameters: { type: 'object' as const, properties: { agent_id: { type: 'string' }, period_days: { type: 'number' } }, required: [] },
+      parameters: { type: 'object' as const, properties: { agent_id: { type: 'string' }, period_days: { type: 'string', description: 'Days to look back, e.g. "30"' } }, required: [] },
     },
   },
   {
@@ -42,7 +42,7 @@ const TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_top_agents',
       description: 'List top-performing agents ranked by call volume or success rate.',
-      parameters: { type: 'object' as const, properties: { limit: { type: 'number' }, rank_by: { type: 'string', enum: ['call_volume', 'success_rate'] } }, required: [] },
+      parameters: { type: 'object' as const, properties: { limit: { type: 'string', description: 'Number of agents to return, e.g. "5"' }, rank_by: { type: 'string', enum: ['call_volume', 'success_rate'] } }, required: [] },
     },
   },
 ];
