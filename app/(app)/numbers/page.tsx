@@ -9,10 +9,18 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import type { PhoneNumber } from '@/lib/supabase/types';
-import { Phone, Search, Plus, Trash2, Server, ChevronRight, ShieldCheck, Loader2, Plug } from 'lucide-react';
+import { Phone, Search, Plus, Trash2, Server, ChevronRight, ShieldCheck, Loader2, Plug, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Convert ISO country code to emoji flag
+interface AvailableNumber {
+  phone_number: string;
+  friendly_name: string;
+  iso_country: string;
+  locality?: string;
+  region?: string;
+  capabilities?: { voice?: boolean; sms?: boolean };
+}
+
 function countryFlag(code: string): string {
   if (!code || code.length !== 2) return '🌐';
   return code.toUpperCase().split('').map(c =>
@@ -20,7 +28,6 @@ function countryFlag(code: string): string {
   ).join('');
 }
 
-// Group numbers by trunk/provider
 interface TrunkGroup {
   key: string;
   label: string;
@@ -45,6 +52,14 @@ function groupByTrunk(numbers: PhoneNumber[]): TrunkGroup[] {
     map.get(key)!.numbers.push(num);
   }
   return Array.from(map.values());
+}
+
+function TwilioLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1.25 17.292l-4.5-4.364 1.857-1.858 2.643 2.506 5.643-5.784 1.857 1.857-7.5 7.643z"/>
+    </svg>
+  );
 }
 
 type DialogMode = 'choose' | 'twilio' | 'sip' | 'connect-twilio' | 'connect-sip';
@@ -73,28 +88,33 @@ export default function NumbersPage() {
   const [mode, setMode] = useState<DialogMode>('choose');
   const [addingToTrunk, setAddingToTrunk] = useState<string | null>(null);
 
-  // Twilio provisioning
-  const [selectedCountry, setSelectedCountry] = useState('US');
-  const [requesting, setRequesting] = useState(false);
-
-  // SIP trunk
+  // SIP trunk (add number)
   const [sipPhone, setSipPhone] = useState('');
   const [sipUri, setSipUri] = useState('');
   const [sipName, setSipName] = useState('');
   const [sipSaving, setSipSaving] = useState(false);
 
-  // Connect Twilio
+  // Twilio connection
   const [twilioSid, setTwilioSid] = useState('');
   const [twilioToken, setTwilioToken] = useState('');
   const [twilioConnecting, setTwilioConnecting] = useState(false);
+  const [twilioConnected, setTwilioConnected] = useState(false);
+  const [twilioAccountSid, setTwilioAccountSid] = useState<string | null>(null);
 
-  // Connect SIP trunk
+  // SIP trunk connection
   const [sipTrunkProvider, setSipTrunkProvider] = useState('');
   const [sipTrunkHost, setSipTrunkHost] = useState('');
   const [sipTrunkUser, setSipTrunkUser] = useState('');
   const [sipTrunkPass, setSipTrunkPass] = useState('');
   const [sipTrunkConnecting, setSipTrunkConnecting] = useState(false);
   const [activeSipProvider, setActiveSipProvider] = useState<string | null>(null);
+
+  // Twilio number search & buy
+  const [selectedCountry, setSelectedCountry] = useState('US');
+  const [numberType, setNumberType] = useState<'local' | 'tollfree'>('local');
+  const [availableNumbers, setAvailableNumbers] = useState<AvailableNumber[]>([]);
+  const [searchingNumbers, setSearchingNumbers] = useState(false);
+  const [buyingPhone, setBuyingPhone] = useState<string | null>(null);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -112,12 +132,29 @@ export default function NumbersPage() {
 
   useEffect(() => {
     fetchNumbers();
+
     fetch('/api/settings/sip')
       .then(r => r.ok ? r.json() : null)
       .then((d: { connected?: boolean; provider_name?: string } | null) => {
         if (d?.connected) setActiveSipProvider(d.provider_name ?? 'SIP Trunk');
       })
       .catch(() => null);
+
+    async function checkTwilio() {
+      try {
+        const r = await fetch('/api/settings/twilio');
+        if (!r.ok) return;
+        const d = await r.json() as { connected?: boolean; account_sid?: string };
+        if (d?.connected) {
+          setTwilioConnected(true);
+          setTwilioAccountSid(d.account_sid ?? null);
+          // Sync existing Twilio numbers to DB, then refresh list
+          await fetch('/api/numbers/twilio-sync');
+          await fetchNumbers();
+        }
+      } catch { /* non-blocking */ }
+    }
+    void checkTwilio();
   }, [fetchNumbers]);
 
   const filtered = useMemo(() => {
@@ -132,11 +169,12 @@ export default function NumbersPage() {
 
   const groups = useMemo(() => groupByTrunk(filtered), [filtered]);
 
-  function openAdd(mode: DialogMode = 'choose', trunkKey?: string) {
-    setMode(mode);
+  function openAdd(m: DialogMode = 'choose', trunkKey?: string) {
+    setMode(m);
     setAddingToTrunk(trunkKey ?? null);
     setSipPhone(''); setSipUri(trunkKey && trunkKey !== '__twilio__' ? trunkKey : ''); setSipName('');
     setSelectedCountry('US');
+    setAvailableNumbers([]);
     setDialogOpen(true);
   }
 
@@ -160,12 +198,69 @@ export default function NumbersPage() {
     });
     setTwilioConnecting(false);
     if (res.ok) {
+      setTwilioConnected(true);
       toast.success('Twilio connected successfully.');
       setDialogOpen(false);
+      await fetch('/api/numbers/twilio-sync');
+      await fetchNumbers();
     } else {
       const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
       toast.error(err.error ?? 'Failed to connect Twilio.');
     }
+  }
+
+  async function disconnectTwilio() {
+    const res = await fetch('/api/settings/twilio', { method: 'DELETE' });
+    if (res.ok) {
+      setTwilioConnected(false);
+      setTwilioAccountSid(null);
+      toast.success('Twilio disconnected.');
+      setDialogOpen(false);
+    } else {
+      toast.error('Failed to disconnect Twilio.');
+    }
+  }
+
+  async function searchTwilioNumbers() {
+    setSearchingNumbers(true);
+    setAvailableNumbers([]);
+    try {
+      const res = await fetch(`/api/numbers/twilio-search?country=${selectedCountry}&type=${numberType}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error' })) as { error?: string };
+        toast.error(err.error ?? 'Failed to search numbers.');
+        return;
+      }
+      const data = await res.json() as { numbers: AvailableNumber[] };
+      setAvailableNumbers(data.numbers ?? []);
+      if ((data.numbers ?? []).length === 0) toast.info('No numbers available for this selection.');
+    } catch { toast.error('Network error.'); }
+    finally { setSearchingNumbers(false); }
+  }
+
+  async function buyTwilioNumber(num: AvailableNumber) {
+    setBuyingPhone(num.phone_number);
+    try {
+      const country = COUNTRIES.find(c => c.code === selectedCountry);
+      const res = await fetch('/api/numbers/twilio-buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_number: num.phone_number,
+          country_code: selectedCountry,
+          country_name: country?.name ?? num.iso_country,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error' })) as { error?: string };
+        toast.error(err.error ?? 'Failed to purchase number.');
+        return;
+      }
+      toast.success(`${num.phone_number} purchased successfully!`);
+      setDialogOpen(false);
+      await fetchNumbers();
+    } catch { toast.error('Network error.'); }
+    finally { setBuyingPhone(null); }
   }
 
   async function connectSipTrunk() {
@@ -199,26 +294,6 @@ export default function NumbersPage() {
     await fetch('/api/settings/sip', { method: 'DELETE' });
     setActiveSipProvider(null);
     toast.success('SIP trunk disconnected.');
-  }
-
-  async function requestTwilioNumber() {
-    setRequesting(true);
-    try {
-      const country = COUNTRIES.find(c => c.code === selectedCountry);
-      const res = await fetch('/api/numbers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country_code: selectedCountry, country_name: country?.name }),
-      });
-      if (res.ok) {
-        await fetchNumbers(); setDialogOpen(false);
-        toast.success('Phone number provisioned.');
-      } else {
-        const err = await res.json() as { error?: string };
-        toast.error(err.error ?? 'Failed to provision number.');
-      }
-    } catch { toast.error('Network error.'); }
-    finally { setRequesting(false); }
   }
 
   async function saveSip() {
@@ -259,6 +334,9 @@ export default function NumbersPage() {
     toast.success(`Deleted all numbers in ${group.label}.`);
   }
 
+  // suppress unused warning
+  void addingToTrunk;
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -274,6 +352,7 @@ export default function NumbersPage() {
               : <><ShieldCheck className="w-4 h-4 mr-1.5" />Check Spam</>
             }
           </Button>
+
           {activeSipProvider ? (
             <Button
               size="sm"
@@ -303,16 +382,28 @@ export default function NumbersPage() {
               Add SIP Trunk
             </Button>
           )}
-          <Button
-            size="sm"
-            className="bg-red-600 hover:bg-red-700 text-white"
-            onClick={() => { setMode('connect-twilio'); setTwilioSid(''); setTwilioToken(''); setDialogOpen(true); }}
-          >
-            <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1.25 17.292l-4.5-4.364 1.857-1.858 2.643 2.506 5.643-5.784 1.857 1.857-7.5 7.643z"/>
-            </svg>
-            Connect Twilio
-          </Button>
+
+          {twilioConnected ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-green-500 text-green-700 hover:bg-green-50"
+              onClick={() => { setMode('connect-twilio'); setTwilioSid(''); setTwilioToken(''); setDialogOpen(true); }}
+            >
+              <TwilioLogo className="w-4 h-4 mr-1.5" />
+              Twilio Connected
+              <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => { setMode('connect-twilio'); setTwilioSid(''); setTwilioToken(''); setDialogOpen(true); }}
+            >
+              <TwilioLogo className="w-4 h-4 mr-1.5" />
+              Connect Twilio
+            </Button>
+          )}
         </div>
       </div>
 
@@ -351,12 +442,11 @@ export default function NumbersPage() {
           </Button>
         </div>
       ) : groups.length === 0 ? (
-        <p className="text-sm text-[#6b6b6b] py-8 text-center">No numbers match "{search}".</p>
+        <p className="text-sm text-[#6b6b6b] py-8 text-center">No numbers match &ldquo;{search}&rdquo;.</p>
       ) : (
         <div className="space-y-5">
           {groups.map(group => (
             <div key={group.key} className="rounded-lg border border-[#e0e0e0]">
-              {/* Group header */}
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#e0e0e0]">
                 <div className="flex items-center gap-2 text-xs font-semibold text-[#6b6b6b] tracking-wider uppercase">
                   <Phone className="w-3.5 h-3.5" />
@@ -375,12 +465,11 @@ export default function NumbersPage() {
                     className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors ml-3"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    Delete All SIP Numbers
+                    Delete All
                   </button>
                 </div>
               </div>
 
-              {/* Number grid */}
               {group.numbers.length === 0 ? (
                 <p className="px-5 py-4 text-sm text-[#6b6b6b]">No phone numbers added</p>
               ) : (
@@ -421,7 +510,6 @@ export default function NumbersPage() {
         </div>
       )}
 
-      {/* + Add Number floating button when numbers exist */}
       {!loading && numbers.length > 0 && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => openAdd()}>
@@ -442,17 +530,27 @@ export default function NumbersPage() {
                 <DialogDescription>Choose how you want to add a phone number.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
-                <button onClick={() => setMode('twilio')} className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors">
+                <button
+                  onClick={() => { setAvailableNumbers([]); setMode('twilio'); }}
+                  className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+                >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
                     <Phone className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">Request a new number</p>
-                    <p className="text-xs text-[#6b6b6b] mt-0.5">Provision via Twilio — billed monthly.</p>
+                    <p className="text-sm font-medium">Buy a Twilio number</p>
+                    <p className="text-xs text-[#6b6b6b] mt-0.5">
+                      {twilioConnected
+                        ? 'Search & purchase from your Twilio account.'
+                        : 'Connect Twilio first to search and buy numbers.'}
+                    </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-[#6b6b6b] shrink-0" />
                 </button>
-                <button onClick={() => setMode('sip')} className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors">
+                <button
+                  onClick={() => setMode('sip')}
+                  className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+                >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
                     <Server className="w-4 h-4" />
                   </div>
@@ -465,7 +563,10 @@ export default function NumbersPage() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-[#6b6b6b] shrink-0" />
                 </button>
-                <button onClick={() => { setSipTrunkProvider(''); setSipTrunkHost(''); setSipTrunkUser(''); setSipTrunkPass(''); setMode('connect-sip'); }} className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors">
+                <button
+                  onClick={() => { setSipTrunkProvider(''); setSipTrunkHost(''); setSipTrunkUser(''); setSipTrunkPass(''); setMode('connect-sip'); }}
+                  className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
+                >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
                     <Plug className="w-4 h-4" />
                   </div>
@@ -483,40 +584,128 @@ export default function NumbersPage() {
             </>
           )}
 
-          {/* Twilio provisioning */}
+          {/* Twilio — search & buy */}
           {mode === 'twilio' && (
             <>
               <DialogHeader>
-                <DialogTitle>Request Phone Number</DialogTitle>
-                <DialogDescription>Select a country to provision a new phone number.</DialogDescription>
+                <DialogTitle>Buy a Phone Number</DialogTitle>
+                <DialogDescription>
+                  {twilioConnected
+                    ? 'Search available numbers in your Twilio account and purchase one.'
+                    : 'Connect Twilio to search and purchase phone numbers.'}
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-2">
-                <Label>Country</Label>
-                <select
-                  value={selectedCountry}
-                  onChange={e => setSelectedCountry(e.target.value)}
-                  className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
-                >
-                  {COUNTRIES.map(c => (
-                    <option key={c.code} value={c.code}>{countryFlag(c.code)} {c.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-[#6b6b6b]">Numbers are provisioned via Twilio and billed monthly.</p>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setMode('choose')}>Back</Button>
-                <Button onClick={requestTwilioNumber} disabled={requesting}>
-                  {requesting ? 'Requesting…' : 'Request Number'}
-                </Button>
-              </DialogFooter>
+
+              {!twilioConnected ? (
+                <div className="py-4 text-center space-y-3">
+                  <p className="text-sm text-[#6b6b6b]">You need to connect your Twilio account first.</p>
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => { setTwilioSid(''); setTwilioToken(''); setMode('connect-twilio'); }}
+                  >
+                    Connect Twilio
+                  </Button>
+                  <div>
+                    <Button variant="outline" size="sm" onClick={() => setMode('choose')}>Back</Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {/* Country */}
+                    <div className="space-y-1.5">
+                      <Label>Country</Label>
+                      <select
+                        value={selectedCountry}
+                        onChange={e => { setSelectedCountry(e.target.value); setAvailableNumbers([]); }}
+                        className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
+                      >
+                        {COUNTRIES.map(c => (
+                          <option key={c.code} value={c.code}>{countryFlag(c.code)} {c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Type */}
+                    <div className="space-y-1.5">
+                      <Label>Type</Label>
+                      <div className="flex gap-2">
+                        {(['local', 'tollfree'] as const).map(t => (
+                          <button
+                            key={t}
+                            onClick={() => { setNumberType(t); setAvailableNumbers([]); }}
+                            className={`flex-1 h-8 rounded-md border text-sm font-medium transition-colors ${
+                              numberType === t
+                                ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white'
+                                : 'border-[#e0e0e0] text-[#6b6b6b] hover:border-[#0a0a0a]'
+                            }`}
+                          >
+                            {t === 'local' ? 'Local' : 'Toll-Free'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Search */}
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={searchTwilioNumbers}
+                      disabled={searchingNumbers}
+                    >
+                      {searchingNumbers
+                        ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Searching…</>
+                        : <><Search className="w-4 h-4 mr-1.5" />Search Available Numbers</>
+                      }
+                    </Button>
+
+                    {/* Results */}
+                    {availableNumbers.length > 0 && (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {availableNumbers.map(num => (
+                          <div
+                            key={num.phone_number}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e0e0] px-3 py-2 bg-white"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-mono text-sm font-medium text-[#0a0a0a]">{num.phone_number}</p>
+                              {(num.locality || num.region) && (
+                                <p className="text-[11px] text-[#6b6b6b] truncate">
+                                  {[num.locality, num.region].filter(Boolean).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              className="text-xs shrink-0 h-7"
+                              disabled={buyingPhone === num.phone_number}
+                              onClick={() => buyTwilioNumber(num)}
+                            >
+                              {buyingPhone === num.phone_number
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : 'Buy'
+                              }
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setMode('choose')}>Back</Button>
+                  </DialogFooter>
+                </>
+              )}
             </>
           )}
 
-          {/* SIP trunk */}
+          {/* SIP — add number */}
           {mode === 'sip' && (
             <>
               <DialogHeader>
-                <DialogTitle>Connect SIP Trunk</DialogTitle>
+                <DialogTitle>Add SIP Number</DialogTitle>
                 <DialogDescription>Add a number from your VoIP provider (CommPeak, Telnyx, SquareTalk, etc.)</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
@@ -547,7 +736,7 @@ export default function NumbersPage() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Plug className="w-5 h-5" />
-                  {activeSipProvider ? `Update SIP Trunk` : 'Add SIP Trunk'}
+                  {activeSipProvider ? 'Update SIP Trunk' : 'Add SIP Trunk'}
                 </DialogTitle>
                 <DialogDescription>
                   Connect any VoIP provider (Squaretalk, CommPeak, Telnyx, Vonage…).
@@ -612,54 +801,83 @@ export default function NumbersPage() {
             </>
           )}
 
-          {/* Connect Twilio */}
+          {/* Connect / Manage Twilio */}
           {mode === 'connect-twilio' && (
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-red-600" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1.25 17.292l-4.5-4.364 1.857-1.858 2.643 2.506 5.643-5.784 1.857 1.857-7.5 7.643z"/>
-                  </svg>
-                  Connect Twilio
+                  <TwilioLogo className="w-5 h-5 text-red-600" />
+                  {twilioConnected ? 'Twilio Account' : 'Connect Twilio'}
                 </DialogTitle>
-                <DialogDescription>Enter your Twilio credentials to provision phone numbers.</DialogDescription>
+                <DialogDescription>
+                  {twilioConnected
+                    ? `Connected${twilioAccountSid ? ` · ${twilioAccountSid}` : ''}. Manage your Twilio connection.`
+                    : 'Enter your Twilio credentials to provision phone numbers.'}
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label>Account SID</Label>
-                  <Input
-                    placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    value={twilioSid}
-                    onChange={e => setTwilioSid(e.target.value)}
-                  />
+
+              {twilioConnected ? (
+                <div className="space-y-4 py-1">
+                  <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                    <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                    <p className="text-sm text-green-700 font-medium">Twilio is connected</p>
+                  </div>
+                  {twilioAccountSid && (
+                    <p className="text-xs text-[#6b6b6b]">Account SID: {twilioAccountSid}</p>
+                  )}
+                  <button
+                    onClick={disconnectTwilio}
+                    className="text-xs text-red-500 hover:text-red-700 underline"
+                  >
+                    Disconnect Twilio
+                  </button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Auth Token</Label>
-                  <Input
-                    type="password"
-                    placeholder="••••••••••••••••••••••••••••••••"
-                    value={twilioToken}
-                    onChange={e => setTwilioToken(e.target.value)}
-                  />
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Account SID</Label>
+                    <Input
+                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      value={twilioSid}
+                      onChange={e => setTwilioSid(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Auth Token</Label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••••••••••••••••••••••••••"
+                      value={twilioToken}
+                      onChange={e => setTwilioToken(e.target.value)}
+                    />
+                  </div>
+                  <a
+                    href="https://console.twilio.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#6b6b6b] underline"
+                  >
+                    Need help? Find these in your Twilio Console →
+                  </a>
                 </div>
-                <a
-                  href="https://console.twilio.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-[#6b6b6b] underline"
-                >
-                  Need help? Find these in your Twilio Console →
-                </a>
-              </div>
+              )}
+
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                  onClick={connectTwilio}
-                  disabled={twilioConnecting}
-                >
-                  {twilioConnecting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Connecting…</> : 'Connect'}
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  {twilioConnected ? 'Close' : 'Cancel'}
                 </Button>
+                {!twilioConnected && (
+                  <Button
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    onClick={connectTwilio}
+                    disabled={twilioConnecting}
+                  >
+                    {twilioConnecting
+                      ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Connecting…</>
+                      : 'Connect'
+                    }
+                  </Button>
+                )}
               </DialogFooter>
             </>
           )}
