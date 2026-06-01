@@ -6,9 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import type { Call, CallOutcome, CallSentiment, CallDisposition } from '@/lib/supabase/types';
-import { Phone, Search, Clock, User, Bot, ExternalLink, FileText, PhoneOutgoing, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { Phone, Search, Clock, User, Bot, ExternalLink, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -53,8 +51,6 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
-interface Agent { id: string; name: string }
-
 export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,49 +59,11 @@ export default function CallsPage() {
   const [dispositionFilter, setDispositionFilter] = useState<DispositionFilter>('all');
   const [workspaceId, setWorkspaceId] = useState('');
 
-  // Manual outbound dial
-  const [dialOpen, setDialOpen] = useState(false);
-  const [dialTo, setDialTo] = useState('');
-  const [dialAgentId, setDialAgentId] = useState('');
-  const [dialAgents, setDialAgents] = useState<Agent[]>([]);
-  const [dialAgentsLoading, setDialAgentsLoading] = useState(true);
-  const [agentsFetchError, setAgentsFetchError] = useState<string | null>(null);
-  const [dialing, setDialing] = useState(false);
-
   useEffect(() => {
-    async function loadPageData() {
-      // Step 1: workspace ID
-      let wsId = '';
-      try {
-        const r = await fetch('/api/admin/workspace-id');
-        if (!r.ok) { setLoading(false); toast.error('Failed to load workspace'); return; }
-        const d = await r.json() as { workspace_id: string };
-        wsId = d.workspace_id ?? '';
-        setWorkspaceId(wsId);
-      } catch {
-        setLoading(false);
-        toast.error('Failed to load workspace data');
-        return;
-      }
-
-      // Step 2: agents for dial modal
-      if (!wsId) { setDialAgentsLoading(false); return; }
-      try {
-        const ar = await fetch(`/api/agents?workspace_id=${encodeURIComponent(wsId)}`);
-        if (!ar.ok) {
-          const body = await ar.text().catch(() => '');
-          setAgentsFetchError(`${ar.status}: ${body.slice(0, 120)}`);
-        } else {
-          const data = await ar.json() as unknown;
-          setDialAgents(Array.isArray(data) ? (data as Agent[]) : []);
-        }
-      } catch (e) {
-        setAgentsFetchError(String(e));
-      } finally {
-        setDialAgentsLoading(false);
-      }
-    }
-    loadPageData();
+    fetch('/api/admin/workspace-id')
+      .then((r) => r.json())
+      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
+      .catch(() => { setLoading(false); toast.error('Failed to load workspace data'); });
   }, []);
 
   const fetchCalls = useCallback(async () => {
@@ -118,7 +76,6 @@ export default function CallsPage() {
     if (res.ok) {
       const data = await res.json() as { data: Call[] };
       let all = data.data ?? [];
-      // Client-side filters
       const q = search.trim().toLowerCase();
       if (q) all = all.filter(c =>
         c.contact_name?.toLowerCase().includes(q) || c.contact_phone?.includes(q)
@@ -134,30 +91,6 @@ export default function CallsPage() {
     const timer = setTimeout(fetchCalls, 300);
     return () => clearTimeout(timer);
   }, [fetchCalls, workspaceId]);
-
-  async function startOutboundCall() {
-    if (!dialTo.trim() || !dialAgentId) { toast.error('Phone number and agent are required'); return; }
-    setDialing(true);
-    try {
-      const res = await fetch('/api/calls/dial', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: dialAgentId, to: dialTo.trim() }),
-      });
-      const d = await res.json() as { call_id?: string; error?: string; warning?: string; missingCountry?: string };
-      if (!res.ok) { toast.error(d.error ?? 'Call failed'); return; }
-      toast.success('Call dialing…');
-      if (d.warning === 'missing_local_number' && d.missingCountry) {
-        toast(`Estás intentando llamar a ${d.missingCountry}, y no tienes un número local. Te recomendamos adquirir uno para mejorar la conectividad.`, {
-          duration: 8000,
-          action: { label: 'Comprar número', onClick: () => { window.location.href = '/numbers'; } },
-        });
-      }
-      setDialOpen(false);
-      setDialTo('');
-    } catch (e) { toast.error(String(e)); }
-    finally { setDialing(false); }
-  }
 
   const outcomes: { value: OutcomeFilter; label: string }[] = [
     { value: 'all',         label: 'All Outcomes' },
@@ -182,64 +115,12 @@ export default function CallsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Dial modal */}
-      {dialOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setDialOpen(false)} />
-          <div className="relative bg-white rounded-2xl border border-[#e0e0e0] shadow-xl p-6 w-full max-w-sm mx-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-base">New Outbound Call</h2>
-              <button onClick={() => setDialOpen(false)} className="text-[#6b6b6b] hover:text-[#0a0a0a]">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dial-to" className="text-xs">Destination Number (E.164)</Label>
-              <Input
-                id="dial-to"
-                placeholder="+14155551234"
-                value={dialTo}
-                onChange={e => setDialTo(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && startOutboundCall()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dial-agent" className="text-xs">Agent</Label>
-              <select
-                id="dial-agent"
-                value={dialAgentId}
-                onChange={e => setDialAgentId(e.target.value)}
-                disabled={dialAgentsLoading}
-                className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0a0a0a] disabled:opacity-50"
-              >
-                <option value="">{dialAgentsLoading ? 'Loading agents…' : 'Select agent…'}</option>
-                {dialAgents.map(a => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-              {agentsFetchError && (
-                <p className="text-xs text-red-500">Error loading agents: {agentsFetchError}</p>
-              )}
-            </div>
-            <Button className="w-full" onClick={startOutboundCall} disabled={dialing || !dialTo.trim() || !dialAgentId}>
-              {dialing ? 'Dialing…' : 'Start Call'}
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Calls</h1>
-          <p className="mt-1 text-sm text-[#6b6b6b]">
-            Browse call recordings, AI summaries, and dispositions.
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setDialOpen(true)} className="flex items-center gap-1.5">
-          <PhoneOutgoing className="h-3.5 w-3.5" />
-          New Call
-        </Button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Calls</h1>
+        <p className="mt-1 text-sm text-[#6b6b6b]">
+          Browse call recordings, AI summaries, and dispositions.
+        </p>
       </div>
 
       {/* Filters */}
@@ -298,7 +179,6 @@ export default function CallsPage() {
             <div className="divide-y divide-[#e0e0e0]">
               {calls.map((call) => (
                 <div key={call.id} className="px-5 py-4 hover:bg-[#f5f5f5] transition-colors">
-                  {/* Row 1: core fields */}
                   <div className="grid grid-cols-[1fr_1fr_1fr_80px_1fr_1fr_80px_1fr_40px] gap-3 text-sm items-center">
                     <span className="font-medium text-[#0a0a0a] truncate flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-[#6b6b6b] shrink-0" />
@@ -329,7 +209,6 @@ export default function CallsPage() {
                     </Link>
                   </div>
 
-                  {/* Row 2: AI summary preview (only if present) */}
                   {call.summary && (
                     <div className="mt-2 flex items-start gap-1.5 pl-5">
                       <FileText className="w-3.5 h-3.5 text-[#6b6b6b] mt-0.5 shrink-0" />
