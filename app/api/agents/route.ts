@@ -52,8 +52,21 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const workspaceId = searchParams.get('workspace_id');
-  if (!workspaceId) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
+  let workspaceId = searchParams.get('workspace_id');
+
+  // If no workspace_id provided, derive from session (owner's first workspace)
+  if (!workspaceId) {
+    const admin = createAdminClient();
+    const { data: ws } = await admin
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!ws) return apiOk([]);
+    workspaceId = ws.id as string;
+  }
 
   const { data, error } = await supabase
     .from('agents')
