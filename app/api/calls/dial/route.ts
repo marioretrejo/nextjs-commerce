@@ -153,6 +153,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Minute limit reached.' }, { status: 403 });
   }
 
+  // ── Early dialer check — fail before claiming a slot or creating a room ──
+  const [{ data: sipCheck }, { data: phoneCheck }] = await Promise.all([
+    admin.from('integrations').select('id').eq('workspace_id', workspace.id).eq('type', 'sip_trunk').eq('status', 'connected').limit(1).maybeSingle(),
+    admin.from('phone_numbers').select('number').eq('workspace_id', workspace.id).eq('status', 'available').limit(1).maybeSingle(),
+  ]);
+  const hasSip       = !!sipCheck;
+  const hasNumber    = !!(phoneCheck as { number: string } | null)?.number;
+  const hasTwilioEnv = !!(process.env['TWILIO_ACCOUNT_SID'] && process.env['TWILIO_AUTH_TOKEN'] && process.env['TWILIO_PHONE_NUMBER']);
+  if (!hasSip && !hasNumber && !hasTwilioEnv) {
+    return NextResponse.json({
+      error: 'No dialer configured. Add a phone number in /numbers or connect a SIP trunk in /integrations.',
+    }, { status: 503 });
+  }
+
   const { data: claimed } = await admin.rpc('try_claim_call_slot', { p_workspace_id: workspace.id });
   if (!claimed) return NextResponse.json({ error: 'Concurrent call limit reached.', code: 'CONCURRENT_LIMIT' }, { status: 429 });
 
@@ -161,7 +175,7 @@ export async function POST(req: Request) {
   const httpUrl   = getRegionalHttpUrl();
 
   if (!apiKey || !apiSecret || !httpUrl) {
-    void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
     return NextResponse.json({ error: 'LiveKit not configured.' }, { status: 500 });
   }
 
@@ -186,7 +200,7 @@ export async function POST(req: Request) {
       departureTimeout: maxDurationSec,
     });
   } catch (err) {
-    void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
     return NextResponse.json({ error: 'Failed to create room.' }, { status: 500 });
   }
 
@@ -262,7 +276,7 @@ export async function POST(req: Request) {
   if (sipIntegration) {
     const creds = sipIntegration.credentials as SipTrunkCredentials;
     if (!callerId) {
-      void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
       return NextResponse.json({ error: 'No caller ID configured. Add a phone number in /numbers.' }, { status: 503 });
     }
     try {
@@ -292,7 +306,7 @@ export async function POST(req: Request) {
         ...(sipWarning ?? {}),
       });
     } catch (err) {
-      void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
       return NextResponse.json({ error: `SIP egress error: ${String(err)}` }, { status: 502 });
     }
   }
@@ -304,7 +318,7 @@ export async function POST(req: Request) {
   const livekitSipHost = process.env['LIVEKIT_SIP_HOST'] ?? 'sip.livekit.run';
 
   if (!twilioSid || !twilioToken || !callerId) {
-    void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
     return NextResponse.json({ error: 'No dialer configured. Connect a SIP trunk or Twilio in Settings.' }, { status: 503 });
   }
 
@@ -338,7 +352,7 @@ export async function POST(req: Request) {
     const r = await res.json() as { sid: string };
     twilioCallSid = r.sid;
   } catch (err) {
-    void Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
     return NextResponse.json({ error: `Twilio error: ${String(err)}` }, { status: 502 });
   }
 
