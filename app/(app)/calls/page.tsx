@@ -68,19 +68,44 @@ export default function CallsPage() {
   const [dialTo, setDialTo] = useState('');
   const [dialAgentId, setDialAgentId] = useState('');
   const [dialAgents, setDialAgents] = useState<Agent[]>([]);
+  const [dialAgentsLoading, setDialAgentsLoading] = useState(true);
+  const [agentsFetchError, setAgentsFetchError] = useState<string | null>(null);
   const [dialing, setDialing] = useState(false);
 
   useEffect(() => {
-    // Load workspace id
-    fetch('/api/admin/workspace-id')
-      .then((r) => r.json())
-      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
-      .catch(() => { setLoading(false); toast.error('Failed to load workspace data'); });
-    // Load agents for dial dropdown (route derives workspace from session when no param given)
-    fetch('/api/agents')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: unknown) => setDialAgents(Array.isArray(data) ? (data as Agent[]) : []))
-      .catch(() => null);
+    async function loadPageData() {
+      // Step 1: workspace ID
+      let wsId = '';
+      try {
+        const r = await fetch('/api/admin/workspace-id');
+        if (!r.ok) { setLoading(false); toast.error('Failed to load workspace'); return; }
+        const d = await r.json() as { workspace_id: string };
+        wsId = d.workspace_id ?? '';
+        setWorkspaceId(wsId);
+      } catch {
+        setLoading(false);
+        toast.error('Failed to load workspace data');
+        return;
+      }
+
+      // Step 2: agents for dial modal
+      if (!wsId) { setDialAgentsLoading(false); return; }
+      try {
+        const ar = await fetch(`/api/agents?workspace_id=${encodeURIComponent(wsId)}`);
+        if (!ar.ok) {
+          const body = await ar.text().catch(() => '');
+          setAgentsFetchError(`${ar.status}: ${body.slice(0, 120)}`);
+        } else {
+          const data = await ar.json() as unknown;
+          setDialAgents(Array.isArray(data) ? (data as Agent[]) : []);
+        }
+      } catch (e) {
+        setAgentsFetchError(String(e));
+      } finally {
+        setDialAgentsLoading(false);
+      }
+    }
+    loadPageData();
   }, []);
 
   const fetchCalls = useCallback(async () => {
@@ -184,13 +209,17 @@ export default function CallsPage() {
                 id="dial-agent"
                 value={dialAgentId}
                 onChange={e => setDialAgentId(e.target.value)}
-                className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
+                disabled={dialAgentsLoading}
+                className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0a0a0a] disabled:opacity-50"
               >
-                <option value="">Select agent…</option>
+                <option value="">{dialAgentsLoading ? 'Loading agents…' : 'Select agent…'}</option>
                 {dialAgents.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
+              {agentsFetchError && (
+                <p className="text-xs text-red-500">Error loading agents: {agentsFetchError}</p>
+              )}
             </div>
             <Button className="w-full" onClick={startOutboundCall} disabled={dialing || !dialTo.trim() || !dialAgentId}>
               {dialing ? 'Dialing…' : 'Start Call'}

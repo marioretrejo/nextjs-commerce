@@ -47,40 +47,46 @@ const CreateAgentSchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const admin = createAdminClient();
-  const { searchParams } = new URL(req.url);
-  let workspaceId = searchParams.get('workspace_id');
+    const admin = createAdminClient();
+    const { searchParams } = new URL(req.url);
+    let workspaceId = searchParams.get('workspace_id');
 
-  // If no workspace_id provided, derive from session (owner's first workspace)
-  if (!workspaceId) {
-    const { data: ws } = await admin
-      .from('workspaces')
-      .select('id')
-      .eq('owner_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (!ws) return apiOk([]);
-    workspaceId = ws.id as string;
-  }
+    if (!workspaceId) {
+      const { data: ws, error: wsErr } = await admin
+        .from('workspaces')
+        .select('id')
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (wsErr) {
+        console.error('[agents] GET workspace error:', wsErr);
+        return apiError('Internal server error', 500);
+      }
+      if (!ws) return apiOk([]);
+      workspaceId = (ws as { id: string }).id;
+    }
 
-  // Use admin client so agents are returned regardless of cookie/RLS state;
-  // ownership is already verified above via user.id → workspaceId.
-  const { data, error } = await admin
-    .from('agents')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false });
+    const { data, error } = await admin
+      .from('agents')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('[agents] GET error:', error);
+    if (error) {
+      console.error('[agents] GET error:', error);
+      return apiError('Internal server error', 500);
+    }
+    return apiOk(((data ?? []) as Record<string, unknown>[]).map(sanitizeAgentForClient));
+  } catch (err) {
+    console.error('[agents] GET unhandled:', err);
     return apiError('Internal server error', 500);
   }
-  return apiOk((data as Record<string, unknown>[]).map(sanitizeAgentForClient));
 }
 
 export async function POST(req: Request) {
