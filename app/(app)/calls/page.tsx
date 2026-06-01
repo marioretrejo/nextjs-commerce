@@ -73,13 +73,18 @@ export default function CallsPage() {
   useEffect(() => {
     fetch('/api/admin/workspace-id')
       .then((r) => r.json())
-      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
+      .then(async (d: { workspace_id: string }) => {
+        const wsId = d.workspace_id ?? '';
+        setWorkspaceId(wsId);
+        if (!wsId) return;
+        // Fetch agents for the manual dial dropdown
+        const r = await fetch(`/api/agents?workspace_id=${wsId}`);
+        if (r.ok) {
+          const data = await r.json() as { agents?: Agent[] };
+          setDialAgents(data.agents ?? []);
+        }
+      })
       .catch(() => { setLoading(false); toast.error('Failed to load workspace data'); });
-    // Preload agents for manual dial
-    fetch('/api/agents')
-      .then(r => r.ok ? r.json() : { agents: [] })
-      .then((d: { agents?: Agent[] }) => setDialAgents(d.agents ?? []))
-      .catch(() => null);
   }, []);
 
   const fetchCalls = useCallback(async () => {
