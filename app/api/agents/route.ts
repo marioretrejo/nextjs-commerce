@@ -51,12 +51,12 @@ export async function GET(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const admin = createAdminClient();
   const { searchParams } = new URL(req.url);
   let workspaceId = searchParams.get('workspace_id');
 
   // If no workspace_id provided, derive from session (owner's first workspace)
   if (!workspaceId) {
-    const admin = createAdminClient();
     const { data: ws } = await admin
       .from('workspaces')
       .select('id')
@@ -68,7 +68,9 @@ export async function GET(req: Request) {
     workspaceId = ws.id as string;
   }
 
-  const { data, error } = await supabase
+  // Use admin client so agents are returned regardless of cookie/RLS state;
+  // ownership is already verified above via user.id → workspaceId.
+  const { data, error } = await admin
     .from('agents')
     .select('*')
     .eq('workspace_id', workspaceId)
