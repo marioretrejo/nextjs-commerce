@@ -9,6 +9,22 @@ interface TwilioIncomingNumber {
   iso_country: string;
 }
 
+const COUNTRY_NAMES: Record<string, string> = {
+  US: 'United States', MX: 'Mexico', CA: 'Canada', GB: 'United Kingdom',
+  ES: 'Spain', DE: 'Germany', FR: 'France', IT: 'Italy', PT: 'Portugal',
+  BR: 'Brazil', AR: 'Argentina', CO: 'Colombia', CL: 'Chile', PE: 'Peru',
+  EC: 'Ecuador', VE: 'Venezuela', BO: 'Bolivia', UY: 'Uruguay', PY: 'Paraguay',
+  DO: 'Dominican Republic', GT: 'Guatemala', HN: 'Honduras', SV: 'El Salvador',
+  NI: 'Nicaragua', CR: 'Costa Rica', PA: 'Panama', PR: 'Puerto Rico',
+  AU: 'Australia', NZ: 'New Zealand', JP: 'Japan', KR: 'South Korea', CN: 'China',
+  IN: 'India', SG: 'Singapore', HK: 'Hong Kong', PH: 'Philippines',
+  ZA: 'South Africa', NG: 'Nigeria', KE: 'Kenya', EG: 'Egypt',
+  NL: 'Netherlands', BE: 'Belgium', CH: 'Switzerland', AT: 'Austria',
+  SE: 'Sweden', NO: 'Norway', DK: 'Denmark', FI: 'Finland', PL: 'Poland',
+  CZ: 'Czech Republic', HU: 'Hungary', RO: 'Romania', IL: 'Israel',
+  AE: 'United Arab Emirates', SA: 'Saudi Arabia', TR: 'Turkey',
+};
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -38,11 +54,15 @@ export async function GET() {
     );
 
     if (!res.ok) {
-      return NextResponse.json({ error: 'Failed to fetch Twilio numbers' }, { status: 502 });
+      const errText = await res.text();
+      console.error('[twilio-sync] Twilio API error:', res.status, errText);
+      return NextResponse.json({ error: 'Failed to fetch Twilio numbers — check credentials' }, { status: 502 });
     }
 
     const data = await res.json() as { incoming_phone_numbers: TwilioIncomingNumber[] };
     const twilioNumbers = data.incoming_phone_numbers ?? [];
+
+    let insertedCount = 0;
 
     if (twilioNumbers.length > 0) {
       const { data: existing } = await admin
@@ -55,21 +75,26 @@ export async function GET() {
       const toInsert = twilioNumbers.filter(n => !existingSet.has(n.phone_number));
 
       if (toInsert.length > 0) {
-        await admin.from('phone_numbers').insert(
+        const { error: insertErr } = await admin.from('phone_numbers').insert(
           toInsert.map(n => ({
             workspace_id: ws.id,
             number: n.phone_number,
             provider: 'twilio',
             country_code: n.iso_country || 'US',
-            country_name: n.friendly_name,
+            country_name: COUNTRY_NAMES[n.iso_country] ?? n.iso_country ?? 'Unknown',
             status: 'available',
             twilio_sid: n.sid,
           }))
         );
+        if (insertErr) {
+          console.error('[twilio-sync] insert error:', insertErr.message);
+        } else {
+          insertedCount = toInsert.length;
+        }
       }
     }
 
-    return NextResponse.json({ numbers: twilioNumbers, synced: twilioNumbers.length });
+    return NextResponse.json({ numbers: twilioNumbers, synced: insertedCount });
   } catch (e) {
     console.error('[twilio-sync]', e);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -115,6 +115,7 @@ export default function NumbersPage() {
   const [availableNumbers, setAvailableNumbers] = useState<AvailableNumber[]>([]);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
   const [buyingPhone, setBuyingPhone] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -148,8 +149,13 @@ export default function NumbersPage() {
         if (d?.connected) {
           setTwilioConnected(true);
           setTwilioAccountSid(d.account_sid ?? null);
-          // Sync existing Twilio numbers to DB, then refresh list
-          await fetch('/api/numbers/twilio-sync');
+          const syncRes = await fetch('/api/numbers/twilio-sync');
+          if (syncRes.ok) {
+            const sd = await syncRes.json() as { synced?: number; numbers?: unknown[] };
+            if ((sd.synced ?? 0) > 0) {
+              toast.success(`${sd.synced} Twilio number(s) synced.`);
+            }
+          }
           await fetchNumbers();
         }
       } catch { /* non-blocking */ }
@@ -199,13 +205,46 @@ export default function NumbersPage() {
     setTwilioConnecting(false);
     if (res.ok) {
       setTwilioConnected(true);
-      toast.success('Twilio connected successfully.');
       setDialogOpen(false);
-      await fetch('/api/numbers/twilio-sync');
+      const syncRes = await fetch('/api/numbers/twilio-sync');
+      if (syncRes.ok) {
+        const sd = await syncRes.json() as { synced?: number; numbers?: unknown[] };
+        const count = sd.synced ?? 0;
+        toast.success(count > 0 ? `Twilio connected — ${count} number(s) synced.` : 'Twilio connected. No existing numbers found in account.');
+      } else {
+        toast.success('Twilio connected.');
+        toast.error('Could not sync numbers. Use "Sync Numbers" in the Twilio settings.');
+      }
       await fetchNumbers();
     } else {
       const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
       toast.error(err.error ?? 'Failed to connect Twilio.');
+    }
+  }
+
+  async function triggerSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/numbers/twilio-sync');
+      const data = await res.json() as { synced?: number; numbers?: unknown[]; error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? 'Sync failed. Check your Twilio credentials.');
+        return;
+      }
+      const total = data.numbers?.length ?? 0;
+      const inserted = data.synced ?? 0;
+      if (total === 0) {
+        toast.info('No phone numbers found in your Twilio account.');
+      } else if (inserted > 0) {
+        toast.success(`${inserted} number(s) imported from Twilio.`);
+      } else {
+        toast.info(`${total} number(s) already in sync.`);
+      }
+      await fetchNumbers();
+    } catch {
+      toast.error('Network error during sync.');
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -436,10 +475,26 @@ export default function NumbersPage() {
         <div className="rounded-lg border border-dashed border-[#e0e0e0] flex flex-col items-center justify-center py-20 text-center">
           <Phone className="w-12 h-12 text-[#e0e0e0] mb-4" />
           <p className="font-semibold text-[#0a0a0a]">No phone numbers yet</p>
-          <p className="text-sm text-[#6b6b6b] mb-4">Add a number to start making calls.</p>
-          <Button size="sm" onClick={() => openAdd()}>
-            <Plus className="w-4 h-4 mr-1" />Add Number
-          </Button>
+          {twilioConnected ? (
+            <>
+              <p className="text-sm text-[#6b6b6b] mb-4">Twilio is connected — sync your existing numbers or buy a new one.</p>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={triggerSync} disabled={syncing}>
+                  {syncing ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Syncing…</> : 'Sync from Twilio'}
+                </Button>
+                <Button size="sm" onClick={() => openAdd('twilio')}>
+                  <Plus className="w-4 h-4 mr-1" />Buy Number
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-[#6b6b6b] mb-4">Add a number to start making calls.</p>
+              <Button size="sm" onClick={() => openAdd()}>
+                <Plus className="w-4 h-4 mr-1" />Add Number
+              </Button>
+            </>
+          )}
         </div>
       ) : groups.length === 0 ? (
         <p className="text-sm text-[#6b6b6b] py-8 text-center">No numbers match &ldquo;{search}&rdquo;.</p>
@@ -825,6 +880,18 @@ export default function NumbersPage() {
                   {twilioAccountSid && (
                     <p className="text-xs text-[#6b6b6b]">Account SID: {twilioAccountSid}</p>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={async () => { await triggerSync(); setDialogOpen(false); }}
+                    disabled={syncing}
+                  >
+                    {syncing
+                      ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Syncing numbers…</>
+                      : 'Sync Numbers from Twilio'
+                    }
+                  </Button>
                   <button
                     onClick={disconnectTwilio}
                     className="text-xs text-red-500 hover:text-red-700 underline"
