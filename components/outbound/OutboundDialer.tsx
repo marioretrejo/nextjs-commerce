@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
   Phone, Upload, Play, Pause, RotateCcw,
   CheckCircle2, XCircle, Clock, Loader2,
-  ChevronDown, ChevronUp, Settings2,
+  ChevronDown, ChevronUp, Settings2, AlertTriangle,
 } from 'lucide-react';
 
 type CallStatus = 'pending' | 'dialing' | 'success' | 'failed' | 'skipped';
@@ -33,6 +33,7 @@ interface PhoneNumber {
 interface Props {
   agents: Agent[];
   phoneNumbers?: PhoneNumber[];
+  hasSipTrunk?: boolean;
 }
 
 // Parse a text block (CSV or one-per-line) into E.164 numbers
@@ -79,7 +80,7 @@ const INPUT_CLS =
   'focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20 disabled:opacity-50 [appearance:textfield] ' +
   '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
-export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
+export function OutboundDialer({ agents, phoneNumbers = [], hasSipTrunk = false }: Props) {
   // ── Core state ────────────────────────────────────────────────────────────
   const [expanded, setExpanded]       = useState(false);
   const [agentId, setAgentId]         = useState(agents[0]?.id ?? '');
@@ -254,6 +255,21 @@ export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
 
       {expanded && (
         <CardContent className="space-y-4 pt-0">
+
+          {/* ── No-dialer warning ── */}
+          {!hasSipTrunk && phoneNumbers.length === 0 && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 leading-snug">
+                <span className="font-semibold">No dialer configured.</span>{' '}
+                To make calls, add a phone number in{' '}
+                <a href="/numbers" className="underline font-medium hover:text-amber-900">/numbers</a>
+                {' '}or connect a SIP trunk in{' '}
+                <a href="/integrations" className="underline font-medium hover:text-amber-900">/integrations</a>.
+                Any number with <span className="font-mono font-semibold">+</span> will dial once a provider is set up.
+              </div>
+            </div>
+          )}
 
           {/* ── Config row (responsive) ── */}
           <div className="flex flex-col gap-3 md:flex-row">
@@ -527,25 +543,34 @@ export function OutboundDialer({ agents, phoneNumbers = [] }: Props) {
           {/* ── Per-number status list ── */}
           {rows.length > 0 && (
             <div className="rounded-xl border border-[#e5e5e5] overflow-hidden">
-              <div className="grid grid-cols-[1fr_100px_50px_1fr] gap-3 px-4 py-2 border-b border-[#f0f0f0] text-[11px] font-medium text-[#a0a0a0] uppercase tracking-wide">
-                <span>Number</span><span>Status</span><span>Tries</span><span>Details</span>
-              </div>
-              <div className="max-h-64 overflow-y-auto divide-y divide-[#f5f5f5]">
+              <div className="max-h-72 overflow-y-auto divide-y divide-[#f5f5f5]">
                 {rows.map((row, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_100px_50px_1fr] gap-3 px-4 py-2.5 items-center text-sm">
-                    <span className="font-mono text-[13px] text-[#0a0a0a]">{row.number}</span>
-                    <div className="flex items-center gap-1.5">
+                  <div key={i} className="flex items-start gap-3 px-4 py-3">
+                    {/* Status icon */}
+                    <div className="mt-0.5 shrink-0">
                       <StatusIcon status={row.status} />
-                      {statusBadge(row.status)}
                     </div>
-                    <span className="text-xs text-center text-[#6b6b6b]">{row.attempts}</span>
-                    <span className="text-xs text-[#6b6b6b] truncate">
-                      {row.status === 'success' && row.callId ? (
-                        <span className="font-mono text-green-700">{row.callId.slice(-12)}</span>
-                      ) : row.status === 'failed' && row.error ? (
-                        <span className="text-red-600">{row.error}</span>
-                      ) : null}
-                    </span>
+
+                    {/* Number + error */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-[13px] font-medium text-[#0a0a0a]">{row.number}</span>
+                        {statusBadge(row.status)}
+                        <span className="text-[11px] text-[#b0b0b0] ml-auto shrink-0">
+                          {row.attempts} {row.attempts === 1 ? 'try' : 'tries'}
+                        </span>
+                      </div>
+
+                      {/* Error — full text, never truncated */}
+                      {row.status === 'failed' && row.error && (
+                        <p className="mt-1 text-xs text-red-600 leading-snug">{row.error}</p>
+                      )}
+                      {row.status === 'success' && row.callId && (
+                        <p className="mt-0.5 text-[11px] font-mono text-green-700">
+                          call id: {row.callId.slice(-16)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

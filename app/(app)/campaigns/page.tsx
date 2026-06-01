@@ -39,9 +39,10 @@ export default async function CampaignsPage() {
   let templates: (CampaignTemplate & { agent?: { name: string } })[] = [];
   let dialerAgents: { id: string; name: string }[] = [];
   let dialerPhoneNumbers: { number: string }[] = [];
+  let dialerHasSipTrunk = false;
   if (workspace) {
     const supabase = await createClient();
-    const [{ data: campaignData }, { data: templateData }, { data: agentData }, { data: phoneData }] = await Promise.all([
+    const [{ data: campaignData }, { data: templateData }, { data: agentData }, { data: phoneData }, { data: sipData }] = await Promise.all([
       supabase
         .from('campaigns')
         .select('*, agent:agents!campaigns_agent_id_fkey(id, name, status)')
@@ -64,18 +65,26 @@ export default async function CampaignsPage() {
         .eq('workspace_id', workspace.id)
         .eq('status', 'available')
         .order('number'),
+      supabase
+        .from('integrations')
+        .select('id')
+        .eq('workspace_id', workspace.id)
+        .eq('type', 'sip_trunk')
+        .eq('status', 'connected')
+        .limit(1),
     ]);
     campaigns = (campaignData as Campaign[]) ?? [];
     templates = (templateData as (CampaignTemplate & { agent?: { name: string } })[]) ?? [];
     dialerAgents = (agentData as { id: string; name: string }[]) ?? [];
     dialerPhoneNumbers = (phoneData as { number: string }[]) ?? [];
+    dialerHasSipTrunk = !!(sipData && sipData.length > 0);
   }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Quick Outbound Dialer */}
       <div className="mb-6">
-        <OutboundDialer agents={dialerAgents} phoneNumbers={dialerPhoneNumbers} />
+        <OutboundDialer agents={dialerAgents} phoneNumbers={dialerPhoneNumbers} hasSipTrunk={dialerHasSipTrunk} />
       </div>
 
       {/* Header */}
