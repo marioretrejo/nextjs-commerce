@@ -170,6 +170,39 @@ async function executeTool(
   }
 }
 
+interface CopilotConfig {
+  system_prompt: string;
+  rag_documents: { title: string; content: string }[];
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+}
+
+const FALLBACK_SYSTEM_PROMPT = `You are a friendly analytics copilot for VoiceOS, a voice-AI platform. You help workspace owners understand their data.
+
+Rules:
+- Be conversational and friendly. Answer greetings, general questions, and small talk naturally WITHOUT calling any tool.
+- Only call a tool when the user specifically asks about metrics, calls, campaigns, agents, or analytics data.
+- When you get tool results, summarize them in clear, concise natural language. Format numbers nicely (e.g. "2 calls", "85% success rate").
+- If asked about projections, use current data to extrapolate (e.g. "at this pace, ~X by end of month").
+- Respond in the same language the user writes in (Spanish or English).`;
+
+async function loadCopilotConfig(admin: ReturnType<typeof createAdminClient>): Promise<CopilotConfig> {
+  try {
+    const { data } = await admin.from('copilot_config').select('*').eq('id', 'global').single();
+    if (data) return data as CopilotConfig;
+  } catch { /* fall through */ }
+  return {
+    system_prompt: FALLBACK_SYSTEM_PROMPT,
+    rag_documents: [],
+    model: 'llama-3.3-70b-versatile',
+    temperature: 0.3,
+    max_tokens: 1024,
+    enabled: true,
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
@@ -182,22 +215,32 @@ export async function POST(req: Request) {
     }
 
     const admin = createAdminClient();
-    const { data: ws } = await admin.from('workspaces').select('id').eq('owner_id', user.id).single();
-    if (!ws) return NextResponse.json({ reply: 'No se encontró tu workspace.' });
-    const workspaceId = (ws as { id: string }).id;
+
+    // Load workspace and copilot config in parallel
+    const [wsResult, cfg] = await Promise.all([
+      admin.from('workspaces').select('id').eq('owner_id', user.id).single(),
+      loadCopilotConfig(admin),
+    ]);
+
+    if (!wsResult.data) return NextResponse.json({ reply: 'No se encontró tu workspace.' });
+    const workspaceId = (wsResult.data as { id: string }).id;
+
+    if (!cfg.enabled) {
+      return NextResponse.json({ reply: 'El Analytics Copilot está deshabilitado por el administrador.' });
+    }
 
     const { messages } = await req.json() as { messages: ChatCompletionMessageParam[] };
     const groq = new Groq({ apiKey: groqKey });
 
-    const systemPrompt = `You are a friendly analytics copilot for VoiceOS, a voice-AI platform. You help workspace owners understand their data.
-
-Rules:
-- Be conversational and friendly. Answer greetings, general questions, and small talk naturally WITHOUT calling any tool.
-- Only call a tool when the user specifically asks about metrics, calls, campaigns, agents, or analytics data.
-- When you get tool results, summarize them in clear, concise natural language. Format numbers nicely (e.g. "2 calls", "85% success rate").
-- If asked about projections, use current data to extrapolate (e.g. "at this pace, ~X by end of month").
-- Respond in the same language the user writes in (Spanish or English).
-- Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
+    // Build system prompt: use configured prompt (or fallback), then append RAG docs and date
+    const basePrompt = cfg.system_prompt.trim() || FALLBACK_SYSTEM_PROMPT;
+    const ragSection = cfg.rag_documents.length > 0
+      ? '\n\n---\n## Knowledge Base\nUse the following documents to answer questions when relevant:\n\n' +
+        cfg.rag_documents
+          .map((doc) => `### ${doc.title}\n${doc.content}`)
+          .join('\n\n')
+      : '';
+    const systemPrompt = `${basePrompt}${ragSection}\n\n- Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
 
     const history: ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
@@ -209,12 +252,12 @@ Rules:
       let response;
       try {
         response = await groq.chat.completions.create({
-          model: 'llama-3.3-70b-versatile',
-          messages: history,
-          tools: TOOLS,
+          model:       cfg.model ?? 'llama-3.3-70b-versatile',
+          messages:    history,
+          tools:       TOOLS,
           tool_choice: 'auto',
-          max_tokens: 1024,
-          temperature: 0.3,
+          max_tokens:  cfg.max_tokens ?? 1024,
+          temperature: cfg.temperature ?? 0.3,
         });
       } catch (groqErr) {
         // If tool validation fails, retry this round without tools
@@ -222,10 +265,10 @@ Rules:
         if (errStr.includes('tool_validation_error') || errStr.includes('tool call validation')) {
           try {
             const fallback = await groq.chat.completions.create({
-              model: 'llama-3.3-70b-versatile',
-              messages: history,
-              max_tokens: 1024,
-              temperature: 0.3,
+              model:       cfg.model ?? 'llama-3.3-70b-versatile',
+              messages:    history,
+              max_tokens:  cfg.max_tokens ?? 1024,
+              temperature: cfg.temperature ?? 0.3,
             });
             const content = fallback.choices[0]?.message?.content;
             return NextResponse.json({ reply: content ?? 'No pude obtener los datos en este momento. Por favor intenta de nuevo.' });
