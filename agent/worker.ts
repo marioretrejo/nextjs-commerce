@@ -1019,11 +1019,16 @@ export default defineAgent({
 });
 
 // Minimal HTTP health-check server so Render web services stay healthy.
-// The agent worker connects outbound to LiveKit and never binds a port by
-// default — Render would kill it without this.
+// LiveKit's supervised_proc spawns child copies of this file — each child
+// will also attempt to listen, so we silently ignore EADDRINUSE (port already
+// held by the parent). Any other listen error is rethrown.
 import { createServer } from 'node:http';
 const healthPort = Number(process.env['PORT'] ?? 10000);
-createServer((_, res) => { res.writeHead(200); res.end('ok'); }).listen(healthPort);
+const _healthServer = createServer((_, res) => { res.writeHead(200); res.end('ok'); });
+_healthServer.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EADDRINUSE') throw err;
+});
+_healthServer.listen(healthPort);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 cli.runApp(new ServerOptions({
