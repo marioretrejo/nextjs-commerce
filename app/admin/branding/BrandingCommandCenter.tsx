@@ -32,37 +32,40 @@ export function BrandingCommandCenter({ workspaces: initial }: Props) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
-  // Branding modal state
   const [brandingTarget, setBrandingTarget] = useState<BrandingWorkspace | null>(null);
   const [brandingForm, setBrandingForm] = useState({ app_name: '', logo_url: '', primary_color: '#0a0a0a' });
   const [brandingLoading, setBrandingLoading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!['image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      toast.error('Solo SVG, PNG o JPG permitidos');
+    const ALLOWED = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!ALLOWED.includes(file.type)) {
+      toast.error('Solo SVG, PNG, JPG o WebP permitidos');
       return;
     }
-
     if (file.size > 5 * 1024 * 1024) {
       toast.error('El archivo no debe exceder 5MB');
       return;
     }
 
+    setLogoUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        setBrandingForm(f => ({ ...f, logo_url: dataUrl }));
-        toast.success('Logo cargado exitosamente');
-        if (logoInputRef.current) logoInputRef.current.value = '';
-      };
-      reader.readAsDataURL(file);
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/admin/upload-logo', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      const { url } = await res.json() as { url: string };
+      setBrandingForm(f => ({ ...f, logo_url: url }));
+      toast.success('Logo subido correctamente');
     } catch (err) {
-      toast.error('Error al leer el archivo');
+      toast.error(`Error al subir el logo: ${String(err)}`);
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
     }
   };
 
@@ -160,14 +163,18 @@ export function BrandingCommandCenter({ workspaces: initial }: Props) {
                     type="button"
                     variant="outline"
                     onClick={() => logoInputRef.current?.click()}
-                    className="px-3"
+                    disabled={logoUploading}
+                    className="px-3 shrink-0"
                   >
-                    Cargar
+                    {logoUploading ? 'Subiendo…' : 'Cargar'}
                   </Button>
                 </div>
                 <p className="text-xs text-[#6b6b6b]">SVG/PNG/JPG, fondo transparente, ~120×32px. Max 5MB.</p>
-                {brandingForm.logo_url && brandingForm.logo_url.startsWith('data:') && (
-                  <p className="text-xs text-green-600">✓ Logo cargado desde archivo</p>
+                {brandingForm.logo_url && !brandingForm.logo_url.startsWith('data:') && (
+                  <div className="flex items-center gap-2 rounded-lg border border-[#e5e5e5] p-2">
+                    <img src={brandingForm.logo_url} alt="Logo preview" className="max-h-8 max-w-[120px] object-contain" />
+                    <span className="text-xs text-green-600">✓ Logo listo</span>
+                  </div>
                 )}
               </div>
             </div>
