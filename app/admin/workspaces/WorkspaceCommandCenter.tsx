@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 import { ImpersonateConfirmModal } from '@/components/admin/ImpersonateConfirmModal';
 import { SuspendModal } from '@/components/admin/SuspendModal';
 
-const ABUSE_THRESHOLD = 100; // 429 rejections per hour to flag
+const ABUSE_THRESHOLD = 100; // 429 rejections per hour to flag (v2)
 
 interface WorkspaceRow {
   id:                     string;
