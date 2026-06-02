@@ -27,7 +27,6 @@ const NAV = [
   { href: '/admin/metrics',     label: 'Metrics',            icon: BarChart2 },
   { href: '/admin/calculator',  label: 'Unit Economics',     icon: Calculator },
   { href: '/admin/copilot',     label: 'Copilot Config',     icon: Sparkles },
-  { href: '/admin/branding',    label: 'Branding',           icon: Palette },
   { href: '/admin/settings',    label: 'Global Settings',    icon: Settings },
 ];
 
@@ -62,6 +61,20 @@ function AdminSidebar() {
             </Link>
           );
         })}
+
+        {/* White-label Branding — hardcoded to guarantee visibility */}
+        <Link
+          href="/admin/branding"
+          className={cn(
+            'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+            pathname.startsWith('/admin/branding')
+              ? 'bg-violet-600 text-white'
+              : 'border border-violet-500/40 text-violet-300 hover:bg-violet-600/20 hover:text-violet-100'
+          )}
+        >
+          <Palette className="h-4 w-4 shrink-0" />
+          Branding
+        </Link>
       </nav>
 
       {/* Footer */}
