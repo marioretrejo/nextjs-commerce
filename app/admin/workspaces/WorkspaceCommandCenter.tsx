@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Shield, ShieldOff, LogIn, ChevronDown, ChevronUp,
   Settings2, Search, AlertTriangle, CheckCircle2, Users, Zap,
-  Building2, BanknoteIcon, X, Palette,
+  Building2, BanknoteIcon, X, Palette, CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +73,10 @@ export function WorkspaceCommandCenter({ workspaces: initial, isSuperAdmin }: Pr
   const [quotaLoading, setQuotaLoading]             = useState(false);
   const [nonpayTarget, setNonpayTarget]             = useState<WorkspaceRow | null>(null);
   const [rejectionCounts, setRejectionCounts]       = useState<Record<string, number>>({});
+  // Plan modal state
+  const [planTarget, setPlanTarget]                 = useState<WorkspaceRow | null>(null);
+  const [planValue, setPlanValue]                   = useState<string>('free');
+  const [planLoading, setPlanLoading]               = useState(false);
   // Branding modal state
   const [brandingTarget, setBrandingTarget]         = useState<WorkspaceRow | null>(null);
   const [brandingForm, setBrandingForm]             = useState({ app_name: '', logo_url: '', primary_color: '#0a0a0a' });
@@ -187,6 +191,31 @@ export function WorkspaceCommandCenter({ workspaces: initial, isSuperAdmin }: Pr
     } catch (e) { toast.error(String(e)); }
     finally { setQuotaLoading(false); }
   }, [quotaTarget, quotaInput]);
+
+  // ─── Plan change ────────────────────────────────────────────────────────────
+  const openPlanModal = (ws: WorkspaceRow) => {
+    setPlanValue(ws.plan);
+    setPlanTarget(ws);
+  };
+
+  const savePlan = useCallback(async () => {
+    if (!planTarget) return;
+    setPlanLoading(true);
+    try {
+      const res = await fetch(`/api/admin/workspaces/${planTarget.id}/plan`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planValue }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      setWorkspaces(prev => prev.map(w =>
+        w.id === planTarget.id ? { ...w, plan: planValue } : w
+      ));
+      toast.success(`Plan changed to "${planValue}" for "${planTarget.name}"`);
+      setPlanTarget(null);
+    } catch (e) { toast.error(String(e)); }
+    finally { setPlanLoading(false); }
+  }, [planTarget, planValue]);
 
   // ─── White-label Branding ────────────────────────────────────────────────────
   const openBrandingModal = (ws: WorkspaceRow) => {
@@ -330,6 +359,61 @@ export function WorkspaceCommandCenter({ workspaces: initial, isSuperAdmin }: Pr
             <Button variant="outline" onClick={() => setQuotaTarget(null)}>Cancel</Button>
             <Button onClick={saveQuota} disabled={quotaLoading}>
               {quotaLoading ? 'Saving…' : 'Save Quota'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan Change Modal */}
+      <Dialog open={!!planTarget} onOpenChange={(o) => { if (!o) setPlanTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-emerald-600" />
+              Change Plan — {planTarget?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Select the billing plan for this workspace. This updates immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {(['free', 'pro', 'scale', 'enterprise'] as const).map((p) => (
+              <label
+                key={p}
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                  planValue === p
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : 'border-[#e5e5e5] hover:border-emerald-200 hover:bg-[#f9f9f9]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="plan"
+                  value={p}
+                  checked={planValue === p}
+                  onChange={() => setPlanValue(p)}
+                  className="accent-emerald-600"
+                />
+                <div>
+                  <p className="text-sm font-semibold capitalize text-[#1a1a1a]">{p}</p>
+                  <p className="text-xs text-[#9b9b9b]">
+                    {p === 'free'       && 'Basic access, no outbound calls'}
+                    {p === 'pro'        && 'Full features, pay-as-you-go'}
+                    {p === 'scale'      && 'High-volume, priority support'}
+                    {p === 'enterprise' && 'Custom contract, minute cap billing'}
+                  </p>
+                </div>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPlanTarget(null)}>Cancel</Button>
+            <Button
+              onClick={savePlan}
+              disabled={planLoading || planValue === planTarget?.plan}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {planLoading ? 'Saving…' : 'Save Plan'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -593,6 +677,17 @@ export function WorkspaceCommandCenter({ workspaces: initial, isSuperAdmin }: Pr
                       <BanknoteIcon className="h-4 w-4" />
                     </button>
                   )}
+
+                  {/* Change Plan */}
+                  <button
+                    onClick={() => openPlanModal(ws)}
+                    disabled={loading[ws.id]}
+                    title={`Plan: ${ws.plan} — click to change`}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Plan
+                  </button>
 
                   {/* White-label Branding — superadmin only */}
                   {isSuperAdmin && (
