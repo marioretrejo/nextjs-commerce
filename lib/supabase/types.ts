@@ -365,6 +365,109 @@ export interface ApiKey {
   created_at: string;
 }
 
+// ─── SIP / Dialing strategy (migration 037) ───────────────────────────────────
+
+export type SipProvider = 'commpeak' | 'squaretalk' | 'telnyx' | 'vonage' | 'twilio' | 'custom';
+export type SipTrunkStatus = 'active' | 'testing' | 'error' | 'disabled';
+
+export interface SipTrunk {
+  id: string;
+  workspace_id: string;
+  name: string;
+  provider: SipProvider;
+  sip_host: string;
+  username: string;
+  password: string;
+  livekit_trunk_id: string | null;
+  priority: number;
+  region: string | null;
+  status: SipTrunkStatus;
+  last_tested_at: string | null;
+  test_result: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface SipTrunkNumber {
+  id: string;
+  trunk_id: string;
+  workspace_id: string;
+  number: string;
+  area_code: string | null;
+  country_code: string;
+  region: string | null;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export type ScheduleWindow = {
+  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+  start: string; // "HH:MM" 24-hour
+  end: string;   // "HH:MM" 24-hour
+};
+
+export interface DialingSchedule {
+  id: string;
+  workspace_id: string;
+  agent_id: string | null;
+  name: string;
+  timezone: string;
+  windows: ScheduleWindow[];
+  is_default: boolean;
+  created_at: string;
+}
+
+export type ActionTrigger =
+  | 'pre_call'
+  | 'post_call'
+  | 'on_transfer'
+  | 'on_voicemail'
+  | 'on_converted'
+  | 'on_no_answer'
+  | 'on_error';
+
+export type ActionType = 'webhook' | 'sms' | 'email' | 'crm_update';
+
+export interface CallAction {
+  id: string;
+  workspace_id: string;
+  agent_id: string | null;
+  name: string;
+  trigger: ActionTrigger;
+  type: ActionType;
+  config: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+}
+
+export type ScenarioType =
+  | 'voicemail_short'
+  | 'voicemail_long'
+  | 'bot_detected'
+  | 'disinterest'
+  | 'objection'
+  | 'no_response'
+  | 'human_requested';
+
+export type ScenarioActionType =
+  | 'hangup'
+  | 'leave_voicemail'
+  | 'navigate_ivr'
+  | 'transfer'
+  | 'retry_later'
+  | 'custom_response';
+
+export interface ScenarioHandlerRow {
+  id: string;
+  workspace_id: string;
+  agent_id: string | null;
+  scenario: ScenarioType;
+  action: ScenarioActionType;
+  config: Record<string, unknown>;
+  max_attempts: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 export type AutomationTrigger = 'converted' | 'no_answer' | 'voicemail' | 'rejected' | 'transferred' | 'any';
 export type AutomationActionType = 'webhook' | 'tag_contact' | 'send_sms' | 'notify_team' | 'add_to_campaign';
 
@@ -424,6 +527,12 @@ export type Database = {
       billing_invoices: { Row: BillingInvoice; Insert: Omit<BillingInvoice, 'id' | 'created_at'>; Update: Partial<BillingInvoice> };
       api_keys: { Row: ApiKey; Insert: Omit<ApiKey, 'id' | 'created_at'>; Update: Partial<ApiKey> };
       campaign_templates: { Row: CampaignTemplate; Insert: Omit<CampaignTemplate, 'id' | 'created_at'>; Update: Partial<CampaignTemplate> };
+      // Migration 037
+      sip_trunks: { Row: SipTrunk; Insert: Omit<SipTrunk, 'id' | 'created_at'>; Update: Partial<SipTrunk> };
+      sip_trunk_numbers: { Row: SipTrunkNumber; Insert: Omit<SipTrunkNumber, 'id' | 'created_at'>; Update: Partial<SipTrunkNumber> };
+      dialing_schedules: { Row: DialingSchedule; Insert: Omit<DialingSchedule, 'id' | 'created_at'>; Update: Partial<DialingSchedule> };
+      call_actions: { Row: CallAction; Insert: Omit<CallAction, 'id' | 'created_at'>; Update: Partial<CallAction> };
+      scenario_handlers: { Row: ScenarioHandlerRow; Insert: Omit<ScenarioHandlerRow, 'id' | 'created_at'>; Update: Partial<ScenarioHandlerRow> };
     };
   };
 };

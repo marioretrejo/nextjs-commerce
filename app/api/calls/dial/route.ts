@@ -8,8 +8,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { RoomServiceClient, SipClient } from 'livekit-server-sdk';
-import { parsePhoneNumber } from 'libphonenumber-js';
 import { getRegionalHttpUrl } from '@/lib/livekit/edge';
+import { resolveDialConfig, cacheLivekitTrunkId } from '@/lib/dialing/strategy';
 import { NextResponse } from 'next/server';
 
 // ── SIP Egress helpers ───────────────────────────────────────────────────────
@@ -43,7 +43,8 @@ async function dialViaSipEgress(params: {
   admin: ReturnType<typeof createAdminClient>;
   workspaceId: string;
   creds: SipTrunkCredentials;
-  integrationId: string;
+  /** Pass for legacy integrations-table path; omit for new sip_trunks path */
+  integrationId?: string;
   to: string;
   from: string;
   roomName: string;
@@ -67,14 +68,14 @@ async function dialViaSipEgress(params: {
       }
     );
     trunkId = trunk.sipTrunkId;
-    // Cache trunk ID — fire-and-forget, non-fatal if it fails
-    void params.admin
-      .from('integrations')
-      .update({
-        credentials: { ...params.creds, livekit_trunk_id: trunkId },
-      })
-      .eq('id', params.integrationId)
-      .then(() => null, () => null);
+    // Cache trunk ID into legacy integrations table (new sip_trunks path caches separately)
+    if (params.integrationId) {
+      void params.admin
+        .from('integrations')
+        .update({ credentials: { ...params.creds, livekit_trunk_id: trunkId } })
+        .eq('id', params.integrationId)
+        .then(() => null, () => null);
+    }
   }
 
   const participant = await sipClient.createSipParticipant(
@@ -95,12 +96,6 @@ async function dialViaSipEgress(params: {
 
 export const dynamic = 'force-dynamic';
 
-function buildLocalPresenceWarning(missingCountry: string | null) {
-  if (!missingCountry) return null;
-  const displayName = new Intl.DisplayNames(['en'], { type: 'region' });
-  const countryName = displayName.of(missingCountry) ?? missingCountry;
-  return { warning: 'missing_local_number', missingCountry: countryName };
-}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -204,13 +199,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create room.' }, { status: 500 });
   }
 
-  // ── Local Presence: extract destination country → match workspace number ───
-  let destinationCountry: string | null = null;
-  let missingLocalCountry: string | null = null;
-  try { destinationCountry = parsePhoneNumber(to).country ?? null; } catch { /* invalid format */ }
+  // ── Dialing strategy: area-code local presence + SIP trunk selection ────
+  const dialCfg = await resolveDialConfig(admin, workspace.id, agentId, to);
 
-  // Resolve caller ID: prefer requestedCallerId if it belongs to this workspace
-  let callerId = '';
+  // Respect caller schedule unless explicitly overridden by API consumer
+  if (!dialCfg.withinSchedule) {
+    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+    return NextResponse.json({
+      error: `Outside calling hours for timezone ${dialCfg.scheduleTimezone}.`,
+      code: 'OUTSIDE_SCHEDULE',
+    }, { status: 403 });
+  }
+
+  // Prefer explicit caller_id if it's owned by this workspace, else strategy result
+  let callerId = dialCfg.callerNumber ?? '';
   if (requestedCallerId) {
     const { data: ownedNumber } = await admin
       .from('phone_numbers')
@@ -222,49 +224,58 @@ export async function POST(req: Request) {
     if (ownedNumber) callerId = (ownedNumber as { number: string }).number;
   }
 
-  // Local presence: if no explicit caller ID, find a workspace number in same country
-  if (!callerId && destinationCountry) {
-    const { data: allNumbers } = await admin
-      .from('phone_numbers')
-      .select('number')
-      .eq('workspace_id', workspace.id)
-      .eq('status', 'available');
+  if (!callerId) callerId = process.env['TWILIO_PHONE_NUMBER'] ?? '';
 
-    if (allNumbers) {
-      for (const row of allNumbers as { number: string }[]) {
-        try {
-          if (parsePhoneNumber(row.number).country === destinationCountry) {
-            callerId = row.number;
-            console.log(`[local-presence] matched local number ${callerId} for ${destinationCountry} destination`);
-            break;
-          }
-        } catch { /* unparseable number — skip */ }
+  // ── SIP Egress via sip_trunks table (preferred) ──────────────────────────
+  if (dialCfg.trunk) {
+    const trunk = dialCfg.trunk;
+    if (!callerId) {
+      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+      return NextResponse.json({ error: 'No caller ID configured. Add a phone number in /numbers.' }, { status: 503 });
+    }
+    const creds: SipTrunkCredentials = {
+      provider_name:     trunk.provider,
+      sip_host:          trunk.sip_host,
+      username:          trunk.username,
+      password:          trunk.password,
+      livekit_trunk_id:  trunk.livekit_trunk_id ?? undefined,
+    };
+    try {
+      const { participantSid, trunkId } = await dialViaSipEgress({
+        admin, workspaceId: workspace.id, creds,
+        integrationId: trunk.id,
+        to, from: callerId, roomName,
+        apiKey, apiSecret, httpUrl,
+      });
+      // Cache LiveKit trunk ID so next call skips creation
+      if (!trunk.livekit_trunk_id) {
+        cacheLivekitTrunkId(admin, trunk.id, trunkId);
       }
+      await admin.from('calls').insert({
+        workspace_id: workspace.id, agent_id: agentId,
+        retell_call_id: roomName, direction: 'outbound',
+        contact_phone: to, status: 'dialing', cost_usd: 0,
+        routing_data: {
+          method: 'livekit_sip_egress',
+          sip_provider: trunk.provider,
+          sip_trunk_id: trunk.id,
+          livekit_trunk_id: trunkId,
+          livekit_participant_sid: participantSid,
+        },
+      });
+      return NextResponse.json({
+        call_id: roomName, room_name: roomName,
+        method: 'livekit_sip_egress',
+        sip_provider: trunk.provider,
+        status: 'dialing',
+      });
+    } catch (err) {
+      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
+      return NextResponse.json({ error: `SIP egress error: ${String(err)}` }, { status: 502 });
     }
-    if (!callerId) missingLocalCountry = destinationCountry;
   }
 
-  if (!callerId) {
-    const { data: defaultNumber } = await admin
-      .from('phone_numbers')
-      .select('number')
-      .eq('workspace_id', workspace.id)
-      .eq('status', 'available')
-      .limit(1)
-      .single();
-    callerId = (defaultNumber as { number: string } | null)?.number
-      ?? process.env['TWILIO_PHONE_NUMBER']
-      ?? '';
-    if (missingLocalCountry) {
-      const displayName = new Intl.DisplayNames(['en'], { type: 'region' });
-      const countryName = displayName.of(missingLocalCountry) ?? missingLocalCountry;
-      console.log(`[local-presence] no local number for ${countryName} — falling back to ${callerId}`);
-    }
-  }
-
-  // ── SIP Egress path (Squaretalk / CommPeak / any SIP provider) ──────────
-  // If the workspace has an active SIP trunk integration, dial through LiveKit
-  // SIP Outbound Egress — no Twilio dependency required.
+  // ── Fallback: legacy integrations table SIP trunk ─────────────────────────
   const { data: sipIntegration } = await admin
     .from('integrations')
     .select('id, credentials')
@@ -297,13 +308,11 @@ export async function POST(req: Request) {
           livekit_participant_sid: participantSid,
         },
       });
-      const sipWarning = buildLocalPresenceWarning(missingLocalCountry);
       return NextResponse.json({
         call_id: roomName, room_name: roomName,
         method: 'livekit_sip_egress',
         sip_provider: creds.provider_name,
         status: 'dialing',
-        ...(sipWarning ?? {}),
       });
     } catch (err) {
       await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
@@ -369,10 +378,8 @@ export async function POST(req: Request) {
     },
   });
 
-  const twilioWarning = buildLocalPresenceWarning(missingLocalCountry);
   return NextResponse.json({
     call_id: roomName, room_name: roomName,
     twilio_call_sid: twilioCallSid, status: 'dialing',
-    ...(twilioWarning ?? {}),
   });
 }
