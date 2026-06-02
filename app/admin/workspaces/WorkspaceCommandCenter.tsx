@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Shield, ShieldOff, LogIn, ChevronDown, ChevronUp,
   Settings2, Search, AlertTriangle, CheckCircle2, Users, Zap,
-  Building2, BanknoteIcon, X,
+  Building2, BanknoteIcon, X, Palette,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +37,13 @@ interface WorkspaceRow {
   minute_cap?:            number | null;
   billing_status?:        'active' | 'suspended_for_nonpayment';
   stripe_balance_cents?:  number;
+  // White-label branding
+  branding?: {
+    app_name:      string;
+    logo_url:      string | null;
+    primary_color: string;
+    favicon_url?:  string | null;
+  } | null;
 }
 
 const FLAG_LABELS: Record<string, string> = {
@@ -63,6 +70,10 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
   const [quotaLoading, setQuotaLoading]             = useState(false);
   const [nonpayTarget, setNonpayTarget]             = useState<WorkspaceRow | null>(null);
   const [rejectionCounts, setRejectionCounts]       = useState<Record<string, number>>({});
+  // Branding modal state
+  const [brandingTarget, setBrandingTarget]         = useState<WorkspaceRow | null>(null);
+  const [brandingForm, setBrandingForm]             = useState({ app_name: '', logo_url: '', primary_color: '#0a0a0a' });
+  const [brandingLoading, setBrandingLoading]       = useState(false);
   const router = useRouter();
 
   // Fetch 429 rejection counts from Redis (last hour) on mount
@@ -174,6 +185,44 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
     finally { setQuotaLoading(false); }
   }, [quotaTarget, quotaInput]);
 
+  // ─── White-label Branding ────────────────────────────────────────────────────
+  const openBrandingModal = (ws: WorkspaceRow) => {
+    setBrandingForm({
+      app_name:      ws.branding?.app_name      ?? '',
+      logo_url:      ws.branding?.logo_url       ?? '',
+      primary_color: ws.branding?.primary_color  ?? '#0a0a0a',
+    });
+    setBrandingTarget(ws);
+  };
+
+  const saveBranding = useCallback(async () => {
+    if (!brandingTarget) return;
+    setBrandingLoading(true);
+    const payload = brandingForm.app_name.trim()
+      ? {
+          app_name:      brandingForm.app_name.trim(),
+          logo_url:      brandingForm.logo_url.trim() || null,
+          primary_color: brandingForm.primary_color || '#0a0a0a',
+        }
+      : null; // clear branding if no app_name
+    try {
+      const res = await fetch(`/api/admin/workspaces/${brandingTarget.id}/branding`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      setWorkspaces(prev => prev.map(w =>
+        w.id === brandingTarget.id ? { ...w, branding: payload } : w
+      ));
+      toast.success(payload
+        ? `Branding activado para "${brandingTarget.name}"`
+        : `Branding eliminado para "${brandingTarget.name}"`);
+      setBrandingTarget(null);
+    } catch (e) { toast.error(String(e)); }
+    finally { setBrandingLoading(false); }
+  }, [brandingTarget, brandingForm]);
+
   // ─── Suspend for Non-Payment ─────────────────────────────────────────────────
   const runNonPaymentSuspend = useCallback(async (ws: WorkspaceRow) => {
     setWsLoading(ws.id, true);
@@ -283,6 +332,79 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
         </DialogContent>
       </Dialog>
 
+      {/* White-label Branding Modal */}
+      <Dialog open={!!brandingTarget} onOpenChange={(o) => { if (!o) setBrandingTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Palette className="h-5 w-5 text-violet-600" />
+              White-label Branding — {brandingTarget?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Personaliza el nombre, logo y color para este cliente.
+              Deja <strong>App Name</strong> en blanco para desactivar el branding personalizado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>App Name</Label>
+              <Input
+                placeholder="Ej. AcmeCalls, SalesBot Pro…"
+                value={brandingForm.app_name}
+                onChange={e => setBrandingForm(f => ({ ...f, app_name: e.target.value }))}
+              />
+              <p className="text-xs text-[#6b6b6b]">Reemplaza &ldquo;VoiceOS&rdquo; en la barra lateral y título de pestaña.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Logo URL <span className="text-[#a0a0a0]">(opcional)</span></Label>
+              <Input
+                placeholder="https://cdn.empresa.com/logo.png"
+                value={brandingForm.logo_url}
+                onChange={e => setBrandingForm(f => ({ ...f, logo_url: e.target.value }))}
+              />
+              <p className="text-xs text-[#6b6b6b]">PNG/SVG recomendado, fondo transparente, ~120×32px.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Color primario</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={brandingForm.primary_color}
+                  onChange={e => setBrandingForm(f => ({ ...f, primary_color: e.target.value }))}
+                  className="h-9 w-14 cursor-pointer rounded border border-[#e5e5e5] p-0.5"
+                />
+                <Input
+                  placeholder="#0a0a0a"
+                  value={brandingForm.primary_color}
+                  onChange={e => setBrandingForm(f => ({ ...f, primary_color: e.target.value }))}
+                  className="flex-1 font-mono text-sm"
+                />
+              </div>
+            </div>
+            {brandingTarget?.branding && (
+              <p className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-700 border border-violet-100">
+                ✓ Branding activo — App: <strong>{brandingTarget.branding.app_name}</strong>
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            {brandingTarget?.branding && (
+              <Button
+                variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => { setBrandingForm({ app_name: '', logo_url: '', primary_color: '#0a0a0a' }); }}
+              >
+                <X className="mr-1.5 h-3.5 w-3.5" /> Limpiar
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setBrandingTarget(null)}>Cancel</Button>
+            <Button onClick={saveBranding} disabled={brandingLoading} className="bg-violet-600 hover:bg-violet-700 text-white">
+              {brandingLoading ? 'Guardando…' : 'Guardar Branding'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Non-payment suspend confirm */}
       <Dialog open={!!nonpayTarget} onOpenChange={(o) => { if (!o) setNonpayTarget(null); }}>
         <DialogContent className="max-w-sm">
@@ -385,7 +507,13 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                     {ws.minute_cap != null && (
                       <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">
                         <Building2 className="h-2.5 w-2.5" />
-                        Enterprise {ws.minute_cap.toLocaleString()} min
+                        Enterprise — {ws.minute_cap.toLocaleString()} min cuota
+                      </span>
+                    )}
+                    {ws.branding && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200">
+                        <Palette className="h-2.5 w-2.5" />
+                        {ws.branding.app_name}
                       </span>
                     )}
                   </div>
@@ -455,6 +583,21 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                       <BanknoteIcon className="h-3.5 w-3.5" /> Non-Pay
                     </button>
                   )}
+
+                  {/* Branding */}
+                  <button
+                    onClick={() => openBrandingModal(ws)}
+                    disabled={loading[ws.id]}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                      ws.branding
+                        ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                        : 'border-[#e5e5e5] bg-white text-[#606060] hover:bg-[#f5f5f5]'
+                    }`}
+                    title="White-label branding"
+                  >
+                    <Palette className="h-3.5 w-3.5" />
+                    {ws.branding ? 'Branding ✓' : 'Branding'}
+                  </button>
 
                   {/* Feature flags expand */}
                   <button
