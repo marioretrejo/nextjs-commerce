@@ -104,7 +104,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         />
       )}
       <div className="hidden md:block">
-        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} visibleModules={visibleModules} />
+        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} branding={branding} visibleModules={visibleModules} />
       </div>
       <RouteGuard visibleModules={visibleModules} />
       <div className={`flex flex-1 flex-col md:pl-56 ${isImpersonating ? 'mt-10' : ''}`}>

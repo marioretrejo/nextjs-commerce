@@ -37,10 +37,16 @@ const adminItems = [
 interface SidebarProps {
   isSuperadmin?: boolean;
   appName?: string;
+  branding?: {
+    app_name: string;
+    logo_url: string | null;
+    primary_color: string;
+    favicon_url?: string | null;
+  } | null;
   visibleModules?: string[];
 }
 
-export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModules }: SidebarProps) {
+export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', branding, visibleModules }: SidebarProps) {
   const pathname = usePathname();
   const t = useTranslations('nav');
 
@@ -96,16 +102,26 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModu
 
         {/* Logo */}
         <div className="px-5 pt-5 pb-4">
-          <div className="flex items-center gap-1.5 mb-4">
-            <span className="h-4 w-1 rounded-full bg-[#0a0a0a]" />
-            <span className="h-3 w-1 rounded-full bg-[#d4d4d4]" />
-            <span className="h-2 w-1 rounded-full bg-[#e8e8e8]" />
-          </div>
+          {branding?.logo_url ? (
+            <div className="mb-4">
+              <img
+                src={branding.logo_url}
+                alt={branding.app_name}
+                className="max-h-12 max-w-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 mb-4">
+              <span className="h-4 w-1 rounded-full bg-[#0a0a0a]" />
+              <span className="h-3 w-1 rounded-full bg-[#d4d4d4]" />
+              <span className="h-2 w-1 rounded-full bg-[#e8e8e8]" />
+            </div>
+          )}
           <span className="text-[13px] font-bold tracking-tight text-[#0a0a0a] leading-none">
             {appName}
           </span>
           <p className="text-[10px] text-[#9b9b9b] mt-0.5 font-medium tracking-wider uppercase">
-            Voice Platform
+            {branding ? 'Platform' : 'Voice Platform'}
           </p>
         </div>
 
