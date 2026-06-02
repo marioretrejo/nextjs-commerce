@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { parsePhoneNumber } from 'libphonenumber-js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +28,41 @@ function countryFlag(code: string): string {
     String.fromCodePoint(0x1F1E0 - 65 + c.charCodeAt(0))
   ).join('');
 }
+
+// Detect country ISO code from a phone number string using libphonenumber-js.
+// Handles ambiguous +1 numbers correctly: +1829 → DO, +1787 → PR, etc.
+function phoneToCountryCode(phone: string): string | null {
+  if (!phone) return null;
+  try {
+    const parsed = parsePhoneNumber(phone);
+    return parsed?.country ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const COUNTRY_NAMES: Record<string, string> = {
+  US: 'United States',  CA: 'Canada',        MX: 'Mexico',          DO: 'Dominican Republic',
+  PR: 'Puerto Rico',    CU: 'Cuba',           HT: 'Haiti',           JM: 'Jamaica',
+  TT: 'Trinidad & Tobago', BB: 'Barbados',    BS: 'Bahamas',         AG: 'Antigua',
+  DM: 'Dominica',       GD: 'Grenada',        KN: 'St. Kitts',       LC: 'St. Lucia',
+  VC: 'St. Vincent',    VI: 'US Virgin Islands', VG: 'British Virgin Islands', TC: 'Turks & Caicos',
+  GB: 'United Kingdom', DE: 'Germany',        FR: 'France',          ES: 'Spain',
+  IT: 'Italy',          PT: 'Portugal',       NL: 'Netherlands',     BE: 'Belgium',
+  SE: 'Sweden',         NO: 'Norway',         DK: 'Denmark',         FI: 'Finland',
+  CH: 'Switzerland',    AT: 'Austria',        IE: 'Ireland',         PL: 'Poland',
+  RU: 'Russia',         UA: 'Ukraine',        TR: 'Turkey',
+  BR: 'Brazil',         AR: 'Argentina',      CO: 'Colombia',        CL: 'Chile',
+  PE: 'Peru',           EC: 'Ecuador',        VE: 'Venezuela',       CR: 'Costa Rica',
+  PA: 'Panama',         GT: 'Guatemala',      HN: 'Honduras',        SV: 'El Salvador',
+  NI: 'Nicaragua',      UY: 'Uruguay',        PY: 'Paraguay',        BO: 'Bolivia',
+  AU: 'Australia',      NZ: 'New Zealand',    JP: 'Japan',           KR: 'South Korea',
+  CN: 'China',          IN: 'India',          SG: 'Singapore',       HK: 'Hong Kong',
+  PH: 'Philippines',    TH: 'Thailand',       MY: 'Malaysia',        ID: 'Indonesia',
+  ZA: 'South Africa',   NG: 'Nigeria',        KE: 'Kenya',           GH: 'Ghana',
+  EG: 'Egypt',          MA: 'Morocco',        IL: 'Israel',          AE: 'UAE',
+  SA: 'Saudi Arabia',
+};
 
 interface TrunkGroup {
   key: string;
@@ -76,6 +112,9 @@ const COUNTRIES = [
   { code: 'PY', name: 'Paraguay' },      { code: 'BO', name: 'Bolivia' },
   { code: 'GB', name: 'United Kingdom' },{ code: 'CA', name: 'Canada' },
   { code: 'ES', name: 'Spain' },         { code: 'DE', name: 'Germany' },
+  { code: 'DO', name: 'Dominican Republic' }, { code: 'PR', name: 'Puerto Rico' },
+  { code: 'CU', name: 'Cuba' },          { code: 'HT', name: 'Haiti' },
+  { code: 'JM', name: 'Jamaica' },
 ];
 
 export default function NumbersPage() {
@@ -340,12 +379,16 @@ export default function NumbersPage() {
     if (!sipUri.trim()) { toast.error('Enter the SIP trunk URI.'); return; }
     setSipSaving(true);
     try {
+      const detectedCode = phoneToCountryCode(sipPhone.trim());
+      const detectedName = detectedCode ? (COUNTRY_NAMES[detectedCode] ?? detectedCode) : undefined;
       const res = await fetch('/api/numbers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: 'sip_trunk', phone_number: sipPhone.trim(),
           sip_trunk_uri: sipUri.trim(), display_name: sipName.trim() || undefined,
+          country_code: detectedCode ?? undefined,
+          country_name: detectedName,
         }),
       });
       if (res.ok) {
@@ -529,12 +572,17 @@ export default function NumbersPage() {
                 <p className="px-5 py-4 text-sm text-[#6b6b6b]">No phone numbers added</p>
               ) : (
                 <div className="p-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {group.numbers.map(num => (
+                  {group.numbers.map(num => {
+                    const detectedCode = phoneToCountryCode(num.number) ?? num.country_code;
+                    const displayName = detectedCode
+                      ? (COUNTRY_NAMES[detectedCode] ?? num.country_name)
+                      : num.country_name;
+                    return (
                     <div
                       key={num.id}
                       className="group relative flex items-center gap-2.5 rounded-lg border border-[#e0e0e0] bg-white px-3 py-2.5 hover:border-[#0a0a0a] transition-colors"
                     >
-                      <span className="text-xl leading-none shrink-0">{countryFlag(num.country_code)}</span>
+                      <span className="text-xl leading-none shrink-0">{countryFlag(detectedCode ?? '')}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono text-sm font-medium text-[#0a0a0a] truncate">{num.number}</span>
@@ -542,8 +590,8 @@ export default function NumbersPage() {
                             <Badge className="text-[10px] px-1 py-0 bg-red-100 text-red-700 border-transparent">SPAM</Badge>
                           )}
                         </div>
-                        {num.country_name && (
-                          <p className="text-[11px] text-[#6b6b6b] truncate mt-0.5">{num.country_name}</p>
+                        {displayName && (
+                          <p className="text-[11px] text-[#6b6b6b] truncate mt-0.5">{displayName}</p>
                         )}
                       </div>
                       <button
@@ -557,7 +605,8 @@ export default function NumbersPage() {
                         }
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -723,13 +772,18 @@ export default function NumbersPage() {
                             key={num.phone_number}
                             className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e0e0] px-3 py-2 bg-white"
                           >
-                            <div className="min-w-0">
-                              <p className="font-mono text-sm font-medium text-[#0a0a0a]">{num.phone_number}</p>
-                              {(num.locality || num.region) && (
-                                <p className="text-[11px] text-[#6b6b6b] truncate">
-                                  {[num.locality, num.region].filter(Boolean).join(', ')}
-                                </p>
-                              )}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-lg shrink-0">
+                                {countryFlag(phoneToCountryCode(num.phone_number) ?? num.iso_country)}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="font-mono text-sm font-medium text-[#0a0a0a]">{num.phone_number}</p>
+                                {(num.locality || num.region) && (
+                                  <p className="text-[11px] text-[#6b6b6b] truncate">
+                                    {[num.locality, num.region].filter(Boolean).join(', ')}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                             <Button
                               size="sm"
@@ -766,8 +820,22 @@ export default function NumbersPage() {
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <Label>Phone number</Label>
-                  <Input placeholder="+15551234567" value={sipPhone} onChange={e => setSipPhone(e.target.value)} />
-                  <p className="text-xs text-[#6b6b6b]">E.164 format</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl w-8 text-center shrink-0">
+                      {phoneToCountryCode(sipPhone) ? countryFlag(phoneToCountryCode(sipPhone)!) : '🌐'}
+                    </span>
+                    <Input
+                      placeholder="+15551234567"
+                      value={sipPhone}
+                      onChange={e => setSipPhone(e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
+                  {phoneToCountryCode(sipPhone) && (
+                    <p className="text-xs text-[#6b6b6b]">
+                      {COUNTRY_NAMES[phoneToCountryCode(sipPhone)!] ?? phoneToCountryCode(sipPhone)}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>SIP trunk URI</Label>
