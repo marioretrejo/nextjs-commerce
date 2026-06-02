@@ -77,6 +77,14 @@ export default function NotificationsPage() {
       const d = await res.json() as Notification[] | { notifications: Notification[] };
       const list = Array.isArray(d) ? d : (d.notifications ?? []);
       setNotifications(list);
+      // Auto-mark all as read after a brief moment so the user sees the unread state first
+      const hasUnread = list.some(n => !n.read);
+      if (hasUnread) {
+        setTimeout(async () => {
+          await fetch('/api/notifications/read-all', { method: 'POST' });
+          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        }, 1200);
+      }
     }
     setLoading(false);
   }, []);
