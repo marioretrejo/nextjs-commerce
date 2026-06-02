@@ -42,6 +42,7 @@ import {
   PhoneForwarded,
   PhoneOff,
   Plus,
+  Sparkles,
   RotateCcw,
   Save,
   Trash2,
@@ -368,6 +369,8 @@ function FlowCanvas({ id }: { id: string }) {
   const [saving, setSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [generatePrompt, setGeneratePrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
   const { fitView } = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
@@ -522,6 +525,33 @@ function FlowCanvas({ id }: { id: string }) {
     setSaving(false);
   }
 
+  async function generateFlow() {
+    const desc = generatePrompt.trim();
+    if (!desc) { toast.error('Describe el flujo que quieres generar'); return; }
+    setGenerating(true);
+    try {
+      const r = await fetch(`/api/agents/${id}/flow/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: desc }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({ error: 'Error desconocido' }));
+        throw new Error(e.error ?? `HTTP ${r.status}`);
+      }
+      const d = await r.json() as { flow: FlowConfig };
+      setNodes(d.flow.nodes as Node[]);
+      setEdges(d.flow.edges as Edge[]);
+      setSelectedId(null);
+      setTimeout(() => fitView({ padding: 0.15, duration: 600 }), 80);
+      toast.success('¡Flujo generado! Revisa y ajusta los nodos.');
+      setGeneratePrompt('');
+    } catch (err) {
+      toast.error(`Generación fallida — ${err instanceof Error ? err.message : 'intenta de nuevo'}`);
+    }
+    setGenerating(false);
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -564,6 +594,33 @@ function FlowCanvas({ id }: { id: string }) {
           </Button>
         </div>
       </header>
+
+      {/* AI Generate bar */}
+      <div className="shrink-0 border-b border-gray-200 bg-gradient-to-r from-violet-50 via-purple-50 to-indigo-50 px-4 py-2">
+        <div className="flex items-center gap-2 max-w-3xl mx-auto">
+          <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
+          <input
+            type="text"
+            value={generatePrompt}
+            onChange={(e) => setGeneratePrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !generating) generateFlow(); }}
+            placeholder="Describe tu flujo… ej. &quot;Calificación outbound: preguntar empresa, cargo y necesidad, si está calificado agendar demo, si no cerrar amigablemente&quot;"
+            className="flex-1 rounded-lg border border-violet-200 bg-white/80 px-3 py-1.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+            disabled={generating}
+          />
+          <Button
+            size="sm"
+            onClick={generateFlow}
+            disabled={generating || !generatePrompt.trim()}
+            className="h-8 bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+          >
+            {generating
+              ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Generando…</>
+              : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar</>
+            }
+          </Button>
+        </div>
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left palette */}
