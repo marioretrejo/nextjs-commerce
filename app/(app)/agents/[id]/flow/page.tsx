@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -13,6 +13,8 @@ import {
   MarkerType,
   Position,
   Panel,
+  useReactFlow,
+  ReactFlowProvider,
   type Connection,
   type Node,
   type Edge,
@@ -30,7 +32,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Brain,
+  Copy,
+  Maximize2,
+  GitBranch,
+  Loader2,
+  PhoneForwarded,
+  PhoneOff,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+  Webhook,
+  Zap,
+} from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -44,201 +61,207 @@ interface FlowConfig {
   edges: Edge[];
 }
 
-interface StartNodeData extends Record<string, unknown> {
-  label: string;
-}
-
+interface StartNodeData extends Record<string, unknown> { label: string }
 interface AiStateData extends Record<string, unknown> {
   label: string;
   state_name: string;
   system_instructions: string;
 }
-
-interface Intent {
-  id: string;
-  label: string;
-  description: string;
-}
-
+interface Intent { id: string; label: string; description: string }
 interface SemanticRouterData extends Record<string, unknown> {
   label: string;
   description: string;
   intents: Intent[];
 }
-
 interface WebhookData extends Record<string, unknown> {
   label: string;
   url: string;
   method: 'GET' | 'POST' | 'PUT';
   extract_variables: string;
 }
-
-interface TransferData extends Record<string, unknown> {
-  label: string;
-  transfer_number: string;
-}
-
-interface EndCallData extends Record<string, unknown> {
-  label: string;
-  farewell: string;
-}
+interface TransferData extends Record<string, unknown> { label: string; transfer_number: string }
+interface EndCallData extends Record<string, unknown> { label: string; farewell: string }
 
 // ---------------------------------------------------------------------------
-// Custom node components (must be defined outside the page component)
+// Node components  (defined outside page to prevent React Flow remount)
 // ---------------------------------------------------------------------------
 
 function StartNode(_props: NodeProps) {
   return (
     <div
-      data-testid="start_node"
-      className="flex items-center justify-center px-5 py-2.5 rounded-full bg-gray-900 text-white font-semibold text-sm shadow-md select-none"
-      style={{ minWidth: 90 }}
+      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-900 text-white font-semibold text-sm shadow-lg select-none"
+      style={{ minWidth: 100 }}
     >
+      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
       START
-      <Handle type="source" position={Position.Right} id="out" />
+      <Handle type="source" position={Position.Right} id="out" className="!h-3 !w-3 !bg-gray-400 !border-2 !border-white" />
     </div>
   );
 }
 
-function AiStateNode({ data }: NodeProps) {
+function AiStateNode({ data, selected }: NodeProps) {
   const d = data as AiStateData;
   return (
     <div
-      data-testid="ai_state"
-      className="rounded-xl border-2 border-blue-300 bg-blue-50 px-4 py-3 shadow-sm"
-      style={{ minWidth: 180, maxWidth: 240 }}
+      className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
+        selected ? 'border-blue-500 shadow-blue-100 shadow-md' : 'border-blue-200'
+      }`}
+      style={{ minWidth: 200, maxWidth: 260 }}
     >
-      <Handle type="target" position={Position.Left} id="in" />
-      <p className="text-[10px] font-medium uppercase tracking-wide text-blue-400 mb-1">
-        AI State
-      </p>
-      <p className="text-sm font-semibold text-blue-900 leading-tight">
-        {d.state_name || 'Unnamed State'}
-      </p>
-      {d.system_instructions && (
-        <p className="text-xs text-blue-600 mt-1 leading-snug">
-          {String(d.system_instructions).slice(0, 60)}
-          {String(d.system_instructions).length > 60 ? '…' : ''}
+      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-blue-400 !border-2 !border-white" />
+      <div className="flex items-center gap-2 rounded-t-xl bg-blue-50 px-3 py-2 border-b border-blue-100">
+        <Brain className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">AI State</span>
+      </div>
+      <div className="px-3 py-2.5">
+        <p className="text-sm font-semibold text-gray-900 leading-tight">
+          {d.state_name || <span className="text-gray-400 font-normal italic">Unnamed State</span>}
         </p>
-      )}
-      <Handle type="source" position={Position.Right} id="out" />
+        {d.system_instructions && (
+          <p className="text-[11px] text-gray-500 mt-1 leading-snug line-clamp-2">
+            {String(d.system_instructions)}
+          </p>
+        )}
+      </div>
+      <Handle type="source" position={Position.Right} id="out" className="!h-3 !w-3 !bg-blue-400 !border-2 !border-white" />
     </div>
   );
 }
 
-function SemanticRouterNode({ data }: NodeProps) {
+function SemanticRouterNode({ data, selected }: NodeProps) {
   const d = data as SemanticRouterData;
   const intents: Intent[] = Array.isArray(d.intents) ? d.intents : [];
   return (
     <div
-      data-testid="semantic_router"
-      className="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3 shadow-sm"
-      style={{ minWidth: 180, maxWidth: 260 }}
+      className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
+        selected ? 'border-amber-500 shadow-amber-100 shadow-md' : 'border-amber-200'
+      }`}
+      style={{ minWidth: 200, maxWidth: 280 }}
     >
-      <Handle type="target" position={Position.Left} id="in" />
-      <p className="text-[10px] font-medium uppercase tracking-wide text-amber-500 mb-1">
-        Semantic Router
-      </p>
-      <p className="text-sm font-semibold text-amber-900 mb-2">🔀 Router</p>
-      <div className="flex flex-wrap gap-1">
-        {intents.map((intent) => (
-          <span
-            key={intent.id}
-            className="inline-block rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-800"
-          >
-            {intent.label || 'Intent'}
-          </span>
-        ))}
+      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white" />
+      <div className="flex items-center gap-2 rounded-t-xl bg-amber-50 px-3 py-2 border-b border-amber-100">
+        <GitBranch className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-500">Intent Router</span>
+      </div>
+      <div className="px-3 py-2.5 space-y-1">
+        {d.description && (
+          <p className="text-[11px] text-gray-500 mb-2">{String(d.description)}</p>
+        )}
+        {intents.length === 0 ? (
+          <p className="text-xs text-amber-400 italic">Add intents in inspector →</p>
+        ) : (
+          intents.map((intent, i) => (
+            <div key={intent.id} className="flex items-center gap-2">
+              <span
+                className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200 truncate max-w-[140px]"
+              >
+                {intent.label || 'Intent'}
+              </span>
+              {/* Right-side source handle per intent, evenly distributed */}
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={intent.id}
+                style={{ top: `${((i + 1) / (intents.length + 1)) * 100}%` }}
+                className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white"
+              />
+            </div>
+          ))
+        )}
         {intents.length === 0 && (
-          <span className="text-xs text-amber-400 italic">No intents yet</span>
+          <Handle type="source" position={Position.Right} id="default" className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white" />
         )}
       </div>
-      {/* One output handle per intent */}
-      {intents.map((intent, i) => (
-        <Handle
-          key={intent.id}
-          type="source"
-          position={Position.Right}
-          id={intent.id}
-          style={{ top: `${20 + i * 28}px` }}
-        />
-      ))}
-      {/* Fallback handle when no intents */}
-      {intents.length === 0 && (
-        <Handle type="source" position={Position.Right} id="default" />
-      )}
     </div>
   );
 }
 
-function WebhookNode({ data }: NodeProps) {
+function WebhookNode({ data, selected }: NodeProps) {
   const d = data as WebhookData;
   return (
     <div
-      data-testid="webhook_node"
-      className="rounded-xl border-2 border-purple-300 bg-purple-50 px-4 py-3 shadow-sm"
-      style={{ minWidth: 180, maxWidth: 240 }}
+      className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
+        selected ? 'border-purple-500 shadow-purple-100 shadow-md' : 'border-purple-200'
+      }`}
+      style={{ minWidth: 200, maxWidth: 260 }}
     >
-      <Handle type="target" position={Position.Left} id="in" />
-      <p className="text-[10px] font-medium uppercase tracking-wide text-purple-400 mb-1">
-        Webhook
-      </p>
-      <p className="text-sm font-semibold text-purple-900">⚡ Webhook</p>
-      {d.url && (
-        <p className="text-xs text-purple-600 mt-1 font-mono break-all">
-          {d.method} {String(d.url).slice(0, 40)}
-          {String(d.url).length > 40 ? '…' : ''}
-        </p>
-      )}
-      <Handle type="source" position={Position.Right} id="out" />
+      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-purple-400 !border-2 !border-white" />
+      <div className="flex items-center gap-2 rounded-t-xl bg-purple-50 px-3 py-2 border-b border-purple-100">
+        <Zap className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-500">Webhook</span>
+        {d.method && (
+          <span className="ml-auto rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-600">
+            {d.method}
+          </span>
+        )}
+      </div>
+      <div className="px-3 py-2.5">
+        {d.url ? (
+          <p className="text-[11px] text-gray-600 font-mono truncate">{String(d.url)}</p>
+        ) : (
+          <p className="text-xs text-gray-400 italic">No URL set</p>
+        )}
+        {d.extract_variables && (
+          <p className="text-[10px] text-purple-400 mt-1">
+            extracts: {String(d.extract_variables)}
+          </p>
+        )}
+      </div>
+      <Handle type="source" position={Position.Right} id="out" className="!h-3 !w-3 !bg-purple-400 !border-2 !border-white" />
     </div>
   );
 }
 
-function TransferNode({ data }: NodeProps) {
+function TransferNode({ data, selected }: NodeProps) {
   const d = data as TransferData;
   return (
     <div
-      data-testid="transfer_node"
-      className="rounded-xl border-2 border-cyan-300 bg-cyan-50 px-4 py-3 shadow-sm"
-      style={{ minWidth: 160, maxWidth: 220 }}
+      className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
+        selected ? 'border-cyan-500 shadow-cyan-100 shadow-md' : 'border-cyan-200'
+      }`}
+      style={{ minWidth: 180, maxWidth: 240 }}
     >
-      <Handle type="target" position={Position.Left} id="in" />
-      <p className="text-[10px] font-medium uppercase tracking-wide text-cyan-500 mb-1">
-        Transfer
-      </p>
-      <p className="text-sm font-semibold text-cyan-900">📲 Transfer</p>
-      {d.transfer_number && (
-        <p className="text-xs text-cyan-700 mt-1 font-mono">{d.transfer_number}</p>
-      )}
+      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-cyan-400 !border-2 !border-white" />
+      <div className="flex items-center gap-2 rounded-t-xl bg-cyan-50 px-3 py-2 border-b border-cyan-100">
+        <PhoneForwarded className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-500">Transfer</span>
+      </div>
+      <div className="px-3 py-2.5">
+        {d.transfer_number ? (
+          <p className="text-sm font-mono text-gray-800">{String(d.transfer_number)}</p>
+        ) : (
+          <p className="text-xs text-gray-400 italic">No number set</p>
+        )}
+      </div>
     </div>
   );
 }
 
-function EndCallNode({ data }: NodeProps) {
+function EndCallNode({ data, selected }: NodeProps) {
   const d = data as EndCallData;
   return (
     <div
-      data-testid="end_call_node"
-      className="rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 shadow-sm"
-      style={{ minWidth: 150, maxWidth: 220 }}
+      className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
+        selected ? 'border-red-500 shadow-red-100 shadow-md' : 'border-red-200'
+      }`}
+      style={{ minWidth: 160, maxWidth: 240 }}
     >
-      <Handle type="target" position={Position.Left} id="in" />
-      <p className="text-[10px] font-medium uppercase tracking-wide text-red-400 mb-1">
-        End Call
-      </p>
-      <p className="text-sm font-semibold text-red-900">📵 End Call</p>
-      {d.farewell && (
-        <p className="text-xs text-red-600 mt-1">
-          {String(d.farewell).slice(0, 40)}
-          {String(d.farewell).length > 40 ? '…' : ''}
-        </p>
-      )}
+      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-red-400 !border-2 !border-white" />
+      <div className="flex items-center gap-2 rounded-t-xl bg-red-50 px-3 py-2 border-b border-red-100">
+        <PhoneOff className="h-3.5 w-3.5 text-red-500 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-red-500">End Call</span>
+      </div>
+      <div className="px-3 py-2.5">
+        {d.farewell ? (
+          <p className="text-[11px] text-gray-600 line-clamp-2">{String(d.farewell)}</p>
+        ) : (
+          <p className="text-xs text-gray-400 italic">No farewell</p>
+        )}
+      </div>
     </div>
   );
 }
 
-// nodeTypes MUST be defined outside the component to avoid React Flow remount issues
 const nodeTypes = {
   start_node: StartNode,
   ai_state: AiStateNode,
@@ -249,44 +272,108 @@ const nodeTypes = {
 };
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants & templates
 // ---------------------------------------------------------------------------
 
 const DEFAULT_NODES: Node[] = [
-  {
-    id: 'start',
-    type: 'start_node',
-    position: { x: 250, y: 180 },
-    data: { label: 'Start' } satisfies StartNodeData,
-    deletable: false,
-  },
+  { id: 'start', type: 'start_node', position: { x: 80, y: 200 }, data: { label: 'Start' }, deletable: false },
 ];
 
 const defaultEdgeOptions = {
-  animated: true,
-  style: { strokeWidth: 2, stroke: '#6366f1' },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' },
+  animated: false,
+  style: { strokeWidth: 2, stroke: '#94a3b8' },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
+  labelStyle: { fontSize: 10, fontWeight: 600, fill: '#6366f1' },
+  labelBgStyle: { fill: '#eef2ff', fillOpacity: 0.9 },
+  labelBgPadding: [4, 3] as [number, number],
+};
+
+const TEMPLATES: Record<string, { label: string; description: string; nodes: Node[]; edges: Edge[] }> = {
+  sales: {
+    label: 'Ventas Outbound',
+    description: 'Presentación → Calificación → Cierre o FIN',
+    nodes: [
+      { id: 'start', type: 'start_node', position: { x: 40, y: 200 }, data: { label: 'Start' }, deletable: false },
+      { id: 'intro', type: 'ai_state', position: { x: 200, y: 160 }, data: { label: 'AI State', state_name: 'Presentación', system_instructions: 'Saluda al contacto, preséntate como {{agent_name}} de {{workspace_name}} y explica brevemente el motivo de la llamada. Sé amable y conciso.' } },
+      { id: 'route1', type: 'semantic_router', position: { x: 480, y: 140 }, data: { label: 'Router', description: '¿Qué quiere hacer el contacto?', intents: [{ id: 'i-interested', label: 'Interesado', description: 'El contacto muestra interés o quiere más información' }, { id: 'i-not-interested', label: 'No interesado', description: 'El contacto rechaza la oferta o no quiere continuar' }, { id: 'i-callback', label: 'Callback', description: 'El contacto pide que lo llamen después' }] } },
+      { id: 'qualified', type: 'ai_state', position: { x: 760, y: 60 }, data: { label: 'AI State', state_name: 'Cierre', system_instructions: 'El contacto está interesado. Recoge sus datos de contacto, confirma la cita o el siguiente paso, y agradece su tiempo.' } },
+      { id: 'objection', type: 'ai_state', position: { x: 760, y: 200 }, data: { label: 'AI State', state_name: 'Manejo de Objeción', system_instructions: 'El contacto no está interesado. Reconoce su posición, ofrece un beneficio específico y pregunta si podría reconsiderarlo.' } },
+      { id: 'end-ok', type: 'end_call_node', position: { x: 1020, y: 60 }, data: { label: 'End Call', farewell: 'Perfecto, quedamos en contacto. ¡Que tenga un buen día!' } },
+      { id: 'end-no', type: 'end_call_node', position: { x: 1020, y: 280 }, data: { label: 'End Call', farewell: 'Entendido, no le molesto más. Gracias por su tiempo, ¡que tenga un buen día!' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'start', target: 'intro', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e2', source: 'intro', target: 'route1', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e3', source: 'route1', target: 'qualified', sourceHandle: 'i-interested', label: 'Interesado', ...defaultEdgeOptions },
+      { id: 'e4', source: 'route1', target: 'objection', sourceHandle: 'i-not-interested', label: 'No interesado', ...defaultEdgeOptions },
+      { id: 'e5', source: 'route1', target: 'end-no', sourceHandle: 'i-callback', label: 'Callback', ...defaultEdgeOptions },
+      { id: 'e6', source: 'qualified', target: 'end-ok', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e7', source: 'objection', target: 'end-no', sourceHandle: 'out', ...defaultEdgeOptions },
+    ],
+  },
+  qualification: {
+    label: 'Calificación de Lead',
+    description: 'BANT → Webhook CRM → FIN',
+    nodes: [
+      { id: 'start', type: 'start_node', position: { x: 40, y: 180 }, data: { label: 'Start' }, deletable: false },
+      { id: 'greeting', type: 'ai_state', position: { x: 200, y: 140 }, data: { label: 'AI State', state_name: 'Saludo y Contexto', system_instructions: 'Saluda al contacto {{contact_name}}, confírmale que llamamos porque mostró interés y explica que harás unas preguntas rápidas para ver cómo podemos ayudar.' } },
+      { id: 'qualify', type: 'ai_state', position: { x: 440, y: 140 }, data: { label: 'AI State', state_name: 'Calificación BANT', system_instructions: 'Haz las siguientes preguntas de calificación:\n1. ¿Cuál es su presupuesto aproximado?\n2. ¿Tiene autoridad para tomar esta decisión?\n3. ¿Qué necesita resolver?\n4. ¿Cuál es su plazo?\n\nToma nota de las respuestas.' } },
+      { id: 'route1', type: 'semantic_router', position: { x: 680, y: 120 }, data: { label: 'Router', description: 'Resultado de calificación', intents: [{ id: 'i-qual', label: 'Calificado', description: 'Tiene presupuesto, autoridad, necesidad y urgencia' }, { id: 'i-notqual', label: 'No calificado', description: 'No cumple criterios BANT' }] } },
+      { id: 'crm', type: 'webhook_node', position: { x: 920, y: 60 }, data: { label: 'Webhook', url: 'https://your-crm.com/api/leads', method: 'POST', extract_variables: 'lead_id,next_steps' } },
+      { id: 'end-qual', type: 'end_call_node', position: { x: 1140, y: 60 }, data: { label: 'End Call', farewell: 'Perfecto, un asesor se pondrá en contacto con usted en las próximas 24 horas. ¡Gracias!' } },
+      { id: 'end-notqual', type: 'end_call_node', position: { x: 940, y: 260 }, data: { label: 'End Call', farewell: 'Gracias por su tiempo. Si en el futuro necesita nuestros servicios, no dude en contactarnos. ¡Hasta luego!' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'start', target: 'greeting', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e2', source: 'greeting', target: 'qualify', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e3', source: 'qualify', target: 'route1', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e4', source: 'route1', target: 'crm', sourceHandle: 'i-qual', label: 'Calificado', ...defaultEdgeOptions },
+      { id: 'e5', source: 'route1', target: 'end-notqual', sourceHandle: 'i-notqual', label: 'No calificado', ...defaultEdgeOptions },
+      { id: 'e6', source: 'crm', target: 'end-qual', sourceHandle: 'out', ...defaultEdgeOptions },
+    ],
+  },
+  support: {
+    label: 'Soporte Inbound',
+    description: 'Clasificación → Soporte técnico / Facturación / Humano',
+    nodes: [
+      { id: 'start', type: 'start_node', position: { x: 40, y: 220 }, data: { label: 'Start' }, deletable: false },
+      { id: 'welcome', type: 'ai_state', position: { x: 200, y: 180 }, data: { label: 'AI State', state_name: 'Bienvenida', system_instructions: 'Saluda al contacto, identifícate como asistente de soporte y pregunta en qué puedes ayudar hoy.' } },
+      { id: 'classify', type: 'semantic_router', position: { x: 440, y: 160 }, data: { label: 'Router', description: 'Tipo de solicitud de soporte', intents: [{ id: 'i-tech', label: 'Soporte técnico', description: 'El usuario tiene un problema técnico con el producto' }, { id: 'i-billing', label: 'Facturación', description: 'El usuario tiene dudas sobre cobros, facturas o pagos' }, { id: 'i-human', label: 'Quiere humano', description: 'El usuario pide hablar con una persona' }] } },
+      { id: 'tech', type: 'ai_state', position: { x: 680, y: 60 }, data: { label: 'AI State', state_name: 'Soporte Técnico', system_instructions: 'Ayuda al usuario a resolver su problema técnico. Haz preguntas diagnósticas, ofrece pasos de solución. Si no puedes resolver en 3 intentos, ofrece transferir con un agente.' } },
+      { id: 'billing', type: 'ai_state', position: { x: 680, y: 220 }, data: { label: 'AI State', state_name: 'Facturación', system_instructions: 'Atiende la consulta de facturación. Responde preguntas sobre cobros, fechas de pago y facturas. Si necesita un ajuste o reembolso, toma los datos y escala.' } },
+      { id: 'transfer', type: 'transfer_node', position: { x: 680, y: 380 }, data: { label: 'Transfer', transfer_number: '+1800XXXXXXX' } },
+      { id: 'end-tech', type: 'end_call_node', position: { x: 920, y: 60 }, data: { label: 'End Call', farewell: '¿Hay algo más en lo que pueda ayudarle? Que tenga un excelente día.' } },
+      { id: 'end-billing', type: 'end_call_node', position: { x: 920, y: 220 }, data: { label: 'End Call', farewell: 'Listo, ya tomamos nota. ¿Puedo ayudarle con algo más?' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'start', target: 'welcome', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e2', source: 'welcome', target: 'classify', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e3', source: 'classify', target: 'tech', sourceHandle: 'i-tech', label: 'Técnico', ...defaultEdgeOptions },
+      { id: 'e4', source: 'classify', target: 'billing', sourceHandle: 'i-billing', label: 'Facturación', ...defaultEdgeOptions },
+      { id: 'e5', source: 'classify', target: 'transfer', sourceHandle: 'i-human', label: 'Quiere humano', ...defaultEdgeOptions },
+      { id: 'e6', source: 'tech', target: 'end-tech', sourceHandle: 'out', ...defaultEdgeOptions },
+      { id: 'e7', source: 'billing', target: 'end-billing', sourceHandle: 'out', ...defaultEdgeOptions },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
-// Page component
+// Inner canvas component (needs ReactFlowProvider context for fitView)
 // ---------------------------------------------------------------------------
 
-export default function FlowBuilderPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+function FlowCanvas({ id }: { id: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(DEFAULT_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const { fitView } = useReactFlow();
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
 
-  // Load saved flow_config on mount
+  // Load saved flow_config
   useEffect(() => {
     fetch(`/api/agents/${id}/flow`)
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
@@ -300,58 +387,117 @@ export default function FlowBuilderPage({
       .catch(() => setLoading(false));
   }, [id, setNodes, setEdges]);
 
+  // Connect with intent edge labels
   const onConnect = useCallback(
-    (connection: Connection) =>
-      setEdges((eds) => addEdge({ ...connection, ...defaultEdgeOptions }, eds)),
-    [setEdges]
+    (connection: Connection) => {
+      // Attach intent label to edge when connecting from a semantic_router
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      let label: string | undefined;
+      if (sourceNode?.type === 'semantic_router') {
+        const d = sourceNode.data as SemanticRouterData;
+        const intent = d.intents?.find((i) => i.id === connection.sourceHandle);
+        if (intent?.label) label = intent.label;
+      }
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            ...defaultEdgeOptions,
+            ...(label ? { label } : {}),
+          },
+          eds
+        )
+      );
+    },
+    [nodes, setEdges]
   );
 
-  // Generic node data updater
+  // Keyboard delete for selected node
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      if (!selectedId || selectedId === 'start') return;
+      deleteNode(selectedId);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  function deleteNode(nodeId: string) {
+    if (nodeId === 'start') return;
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setSelectedId(null);
+  }
+
+  function deleteEdge(edgeId: string) {
+    setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+  }
+
   function updateNode(nodeId: string, partialData: Record<string, unknown>) {
     setNodes((nds) =>
       nds.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...partialData } } : n
       )
     );
+    // Sync intent edge labels when Router intents change
+    if (partialData.intents) {
+      const intents = partialData.intents as Intent[];
+      setEdges((eds) =>
+        eds.map((e) => {
+          if (e.source !== nodeId) return e;
+          const intent = intents.find((i) => i.id === e.sourceHandle);
+          if (!intent) return e;
+          return { ...e, label: intent.label || e.label };
+        })
+      );
+    }
   }
 
-  function addNode(
-    type: 'ai_state' | 'semantic_router' | 'webhook_node' | 'transfer_node' | 'end_call_node'
-  ) {
-    const id_new = `${type}-${Date.now()}`;
-    const defaults: Record<typeof type, Record<string, unknown>> = {
-      ai_state: {
-        label: 'AI State',
-        state_name: '',
-        system_instructions: '',
-      } satisfies AiStateData,
-      semantic_router: {
-        label: 'Router',
-        description: '',
-        intents: [],
-      } satisfies SemanticRouterData,
-      webhook_node: {
-        label: 'Webhook',
-        url: '',
-        method: 'POST',
-        extract_variables: '',
-      } satisfies WebhookData,
-      transfer_node: {
-        label: 'Transfer',
-        transfer_number: '',
-      } satisfies TransferData,
-      end_call_node: {
-        label: 'End Call',
-        farewell: '',
-      } satisfies EndCallData,
+  function duplicateNode(nodeId: string) {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const newId = `${node.type}-${Date.now()}`;
+    setNodes((nds) => [
+      ...nds,
+      { ...node, id: newId, position: { x: node.position.x + 40, y: node.position.y + 40 }, selected: false },
+    ]);
+    toast.success('Node duplicated');
+  }
+
+  function addNode(type: 'ai_state' | 'semantic_router' | 'webhook_node' | 'transfer_node' | 'end_call_node') {
+    const newId = `${type}-${Date.now()}`;
+    const defaults: Record<string, Record<string, unknown>> = {
+      ai_state:         { label: 'AI State', state_name: '', system_instructions: '' },
+      semantic_router:  { label: 'Router', description: '', intents: [] },
+      webhook_node:     { label: 'Webhook', url: '', method: 'POST', extract_variables: '' },
+      transfer_node:    { label: 'Transfer', transfer_number: '' },
+      end_call_node:    { label: 'End Call', farewell: '' },
     };
-    const newNode: Node = {
-      id: id_new,
-      type,
-      position: { x: 350 + Math.random() * 150, y: 100 + nodes.length * 90 },
-      data: defaults[type],
-    };
-    setNodes((nds) => [...nds, newNode]);
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: newId,
+        type,
+        position: { x: 300 + Math.random() * 120, y: 80 + nds.length * 80 },
+        data: defaults[type]!,
+      },
+    ]);
+    setSelectedId(newId);
+  }
+
+  function loadTemplate(key: string) {
+    const t = TEMPLATES[key];
+    if (!t) return;
+    setNodes(t.nodes);
+    setEdges(t.edges);
+    setSelectedId(null);
+    setShowTemplates(false);
+    setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 50);
+    toast.success(`Template "${t.label}" loaded`);
   }
 
   function resetCanvas() {
@@ -363,16 +509,15 @@ export default function FlowBuilderPage({
   async function save() {
     setSaving(true);
     try {
-      await fetch(`/api/agents/${id}/flow`, {
+      const r = await fetch(`/api/agents/${id}/flow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          flow_config: { version: 2, nodes, edges } satisfies FlowConfig,
-        }),
+        body: JSON.stringify({ flow_config: { version: 2, nodes, edges } satisfies FlowConfig }),
       });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       toast.success('Flow saved');
     } catch {
-      toast.error('Save failed');
+      toast.error('Failed to save flow');
     }
     setSaving(false);
   }
@@ -385,88 +530,97 @@ export default function FlowBuilderPage({
     );
   }
 
+  const nonStartNodes = nodes.filter((n) => n.id !== 'start');
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      {/* ----------------------------------------------------------------- */}
-      {/* Top bar                                                            */}
-      {/* ----------------------------------------------------------------- */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-gray-50">
+      {/* Top bar */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm">
         <div className="flex items-center gap-3">
           <Link href={`/agents/${id}`}>
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <span className="text-sm font-semibold">AI State Machine</span>
+          <div className="h-4 w-px bg-gray-200" />
+          <span className="text-sm font-semibold text-gray-900">AI State Machine</span>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
+            {nonStartNodes.length} node{nonStartNodes.length !== 1 ? 's' : ''} · {edges.length} edge{edges.length !== 1 ? 's' : ''}
+          </span>
         </div>
-        <Button size="sm" onClick={save} disabled={saving}>
-          {saving ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-1.5 h-4 w-4" />
-          )}
-          Save Flow
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => { fitView({ padding: 0.1, duration: 400 }); }}
+          >
+            <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
+            Fit
+          </Button>
+          <Button size="sm" onClick={save} disabled={saving} className="h-8">
+            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+            Save Flow
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* --------------------------------------------------------------- */}
-        {/* Left palette                                                      */}
-        {/* --------------------------------------------------------------- */}
-        <aside className="flex w-52 shrink-0 flex-col border-r border-gray-200 bg-white">
+        {/* Left palette */}
+        <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
           <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            {/* Templates button */}
+            <button
+              onClick={() => setShowTemplates((v) => !v)}
+              className="mb-3 flex w-full items-center justify-between rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-left hover:bg-indigo-100 transition-colors"
+            >
+              <span className="text-xs font-semibold text-indigo-700">Quick Templates</span>
+              <span className="text-[10px] text-indigo-400">{showTemplates ? '▲' : '▼'}</span>
+            </button>
+
+            {showTemplates && (
+              <div className="mb-3 space-y-1">
+                {Object.entries(TEMPLATES).map(([key, t]) => (
+                  <button
+                    key={key}
+                    onClick={() => loadTemplate(key)}
+                    className="w-full rounded-lg border border-gray-100 bg-gray-50 p-2 text-left hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                  >
+                    <p className="text-xs font-medium text-gray-800">{t.label}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{t.description}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
               Add Node
             </p>
 
-            <PaletteButton
-              label="AI State"
-              description="LLM mindset phase"
-              color="blue"
-              onClick={() => addNode('ai_state')}
-            />
-            <PaletteButton
-              label="Router"
-              description="Multi-intent routing"
-              color="amber"
-              onClick={() => addNode('semantic_router')}
-            />
-            <PaletteButton
-              label="Webhook"
-              description="HTTP call & extract"
-              color="purple"
-              onClick={() => addNode('webhook_node')}
-            />
-            <PaletteButton
-              label="Transfer"
-              description="Transfer to human"
-              color="cyan"
-              onClick={() => addNode('transfer_node')}
-            />
-            <PaletteButton
-              label="End Call"
-              description="Terminate conversation"
-              color="red"
-              onClick={() => addNode('end_call_node')}
-            />
+            <PaletteButton label="AI State" description="Objetivo + instrucciones LLM" color="blue" icon={<Brain className="h-3.5 w-3.5" />} onClick={() => addNode('ai_state')} />
+            <PaletteButton label="Intent Router" description="Ramifica por intención" color="amber" icon={<GitBranch className="h-3.5 w-3.5" />} onClick={() => addNode('semantic_router')} />
+            <PaletteButton label="Webhook" description="Llama una API HTTP" color="purple" icon={<Zap className="h-3.5 w-3.5" />} onClick={() => addNode('webhook_node')} />
+            <PaletteButton label="Transfer" description="Transfiere a humano" color="cyan" icon={<PhoneForwarded className="h-3.5 w-3.5" />} onClick={() => addNode('transfer_node')} />
+            <PaletteButton label="End Call" description="Termina la conversación" color="red" icon={<PhoneOff className="h-3.5 w-3.5" />} onClick={() => addNode('end_call_node')} />
           </div>
 
-          {/* Reset button pinned to bottom */}
-          <div className="shrink-0 border-t border-gray-100 p-3">
+          <div className="shrink-0 border-t border-gray-100 p-3 space-y-1">
+            <p className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Tips</p>
+            <p className="text-[10px] text-gray-400">• Click nodo → editar en panel derecho</p>
+            <p className="text-[10px] text-gray-400">• Arrastra handle → conectar</p>
+            <p className="text-[10px] text-gray-400">• Seleccionar + Delete → borrar</p>
             <button
               onClick={resetCanvas}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+              className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50 hover:text-red-500 transition-colors"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              <RotateCcw className="h-3 w-3" />
               Reset canvas
             </button>
           </div>
         </aside>
 
-        {/* --------------------------------------------------------------- */}
-        {/* Canvas                                                            */}
-        {/* --------------------------------------------------------------- */}
-        <div className="flex-1">
+        {/* Canvas */}
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -477,27 +631,43 @@ export default function FlowBuilderPage({
             defaultEdgeOptions={defaultEdgeOptions}
             onNodeClick={(_, node) => setSelectedId(node.id)}
             onPaneClick={() => setSelectedId(null)}
+            onEdgeDoubleClick={(_, edge) => deleteEdge(edge.id)}
+            deleteKeyCode={null}
             fitView
+            fitViewOptions={{ padding: 0.15 }}
+            minZoom={0.3}
+            maxZoom={2}
           >
-            <Background color="#e5e7eb" gap={16} />
+            <Background color="#d1d5db" gap={20} size={1} />
             <Controls />
-            <MiniMap zoomable pannable />
+            <MiniMap
+              zoomable
+              pannable
+              nodeColor={(n) => {
+                const colors: Record<string, string> = {
+                  start_node: '#1f2937', ai_state: '#3b82f6',
+                  semantic_router: '#f59e0b', webhook_node: '#8b5cf6',
+                  transfer_node: '#06b6d4', end_call_node: '#ef4444',
+                };
+                return colors[n.type ?? ''] ?? '#94a3b8';
+              }}
+            />
             <Panel position="bottom-center">
-              <p className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-400">
-                Click a node to inspect · Drag handles to connect · Scroll to zoom
+              <p className="rounded-full border border-gray-200 bg-white/90 backdrop-blur px-3 py-1 text-[10px] text-gray-400 shadow-sm">
+                Doble click en edge para eliminarlo · Delete/Backspace para borrar nodo seleccionado
               </p>
             </Panel>
           </ReactFlow>
         </div>
 
-        {/* --------------------------------------------------------------- */}
-        {/* Right inspector panel                                             */}
-        {/* --------------------------------------------------------------- */}
+        {/* Right inspector */}
         {selectedNode && selectedNode.id !== 'start' && (
-          <aside className="w-72 shrink-0 overflow-y-auto border-l border-gray-200 bg-white p-4">
+          <aside className="w-80 shrink-0 overflow-y-auto border-l border-gray-200 bg-white">
             <InspectorPanel
               node={selectedNode}
               updateNode={updateNode}
+              onDelete={() => deleteNode(selectedNode.id)}
+              onDuplicate={() => duplicateNode(selectedNode.id)}
             />
           </aside>
         )}
@@ -507,65 +677,49 @@ export default function FlowBuilderPage({
 }
 
 // ---------------------------------------------------------------------------
-// Palette button helper
+// Page wrapper with ReactFlowProvider (required for useReactFlow hook)
+// ---------------------------------------------------------------------------
+
+export default function FlowBuilderPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <ReactFlowProvider>
+      <FlowCanvas id={id} />
+    </ReactFlowProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Palette button
 // ---------------------------------------------------------------------------
 
 type PaletteColor = 'blue' | 'amber' | 'purple' | 'cyan' | 'red';
 
-const paletteColorMap: Record<
-  PaletteColor,
-  { dot: string; label: string; hover: string }
-> = {
-  blue: {
-    dot: 'bg-blue-400',
-    label: 'text-blue-700',
-    hover: 'hover:border-blue-400 hover:bg-blue-50',
-  },
-  amber: {
-    dot: 'bg-amber-400',
-    label: 'text-amber-700',
-    hover: 'hover:border-amber-400 hover:bg-amber-50',
-  },
-  purple: {
-    dot: 'bg-purple-400',
-    label: 'text-purple-700',
-    hover: 'hover:border-purple-400 hover:bg-purple-50',
-  },
-  cyan: {
-    dot: 'bg-cyan-400',
-    label: 'text-cyan-700',
-    hover: 'hover:border-cyan-400 hover:bg-cyan-50',
-  },
-  red: {
-    dot: 'bg-red-400',
-    label: 'text-red-700',
-    hover: 'hover:border-red-400 hover:bg-red-50',
-  },
+const paletteMap: Record<PaletteColor, { dot: string; label: string; hover: string; icon: string }> = {
+  blue:   { dot: 'bg-blue-400',   label: 'text-blue-700',   hover: 'hover:border-blue-300 hover:bg-blue-50',   icon: 'text-blue-500'   },
+  amber:  { dot: 'bg-amber-400',  label: 'text-amber-700',  hover: 'hover:border-amber-300 hover:bg-amber-50',  icon: 'text-amber-500'  },
+  purple: { dot: 'bg-purple-400', label: 'text-purple-700', hover: 'hover:border-purple-300 hover:bg-purple-50', icon: 'text-purple-500' },
+  cyan:   { dot: 'bg-cyan-400',   label: 'text-cyan-700',   hover: 'hover:border-cyan-300 hover:bg-cyan-50',   icon: 'text-cyan-500'   },
+  red:    { dot: 'bg-red-400',    label: 'text-red-700',    hover: 'hover:border-red-300 hover:bg-red-50',     icon: 'text-red-500'    },
 };
 
 function PaletteButton({
-  label,
-  description,
-  color,
-  onClick,
+  label, description, color, icon, onClick,
 }: {
-  label: string;
-  description: string;
-  color: PaletteColor;
-  onClick: () => void;
+  label: string; description: string; color: PaletteColor; icon: React.ReactNode; onClick: () => void;
 }) {
-  const c = paletteColorMap[color];
+  const c = paletteMap[color];
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-lg border border-gray-200 p-2.5 text-left transition-colors ${c.hover}`}
+      className={`w-full rounded-lg border border-gray-200 p-2.5 text-left transition-all ${c.hover} group`}
     >
       <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full shrink-0 ${c.dot}`} />
+        <span className={`shrink-0 ${c.icon}`}>{icon}</span>
         <span className={`text-sm font-medium ${c.label}`}>{label}</span>
-        <Plus className="ml-auto h-3.5 w-3.5 text-gray-300" />
+        <Plus className="ml-auto h-3.5 w-3.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
       </div>
-      <p className="mt-0.5 pl-4 text-[11px] text-gray-400">{description}</p>
+      <p className="mt-0.5 pl-6 text-[10px] text-gray-400">{description}</p>
     </button>
   );
 }
@@ -574,45 +728,63 @@ function PaletteButton({
 // Inspector panel
 // ---------------------------------------------------------------------------
 
+const typeLabels: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  ai_state:         { label: 'AI State', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: <Brain className="h-3.5 w-3.5" /> },
+  semantic_router:  { label: 'Intent Router', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: <GitBranch className="h-3.5 w-3.5" /> },
+  webhook_node:     { label: 'Webhook', color: 'text-purple-600 bg-purple-50 border-purple-200', icon: <Zap className="h-3.5 w-3.5" /> },
+  transfer_node:    { label: 'Transfer', color: 'text-cyan-600 bg-cyan-50 border-cyan-200', icon: <PhoneForwarded className="h-3.5 w-3.5" /> },
+  end_call_node:    { label: 'End Call', color: 'text-red-600 bg-red-50 border-red-200', icon: <PhoneOff className="h-3.5 w-3.5" /> },
+};
+
 function InspectorPanel({
-  node,
-  updateNode,
+  node, updateNode, onDelete, onDuplicate,
 }: {
   node: Node;
   updateNode: (id: string, partial: Record<string, unknown>) => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const type = node.type as string;
+  const meta = typeLabels[type] ?? { label: type, color: 'text-gray-600 bg-gray-50 border-gray-200', icon: null };
 
   function patch(partial: Record<string, unknown>) {
     updateNode(node.id, partial);
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-          {type.replace(/_/g, ' ')}
-        </p>
+    <div className="flex flex-col h-full">
+      {/* Inspector header */}
+      <div className={`flex items-center justify-between border-b px-4 py-3 ${meta.color}`}>
+        <div className="flex items-center gap-2">
+          {meta.icon}
+          <span className="text-sm font-semibold">{meta.label}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onDuplicate}
+            title="Duplicate node"
+            className="rounded p-1 hover:bg-white/60 transition-colors"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onDelete}
+            title="Delete node"
+            className="rounded p-1 hover:bg-red-100 hover:text-red-600 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
-      {type === 'ai_state' && (
-        <AiStateInspector data={node.data as AiStateData} patch={patch} />
-      )}
-      {type === 'semantic_router' && (
-        <SemanticRouterInspector
-          data={node.data as SemanticRouterData}
-          patch={patch}
-        />
-      )}
-      {type === 'webhook_node' && (
-        <WebhookInspector data={node.data as WebhookData} patch={patch} />
-      )}
-      {type === 'transfer_node' && (
-        <TransferInspector data={node.data as TransferData} patch={patch} />
-      )}
-      {type === 'end_call_node' && (
-        <EndCallInspector data={node.data as EndCallData} patch={patch} />
-      )}
+      {/* Inspector body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {type === 'ai_state' && <AiStateInspector data={node.data as AiStateData} patch={patch} />}
+        {type === 'semantic_router' && <SemanticRouterInspector data={node.data as SemanticRouterData} patch={patch} />}
+        {type === 'webhook_node' && <WebhookInspector data={node.data as WebhookData} patch={patch} />}
+        {type === 'transfer_node' && <TransferInspector data={node.data as TransferData} patch={patch} />}
+        {type === 'end_call_node' && <EndCallInspector data={node.data as EndCallData} patch={patch} />}
+      </div>
     </div>
   );
 }
@@ -621,135 +793,102 @@ function InspectorPanel({
 // Per-type inspector sub-components
 // ---------------------------------------------------------------------------
 
-function AiStateInspector({
-  data,
-  patch,
-}: {
-  data: AiStateData;
-  patch: (p: Record<string, unknown>) => void;
-}) {
+function AiStateInspector({ data, patch }: { data: AiStateData; patch: (p: Record<string, unknown>) => void }) {
   return (
     <>
       <div className="space-y-1.5">
-        <Label className="text-xs">State Name</Label>
+        <Label className="text-xs font-medium">State Name</Label>
         <Input
           value={data.state_name}
           onChange={(e) => patch({ state_name: e.target.value })}
-          placeholder="e.g. Qualification"
+          placeholder="e.g. Qualification, Closing…"
           className="h-8 text-sm"
         />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">System Instructions</Label>
+        <Label className="text-xs font-medium">System Instructions</Label>
         <Textarea
-          rows={5}
+          rows={7}
           value={data.system_instructions}
           onChange={(e) => patch({ system_instructions: e.target.value })}
-          placeholder="Describe the LLM objective for this phase…"
+          placeholder="Describe the LLM objective and behaviour for this phase…"
           className="text-sm resize-none"
         />
+      </div>
+      <div className="rounded-lg bg-gray-50 border border-gray-100 p-3">
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Variables disponibles</p>
+        <div className="flex flex-wrap gap-1">
+          {['{{contact_name}}', '{{contact_phone}}', '{{agent_name}}', '{{workspace_name}}'].map((v) => (
+            <code
+              key={v}
+              className="rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[10px] text-indigo-600 cursor-pointer hover:bg-indigo-50"
+              onClick={() => patch({ system_instructions: (data.system_instructions || '') + v })}
+              title="Click to insert"
+            >
+              {v}
+            </code>
+          ))}
+        </div>
+        <p className="text-[9px] text-gray-400 mt-1.5">Click para insertar en las instrucciones</p>
       </div>
     </>
   );
 }
 
-function SemanticRouterInspector({
-  data,
-  patch,
-}: {
-  data: SemanticRouterData;
-  patch: (p: Record<string, unknown>) => void;
-}) {
+function SemanticRouterInspector({ data, patch }: { data: SemanticRouterData; patch: (p: Record<string, unknown>) => void }) {
   const intents: Intent[] = Array.isArray(data.intents) ? data.intents : [];
 
   function addIntent() {
-    patch({
-      intents: [
-        ...intents,
-        { id: crypto.randomUUID(), label: '', description: '' },
-      ],
-    });
+    patch({ intents: [...intents, { id: crypto.randomUUID(), label: '', description: '' }] });
   }
-
   function removeIntent(intentId: string) {
     patch({ intents: intents.filter((i) => i.id !== intentId) });
   }
-
   function updateIntent(intentId: string, field: keyof Intent, value: string) {
-    patch({
-      intents: intents.map((i) =>
-        i.id === intentId ? { ...i, [field]: value } : i
-      ),
-    });
+    patch({ intents: intents.map((i) => i.id === intentId ? { ...i, [field]: value } : i) });
   }
 
   return (
     <>
       <div className="space-y-1.5">
-        <Label className="text-xs">Router Description</Label>
+        <Label className="text-xs font-medium">Descripción del Router</Label>
         <Input
           value={data.description}
           onChange={(e) => patch({ description: e.target.value })}
-          placeholder="What does this router decide?"
+          placeholder="¿Qué decide este router?"
           className="h-8 text-sm"
         />
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs">Intents</Label>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-xs"
-            onClick={addIntent}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Add
+          <Label className="text-xs font-medium">Intents ({intents.length})</Label>
+          <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={addIntent}>
+            <Plus className="mr-1 h-3 w-3" /> Añadir
           </Button>
         </div>
 
         {intents.length === 0 && (
-          <p className="text-[11px] text-gray-400 italic">
-            No intents yet. Add one to create output handles.
-          </p>
+          <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-3 text-center">
+            <p className="text-[11px] text-amber-600">Sin intents. Cada intent crea un handle de salida en el nodo.</p>
+          </div>
         )}
 
         {intents.map((intent, idx) => (
-          <div
-            key={intent.id}
-            className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5"
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
-                Intent {idx + 1}
-              </span>
-              <button
-                onClick={() => removeIntent(intent.id)}
-                className="text-gray-300 hover:text-red-400 transition-colors"
-              >
+          <div key={intent.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-medium text-amber-500 uppercase tracking-wide">Intent {idx + 1}</span>
+              <button onClick={() => removeIntent(intent.id)} className="text-gray-300 hover:text-red-400 transition-colors">
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] text-gray-500">Label</Label>
-              <Input
-                value={intent.label}
-                onChange={(e) => updateIntent(intent.id, 'label', e.target.value)}
-                placeholder="e.g. Pricing question"
-                className="h-7 text-xs"
-              />
+              <Label className="text-[10px] text-gray-500">Label (se muestra en el edge)</Label>
+              <Input value={intent.label} onChange={(e) => updateIntent(intent.id, 'label', e.target.value)} placeholder="e.g. Interesado" className="h-7 text-xs" />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] text-gray-500">Description</Label>
-              <Input
-                value={intent.description}
-                onChange={(e) =>
-                  updateIntent(intent.id, 'description', e.target.value)
-                }
-                placeholder="When the caller asks about pricing…"
-                className="h-7 text-xs"
-              />
+              <Label className="text-[10px] text-gray-500">Descripción (para el LLM)</Label>
+              <Input value={intent.description} onChange={(e) => updateIntent(intent.id, 'description', e.target.value)} placeholder="Cuando el contacto expresa interés…" className="h-7 text-xs" />
             </div>
           </div>
         ))}
@@ -758,33 +897,17 @@ function SemanticRouterInspector({
   );
 }
 
-function WebhookInspector({
-  data,
-  patch,
-}: {
-  data: WebhookData;
-  patch: (p: Record<string, unknown>) => void;
-}) {
+function WebhookInspector({ data, patch }: { data: WebhookData; patch: (p: Record<string, unknown>) => void }) {
   return (
     <>
       <div className="space-y-1.5">
-        <Label className="text-xs">URL</Label>
-        <Input
-          value={data.url}
-          onChange={(e) => patch({ url: e.target.value })}
-          placeholder="https://api.example.com/endpoint"
-          className="h-8 text-sm font-mono"
-        />
+        <Label className="text-xs font-medium">URL</Label>
+        <Input value={data.url} onChange={(e) => patch({ url: e.target.value })} placeholder="https://api.example.com/endpoint" className="h-8 text-sm font-mono" />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Method</Label>
-        <Select
-          value={data.method}
-          onValueChange={(v) => patch({ method: v as 'GET' | 'POST' | 'PUT' })}
-        >
-          <SelectTrigger className="h-8 text-sm">
-            <SelectValue />
-          </SelectTrigger>
+        <Label className="text-xs font-medium">Método HTTP</Label>
+        <Select value={data.method} onValueChange={(v) => patch({ method: v })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="GET">GET</SelectItem>
             <SelectItem value="POST">POST</SelectItem>
@@ -793,59 +916,30 @@ function WebhookInspector({
         </Select>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Extract Variables</Label>
-        <Input
-          value={data.extract_variables}
-          onChange={(e) => patch({ extract_variables: e.target.value })}
-          placeholder="price,availability,name"
-          className="h-8 text-sm font-mono"
-        />
-        <p className="text-[10px] text-gray-400">Comma-separated variable names to extract from the response</p>
+        <Label className="text-xs font-medium">Variables a extraer</Label>
+        <Input value={data.extract_variables} onChange={(e) => patch({ extract_variables: e.target.value })} placeholder="price,availability,lead_id" className="h-8 text-sm font-mono" />
+        <p className="text-[10px] text-gray-400">Nombres separados por coma del JSON de respuesta</p>
       </div>
     </>
   );
 }
 
-function TransferInspector({
-  data,
-  patch,
-}: {
-  data: TransferData;
-  patch: (p: Record<string, unknown>) => void;
-}) {
+function TransferInspector({ data, patch }: { data: TransferData; patch: (p: Record<string, unknown>) => void }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">Transfer Number</Label>
-      <Input
-        value={data.transfer_number}
-        onChange={(e) => patch({ transfer_number: e.target.value })}
-        placeholder="+1234567890"
-        className="h-8 text-sm font-mono"
-      />
-      <p className="text-[10px] text-gray-400">
-        The call will be transferred to this number
-      </p>
+      <Label className="text-xs font-medium">Número de transferencia</Label>
+      <Input value={data.transfer_number} onChange={(e) => patch({ transfer_number: e.target.value })} placeholder="+1234567890" className="h-8 text-sm font-mono" />
+      <p className="text-[10px] text-gray-400">Formato E.164. La llamada se transfiere a este número via SIP REFER.</p>
     </div>
   );
 }
 
-function EndCallInspector({
-  data,
-  patch,
-}: {
-  data: EndCallData;
-  patch: (p: Record<string, unknown>) => void;
-}) {
+function EndCallInspector({ data, patch }: { data: EndCallData; patch: (p: Record<string, unknown>) => void }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">Farewell Message (optional)</Label>
-      <Textarea
-        rows={3}
-        value={data.farewell}
-        onChange={(e) => patch({ farewell: e.target.value })}
-        placeholder="Thank you for calling, have a great day!"
-        className="text-sm resize-none"
-      />
+      <Label className="text-xs font-medium">Mensaje de despedida</Label>
+      <Textarea rows={3} value={data.farewell} onChange={(e) => patch({ farewell: e.target.value })} placeholder="Gracias por su tiempo, ¡que tenga un buen día!" className="text-sm resize-none" />
+      <p className="text-[10px] text-gray-400">Opcional. El agente lo dirá antes de colgar.</p>
     </div>
   );
 }
