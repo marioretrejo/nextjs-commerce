@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import { TopUpModal } from '@/components/billing/TopUpModal';
 
 // --- Inner room UI ---
-function CallControls({ onEnd }: { onEnd: () => void }) {
+function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () => void }) {
   const connectionState = useConnectionState();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -30,6 +30,13 @@ function CallControls({ onEnd }: { onEnd: () => void }) {
   const isConnected = connectionState === ConnectionState.Connected;
   const agentJoined = remoteParticipants.length > 0;
   const isMuted = localParticipant.isMicrophoneEnabled === false;
+
+  // Timeout: if not connected after 20s, notify parent
+  useEffect(() => {
+    if (isConnected) return;
+    const t = setTimeout(onTimeout, 20_000);
+    return () => clearTimeout(t);
+  }, [isConnected, onTimeout]);
 
   const toggleMic = useCallback(() => {
     localParticipant.setMicrophoneEnabled(isMuted);
@@ -101,6 +108,7 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
   const [workspaceId, setWorkspaceId] = useState<string>('');
   const [connecting, setConnecting] = useState(false);
   const [livekitUnavailable, setLivekitUnavailable] = useState(false);
+  const [connectFailed, setConnectFailed] = useState(false);
 
   // Billing state — fetched client-side so we don't need SSR props
   const [balanceCents, setBalanceCents]   = useState<number | null>(null);
@@ -163,7 +171,12 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
     }
   }
 
-  function endCall() { setToken(null); setWsUrl(null); }
+  function endCall() { setToken(null); setWsUrl(null); setConnectFailed(false); }
+
+  function handleConnectTimeout() {
+    endCall();
+    setConnectFailed(true);
+  }
 
   return (
     <div className="p-6 mx-auto max-w-2xl space-y-6">
@@ -204,14 +217,26 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
             </div>
           )}
 
+          {connectFailed && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 space-y-2">
+              <p className="font-medium">No se pudo conectar con el agente.</p>
+              <p className="text-xs text-red-600">
+                El servidor de voz no respondió a tiempo. Verifica que el worker de VoiceOS esté activo en Render y que <code className="font-mono">LIVEKIT_URL</code> esté correctamente configurado en Vercel.
+              </p>
+              <Button size="sm" variant="outline" onClick={() => { setConnectFailed(false); startCall(); }}>
+                <Phone className="mr-2 h-3.5 w-3.5" /> Reintentar
+              </Button>
+            </div>
+          )}
+
           {!token || !wsUrl ? (
-            hasBalance || !billingLoaded ? (
+            !connectFailed && (hasBalance || !billingLoaded) ? (
               <Button onClick={startCall} disabled={connecting || !billingLoaded || livekitUnavailable}>
                 {connecting
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting…</>
                   : <><Phone className="mr-2 h-4 w-4" />Start Call</>}
               </Button>
-            ) : (
+            ) : !connectFailed ? (
               // Locked state — no balance
               <div className="space-y-3">
                 <Button
@@ -232,7 +257,7 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
                   Add Credit to Enable
                 </Button>
               </div>
-            )
+            ) : null
           ) : (
             <LiveKitRoom
               token={token}
@@ -243,7 +268,7 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
               onDisconnected={endCall}
             >
               <RoomAudioRenderer />
-              <CallControls onEnd={endCall} />
+              <CallControls onEnd={endCall} onTimeout={handleConnectTimeout} />
             </LiveKitRoom>
           )}
         </CardContent>
