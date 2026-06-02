@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Search, Palette, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,35 @@ export function BrandingCommandCenter({ workspaces: initial }: Props) {
   const [brandingTarget, setBrandingTarget] = useState<BrandingWorkspace | null>(null);
   const [brandingForm, setBrandingForm] = useState({ app_name: '', logo_url: '', primary_color: '#0a0a0a' });
   const [brandingLoading, setBrandingLoading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      toast.error('Solo SVG, PNG o JPG permitidos');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('El archivo no debe exceder 5MB');
+      return;
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setBrandingForm(f => ({ ...f, logo_url: dataUrl }));
+        toast.success('Logo cargado exitosamente');
+        if (logoInputRef.current) logoInputRef.current.value = '';
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      toast.error('Error al leer el archivo');
+    }
+  };
 
   const setWsLoading = (id: string, v: boolean) =>
     setLoading((p) => ({ ...p, [id]: v }));
@@ -111,13 +140,36 @@ export function BrandingCommandCenter({ workspaces: initial }: Props) {
               <p className="text-xs text-[#6b6b6b]">Reemplaza &ldquo;VoiceOS&rdquo; en la barra lateral y título de pestaña.</p>
             </div>
             <div className="space-y-1.5">
-              <Label>Logo URL <span className="text-[#a0a0a0]">(opcional)</span></Label>
-              <Input
-                placeholder="https://cdn.empresa.com/logo.png"
-                value={brandingForm.logo_url}
-                onChange={e => setBrandingForm(f => ({ ...f, logo_url: e.target.value }))}
-              />
-              <p className="text-xs text-[#6b6b6b]">PNG/SVG recomendado, fondo transparente, ~120×32px.</p>
+              <Label>Logo <span className="text-[#a0a0a0]">(opcional)</span></Label>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://cdn.empresa.com/logo.png o cargado ↓"
+                    value={brandingForm.logo_url}
+                    onChange={e => setBrandingForm(f => ({ ...f, logo_url: e.target.value }))}
+                    className="flex-1"
+                  />
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept=".svg,.png,.jpg,.jpeg"
+                    onChange={handleLogoFileSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="px-3"
+                  >
+                    Cargar
+                  </Button>
+                </div>
+                <p className="text-xs text-[#6b6b6b]">SVG/PNG/JPG, fondo transparente, ~120×32px. Max 5MB.</p>
+                {brandingForm.logo_url && brandingForm.logo_url.startsWith('data:') && (
+                  <p className="text-xs text-green-600">✓ Logo cargado desde archivo</p>
+                )}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Color primario</Label>
