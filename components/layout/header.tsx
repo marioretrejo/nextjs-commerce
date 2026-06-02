@@ -29,9 +29,10 @@ interface HeaderProps {
   user: User;
   workspace: Workspace;
   unreadNotifications?: number;
+  primaryColor?: string;
 }
 
-export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps) {
+export function Header({ user, workspace, unreadNotifications = 0, primaryColor = '#0a0a0a' }: HeaderProps) {
   const router = useRouter();
   const initials = (user.name ?? user.email)
     .split(' ')
@@ -63,9 +64,14 @@ export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps
 
       {/* Right */}
       <div className="flex items-center gap-2">
-        {/* Plan badge */}
-        <Badge className={`${plan.className} text-[10px] px-2 py-0.5 font-semibold tracking-wider`}>
-          {plan.label.toUpperCase()}
+        {/* Plan badge — use primary color for branded workspaces */}
+        <Badge
+          className="text-[10px] px-2 py-0.5 font-semibold tracking-wider text-white border-0"
+          style={{ backgroundColor: workspace.plan === 'free' ? '#f5f5f5' : primaryColor }}
+        >
+          <span style={{ color: workspace.plan === 'free' ? '#6b6b6b' : 'white' }}>
+            {plan.label.toUpperCase()}
+          </span>
         </Badge>
 
         {/* Divider */}
@@ -79,7 +85,10 @@ export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl hover:bg-[#f5f5f5]">
             <Bell className="h-4 w-4 text-[#6b6b6b]" />
             {unreadNotifications > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#0a0a0a] text-[9px] font-bold text-white ring-2 ring-white">
+              <span
+                className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white ring-2 ring-white"
+                style={{ backgroundColor: primaryColor }}
+              >
                 {unreadNotifications > 9 ? '9+' : unreadNotifications}
               </span>
             )}
@@ -92,7 +101,10 @@ export function Header({ user, workspace, unreadNotifications = 0 }: HeaderProps
             <button className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-[#f5f5f5] transition-colors">
               <Avatar className="h-7 w-7 ring-2 ring-[#e8e8e8]">
                 <AvatarImage src={user.avatar_url ?? undefined} />
-                <AvatarFallback className="text-[10px] font-bold bg-[#0a0a0a] text-white">
+                <AvatarFallback
+                  className="text-[10px] font-bold text-white"
+                  style={{ backgroundColor: primaryColor }}
+                >
                   {initials}
                 </AvatarFallback>
               </Avatar>

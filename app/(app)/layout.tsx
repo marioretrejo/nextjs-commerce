@@ -108,7 +108,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       </div>
       <RouteGuard visibleModules={visibleModules} />
       <div className={`flex flex-1 flex-col md:pl-56 ${isImpersonating ? 'mt-10' : ''}`}>
-        <Header user={userProfile} workspace={workspace} unreadNotifications={unread} />
+        <Header user={userProfile} workspace={workspace} unreadNotifications={unread} primaryColor={primaryColor} />
         {/* Activation banner — standard clients with $0 balance */}
         {needsActivation && userProfile.onboarding_completed && (
           <div className="pt-14">

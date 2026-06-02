@@ -47,6 +47,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', branding, visibleModules }: SidebarProps) {
+  const primaryColor = branding?.primary_color ?? '#0a0a0a';
   const pathname = usePathname();
   const t = useTranslations('nav');
 
@@ -100,6 +101,9 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', branding, v
     <aside className="fixed inset-y-0 left-0 z-40 w-56">
       <div className="m-3 flex h-[calc(100vh-24px)] flex-col rounded-2xl bg-white sidebar-panel overflow-hidden">
 
+        {/* Accent bar — brand color */}
+        {branding && <div className="h-1 w-full" style={{ backgroundColor: primaryColor }} />}
+
         {/* Logo */}
         <div className="px-5 pt-5 pb-4">
           {branding?.logo_url ? (
@@ -149,9 +153,10 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', branding, v
                       className={cn(
                         'group relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-[12.5px] font-medium transition-all duration-150',
                         active
-                          ? 'bg-[#0a0a0a] text-white nav-active'
+                          ? 'text-white nav-active'
                           : 'text-[#7a7a7a] hover:bg-[#f5f5f5] hover:text-[#0a0a0a] hover:translate-x-0.5'
                       )}
+                      style={active ? { backgroundColor: primaryColor } : undefined}
                     >
                       <Icon className={cn(
                         'h-3.5 w-3.5 shrink-0 transition-transform duration-150',
@@ -187,9 +192,10 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', branding, v
                       className={cn(
                         'group flex items-center gap-2.5 rounded-xl px-3 py-2 text-[12.5px] font-medium transition-all duration-150',
                         active
-                          ? 'bg-[#0a0a0a] text-white nav-active'
+                          ? 'text-white nav-active'
                           : 'text-[#7a7a7a] hover:bg-[#f5f5f5] hover:text-[#0a0a0a] hover:translate-x-0.5'
                       )}
+                      style={active ? { backgroundColor: primaryColor } : undefined}
                     >
                       <Icon className={cn(
                         'h-3.5 w-3.5 shrink-0',
