@@ -1018,6 +1018,13 @@ export default defineAgent({
   },
 });
 
+// Minimal HTTP health-check server so Render web services stay healthy.
+// The agent worker connects outbound to LiveKit and never binds a port by
+// default — Render would kill it without this.
+import { createServer } from 'node:http';
+const healthPort = Number(process.env['PORT'] ?? 10000);
+createServer((_, res) => { res.writeHead(200); res.end('ok'); }).listen(healthPort);
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(import.meta.url),
