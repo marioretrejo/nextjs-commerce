@@ -668,50 +668,6 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                     </button>
                   )}
 
-<<<<<<< HEAD
-                  {/* Branding */}
-                  <button
-                    onClick={() => openBrandingModal(ws)}
-                    disabled={loading[ws.id]}
-                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-                      ws.branding
-                        ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                        : 'border-[#e5e5e5] bg-white text-[#606060] hover:bg-[#f5f5f5]'
-                    }`}
-                    title="White-label branding"
-                  >
-                    <Palette className="h-3.5 w-3.5" />
-                    {ws.branding ? 'Branding ✓' : 'Branding'}
-                  </button>
-=======
-                  {/* Change Plan */}
-                  <button
-                    onClick={() => openPlanModal(ws)}
-                    disabled={loading[ws.id]}
-                    title={`Plan: ${ws.plan} — click to change`}
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                  >
-                    <CreditCard className="h-3.5 w-3.5" />
-                    Plan
-                  </button>
-
-                  {/* White-label Branding — superadmin only */}
-                  {isSuperAdmin && (
-                    <button
-                      onClick={() => openBrandingModal(ws)}
-                      disabled={loading[ws.id]}
-                      title={ws.branding ? `Branding activo: ${ws.branding.app_name}` : 'Configurar white-label branding'}
-                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-                        ws.branding
-                          ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                          : 'border-violet-200 bg-white text-violet-600 hover:bg-violet-50'
-                      }`}
-                    >
-                      <Palette className="h-3.5 w-3.5" />
-                      Branding
-                    </button>
-                  )}
->>>>>>> 974abd3 (feat(admin): add Plan selector to workspace toolbar)
 
                   {/* Feature flags expand */}
                   <button
