@@ -1,7 +1,7 @@
 /**
- * POST /api/webhooks/stripe
+ * POST /api/webhooks/stripe  (also aliased at /api/stripe/webhook)
  *
- * Validates Stripe signature, then dispatches subscription lifecycle events
+ * Validates Stripe signature then dispatches subscription lifecycle events
  * to keep workspaces and users in sync with Stripe's source of truth.
  *
  * Required env vars:
@@ -16,8 +16,11 @@ import { sendPaymentFailed, sendTopUpReceipt } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 
-// TODO: ensure STRIPE_WEBHOOK_SECRET is set in Vercel env vars
-// TODO: ensure STRIPE_PRICE_PRO and STRIPE_PRICE_SCALE are set in Vercel env vars
+// Node.js runtime required — body must be read as raw text for Stripe signature
+// verification; the Edge runtime's Web Streams API produces different byte
+// sequences that cause constructEvent() to throw "No signatures found".
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const PLAN_MINUTES: Record<string, number> = { pro: 1000, scale: 5000, free: 50 };
 
@@ -27,6 +30,7 @@ function planFromPriceId(priceId: string | undefined): string {
   return 'free';
 }
 
+/** Resolve workspace id from multiple sources and upsert plan/subscription data. */
 async function syncSubscription(
   admin: ReturnType<typeof createAdminClient>,
   sub: Stripe.Subscription,
@@ -36,7 +40,7 @@ async function syncSubscription(
   const plan       = planFromPriceId(priceId);
   const customerId = sub.customer as string;
 
-  // Resolve workspace: explicit > subscription metadata > customer lookup > owner lookup
+  // Resolve workspace: explicit → subscription metadata → customer lookup → owner lookup
   let wsId = explicitWorkspaceId ?? sub.metadata?.workspace_id ?? null;
 
   if (!wsId) {
@@ -55,8 +59,12 @@ async function syncSubscription(
     }
   }
 
+  console.log('[stripe/webhook] syncSubscription', {
+    subId: sub.id, plan, customerId, wsId, status: sub.status,
+  });
+
   if (wsId) {
-    await admin.from('workspaces').update({
+    const { error } = await admin.from('workspaces').update({
       plan,
       minutes_limit:          PLAN_MINUTES[plan] ?? 50,
       is_white_label:         plan === 'scale',
@@ -64,8 +72,13 @@ async function syncSubscription(
       stripe_subscription_id: sub.id,
       stripe_price_id:        priceId ?? null,
       subscription_status:    sub.status,
+      billing_status:         sub.status === 'active' || sub.status === 'trialing'
+                                ? 'active'
+                                : 'suspended_for_nonpayment',
     }).eq('id', wsId);
+    if (error) console.error('[stripe/webhook] workspaces update error', error.message);
 
+    // Re-activate paused campaigns when plan upgrades
     if (plan !== 'free') {
       await admin.from('campaigns')
         .update({ status: 'active', pause_reason: null })
@@ -74,189 +87,237 @@ async function syncSubscription(
     }
   }
 
-  await admin.from('users').update({
+  const { error: userErr } = await admin.from('users').update({
     plan,
     stripe_subscription_id: sub.id,
     subscription_status:    sub.status,
   }).eq('stripe_customer_id', customerId);
+  if (userErr) console.error('[stripe/webhook] users update error', userErr.message);
 }
 
 export async function POST(req: Request) {
+  // Read raw body text — must happen BEFORE any JSON parsing
   const body = await req.text();
   const sig  = req.headers.get('stripe-signature');
 
-  if (!sig) return new NextResponse('Missing signature', { status: 400 });
+  if (!sig) {
+    console.error('[stripe/webhook] missing stripe-signature header');
+    return new NextResponse('Missing signature', { status: 400 });
+  }
 
   const webhookSecret = process.env['STRIPE_WEBHOOK_SECRET'];
-  if (!webhookSecret) return new NextResponse('STRIPE_WEBHOOK_SECRET not configured', { status: 500 });
+  if (!webhookSecret) {
+    console.error('[stripe/webhook] STRIPE_WEBHOOK_SECRET is not set');
+    return new NextResponse('Webhook secret not configured', { status: 500 });
+  }
 
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
-  } catch {
-    return new NextResponse('Invalid signature', { status: 400 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[stripe/webhook] signature validation failed:', msg);
+    return new NextResponse(`Invalid signature: ${msg}`, { status: 400 });
   }
+
+  console.log('[stripe/webhook] received', { type: event.type, id: event.id });
 
   const admin = createAdminClient();
 
-  switch (event.type) {
+  try {
+    switch (event.type) {
 
-    case 'customer.subscription.created':
-    case 'customer.subscription.updated': {
-      await syncSubscription(admin, event.data.object as Stripe.Subscription);
-      break;
-    }
-
-    case 'customer.subscription.deleted': {
-      const sub = event.data.object as Stripe.Subscription;
-      const customerId = sub.customer as string;
-
-      const { data: ws } = await admin
-        .from('workspaces').select('id').eq('stripe_customer_id', customerId).maybeSingle();
-      const wsId = (ws as { id: string } | null)?.id;
-
-      if (wsId) {
-        await admin.from('workspaces').update({
-          plan: 'free',
-          minutes_limit:          50,
-          stripe_subscription_id: null,
-          stripe_price_id:        null,
-          subscription_status:    'canceled',
-        }).eq('id', wsId);
-      }
-
-      await admin.from('users').update({
-        plan: 'free',
-        stripe_subscription_id: null,
-        subscription_status:    'canceled',
-      }).eq('stripe_customer_id', customerId);
-      break;
-    }
-
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Checkout.Session;
-
-      // Subscription checkout → sync immediately
-      if (session.mode === 'subscription' && session.subscription) {
-        const sub = await stripe.subscriptions.retrieve(session.subscription as string);
-        await syncSubscription(admin, sub, session.metadata?.workspace_id);
+      // ── Subscription lifecycle ────────────────────────────────────────────────
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        await syncSubscription(admin, event.data.object as Stripe.Subscription);
         break;
       }
 
-      // One-time top-up
-      if (session.metadata?.type === 'voiceos_topup') {
-        const workspaceId = session.metadata.workspace_id;
-        const amountCents = Number(session.metadata.amount_cents ?? 0);
-        if (!workspaceId || !amountCents) break;
+      case 'customer.subscription.deleted': {
+        const sub        = event.data.object as Stripe.Subscription;
+        const customerId = sub.customer as string;
 
-        const { error } = await admin.rpc('increment_workspace_balance', {
-          p_workspace_id: workspaceId,
-          p_amount_cents: amountCents,
-        });
+        const { data: ws } = await admin
+          .from('workspaces').select('id').eq('stripe_customer_id', customerId).maybeSingle();
+        const wsId = (ws as { id: string } | null)?.id;
 
-        if (error) {
-          const { data: current } = await admin
-            .from('workspaces').select('stripe_balance_cents').eq('id', workspaceId).single();
-          const existing = (current as { stripe_balance_cents: number } | null)?.stripe_balance_cents ?? 0;
+        console.log('[stripe/webhook] subscription deleted', { subId: sub.id, wsId });
+
+        if (wsId) {
+          const { error } = await admin.from('workspaces').update({
+            plan:                   'free',
+            minutes_limit:          PLAN_MINUTES['free'],
+            stripe_subscription_id: null,
+            stripe_price_id:        null,
+            subscription_status:    'canceled',
+            billing_status:         'active', // free plan stays accessible
+          }).eq('id', wsId);
+          if (error) console.error('[stripe/webhook] downgrade workspace error', error.message);
+        }
+
+        const { error: userErr } = await admin.from('users').update({
+          plan:                   'free',
+          stripe_subscription_id: null,
+          subscription_status:    'canceled',
+        }).eq('stripe_customer_id', customerId);
+        if (userErr) console.error('[stripe/webhook] downgrade user error', userErr.message);
+        break;
+      }
+
+      // ── Checkout completed ────────────────────────────────────────────────────
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+
+        // Subscription checkout → sync plan immediately
+        if (session.mode === 'subscription' && session.subscription) {
+          const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+          await syncSubscription(admin, sub, session.metadata?.workspace_id);
+          break;
+        }
+
+        // One-time credit top-up
+        if (session.metadata?.type === 'voiceos_topup') {
+          const workspaceId = session.metadata.workspace_id;
+          const amountCents = Number(session.metadata.amount_cents ?? 0);
+
+          console.log('[stripe/webhook] topup completed', { workspaceId, amountCents });
+
+          if (!workspaceId || !amountCents) break;
+
+          // Try RPC first, fall back to manual increment
+          const { error: rpcErr } = await admin.rpc('increment_workspace_balance', {
+            p_workspace_id: workspaceId,
+            p_amount_cents: amountCents,
+          });
+
+          if (rpcErr) {
+            console.warn('[stripe/webhook] RPC fallback for balance increment', rpcErr.message);
+            const { data: current } = await admin
+              .from('workspaces').select('stripe_balance_cents').eq('id', workspaceId).single();
+            const existing = (current as { stripe_balance_cents: number } | null)?.stripe_balance_cents ?? 0;
+            await admin.from('workspaces')
+              .update({ stripe_balance_cents: existing + amountCents }).eq('id', workspaceId);
+          }
+
+          // Fire-and-forget: record invoice + send receipt email
+          void Promise.resolve(admin.from('billing_invoices').upsert({
+            workspace_id:      workspaceId,
+            stripe_invoice_id: session.id,
+            amount:            amountCents,
+            currency:          session.currency ?? 'usd',
+            status:            'paid',
+            period_start:      new Date().toISOString(),
+            period_end:        new Date().toISOString(),
+            pdf_url:           null,
+          }, { onConflict: 'stripe_invoice_id', ignoreDuplicates: true })).catch(console.error);
+
+          void (async () => {
+            const { data: ws } = await admin.from('workspaces')
+              .select('owner_id, name').eq('id', workspaceId).single();
+            if (!ws) return;
+            const { data: owner } = await admin.from('users')
+              .select('email').eq('id', (ws as { owner_id: string }).owner_id).single();
+            if (owner?.email) {
+              sendTopUpReceipt({
+                to:            owner.email,
+                workspaceName: (ws as { name: string }).name,
+                amount:        `$${(amountCents / 100).toFixed(2)}`,
+              }).catch(console.error);
+            }
+          })().catch(console.error);
+        }
+        break;
+      }
+
+      // ── Invoices ──────────────────────────────────────────────────────────────
+      case 'invoice.paid': {
+        const inv        = event.data.object as Stripe.Invoice;
+        const customerId = inv.customer as string;
+
+        let wsId: string | null = null;
+        const { data: ws } = await admin
+          .from('workspaces').select('id').eq('stripe_customer_id', customerId).maybeSingle();
+        wsId = (ws as { id: string } | null)?.id ?? null;
+
+        if (!wsId) {
+          const { data: ownerUser } = await admin
+            .from('users').select('id').eq('stripe_customer_id', customerId).maybeSingle();
+          if (ownerUser) {
+            const { data: ownerWs } = await admin
+              .from('workspaces').select('id').eq('owner_id', (ownerUser as { id: string }).id).single();
+            wsId = (ownerWs as { id: string } | null)?.id ?? null;
+          }
+        }
+
+        console.log('[stripe/webhook] invoice paid', { invoiceId: inv.id, wsId });
+
+        if (wsId) {
+          // Upsert prevents duplicates if Stripe retries the event
+          const { error } = await admin.from('billing_invoices').upsert({
+            workspace_id:      wsId,
+            stripe_invoice_id: inv.id,
+            amount:            inv.amount_paid,
+            currency:          inv.currency,
+            status:            'paid',
+            period_start:      new Date((inv.period_start ?? 0) * 1000).toISOString(),
+            period_end:        new Date((inv.period_end ?? 0) * 1000).toISOString(),
+            pdf_url:           inv.invoice_pdf ?? null,
+          }, { onConflict: 'stripe_invoice_id', ignoreDuplicates: true });
+          if (error) console.error('[stripe/webhook] billing_invoices upsert error', error.message);
+        }
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const inv        = event.data.object as Stripe.Invoice;
+        const customerId = inv.customer as string;
+
+        const { data: userRow } = await admin
+          .from('users').select('id, email').eq('stripe_customer_id', customerId).single();
+        if (!userRow) break;
+        const u = userRow as { id: string; email: string };
+
+        const { data: wsRow } = await admin
+          .from('workspaces').select('id, name').eq('owner_id', u.id).single();
+        const workspaceName = (wsRow as { name: string } | null)?.name ?? 'your workspace';
+        const wsId          = (wsRow as { id: string } | null)?.id;
+        const amountStr     = `$${((inv.amount_due ?? 0) / 100).toFixed(2)}`;
+        const appUrl        = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
+
+        console.log('[stripe/webhook] invoice payment failed', { invoiceId: inv.id, wsId });
+
+        // Suspend workspace until payment is resolved
+        if (wsId) {
           await admin.from('workspaces')
-            .update({ stripe_balance_cents: existing + amountCents }).eq('id', workspaceId);
+            .update({ billing_status: 'suspended_for_nonpayment' })
+            .eq('id', wsId);
         }
 
-        void Promise.resolve(
-          admin.from('workspaces').select('owner_id, name').eq('id', workspaceId).single()
-            .then(async ({ data: ws }) => {
-              if (!ws) return;
-              const { data: owner } = await admin.from('users')
-                .select('email').eq('id', (ws as { owner_id: string }).owner_id).single();
-              if (owner?.email) {
-                sendTopUpReceipt({
-                  to: owner.email,
-                  workspaceName: (ws as { name: string }).name,
-                  amount: `$${(amountCents / 100).toFixed(2)}`,
-                }).catch(console.error);
-              }
-            })
-        ).catch(() => null);
-
-        void Promise.resolve(admin.from('billing_invoices').insert({
-          workspace_id:      workspaceId,
-          stripe_invoice_id: session.id,
-          amount:            amountCents,
-          currency:          session.currency ?? 'usd',
-          status:            'paid',
-          period_start:      new Date().toISOString(),
-          period_end:        new Date().toISOString(),
-          pdf_url:           null,
-        })).catch(() => null);
-      }
-      break;
-    }
-
-    case 'invoice.paid': {
-      const inv        = event.data.object as Stripe.Invoice;
-      const customerId = inv.customer as string;
-
-      // Find workspace via customer ID or owner lookup
-      let wsId: string | null = null;
-      const { data: ws } = await admin
-        .from('workspaces').select('id').eq('stripe_customer_id', customerId).maybeSingle();
-      wsId = (ws as { id: string } | null)?.id ?? null;
-
-      if (!wsId) {
-        const { data: ownerUser } = await admin
-          .from('users').select('id').eq('stripe_customer_id', customerId).maybeSingle();
-        if (ownerUser) {
-          const { data: ownerWs } = await admin
-            .from('workspaces').select('id').eq('owner_id', (ownerUser as { id: string }).id).single();
-          wsId = (ownerWs as { id: string } | null)?.id ?? null;
-        }
-      }
-
-      if (wsId) {
-        await admin.from('billing_invoices').insert({
-          workspace_id:      wsId,
-          stripe_invoice_id: inv.id,
-          amount:            inv.amount_paid,
-          currency:          inv.currency,
-          status:            'paid',
-          period_start:      new Date((inv.period_start ?? 0) * 1000).toISOString(),
-          period_end:        new Date((inv.period_end ?? 0) * 1000).toISOString(),
-          pdf_url:           inv.invoice_pdf,
+        await admin.from('notifications').insert({
+          user_id: u.id,
+          type:    'payment_failed',
+          title:   'Payment failed',
+          message: `Your payment of ${amountStr} failed. Please update your payment method.`,
         });
+
+        sendPaymentFailed({
+          to:           u.email,
+          workspaceName,
+          amount:       amountStr,
+          retryUrl:     `${appUrl}/billing`,
+        }).catch(console.error);
+        break;
       }
-      break;
+
+      default:
+        console.log('[stripe/webhook] unhandled event type', event.type);
     }
-
-    case 'invoice.payment_failed': {
-      const inv        = event.data.object as Stripe.Invoice;
-      const customerId = inv.customer as string;
-
-      const { data: userRow } = await admin
-        .from('users').select('id, email').eq('stripe_customer_id', customerId).single();
-      if (!userRow) break;
-      const u = userRow as { id: string; email: string };
-
-      const { data: wsRow } = await admin
-        .from('workspaces').select('name').eq('owner_id', u.id).single();
-      const workspaceName = (wsRow as { name: string } | null)?.name ?? 'your workspace';
-      const amountStr     = `$${((inv.amount_due ?? 0) / 100).toFixed(2)}`;
-      const appUrl        = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
-
-      await admin.from('notifications').insert({
-        user_id: u.id,
-        type:    'payment_failed',
-        title:   'Payment failed',
-        message: `Your payment of ${amountStr} failed. Please update your payment method.`,
-      });
-
-      sendPaymentFailed({
-        to: u.email,
-        workspaceName,
-        amount: amountStr,
-        retryUrl: `${appUrl}/billing`,
-      }).catch(console.error);
-      break;
-    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[stripe/webhook] handler error', { type: event.type, id: event.id, msg });
+    // Return 200 so Stripe does NOT retry — the event was received, the bug is ours to fix
+    return NextResponse.json({ received: true, error: msg }, { status: 200 });
   }
 
   return NextResponse.json({ received: true });
