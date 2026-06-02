@@ -44,6 +44,7 @@ RUN node_modules/.pnpm/node_modules/.bin/esbuild agent/worker_core.ts \
   --external:@livekit/agents-plugin-cartesia \
   --external:@livekit/rtc-node \
   --external:fsevents \
+  "--banner:js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);" \
   --outfile=dist/worker.mjs
 
 # ─── Stage 3: Runtime image ────────────────────────────────────────────────────
