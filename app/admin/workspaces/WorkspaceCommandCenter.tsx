@@ -523,72 +523,79 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                   </p>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                  {/* Impersonate → opens confirmation modal */}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {/* Impersonate */}
                   <button
                     onClick={() => setImpersonateTarget(ws)}
                     disabled={loading[ws.id]}
+                    title="Log in as this workspace"
                     className="flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1a1a1a] hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
                   >
                     <LogIn className="h-3.5 w-3.5" />
                     Log in as
                   </button>
 
-                  {/* Suspend → modal  |  Unsuspend → direct */}
+                  {/* Suspend / Unsuspend */}
                   {ws.is_suspended ? (
                     <button
                       onClick={() => runUnsuspend(ws)}
                       disabled={loading[ws.id]}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                      title="Reinstate workspace"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                     >
-                      <ShieldOff className="h-3.5 w-3.5" />Reinstate
+                      <ShieldOff className="h-4 w-4" />
                     </button>
                   ) : (
                     <button
                       onClick={() => setSuspendTarget(ws)}
                       disabled={loading[ws.id]}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                      title="Suspend workspace"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
-                      <Shield className="h-3.5 w-3.5" />Suspend
+                      <Shield className="h-4 w-4" />
                     </button>
                   )}
 
-                  {/* Enterprise Quota */}
+                  {/* Enterprise Quota (icon only) */}
                   <button
                     onClick={() => openQuotaModal(ws)}
                     disabled={loading[ws.id]}
-                    className="flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50"
-                    title="Assign or clear enterprise minute cap"
+                    title={ws.minute_cap != null ? `Enterprise quota: ${ws.minute_cap.toLocaleString()} min` : 'Set enterprise minute quota'}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
+                      ws.minute_cap != null
+                        ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        : 'border-[#e5e5e5] bg-white text-[#606060] hover:bg-[#f5f5f5]'
+                    }`}
                   >
-                    <Building2 className="h-3.5 w-3.5" />
-                    {ws.minute_cap != null ? 'Edit Quota' : 'Set Quota'}
+                    <Building2 className="h-4 w-4" />
                   </button>
 
-                  {/* Non-payment suspend / reinstate */}
+                  {/* Non-payment suspend / reinstate (icon only) */}
                   {ws.billing_status === 'suspended_for_nonpayment' ? (
                     <button
                       onClick={() => runNonPaymentUnsuspend(ws)}
                       disabled={loading[ws.id]}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                      title="Reinstate billing"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                     >
-                      <X className="h-3.5 w-3.5" /> Reinstate
+                      <X className="h-4 w-4" />
                     </button>
                   ) : (
                     <button
                       onClick={() => setNonpayTarget(ws)}
                       disabled={loading[ws.id]}
-                      className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                       title="Suspend for non-payment"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                     >
-                      <BanknoteIcon className="h-3.5 w-3.5" /> Non-Pay
+                      <BanknoteIcon className="h-4 w-4" />
                     </button>
                   )}
 
-                  {/* Branding (icon only, compact) */}
+                  {/* White-label Branding */}
                   <button
                     onClick={() => openBrandingModal(ws)}
                     disabled={loading[ws.id]}
-                    title={ws.branding ? `Branding: ${ws.branding.app_name}` : 'Configure white-label branding'}
+                    title={ws.branding ? `Branding activo: ${ws.branding.app_name}` : 'Configurar white-label branding'}
                     className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
                       ws.branding
                         ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
