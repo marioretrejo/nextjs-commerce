@@ -584,21 +584,6 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                     </button>
                   )}
 
-                  {/* Branding */}
-                  <button
-                    onClick={() => openBrandingModal(ws)}
-                    disabled={loading[ws.id]}
-                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-                      ws.branding
-                        ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                        : 'border-[#e5e5e5] bg-white text-[#606060] hover:bg-[#f5f5f5]'
-                    }`}
-                    title="White-label branding"
-                  >
-                    <Palette className="h-3.5 w-3.5" />
-                    {ws.branding ? 'Branding ✓' : 'Branding'}
-                  </button>
-
                   {/* Feature flags expand */}
                   <button
                     onClick={() => setExpanded((p) => p === ws.id ? null : ws.id)}
@@ -616,8 +601,33 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
 
               {/* Feature flags panel */}
               {expanded === ws.id && (
-                <div className="border-t border-[#f0f0f0] px-4 py-3">
-                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
+                <div className="border-t border-[#f0f0f0] px-4 py-3 space-y-4">
+                  {/* Branding section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
+                        <Palette className="h-3 w-3 inline mr-1" /> White-label Branding
+                      </p>
+                      <button
+                        onClick={() => openBrandingModal(ws)}
+                        disabled={loading[ws.id]}
+                        className={`text-xs font-medium px-2.5 py-1 rounded transition-colors ${
+                          ws.branding
+                            ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {ws.branding ? `✓ ${ws.branding.app_name}` : 'Configure'}
+                      </button>
+                    </div>
+                    {ws.branding && (
+                      <p className="text-[10px] text-gray-500">
+                        Logo: {ws.branding.logo_url ? '✓' : '–'} | Color: <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '2px', backgroundColor: ws.branding.primary_color, border: '1px solid #ddd', verticalAlign: 'middle' }} />
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
                     Feature Flags
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
