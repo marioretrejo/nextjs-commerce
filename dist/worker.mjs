@@ -13060,2329 +13060,6 @@ var require_main3 = __commonJS({
   }
 });
 
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/buffer_utils.js
-function concat(...buffers) {
-  const size = buffers.reduce((acc, { length }) => acc + length, 0);
-  const buf = new Uint8Array(size);
-  let i = 0;
-  for (const buffer of buffers) {
-    buf.set(buffer, i);
-    i += buffer.length;
-  }
-  return buf;
-}
-var encoder, decoder, MAX_INT32;
-var init_buffer_utils = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/buffer_utils.js"() {
-    "use strict";
-    encoder = new TextEncoder();
-    decoder = new TextDecoder();
-    MAX_INT32 = 2 ** 32;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/base64url.js
-import { Buffer as Buffer2 } from "node:buffer";
-function normalize(input) {
-  let encoded = input;
-  if (encoded instanceof Uint8Array) {
-    encoded = decoder.decode(encoded);
-  }
-  return encoded;
-}
-var encode, decode;
-var init_base64url = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/base64url.js"() {
-    "use strict";
-    init_buffer_utils();
-    encode = (input) => Buffer2.from(input).toString("base64url");
-    decode = (input) => new Uint8Array(Buffer2.from(normalize(input), "base64url"));
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/errors.js
-var JOSEError, JWTClaimValidationFailed, JWTExpired, JOSEAlgNotAllowed, JOSENotSupported, JWSInvalid, JWTInvalid, JWSSignatureVerificationFailed;
-var init_errors = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/errors.js"() {
-    "use strict";
-    JOSEError = class extends Error {
-      static code = "ERR_JOSE_GENERIC";
-      code = "ERR_JOSE_GENERIC";
-      constructor(message2, options) {
-        super(message2, options);
-        this.name = this.constructor.name;
-        Error.captureStackTrace?.(this, this.constructor);
-      }
-    };
-    JWTClaimValidationFailed = class extends JOSEError {
-      static code = "ERR_JWT_CLAIM_VALIDATION_FAILED";
-      code = "ERR_JWT_CLAIM_VALIDATION_FAILED";
-      claim;
-      reason;
-      payload;
-      constructor(message2, payload, claim = "unspecified", reason = "unspecified") {
-        super(message2, { cause: { claim, reason, payload } });
-        this.claim = claim;
-        this.reason = reason;
-        this.payload = payload;
-      }
-    };
-    JWTExpired = class extends JOSEError {
-      static code = "ERR_JWT_EXPIRED";
-      code = "ERR_JWT_EXPIRED";
-      claim;
-      reason;
-      payload;
-      constructor(message2, payload, claim = "unspecified", reason = "unspecified") {
-        super(message2, { cause: { claim, reason, payload } });
-        this.claim = claim;
-        this.reason = reason;
-        this.payload = payload;
-      }
-    };
-    JOSEAlgNotAllowed = class extends JOSEError {
-      static code = "ERR_JOSE_ALG_NOT_ALLOWED";
-      code = "ERR_JOSE_ALG_NOT_ALLOWED";
-    };
-    JOSENotSupported = class extends JOSEError {
-      static code = "ERR_JOSE_NOT_SUPPORTED";
-      code = "ERR_JOSE_NOT_SUPPORTED";
-    };
-    JWSInvalid = class extends JOSEError {
-      static code = "ERR_JWS_INVALID";
-      code = "ERR_JWS_INVALID";
-    };
-    JWTInvalid = class extends JOSEError {
-      static code = "ERR_JWT_INVALID";
-      code = "ERR_JWT_INVALID";
-    };
-    JWSSignatureVerificationFailed = class extends JOSEError {
-      static code = "ERR_JWS_SIGNATURE_VERIFICATION_FAILED";
-      code = "ERR_JWS_SIGNATURE_VERIFICATION_FAILED";
-      constructor(message2 = "signature verification failed", options) {
-        super(message2, options);
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_object.js
-import * as util from "node:util";
-var is_key_object_default;
-var init_is_key_object = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_object.js"() {
-    "use strict";
-    is_key_object_default = (obj) => util.types.isKeyObject(obj);
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/webcrypto.js
-import * as crypto2 from "node:crypto";
-import * as util2 from "node:util";
-var webcrypto2, webcrypto_default, isCryptoKey;
-var init_webcrypto = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/webcrypto.js"() {
-    "use strict";
-    webcrypto2 = crypto2.webcrypto;
-    webcrypto_default = webcrypto2;
-    isCryptoKey = (key) => util2.types.isCryptoKey(key);
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/crypto_key.js
-function unusable(name, prop = "algorithm.name") {
-  return new TypeError(`CryptoKey does not support this operation, its ${prop} must be ${name}`);
-}
-function isAlgorithm(algorithm, name) {
-  return algorithm.name === name;
-}
-function getHashLength(hash) {
-  return parseInt(hash.name.slice(4), 10);
-}
-function getNamedCurve(alg) {
-  switch (alg) {
-    case "ES256":
-      return "P-256";
-    case "ES384":
-      return "P-384";
-    case "ES512":
-      return "P-521";
-    default:
-      throw new Error("unreachable");
-  }
-}
-function checkUsage(key, usages) {
-  if (usages.length && !usages.some((expected) => key.usages.includes(expected))) {
-    let msg = "CryptoKey does not support this operation, its usages must include ";
-    if (usages.length > 2) {
-      const last = usages.pop();
-      msg += `one of ${usages.join(", ")}, or ${last}.`;
-    } else if (usages.length === 2) {
-      msg += `one of ${usages[0]} or ${usages[1]}.`;
-    } else {
-      msg += `${usages[0]}.`;
-    }
-    throw new TypeError(msg);
-  }
-}
-function checkSigCryptoKey(key, alg, ...usages) {
-  switch (alg) {
-    case "HS256":
-    case "HS384":
-    case "HS512": {
-      if (!isAlgorithm(key.algorithm, "HMAC"))
-        throw unusable("HMAC");
-      const expected = parseInt(alg.slice(2), 10);
-      const actual = getHashLength(key.algorithm.hash);
-      if (actual !== expected)
-        throw unusable(`SHA-${expected}`, "algorithm.hash");
-      break;
-    }
-    case "RS256":
-    case "RS384":
-    case "RS512": {
-      if (!isAlgorithm(key.algorithm, "RSASSA-PKCS1-v1_5"))
-        throw unusable("RSASSA-PKCS1-v1_5");
-      const expected = parseInt(alg.slice(2), 10);
-      const actual = getHashLength(key.algorithm.hash);
-      if (actual !== expected)
-        throw unusable(`SHA-${expected}`, "algorithm.hash");
-      break;
-    }
-    case "PS256":
-    case "PS384":
-    case "PS512": {
-      if (!isAlgorithm(key.algorithm, "RSA-PSS"))
-        throw unusable("RSA-PSS");
-      const expected = parseInt(alg.slice(2), 10);
-      const actual = getHashLength(key.algorithm.hash);
-      if (actual !== expected)
-        throw unusable(`SHA-${expected}`, "algorithm.hash");
-      break;
-    }
-    case "EdDSA": {
-      if (key.algorithm.name !== "Ed25519" && key.algorithm.name !== "Ed448") {
-        throw unusable("Ed25519 or Ed448");
-      }
-      break;
-    }
-    case "Ed25519": {
-      if (!isAlgorithm(key.algorithm, "Ed25519"))
-        throw unusable("Ed25519");
-      break;
-    }
-    case "ES256":
-    case "ES384":
-    case "ES512": {
-      if (!isAlgorithm(key.algorithm, "ECDSA"))
-        throw unusable("ECDSA");
-      const expected = getNamedCurve(alg);
-      const actual = key.algorithm.namedCurve;
-      if (actual !== expected)
-        throw unusable(expected, "algorithm.namedCurve");
-      break;
-    }
-    default:
-      throw new TypeError("CryptoKey does not support this operation");
-  }
-  checkUsage(key, usages);
-}
-var init_crypto_key = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/crypto_key.js"() {
-    "use strict";
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/invalid_key_input.js
-function message(msg, actual, ...types4) {
-  types4 = types4.filter(Boolean);
-  if (types4.length > 2) {
-    const last = types4.pop();
-    msg += `one of type ${types4.join(", ")}, or ${last}.`;
-  } else if (types4.length === 2) {
-    msg += `one of type ${types4[0]} or ${types4[1]}.`;
-  } else {
-    msg += `of type ${types4[0]}.`;
-  }
-  if (actual == null) {
-    msg += ` Received ${actual}`;
-  } else if (typeof actual === "function" && actual.name) {
-    msg += ` Received function ${actual.name}`;
-  } else if (typeof actual === "object" && actual != null) {
-    if (actual.constructor?.name) {
-      msg += ` Received an instance of ${actual.constructor.name}`;
-    }
-  }
-  return msg;
-}
-function withAlg(alg, actual, ...types4) {
-  return message(`Key for the ${alg} algorithm must be `, actual, ...types4);
-}
-var invalid_key_input_default;
-var init_invalid_key_input = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/invalid_key_input.js"() {
-    "use strict";
-    invalid_key_input_default = (actual, ...types4) => {
-      return message("Key must be ", actual, ...types4);
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_like.js
-var is_key_like_default, types3;
-var init_is_key_like = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_like.js"() {
-    "use strict";
-    init_webcrypto();
-    init_is_key_object();
-    is_key_like_default = (key) => is_key_object_default(key) || isCryptoKey(key);
-    types3 = ["KeyObject"];
-    if (globalThis.CryptoKey || webcrypto_default?.CryptoKey) {
-      types3.push("CryptoKey");
-    }
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_disjoint.js
-var isDisjoint, is_disjoint_default;
-var init_is_disjoint = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_disjoint.js"() {
-    "use strict";
-    isDisjoint = (...headers) => {
-      const sources = headers.filter(Boolean);
-      if (sources.length === 0 || sources.length === 1) {
-        return true;
-      }
-      let acc;
-      for (const header of sources) {
-        const parameters = Object.keys(header);
-        if (!acc || acc.size === 0) {
-          acc = new Set(parameters);
-          continue;
-        }
-        for (const parameter of parameters) {
-          if (acc.has(parameter)) {
-            return false;
-          }
-          acc.add(parameter);
-        }
-      }
-      return true;
-    };
-    is_disjoint_default = isDisjoint;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_object.js
-function isObjectLike(value) {
-  return typeof value === "object" && value !== null;
-}
-function isObject(input) {
-  if (!isObjectLike(input) || Object.prototype.toString.call(input) !== "[object Object]") {
-    return false;
-  }
-  if (Object.getPrototypeOf(input) === null) {
-    return true;
-  }
-  let proto = input;
-  while (Object.getPrototypeOf(proto) !== null) {
-    proto = Object.getPrototypeOf(proto);
-  }
-  return Object.getPrototypeOf(input) === proto;
-}
-var init_is_object = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_object.js"() {
-    "use strict";
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_jwk.js
-function isJWK(key) {
-  return isObject(key) && typeof key.kty === "string";
-}
-function isPrivateJWK(key) {
-  return key.kty !== "oct" && typeof key.d === "string";
-}
-function isPublicJWK(key) {
-  return key.kty !== "oct" && typeof key.d === "undefined";
-}
-function isSecretJWK(key) {
-  return isJWK(key) && key.kty === "oct" && typeof key.k === "string";
-}
-var init_is_jwk = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_jwk.js"() {
-    "use strict";
-    init_is_object();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_named_curve.js
-import { KeyObject } from "node:crypto";
-var namedCurveToJOSE, getNamedCurve2, get_named_curve_default;
-var init_get_named_curve = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_named_curve.js"() {
-    "use strict";
-    init_errors();
-    init_webcrypto();
-    init_is_key_object();
-    init_invalid_key_input();
-    init_is_key_like();
-    init_is_jwk();
-    namedCurveToJOSE = (namedCurve) => {
-      switch (namedCurve) {
-        case "prime256v1":
-          return "P-256";
-        case "secp384r1":
-          return "P-384";
-        case "secp521r1":
-          return "P-521";
-        case "secp256k1":
-          return "secp256k1";
-        default:
-          throw new JOSENotSupported("Unsupported key curve for this operation");
-      }
-    };
-    getNamedCurve2 = (kee, raw) => {
-      let key;
-      if (isCryptoKey(kee)) {
-        key = KeyObject.from(kee);
-      } else if (is_key_object_default(kee)) {
-        key = kee;
-      } else if (isJWK(kee)) {
-        return kee.crv;
-      } else {
-        throw new TypeError(invalid_key_input_default(kee, ...types3));
-      }
-      if (key.type === "secret") {
-        throw new TypeError('only "private" or "public" type keys can be used for this operation');
-      }
-      switch (key.asymmetricKeyType) {
-        case "ed25519":
-        case "ed448":
-          return `Ed${key.asymmetricKeyType.slice(2)}`;
-        case "x25519":
-        case "x448":
-          return `X${key.asymmetricKeyType.slice(1)}`;
-        case "ec": {
-          const namedCurve = key.asymmetricKeyDetails.namedCurve;
-          if (raw) {
-            return namedCurve;
-          }
-          return namedCurveToJOSE(namedCurve);
-        }
-        default:
-          throw new TypeError("Invalid asymmetric key type for this operation");
-      }
-    };
-    get_named_curve_default = getNamedCurve2;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/check_key_length.js
-import { KeyObject as KeyObject2 } from "node:crypto";
-var check_key_length_default;
-var init_check_key_length = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/check_key_length.js"() {
-    "use strict";
-    check_key_length_default = (key, alg) => {
-      let modulusLength;
-      try {
-        if (key instanceof KeyObject2) {
-          modulusLength = key.asymmetricKeyDetails?.modulusLength;
-        } else {
-          modulusLength = Buffer.from(key.n, "base64url").byteLength << 3;
-        }
-      } catch {
-      }
-      if (typeof modulusLength !== "number" || modulusLength < 2048) {
-        throw new TypeError(`${alg} requires key modulusLength to be 2048 bits or larger`);
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/jwk_to_key.js
-import { createPrivateKey, createPublicKey } from "node:crypto";
-var parse, jwk_to_key_default;
-var init_jwk_to_key = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/jwk_to_key.js"() {
-    "use strict";
-    parse = (key) => {
-      if (key.d) {
-        return createPrivateKey({ format: "jwk", key });
-      }
-      return createPublicKey({ format: "jwk", key });
-    };
-    jwk_to_key_default = parse;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/key/import.js
-async function importJWK(jwk, alg) {
-  if (!isObject(jwk)) {
-    throw new TypeError("JWK must be an object");
-  }
-  alg ||= jwk.alg;
-  switch (jwk.kty) {
-    case "oct":
-      if (typeof jwk.k !== "string" || !jwk.k) {
-        throw new TypeError('missing "k" (Key Value) Parameter value');
-      }
-      return decode(jwk.k);
-    case "RSA":
-      if ("oth" in jwk && jwk.oth !== void 0) {
-        throw new JOSENotSupported('RSA JWK "oth" (Other Primes Info) Parameter value is not supported');
-      }
-    case "EC":
-    case "OKP":
-      return jwk_to_key_default({ ...jwk, alg });
-    default:
-      throw new JOSENotSupported('Unsupported "kty" (Key Type) Parameter value');
-  }
-}
-var init_import = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/key/import.js"() {
-    "use strict";
-    init_base64url();
-    init_jwk_to_key();
-    init_errors();
-    init_is_object();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/check_key_type.js
-function checkKeyType(allowJwk, alg, key, usage) {
-  const symmetric = alg.startsWith("HS") || alg === "dir" || alg.startsWith("PBES2") || /^A\d{3}(?:GCM)?KW$/.test(alg);
-  if (symmetric) {
-    symmetricTypeCheck(alg, key, usage, allowJwk);
-  } else {
-    asymmetricTypeCheck(alg, key, usage, allowJwk);
-  }
-}
-var tag, jwkMatchesOp, symmetricTypeCheck, asymmetricTypeCheck, check_key_type_default, checkKeyTypeWithJwk;
-var init_check_key_type = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/check_key_type.js"() {
-    "use strict";
-    init_invalid_key_input();
-    init_is_key_like();
-    init_is_jwk();
-    tag = (key) => key?.[Symbol.toStringTag];
-    jwkMatchesOp = (alg, key, usage) => {
-      if (key.use !== void 0 && key.use !== "sig") {
-        throw new TypeError("Invalid key for this operation, when present its use must be sig");
-      }
-      if (key.key_ops !== void 0 && key.key_ops.includes?.(usage) !== true) {
-        throw new TypeError(`Invalid key for this operation, when present its key_ops must include ${usage}`);
-      }
-      if (key.alg !== void 0 && key.alg !== alg) {
-        throw new TypeError(`Invalid key for this operation, when present its alg must be ${alg}`);
-      }
-      return true;
-    };
-    symmetricTypeCheck = (alg, key, usage, allowJwk) => {
-      if (key instanceof Uint8Array)
-        return;
-      if (allowJwk && isJWK(key)) {
-        if (isSecretJWK(key) && jwkMatchesOp(alg, key, usage))
-          return;
-        throw new TypeError(`JSON Web Key for symmetric algorithms must have JWK "kty" (Key Type) equal to "oct" and the JWK "k" (Key Value) present`);
-      }
-      if (!is_key_like_default(key)) {
-        throw new TypeError(withAlg(alg, key, ...types3, "Uint8Array", allowJwk ? "JSON Web Key" : null));
-      }
-      if (key.type !== "secret") {
-        throw new TypeError(`${tag(key)} instances for symmetric algorithms must be of type "secret"`);
-      }
-    };
-    asymmetricTypeCheck = (alg, key, usage, allowJwk) => {
-      if (allowJwk && isJWK(key)) {
-        switch (usage) {
-          case "sign":
-            if (isPrivateJWK(key) && jwkMatchesOp(alg, key, usage))
-              return;
-            throw new TypeError(`JSON Web Key for this operation be a private JWK`);
-          case "verify":
-            if (isPublicJWK(key) && jwkMatchesOp(alg, key, usage))
-              return;
-            throw new TypeError(`JSON Web Key for this operation be a public JWK`);
-        }
-      }
-      if (!is_key_like_default(key)) {
-        throw new TypeError(withAlg(alg, key, ...types3, allowJwk ? "JSON Web Key" : null));
-      }
-      if (key.type === "secret") {
-        throw new TypeError(`${tag(key)} instances for asymmetric algorithms must not be of type "secret"`);
-      }
-      if (usage === "sign" && key.type === "public") {
-        throw new TypeError(`${tag(key)} instances for asymmetric algorithm signing must be of type "private"`);
-      }
-      if (usage === "decrypt" && key.type === "public") {
-        throw new TypeError(`${tag(key)} instances for asymmetric algorithm decryption must be of type "private"`);
-      }
-      if (key.algorithm && usage === "verify" && key.type === "private") {
-        throw new TypeError(`${tag(key)} instances for asymmetric algorithm verifying must be of type "public"`);
-      }
-      if (key.algorithm && usage === "encrypt" && key.type === "private") {
-        throw new TypeError(`${tag(key)} instances for asymmetric algorithm encryption must be of type "public"`);
-      }
-    };
-    check_key_type_default = checkKeyType.bind(void 0, false);
-    checkKeyTypeWithJwk = checkKeyType.bind(void 0, true);
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_crit.js
-function validateCrit(Err, recognizedDefault, recognizedOption, protectedHeader, joseHeader) {
-  if (joseHeader.crit !== void 0 && protectedHeader?.crit === void 0) {
-    throw new Err('"crit" (Critical) Header Parameter MUST be integrity protected');
-  }
-  if (!protectedHeader || protectedHeader.crit === void 0) {
-    return /* @__PURE__ */ new Set();
-  }
-  if (!Array.isArray(protectedHeader.crit) || protectedHeader.crit.length === 0 || protectedHeader.crit.some((input) => typeof input !== "string" || input.length === 0)) {
-    throw new Err('"crit" (Critical) Header Parameter MUST be an array of non-empty strings when present');
-  }
-  let recognized;
-  if (recognizedOption !== void 0) {
-    recognized = new Map([...Object.entries(recognizedOption), ...recognizedDefault.entries()]);
-  } else {
-    recognized = recognizedDefault;
-  }
-  for (const parameter of protectedHeader.crit) {
-    if (!recognized.has(parameter)) {
-      throw new JOSENotSupported(`Extension Header Parameter "${parameter}" is not recognized`);
-    }
-    if (joseHeader[parameter] === void 0) {
-      throw new Err(`Extension Header Parameter "${parameter}" is missing`);
-    }
-    if (recognized.get(parameter) && protectedHeader[parameter] === void 0) {
-      throw new Err(`Extension Header Parameter "${parameter}" MUST be integrity protected`);
-    }
-  }
-  return new Set(protectedHeader.crit);
-}
-var validate_crit_default;
-var init_validate_crit = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_crit.js"() {
-    "use strict";
-    init_errors();
-    validate_crit_default = validateCrit;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_algorithms.js
-var validateAlgorithms, validate_algorithms_default;
-var init_validate_algorithms = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_algorithms.js"() {
-    "use strict";
-    validateAlgorithms = (option, algorithms) => {
-      if (algorithms !== void 0 && (!Array.isArray(algorithms) || algorithms.some((s) => typeof s !== "string"))) {
-        throw new TypeError(`"${option}" option must be an array of strings`);
-      }
-      if (!algorithms) {
-        return void 0;
-      }
-      return new Set(algorithms);
-    };
-    validate_algorithms_default = validateAlgorithms;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/dsa_digest.js
-function dsaDigest(alg) {
-  switch (alg) {
-    case "PS256":
-    case "RS256":
-    case "ES256":
-    case "ES256K":
-      return "sha256";
-    case "PS384":
-    case "RS384":
-    case "ES384":
-      return "sha384";
-    case "PS512":
-    case "RS512":
-    case "ES512":
-      return "sha512";
-    case "Ed25519":
-    case "EdDSA":
-      return void 0;
-    default:
-      throw new JOSENotSupported(`alg ${alg} is not supported either by JOSE or your javascript runtime`);
-  }
-}
-var init_dsa_digest = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/dsa_digest.js"() {
-    "use strict";
-    init_errors();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/node_key.js
-import { constants, KeyObject as KeyObject3 } from "node:crypto";
-function keyForCrypto(alg, key) {
-  let asymmetricKeyType;
-  let asymmetricKeyDetails;
-  let isJWK2;
-  if (key instanceof KeyObject3) {
-    asymmetricKeyType = key.asymmetricKeyType;
-    asymmetricKeyDetails = key.asymmetricKeyDetails;
-  } else {
-    isJWK2 = true;
-    switch (key.kty) {
-      case "RSA":
-        asymmetricKeyType = "rsa";
-        break;
-      case "EC":
-        asymmetricKeyType = "ec";
-        break;
-      case "OKP": {
-        if (key.crv === "Ed25519") {
-          asymmetricKeyType = "ed25519";
-          break;
-        }
-        if (key.crv === "Ed448") {
-          asymmetricKeyType = "ed448";
-          break;
-        }
-        throw new TypeError("Invalid key for this operation, its crv must be Ed25519 or Ed448");
-      }
-      default:
-        throw new TypeError("Invalid key for this operation, its kty must be RSA, OKP, or EC");
-    }
-  }
-  let options;
-  switch (alg) {
-    case "Ed25519":
-      if (asymmetricKeyType !== "ed25519") {
-        throw new TypeError(`Invalid key for this operation, its asymmetricKeyType must be ed25519`);
-      }
-      break;
-    case "EdDSA":
-      if (!["ed25519", "ed448"].includes(asymmetricKeyType)) {
-        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be ed25519 or ed448");
-      }
-      break;
-    case "RS256":
-    case "RS384":
-    case "RS512":
-      if (asymmetricKeyType !== "rsa") {
-        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be rsa");
-      }
-      check_key_length_default(key, alg);
-      break;
-    case "PS256":
-    case "PS384":
-    case "PS512":
-      if (asymmetricKeyType === "rsa-pss") {
-        const { hashAlgorithm, mgf1HashAlgorithm, saltLength } = asymmetricKeyDetails;
-        const length = parseInt(alg.slice(-3), 10);
-        if (hashAlgorithm !== void 0 && (hashAlgorithm !== `sha${length}` || mgf1HashAlgorithm !== hashAlgorithm)) {
-          throw new TypeError(`Invalid key for this operation, its RSA-PSS parameters do not meet the requirements of "alg" ${alg}`);
-        }
-        if (saltLength !== void 0 && saltLength > length >> 3) {
-          throw new TypeError(`Invalid key for this operation, its RSA-PSS parameter saltLength does not meet the requirements of "alg" ${alg}`);
-        }
-      } else if (asymmetricKeyType !== "rsa") {
-        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be rsa or rsa-pss");
-      }
-      check_key_length_default(key, alg);
-      options = {
-        padding: constants.RSA_PKCS1_PSS_PADDING,
-        saltLength: constants.RSA_PSS_SALTLEN_DIGEST
-      };
-      break;
-    case "ES256":
-    case "ES256K":
-    case "ES384":
-    case "ES512": {
-      if (asymmetricKeyType !== "ec") {
-        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be ec");
-      }
-      const actual = get_named_curve_default(key);
-      const expected = ecCurveAlgMap.get(alg);
-      if (actual !== expected) {
-        throw new TypeError(`Invalid key curve for the algorithm, its curve must be ${expected}, got ${actual}`);
-      }
-      options = { dsaEncoding: "ieee-p1363" };
-      break;
-    }
-    default:
-      throw new JOSENotSupported(`alg ${alg} is not supported either by JOSE or your javascript runtime`);
-  }
-  if (isJWK2) {
-    return { format: "jwk", key, ...options };
-  }
-  return options ? { ...options, key } : key;
-}
-var ecCurveAlgMap;
-var init_node_key = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/node_key.js"() {
-    "use strict";
-    init_get_named_curve();
-    init_errors();
-    init_check_key_length();
-    ecCurveAlgMap = /* @__PURE__ */ new Map([
-      ["ES256", "P-256"],
-      ["ES256K", "secp256k1"],
-      ["ES384", "P-384"],
-      ["ES512", "P-521"]
-    ]);
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/hmac_digest.js
-function hmacDigest(alg) {
-  switch (alg) {
-    case "HS256":
-      return "sha256";
-    case "HS384":
-      return "sha384";
-    case "HS512":
-      return "sha512";
-    default:
-      throw new JOSENotSupported(`alg ${alg} is not supported either by JOSE or your javascript runtime`);
-  }
-}
-var init_hmac_digest = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/hmac_digest.js"() {
-    "use strict";
-    init_errors();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_sign_verify_key.js
-import { KeyObject as KeyObject4, createSecretKey } from "node:crypto";
-function getSignVerifyKey(alg, key, usage) {
-  if (key instanceof Uint8Array) {
-    if (!alg.startsWith("HS")) {
-      throw new TypeError(invalid_key_input_default(key, ...types3));
-    }
-    return createSecretKey(key);
-  }
-  if (key instanceof KeyObject4) {
-    return key;
-  }
-  if (isCryptoKey(key)) {
-    checkSigCryptoKey(key, alg, usage);
-    return KeyObject4.from(key);
-  }
-  if (isJWK(key)) {
-    if (alg.startsWith("HS")) {
-      return createSecretKey(Buffer.from(key.k, "base64url"));
-    }
-    return key;
-  }
-  throw new TypeError(invalid_key_input_default(key, ...types3, "Uint8Array", "JSON Web Key"));
-}
-var init_get_sign_verify_key = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_sign_verify_key.js"() {
-    "use strict";
-    init_webcrypto();
-    init_crypto_key();
-    init_invalid_key_input();
-    init_is_key_like();
-    init_is_jwk();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/sign.js
-import * as crypto3 from "node:crypto";
-import { promisify } from "node:util";
-var oneShotSign, sign2, sign_default;
-var init_sign = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/sign.js"() {
-    "use strict";
-    init_dsa_digest();
-    init_hmac_digest();
-    init_node_key();
-    init_get_sign_verify_key();
-    oneShotSign = promisify(crypto3.sign);
-    sign2 = async (alg, key, data) => {
-      const k = getSignVerifyKey(alg, key, "sign");
-      if (alg.startsWith("HS")) {
-        const hmac = crypto3.createHmac(hmacDigest(alg), k);
-        hmac.update(data);
-        return hmac.digest();
-      }
-      return oneShotSign(dsaDigest(alg), data, keyForCrypto(alg, k));
-    };
-    sign_default = sign2;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/verify.js
-import * as crypto4 from "node:crypto";
-import { promisify as promisify2 } from "node:util";
-var oneShotVerify, verify2, verify_default;
-var init_verify = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/verify.js"() {
-    "use strict";
-    init_dsa_digest();
-    init_node_key();
-    init_sign();
-    init_get_sign_verify_key();
-    oneShotVerify = promisify2(crypto4.verify);
-    verify2 = async (alg, key, signature, data) => {
-      const k = getSignVerifyKey(alg, key, "verify");
-      if (alg.startsWith("HS")) {
-        const expected = await sign_default(alg, k, data);
-        const actual = signature;
-        try {
-          return crypto4.timingSafeEqual(actual, expected);
-        } catch {
-          return false;
-        }
-      }
-      const algorithm = dsaDigest(alg);
-      const keyInput = keyForCrypto(alg, k);
-      try {
-        return await oneShotVerify(algorithm, data, keyInput, signature);
-      } catch {
-        return false;
-      }
-    };
-    verify_default = verify2;
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/verify.js
-async function flattenedVerify(jws, key, options) {
-  if (!isObject(jws)) {
-    throw new JWSInvalid("Flattened JWS must be an object");
-  }
-  if (jws.protected === void 0 && jws.header === void 0) {
-    throw new JWSInvalid('Flattened JWS must have either of the "protected" or "header" members');
-  }
-  if (jws.protected !== void 0 && typeof jws.protected !== "string") {
-    throw new JWSInvalid("JWS Protected Header incorrect type");
-  }
-  if (jws.payload === void 0) {
-    throw new JWSInvalid("JWS Payload missing");
-  }
-  if (typeof jws.signature !== "string") {
-    throw new JWSInvalid("JWS Signature missing or incorrect type");
-  }
-  if (jws.header !== void 0 && !isObject(jws.header)) {
-    throw new JWSInvalid("JWS Unprotected Header incorrect type");
-  }
-  let parsedProt = {};
-  if (jws.protected) {
-    try {
-      const protectedHeader = decode(jws.protected);
-      parsedProt = JSON.parse(decoder.decode(protectedHeader));
-    } catch {
-      throw new JWSInvalid("JWS Protected Header is invalid");
-    }
-  }
-  if (!is_disjoint_default(parsedProt, jws.header)) {
-    throw new JWSInvalid("JWS Protected and JWS Unprotected Header Parameter names must be disjoint");
-  }
-  const joseHeader = {
-    ...parsedProt,
-    ...jws.header
-  };
-  const extensions = validate_crit_default(JWSInvalid, /* @__PURE__ */ new Map([["b64", true]]), options?.crit, parsedProt, joseHeader);
-  let b64 = true;
-  if (extensions.has("b64")) {
-    b64 = parsedProt.b64;
-    if (typeof b64 !== "boolean") {
-      throw new JWSInvalid('The "b64" (base64url-encode payload) Header Parameter must be a boolean');
-    }
-  }
-  const { alg } = joseHeader;
-  if (typeof alg !== "string" || !alg) {
-    throw new JWSInvalid('JWS "alg" (Algorithm) Header Parameter missing or invalid');
-  }
-  const algorithms = options && validate_algorithms_default("algorithms", options.algorithms);
-  if (algorithms && !algorithms.has(alg)) {
-    throw new JOSEAlgNotAllowed('"alg" (Algorithm) Header Parameter value not allowed');
-  }
-  if (b64) {
-    if (typeof jws.payload !== "string") {
-      throw new JWSInvalid("JWS Payload must be a string");
-    }
-  } else if (typeof jws.payload !== "string" && !(jws.payload instanceof Uint8Array)) {
-    throw new JWSInvalid("JWS Payload must be a string or an Uint8Array instance");
-  }
-  let resolvedKey = false;
-  if (typeof key === "function") {
-    key = await key(parsedProt, jws);
-    resolvedKey = true;
-    checkKeyTypeWithJwk(alg, key, "verify");
-    if (isJWK(key)) {
-      key = await importJWK(key, alg);
-    }
-  } else {
-    checkKeyTypeWithJwk(alg, key, "verify");
-  }
-  const data = concat(encoder.encode(jws.protected ?? ""), encoder.encode("."), typeof jws.payload === "string" ? encoder.encode(jws.payload) : jws.payload);
-  let signature;
-  try {
-    signature = decode(jws.signature);
-  } catch {
-    throw new JWSInvalid("Failed to base64url decode the signature");
-  }
-  const verified = await verify_default(alg, key, signature, data);
-  if (!verified) {
-    throw new JWSSignatureVerificationFailed();
-  }
-  let payload;
-  if (b64) {
-    try {
-      payload = decode(jws.payload);
-    } catch {
-      throw new JWSInvalid("Failed to base64url decode the payload");
-    }
-  } else if (typeof jws.payload === "string") {
-    payload = encoder.encode(jws.payload);
-  } else {
-    payload = jws.payload;
-  }
-  const result = { payload };
-  if (jws.protected !== void 0) {
-    result.protectedHeader = parsedProt;
-  }
-  if (jws.header !== void 0) {
-    result.unprotectedHeader = jws.header;
-  }
-  if (resolvedKey) {
-    return { ...result, key };
-  }
-  return result;
-}
-var init_verify2 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/verify.js"() {
-    "use strict";
-    init_base64url();
-    init_verify();
-    init_errors();
-    init_buffer_utils();
-    init_is_disjoint();
-    init_is_object();
-    init_check_key_type();
-    init_validate_crit();
-    init_validate_algorithms();
-    init_is_jwk();
-    init_import();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/verify.js
-async function compactVerify(jws, key, options) {
-  if (jws instanceof Uint8Array) {
-    jws = decoder.decode(jws);
-  }
-  if (typeof jws !== "string") {
-    throw new JWSInvalid("Compact JWS must be a string or Uint8Array");
-  }
-  const { 0: protectedHeader, 1: payload, 2: signature, length } = jws.split(".");
-  if (length !== 3) {
-    throw new JWSInvalid("Invalid Compact JWS");
-  }
-  const verified = await flattenedVerify({ payload, protected: protectedHeader, signature }, key, options);
-  const result = { payload: verified.payload, protectedHeader: verified.protectedHeader };
-  if (typeof key === "function") {
-    return { ...result, key: verified.key };
-  }
-  return result;
-}
-var init_verify3 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/verify.js"() {
-    "use strict";
-    init_verify2();
-    init_errors();
-    init_buffer_utils();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/epoch.js
-var epoch_default;
-var init_epoch = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/epoch.js"() {
-    "use strict";
-    epoch_default = (date) => Math.floor(date.getTime() / 1e3);
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/secs.js
-var minute, hour, day, week, year, REGEX, secs_default;
-var init_secs = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/secs.js"() {
-    "use strict";
-    minute = 60;
-    hour = minute * 60;
-    day = hour * 24;
-    week = day * 7;
-    year = day * 365.25;
-    REGEX = /^(\+|\-)? ?(\d+|\d+\.\d+) ?(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)(?: (ago|from now))?$/i;
-    secs_default = (str) => {
-      const matched = REGEX.exec(str);
-      if (!matched || matched[4] && matched[1]) {
-        throw new TypeError("Invalid time period format");
-      }
-      const value = parseFloat(matched[2]);
-      const unit = matched[3].toLowerCase();
-      let numericDate;
-      switch (unit) {
-        case "sec":
-        case "secs":
-        case "second":
-        case "seconds":
-        case "s":
-          numericDate = Math.round(value);
-          break;
-        case "minute":
-        case "minutes":
-        case "min":
-        case "mins":
-        case "m":
-          numericDate = Math.round(value * minute);
-          break;
-        case "hour":
-        case "hours":
-        case "hr":
-        case "hrs":
-        case "h":
-          numericDate = Math.round(value * hour);
-          break;
-        case "day":
-        case "days":
-        case "d":
-          numericDate = Math.round(value * day);
-          break;
-        case "week":
-        case "weeks":
-        case "w":
-          numericDate = Math.round(value * week);
-          break;
-        default:
-          numericDate = Math.round(value * year);
-          break;
-      }
-      if (matched[1] === "-" || matched[4] === "ago") {
-        return -numericDate;
-      }
-      return numericDate;
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/jwt_claims_set.js
-var normalizeTyp, checkAudiencePresence, jwt_claims_set_default;
-var init_jwt_claims_set = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/jwt_claims_set.js"() {
-    "use strict";
-    init_errors();
-    init_buffer_utils();
-    init_epoch();
-    init_secs();
-    init_is_object();
-    normalizeTyp = (value) => value.toLowerCase().replace(/^application\//, "");
-    checkAudiencePresence = (audPayload, audOption) => {
-      if (typeof audPayload === "string") {
-        return audOption.includes(audPayload);
-      }
-      if (Array.isArray(audPayload)) {
-        return audOption.some(Set.prototype.has.bind(new Set(audPayload)));
-      }
-      return false;
-    };
-    jwt_claims_set_default = (protectedHeader, encodedPayload, options = {}) => {
-      let payload;
-      try {
-        payload = JSON.parse(decoder.decode(encodedPayload));
-      } catch {
-      }
-      if (!isObject(payload)) {
-        throw new JWTInvalid("JWT Claims Set must be a top-level JSON object");
-      }
-      const { typ } = options;
-      if (typ && (typeof protectedHeader.typ !== "string" || normalizeTyp(protectedHeader.typ) !== normalizeTyp(typ))) {
-        throw new JWTClaimValidationFailed('unexpected "typ" JWT header value', payload, "typ", "check_failed");
-      }
-      const { requiredClaims = [], issuer, subject, audience, maxTokenAge } = options;
-      const presenceCheck = [...requiredClaims];
-      if (maxTokenAge !== void 0)
-        presenceCheck.push("iat");
-      if (audience !== void 0)
-        presenceCheck.push("aud");
-      if (subject !== void 0)
-        presenceCheck.push("sub");
-      if (issuer !== void 0)
-        presenceCheck.push("iss");
-      for (const claim of new Set(presenceCheck.reverse())) {
-        if (!(claim in payload)) {
-          throw new JWTClaimValidationFailed(`missing required "${claim}" claim`, payload, claim, "missing");
-        }
-      }
-      if (issuer && !(Array.isArray(issuer) ? issuer : [issuer]).includes(payload.iss)) {
-        throw new JWTClaimValidationFailed('unexpected "iss" claim value', payload, "iss", "check_failed");
-      }
-      if (subject && payload.sub !== subject) {
-        throw new JWTClaimValidationFailed('unexpected "sub" claim value', payload, "sub", "check_failed");
-      }
-      if (audience && !checkAudiencePresence(payload.aud, typeof audience === "string" ? [audience] : audience)) {
-        throw new JWTClaimValidationFailed('unexpected "aud" claim value', payload, "aud", "check_failed");
-      }
-      let tolerance;
-      switch (typeof options.clockTolerance) {
-        case "string":
-          tolerance = secs_default(options.clockTolerance);
-          break;
-        case "number":
-          tolerance = options.clockTolerance;
-          break;
-        case "undefined":
-          tolerance = 0;
-          break;
-        default:
-          throw new TypeError("Invalid clockTolerance option type");
-      }
-      const { currentDate } = options;
-      const now = epoch_default(currentDate || /* @__PURE__ */ new Date());
-      if ((payload.iat !== void 0 || maxTokenAge) && typeof payload.iat !== "number") {
-        throw new JWTClaimValidationFailed('"iat" claim must be a number', payload, "iat", "invalid");
-      }
-      if (payload.nbf !== void 0) {
-        if (typeof payload.nbf !== "number") {
-          throw new JWTClaimValidationFailed('"nbf" claim must be a number', payload, "nbf", "invalid");
-        }
-        if (payload.nbf > now + tolerance) {
-          throw new JWTClaimValidationFailed('"nbf" claim timestamp check failed', payload, "nbf", "check_failed");
-        }
-      }
-      if (payload.exp !== void 0) {
-        if (typeof payload.exp !== "number") {
-          throw new JWTClaimValidationFailed('"exp" claim must be a number', payload, "exp", "invalid");
-        }
-        if (payload.exp <= now - tolerance) {
-          throw new JWTExpired('"exp" claim timestamp check failed', payload, "exp", "check_failed");
-        }
-      }
-      if (maxTokenAge) {
-        const age = now - payload.iat;
-        const max = typeof maxTokenAge === "number" ? maxTokenAge : secs_default(maxTokenAge);
-        if (age - tolerance > max) {
-          throw new JWTExpired('"iat" claim timestamp check failed (too far in the past)', payload, "iat", "check_failed");
-        }
-        if (age < 0 - tolerance) {
-          throw new JWTClaimValidationFailed('"iat" claim timestamp check failed (it should be in the past)', payload, "iat", "check_failed");
-        }
-      }
-      return payload;
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/verify.js
-async function jwtVerify(jwt, key, options) {
-  const verified = await compactVerify(jwt, key, options);
-  if (verified.protectedHeader.crit?.includes("b64") && verified.protectedHeader.b64 === false) {
-    throw new JWTInvalid("JWTs MUST NOT use unencoded payload");
-  }
-  const payload = jwt_claims_set_default(verified.protectedHeader, verified.payload, options);
-  const result = { payload, protectedHeader: verified.protectedHeader };
-  if (typeof key === "function") {
-    return { ...result, key: verified.key };
-  }
-  return result;
-}
-var init_verify4 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/verify.js"() {
-    "use strict";
-    init_verify3();
-    init_jwt_claims_set();
-    init_errors();
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/sign.js
-var FlattenedSign;
-var init_sign2 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/sign.js"() {
-    "use strict";
-    init_base64url();
-    init_sign();
-    init_is_disjoint();
-    init_errors();
-    init_buffer_utils();
-    init_check_key_type();
-    init_validate_crit();
-    FlattenedSign = class {
-      _payload;
-      _protectedHeader;
-      _unprotectedHeader;
-      constructor(payload) {
-        if (!(payload instanceof Uint8Array)) {
-          throw new TypeError("payload must be an instance of Uint8Array");
-        }
-        this._payload = payload;
-      }
-      setProtectedHeader(protectedHeader) {
-        if (this._protectedHeader) {
-          throw new TypeError("setProtectedHeader can only be called once");
-        }
-        this._protectedHeader = protectedHeader;
-        return this;
-      }
-      setUnprotectedHeader(unprotectedHeader) {
-        if (this._unprotectedHeader) {
-          throw new TypeError("setUnprotectedHeader can only be called once");
-        }
-        this._unprotectedHeader = unprotectedHeader;
-        return this;
-      }
-      async sign(key, options) {
-        if (!this._protectedHeader && !this._unprotectedHeader) {
-          throw new JWSInvalid("either setProtectedHeader or setUnprotectedHeader must be called before #sign()");
-        }
-        if (!is_disjoint_default(this._protectedHeader, this._unprotectedHeader)) {
-          throw new JWSInvalid("JWS Protected and JWS Unprotected Header Parameter names must be disjoint");
-        }
-        const joseHeader = {
-          ...this._protectedHeader,
-          ...this._unprotectedHeader
-        };
-        const extensions = validate_crit_default(JWSInvalid, /* @__PURE__ */ new Map([["b64", true]]), options?.crit, this._protectedHeader, joseHeader);
-        let b64 = true;
-        if (extensions.has("b64")) {
-          b64 = this._protectedHeader.b64;
-          if (typeof b64 !== "boolean") {
-            throw new JWSInvalid('The "b64" (base64url-encode payload) Header Parameter must be a boolean');
-          }
-        }
-        const { alg } = joseHeader;
-        if (typeof alg !== "string" || !alg) {
-          throw new JWSInvalid('JWS "alg" (Algorithm) Header Parameter missing or invalid');
-        }
-        checkKeyTypeWithJwk(alg, key, "sign");
-        let payload = this._payload;
-        if (b64) {
-          payload = encoder.encode(encode(payload));
-        }
-        let protectedHeader;
-        if (this._protectedHeader) {
-          protectedHeader = encoder.encode(encode(JSON.stringify(this._protectedHeader)));
-        } else {
-          protectedHeader = encoder.encode("");
-        }
-        const data = concat(protectedHeader, encoder.encode("."), payload);
-        const signature = await sign_default(alg, key, data);
-        const jws = {
-          signature: encode(signature),
-          payload: ""
-        };
-        if (b64) {
-          jws.payload = decoder.decode(payload);
-        }
-        if (this._unprotectedHeader) {
-          jws.header = this._unprotectedHeader;
-        }
-        if (this._protectedHeader) {
-          jws.protected = decoder.decode(protectedHeader);
-        }
-        return jws;
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/sign.js
-var CompactSign;
-var init_sign3 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/sign.js"() {
-    "use strict";
-    init_sign2();
-    CompactSign = class {
-      _flattened;
-      constructor(payload) {
-        this._flattened = new FlattenedSign(payload);
-      }
-      setProtectedHeader(protectedHeader) {
-        this._flattened.setProtectedHeader(protectedHeader);
-        return this;
-      }
-      async sign(key, options) {
-        const jws = await this._flattened.sign(key, options);
-        if (jws.payload === void 0) {
-          throw new TypeError("use the flattened module for creating JWS with b64: false");
-        }
-        return `${jws.protected}.${jws.payload}.${jws.signature}`;
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/produce.js
-function validateInput(label, input) {
-  if (!Number.isFinite(input)) {
-    throw new TypeError(`Invalid ${label} input`);
-  }
-  return input;
-}
-var ProduceJWT;
-var init_produce = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/produce.js"() {
-    "use strict";
-    init_epoch();
-    init_is_object();
-    init_secs();
-    ProduceJWT = class {
-      _payload;
-      constructor(payload = {}) {
-        if (!isObject(payload)) {
-          throw new TypeError("JWT Claims Set MUST be an object");
-        }
-        this._payload = payload;
-      }
-      setIssuer(issuer) {
-        this._payload = { ...this._payload, iss: issuer };
-        return this;
-      }
-      setSubject(subject) {
-        this._payload = { ...this._payload, sub: subject };
-        return this;
-      }
-      setAudience(audience) {
-        this._payload = { ...this._payload, aud: audience };
-        return this;
-      }
-      setJti(jwtId) {
-        this._payload = { ...this._payload, jti: jwtId };
-        return this;
-      }
-      setNotBefore(input) {
-        if (typeof input === "number") {
-          this._payload = { ...this._payload, nbf: validateInput("setNotBefore", input) };
-        } else if (input instanceof Date) {
-          this._payload = { ...this._payload, nbf: validateInput("setNotBefore", epoch_default(input)) };
-        } else {
-          this._payload = { ...this._payload, nbf: epoch_default(/* @__PURE__ */ new Date()) + secs_default(input) };
-        }
-        return this;
-      }
-      setExpirationTime(input) {
-        if (typeof input === "number") {
-          this._payload = { ...this._payload, exp: validateInput("setExpirationTime", input) };
-        } else if (input instanceof Date) {
-          this._payload = { ...this._payload, exp: validateInput("setExpirationTime", epoch_default(input)) };
-        } else {
-          this._payload = { ...this._payload, exp: epoch_default(/* @__PURE__ */ new Date()) + secs_default(input) };
-        }
-        return this;
-      }
-      setIssuedAt(input) {
-        if (typeof input === "undefined") {
-          this._payload = { ...this._payload, iat: epoch_default(/* @__PURE__ */ new Date()) };
-        } else if (input instanceof Date) {
-          this._payload = { ...this._payload, iat: validateInput("setIssuedAt", epoch_default(input)) };
-        } else if (typeof input === "string") {
-          this._payload = {
-            ...this._payload,
-            iat: validateInput("setIssuedAt", epoch_default(/* @__PURE__ */ new Date()) + secs_default(input))
-          };
-        } else {
-          this._payload = { ...this._payload, iat: validateInput("setIssuedAt", input) };
-        }
-        return this;
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/sign.js
-var SignJWT;
-var init_sign4 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/sign.js"() {
-    "use strict";
-    init_sign3();
-    init_errors();
-    init_buffer_utils();
-    init_produce();
-    SignJWT = class extends ProduceJWT {
-      _protectedHeader;
-      setProtectedHeader(protectedHeader) {
-        this._protectedHeader = protectedHeader;
-        return this;
-      }
-      async sign(key, options) {
-        const sig = new CompactSign(encoder.encode(JSON.stringify(this._payload)));
-        sig.setProtectedHeader(this._protectedHeader);
-        if (Array.isArray(this._protectedHeader?.crit) && this._protectedHeader.crit.includes("b64") && this._protectedHeader.b64 === false) {
-          throw new JWTInvalid("JWTs MUST NOT use unencoded payload");
-        }
-        return sig.sign(key, options);
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/base64url.js
-var init_base64url2 = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/base64url.js"() {
-    "use strict";
-  }
-});
-
-// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/index.js
-var init_esm = __esm({
-  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/index.js"() {
-    "use strict";
-    init_verify4();
-    init_sign4();
-    init_errors();
-    init_base64url2();
-  }
-});
-
-// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/grants.js
-import { TrackSource } from "@livekit/protocol";
-function trackSourceToString(source) {
-  switch (source) {
-    case TrackSource.CAMERA:
-      return "camera";
-    case TrackSource.MICROPHONE:
-      return "microphone";
-    case TrackSource.SCREEN_SHARE:
-      return "screen_share";
-    case TrackSource.SCREEN_SHARE_AUDIO:
-      return "screen_share_audio";
-    default:
-      throw new TypeError(`Cannot convert TrackSource ${source} to string`);
-  }
-}
-function claimsToJwtPayload(grant) {
-  var _a;
-  const claim = { ...grant };
-  if (Array.isArray((_a = claim.video) == null ? void 0 : _a.canPublishSources)) {
-    claim.video.canPublishSources = claim.video.canPublishSources.map(trackSourceToString);
-  }
-  return claim;
-}
-var init_grants = __esm({
-  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/grants.js"() {
-    "use strict";
-  }
-});
-
-// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AccessToken.js
-var defaultTTL, defaultClockToleranceSeconds, AccessToken, TokenVerifier;
-var init_AccessToken = __esm({
-  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AccessToken.js"() {
-    "use strict";
-    init_esm();
-    init_grants();
-    defaultTTL = `6h`;
-    defaultClockToleranceSeconds = 10;
-    AccessToken = class {
-      /**
-       * Creates a new AccessToken
-       * @param apiKey - API Key, can be set in env LIVEKIT_API_KEY
-       * @param apiSecret - Secret, can be set in env LIVEKIT_API_SECRET
-       */
-      constructor(apiKey, apiSecret, options) {
-        if (!apiKey) {
-          apiKey = process.env.LIVEKIT_API_KEY;
-        }
-        if (!apiSecret) {
-          apiSecret = process.env.LIVEKIT_API_SECRET;
-        }
-        if (!apiKey || !apiSecret) {
-          throw Error("api-key and api-secret must be set");
-        } else if (typeof document !== "undefined") {
-          console.error(
-            "You should not include your API secret in your web client bundle.\n\nYour web client should request a token from your backend server which should then use the API secret to generate a token. See https://docs.livekit.io/client/connect/"
-          );
-        }
-        this.apiKey = apiKey;
-        this.apiSecret = apiSecret;
-        this.grants = {};
-        this.identity = options == null ? void 0 : options.identity;
-        this.ttl = (options == null ? void 0 : options.ttl) || defaultTTL;
-        if (typeof this.ttl === "number") {
-          this.ttl = `${this.ttl}s`;
-        }
-        if (options == null ? void 0 : options.metadata) {
-          this.metadata = options.metadata;
-        }
-        if (options == null ? void 0 : options.attributes) {
-          this.attributes = options.attributes;
-        }
-        if (options == null ? void 0 : options.name) {
-          this.name = options.name;
-        }
-      }
-      /**
-       * Adds a video grant to this token.
-       * @param grant -
-       */
-      addGrant(grant) {
-        this.grants.video = { ...this.grants.video ?? {}, ...grant };
-      }
-      /**
-       * Adds an inference grant to this token.
-       * @param grant -
-       */
-      addInferenceGrant(grant) {
-        this.grants.inference = { ...this.grants.inference ?? {}, ...grant };
-      }
-      /**
-       * Adds a SIP grant to this token.
-       * @param grant -
-       */
-      addSIPGrant(grant) {
-        this.grants.sip = { ...this.grants.sip ?? {}, ...grant };
-      }
-      /**
-       * Adds an observability grant to this token.
-       * @param grant -
-       */
-      addObservabilityGrant(grant) {
-        this.grants.observability = { ...this.grants.observability ?? {}, ...grant };
-      }
-      get name() {
-        return this.grants.name;
-      }
-      set name(name) {
-        this.grants.name = name;
-      }
-      get metadata() {
-        return this.grants.metadata;
-      }
-      /**
-       * Set metadata to be passed to the Participant, used only when joining the room
-       */
-      set metadata(md) {
-        this.grants.metadata = md;
-      }
-      get attributes() {
-        return this.grants.attributes;
-      }
-      set attributes(attrs) {
-        this.grants.attributes = attrs;
-      }
-      get kind() {
-        return this.grants.kind;
-      }
-      set kind(kind) {
-        this.grants.kind = kind;
-      }
-      get sha256() {
-        return this.grants.sha256;
-      }
-      set sha256(sha) {
-        this.grants.sha256 = sha;
-      }
-      get roomPreset() {
-        return this.grants.roomPreset;
-      }
-      set roomPreset(preset) {
-        this.grants.roomPreset = preset;
-      }
-      get roomConfig() {
-        return this.grants.roomConfig;
-      }
-      set roomConfig(config2) {
-        this.grants.roomConfig = config2;
-      }
-      /**
-       * @returns JWT encoded token
-       */
-      async toJwt() {
-        var _a;
-        const secret = new TextEncoder().encode(this.apiSecret);
-        const jwt = new SignJWT(claimsToJwtPayload(this.grants)).setProtectedHeader({ alg: "HS256" }).setIssuer(this.apiKey).setExpirationTime(this.ttl).setNotBefore(/* @__PURE__ */ new Date());
-        if (this.identity) {
-          jwt.setSubject(this.identity);
-        } else if ((_a = this.grants.video) == null ? void 0 : _a.roomJoin) {
-          throw Error("identity is required for join but not set");
-        }
-        return jwt.sign(secret);
-      }
-    };
-    TokenVerifier = class {
-      constructor(apiKey, apiSecret) {
-        this.apiKey = apiKey;
-        this.apiSecret = apiSecret;
-      }
-      async verify(token, clockTolerance = defaultClockToleranceSeconds) {
-        const secret = new TextEncoder().encode(this.apiSecret);
-        const { payload } = await jwtVerify(token, secret, {
-          issuer: this.apiKey,
-          clockTolerance
-        });
-        if (!payload) {
-          throw Error("invalid token");
-        }
-        return payload;
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/ServiceBase.js
-var ServiceBase;
-var init_ServiceBase = __esm({
-  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/ServiceBase.js"() {
-    "use strict";
-    init_AccessToken();
-    ServiceBase = class {
-      /**
-       * @param apiKey - API Key.
-       * @param secret - API Secret.
-       * @param ttl - token TTL
-       */
-      constructor(apiKey, secret, ttl) {
-        this.apiKey = apiKey;
-        this.secret = secret;
-        this.ttl = ttl || "10m";
-      }
-      async authHeader(grant, sip) {
-        const at = new AccessToken(this.apiKey, this.secret, { ttl: this.ttl });
-        if (grant) {
-          at.addGrant(grant);
-        }
-        if (sip) {
-          at.addSIPGrant(sip);
-        }
-        return {
-          Authorization: `Bearer ${await at.toJwt()}`
-        };
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/map-obj@5.0.0/node_modules/map-obj/index.js
-function mapObject(object, mapper, options) {
-  if (!isObject2(object)) {
-    throw new TypeError(`Expected an object, got \`${object}\` (${typeof object})`);
-  }
-  return _mapObject(object, mapper, options);
-}
-var isObject2, isObjectCustom, mapObjectSkip, _mapObject;
-var init_map_obj = __esm({
-  "node_modules/.pnpm/map-obj@5.0.0/node_modules/map-obj/index.js"() {
-    "use strict";
-    isObject2 = (value) => typeof value === "object" && value !== null;
-    isObjectCustom = (value) => isObject2(value) && !(value instanceof RegExp) && !(value instanceof Error) && !(value instanceof Date);
-    mapObjectSkip = /* @__PURE__ */ Symbol("mapObjectSkip");
-    _mapObject = (object, mapper, options, isSeen = /* @__PURE__ */ new WeakMap()) => {
-      options = {
-        deep: false,
-        target: {},
-        ...options
-      };
-      if (isSeen.has(object)) {
-        return isSeen.get(object);
-      }
-      isSeen.set(object, options.target);
-      const { target } = options;
-      delete options.target;
-      const mapArray = (array) => array.map((element) => isObjectCustom(element) ? _mapObject(element, mapper, options, isSeen) : element);
-      if (Array.isArray(object)) {
-        return mapArray(object);
-      }
-      for (const [key, value] of Object.entries(object)) {
-        const mapResult = mapper(key, value, object);
-        if (mapResult === mapObjectSkip) {
-          continue;
-        }
-        let [newKey, newValue, { shouldRecurse = true } = {}] = mapResult;
-        if (newKey === "__proto__") {
-          continue;
-        }
-        if (options.deep && shouldRecurse && isObjectCustom(newValue)) {
-          newValue = Array.isArray(newValue) ? mapArray(newValue) : _mapObject(newValue, mapper, options, isSeen);
-        }
-        target[newKey] = newValue;
-      }
-      return target;
-    };
-  }
-});
-
-// node_modules/.pnpm/camelcase@8.0.0/node_modules/camelcase/index.js
-function camelCase(input, options) {
-  if (!(typeof input === "string" || Array.isArray(input))) {
-    throw new TypeError("Expected the input to be `string | string[]`");
-  }
-  options = {
-    pascalCase: false,
-    preserveConsecutiveUppercase: false,
-    ...options
-  };
-  if (Array.isArray(input)) {
-    input = input.map((x) => x.trim()).filter((x) => x.length).join("-");
-  } else {
-    input = input.trim();
-  }
-  if (input.length === 0) {
-    return "";
-  }
-  const toLowerCase = options.locale === false ? (string) => string.toLowerCase() : (string) => string.toLocaleLowerCase(options.locale);
-  const toUpperCase = options.locale === false ? (string) => string.toUpperCase() : (string) => string.toLocaleUpperCase(options.locale);
-  if (input.length === 1) {
-    if (SEPARATORS.test(input)) {
-      return "";
-    }
-    return options.pascalCase ? toUpperCase(input) : toLowerCase(input);
-  }
-  const hasUpperCase = input !== toLowerCase(input);
-  if (hasUpperCase) {
-    input = preserveCamelCase(input, toLowerCase, toUpperCase, options.preserveConsecutiveUppercase);
-  }
-  input = input.replace(LEADING_SEPARATORS, "");
-  input = options.preserveConsecutiveUppercase ? preserveConsecutiveUppercase(input, toLowerCase) : toLowerCase(input);
-  if (options.pascalCase) {
-    input = toUpperCase(input.charAt(0)) + input.slice(1);
-  }
-  return postProcess(input, toUpperCase);
-}
-var UPPERCASE, LOWERCASE, LEADING_CAPITAL, IDENTIFIER, SEPARATORS, LEADING_SEPARATORS, SEPARATORS_AND_IDENTIFIER, NUMBERS_AND_IDENTIFIER, preserveCamelCase, preserveConsecutiveUppercase, postProcess;
-var init_camelcase = __esm({
-  "node_modules/.pnpm/camelcase@8.0.0/node_modules/camelcase/index.js"() {
-    "use strict";
-    UPPERCASE = /[\p{Lu}]/u;
-    LOWERCASE = /[\p{Ll}]/u;
-    LEADING_CAPITAL = /^[\p{Lu}](?![\p{Lu}])/gu;
-    IDENTIFIER = /([\p{Alpha}\p{N}_]|$)/u;
-    SEPARATORS = /[_.\- ]+/;
-    LEADING_SEPARATORS = new RegExp("^" + SEPARATORS.source);
-    SEPARATORS_AND_IDENTIFIER = new RegExp(SEPARATORS.source + IDENTIFIER.source, "gu");
-    NUMBERS_AND_IDENTIFIER = new RegExp("\\d+" + IDENTIFIER.source, "gu");
-    preserveCamelCase = (string, toLowerCase, toUpperCase, preserveConsecutiveUppercase2) => {
-      let isLastCharLower = false;
-      let isLastCharUpper = false;
-      let isLastLastCharUpper = false;
-      let isLastLastCharPreserved = false;
-      for (let index = 0; index < string.length; index++) {
-        const character = string[index];
-        isLastLastCharPreserved = index > 2 ? string[index - 3] === "-" : true;
-        if (isLastCharLower && UPPERCASE.test(character)) {
-          string = string.slice(0, index) + "-" + string.slice(index);
-          isLastCharLower = false;
-          isLastLastCharUpper = isLastCharUpper;
-          isLastCharUpper = true;
-          index++;
-        } else if (isLastCharUpper && isLastLastCharUpper && LOWERCASE.test(character) && (!isLastLastCharPreserved || preserveConsecutiveUppercase2)) {
-          string = string.slice(0, index - 1) + "-" + string.slice(index - 1);
-          isLastLastCharUpper = isLastCharUpper;
-          isLastCharUpper = false;
-          isLastCharLower = true;
-        } else {
-          isLastCharLower = toLowerCase(character) === character && toUpperCase(character) !== character;
-          isLastLastCharUpper = isLastCharUpper;
-          isLastCharUpper = toUpperCase(character) === character && toLowerCase(character) !== character;
-        }
-      }
-      return string;
-    };
-    preserveConsecutiveUppercase = (input, toLowerCase) => {
-      LEADING_CAPITAL.lastIndex = 0;
-      return input.replaceAll(LEADING_CAPITAL, (match) => toLowerCase(match));
-    };
-    postProcess = (input, toUpperCase) => {
-      SEPARATORS_AND_IDENTIFIER.lastIndex = 0;
-      NUMBERS_AND_IDENTIFIER.lastIndex = 0;
-      return input.replaceAll(NUMBERS_AND_IDENTIFIER, (match, pattern, offset) => ["_", "-"].includes(input.charAt(offset + match.length)) ? match : toUpperCase(match)).replaceAll(SEPARATORS_AND_IDENTIFIER, (_, identifier) => toUpperCase(identifier));
-    };
-  }
-});
-
-// node_modules/.pnpm/quick-lru@6.1.2/node_modules/quick-lru/index.js
-var QuickLRU;
-var init_quick_lru = __esm({
-  "node_modules/.pnpm/quick-lru@6.1.2/node_modules/quick-lru/index.js"() {
-    "use strict";
-    QuickLRU = class extends Map {
-      constructor(options = {}) {
-        super();
-        if (!(options.maxSize && options.maxSize > 0)) {
-          throw new TypeError("`maxSize` must be a number greater than 0");
-        }
-        if (typeof options.maxAge === "number" && options.maxAge === 0) {
-          throw new TypeError("`maxAge` must be a number greater than 0");
-        }
-        this.maxSize = options.maxSize;
-        this.maxAge = options.maxAge || Number.POSITIVE_INFINITY;
-        this.onEviction = options.onEviction;
-        this.cache = /* @__PURE__ */ new Map();
-        this.oldCache = /* @__PURE__ */ new Map();
-        this._size = 0;
-      }
-      // TODO: Use private class methods when targeting Node.js 16.
-      _emitEvictions(cache2) {
-        if (typeof this.onEviction !== "function") {
-          return;
-        }
-        for (const [key, item] of cache2) {
-          this.onEviction(key, item.value);
-        }
-      }
-      _deleteIfExpired(key, item) {
-        if (typeof item.expiry === "number" && item.expiry <= Date.now()) {
-          if (typeof this.onEviction === "function") {
-            this.onEviction(key, item.value);
-          }
-          return this.delete(key);
-        }
-        return false;
-      }
-      _getOrDeleteIfExpired(key, item) {
-        const deleted = this._deleteIfExpired(key, item);
-        if (deleted === false) {
-          return item.value;
-        }
-      }
-      _getItemValue(key, item) {
-        return item.expiry ? this._getOrDeleteIfExpired(key, item) : item.value;
-      }
-      _peek(key, cache2) {
-        const item = cache2.get(key);
-        return this._getItemValue(key, item);
-      }
-      _set(key, value) {
-        this.cache.set(key, value);
-        this._size++;
-        if (this._size >= this.maxSize) {
-          this._size = 0;
-          this._emitEvictions(this.oldCache);
-          this.oldCache = this.cache;
-          this.cache = /* @__PURE__ */ new Map();
-        }
-      }
-      _moveToRecent(key, item) {
-        this.oldCache.delete(key);
-        this._set(key, item);
-      }
-      *_entriesAscending() {
-        for (const item of this.oldCache) {
-          const [key, value] = item;
-          if (!this.cache.has(key)) {
-            const deleted = this._deleteIfExpired(key, value);
-            if (deleted === false) {
-              yield item;
-            }
-          }
-        }
-        for (const item of this.cache) {
-          const [key, value] = item;
-          const deleted = this._deleteIfExpired(key, value);
-          if (deleted === false) {
-            yield item;
-          }
-        }
-      }
-      get(key) {
-        if (this.cache.has(key)) {
-          const item = this.cache.get(key);
-          return this._getItemValue(key, item);
-        }
-        if (this.oldCache.has(key)) {
-          const item = this.oldCache.get(key);
-          if (this._deleteIfExpired(key, item) === false) {
-            this._moveToRecent(key, item);
-            return item.value;
-          }
-        }
-      }
-      set(key, value, { maxAge = this.maxAge } = {}) {
-        const expiry = typeof maxAge === "number" && maxAge !== Number.POSITIVE_INFINITY ? Date.now() + maxAge : void 0;
-        if (this.cache.has(key)) {
-          this.cache.set(key, {
-            value,
-            expiry
-          });
-        } else {
-          this._set(key, { value, expiry });
-        }
-        return this;
-      }
-      has(key) {
-        if (this.cache.has(key)) {
-          return !this._deleteIfExpired(key, this.cache.get(key));
-        }
-        if (this.oldCache.has(key)) {
-          return !this._deleteIfExpired(key, this.oldCache.get(key));
-        }
-        return false;
-      }
-      peek(key) {
-        if (this.cache.has(key)) {
-          return this._peek(key, this.cache);
-        }
-        if (this.oldCache.has(key)) {
-          return this._peek(key, this.oldCache);
-        }
-      }
-      delete(key) {
-        const deleted = this.cache.delete(key);
-        if (deleted) {
-          this._size--;
-        }
-        return this.oldCache.delete(key) || deleted;
-      }
-      clear() {
-        this.cache.clear();
-        this.oldCache.clear();
-        this._size = 0;
-      }
-      resize(newSize) {
-        if (!(newSize && newSize > 0)) {
-          throw new TypeError("`maxSize` must be a number greater than 0");
-        }
-        const items = [...this._entriesAscending()];
-        const removeCount = items.length - newSize;
-        if (removeCount < 0) {
-          this.cache = new Map(items);
-          this.oldCache = /* @__PURE__ */ new Map();
-          this._size = items.length;
-        } else {
-          if (removeCount > 0) {
-            this._emitEvictions(items.slice(0, removeCount));
-          }
-          this.oldCache = new Map(items.slice(removeCount));
-          this.cache = /* @__PURE__ */ new Map();
-          this._size = 0;
-        }
-        this.maxSize = newSize;
-      }
-      *keys() {
-        for (const [key] of this) {
-          yield key;
-        }
-      }
-      *values() {
-        for (const [, value] of this) {
-          yield value;
-        }
-      }
-      *[Symbol.iterator]() {
-        for (const item of this.cache) {
-          const [key, value] = item;
-          const deleted = this._deleteIfExpired(key, value);
-          if (deleted === false) {
-            yield [key, value.value];
-          }
-        }
-        for (const item of this.oldCache) {
-          const [key, value] = item;
-          if (!this.cache.has(key)) {
-            const deleted = this._deleteIfExpired(key, value);
-            if (deleted === false) {
-              yield [key, value.value];
-            }
-          }
-        }
-      }
-      *entriesDescending() {
-        let items = [...this.cache];
-        for (let i = items.length - 1; i >= 0; --i) {
-          const item = items[i];
-          const [key, value] = item;
-          const deleted = this._deleteIfExpired(key, value);
-          if (deleted === false) {
-            yield [key, value.value];
-          }
-        }
-        items = [...this.oldCache];
-        for (let i = items.length - 1; i >= 0; --i) {
-          const item = items[i];
-          const [key, value] = item;
-          if (!this.cache.has(key)) {
-            const deleted = this._deleteIfExpired(key, value);
-            if (deleted === false) {
-              yield [key, value.value];
-            }
-          }
-        }
-      }
-      *entriesAscending() {
-        for (const [key, value] of this._entriesAscending()) {
-          yield [key, value.value];
-        }
-      }
-      get size() {
-        if (!this._size) {
-          return this.oldCache.size;
-        }
-        let oldCacheSize = 0;
-        for (const key of this.oldCache.keys()) {
-          if (!this.cache.has(key)) {
-            oldCacheSize++;
-          }
-        }
-        return Math.min(this._size + oldCacheSize, this.maxSize);
-      }
-      entries() {
-        return this.entriesAscending();
-      }
-      forEach(callbackFunction, thisArgument = this) {
-        for (const [key, value] of this.entriesAscending()) {
-          callbackFunction.call(thisArgument, value, key, this);
-        }
-      }
-      get [Symbol.toStringTag]() {
-        return JSON.stringify([...this.entriesAscending()]);
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/camelcase-keys@9.1.3/node_modules/camelcase-keys/index.js
-var camelcase_keys_exports = {};
-__export(camelcase_keys_exports, {
-  default: () => camelcaseKeys
-});
-function camelcaseKeys(input, options) {
-  if (Array.isArray(input)) {
-    return Object.keys(input).map((key) => transform(input[key], options));
-  }
-  return transform(input, options);
-}
-var has, cache, isObject3, transform;
-var init_camelcase_keys = __esm({
-  "node_modules/.pnpm/camelcase-keys@9.1.3/node_modules/camelcase-keys/index.js"() {
-    "use strict";
-    init_map_obj();
-    init_camelcase();
-    init_quick_lru();
-    has = (array, key) => array.some((element) => {
-      if (typeof element === "string") {
-        return element === key;
-      }
-      element.lastIndex = 0;
-      return element.test(key);
-    });
-    cache = new QuickLRU({ maxSize: 1e5 });
-    isObject3 = (value) => typeof value === "object" && value !== null && !(value instanceof RegExp) && !(value instanceof Error) && !(value instanceof Date);
-    transform = (input, options = {}) => {
-      if (!isObject3(input)) {
-        return input;
-      }
-      const {
-        exclude,
-        pascalCase = false,
-        stopPaths,
-        deep = false,
-        preserveConsecutiveUppercase: preserveConsecutiveUppercase2 = false
-      } = options;
-      const stopPathsSet = new Set(stopPaths);
-      const makeMapper = (parentPath) => (key, value) => {
-        if (deep && isObject3(value)) {
-          const path2 = parentPath === void 0 ? key : `${parentPath}.${key}`;
-          if (!stopPathsSet.has(path2)) {
-            value = mapObject(value, makeMapper(path2));
-          }
-        }
-        if (!(exclude && has(exclude, key))) {
-          const cacheKey = pascalCase ? `${key}_` : key;
-          if (cache.has(cacheKey)) {
-            key = cache.get(cacheKey);
-          } else {
-            const returnValue = camelCase(key, { pascalCase, locale: false, preserveConsecutiveUppercase: preserveConsecutiveUppercase2 });
-            if (key.length < 100) {
-              cache.set(cacheKey, returnValue);
-            }
-            key = returnValue;
-          }
-        }
-        return [key, value];
-      };
-      return mapObject(input, makeMapper(void 0));
-    };
-  }
-});
-
-// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/TwirpRPC.js
-var defaultPrefix, defaultTimeoutSeconds, livekitPackage, TwirpError, TwirpRpc;
-var init_TwirpRPC = __esm({
-  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/TwirpRPC.js"() {
-    "use strict";
-    defaultPrefix = "/twirp";
-    defaultTimeoutSeconds = 60;
-    livekitPackage = "livekit";
-    TwirpError = class extends Error {
-      constructor(name, message2, status, code, metadata) {
-        super(message2);
-        this.name = name;
-        this.status = status;
-        this.code = code;
-        this.metadata = metadata;
-      }
-    };
-    TwirpRpc = class {
-      constructor(host, pkg, options) {
-        if (host.startsWith("ws")) {
-          host = host.replace("ws", "http");
-        }
-        this.host = host;
-        this.pkg = pkg;
-        this.requestTimeout = (options == null ? void 0 : options.requestTimeout) ?? defaultTimeoutSeconds;
-        this.prefix = (options == null ? void 0 : options.prefix) || defaultPrefix;
-      }
-      async request(service, method, data, headers, timeout = this.requestTimeout) {
-        const path2 = `${this.prefix}/${this.pkg}.${service}/${method}`;
-        const url = new URL(path2, this.host);
-        const init = {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json;charset=UTF-8",
-            ...headers
-          },
-          body: JSON.stringify(data)
-        };
-        if (timeout) {
-          init.signal = AbortSignal.timeout(timeout * 1e3);
-        }
-        const response = await fetch(url, init);
-        if (!response.ok) {
-          const isJson = response.headers.get("content-type") === "application/json";
-          let errorMessage = "Unknown internal error";
-          let errorCode = void 0;
-          let metadata = void 0;
-          try {
-            if (isJson) {
-              const parsedError = await response.json();
-              if ("msg" in parsedError) {
-                errorMessage = parsedError.msg;
-              }
-              if ("code" in parsedError) {
-                errorCode = parsedError.code;
-              }
-              if ("meta" in parsedError) {
-                metadata = parsedError.meta;
-              }
-            } else {
-              errorMessage = await response.text();
-            }
-          } catch (e) {
-            console.debug(`Error when trying to parse error message, using defaults`, e);
-          }
-          throw new TwirpError(response.statusText, errorMessage, response.status, errorCode, metadata);
-        }
-        const parsedResp = await response.json();
-        const camelcaseKeys2 = await Promise.resolve().then(() => (init_camelcase_keys(), camelcase_keys_exports)).then((mod) => mod.default);
-        return camelcaseKeys2(parsedResp, { deep: true });
-      }
-    };
-  }
-});
-
-// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AgentDispatchClient.js
-import {
-  AgentDispatch,
-  CreateAgentDispatchRequest,
-  DeleteAgentDispatchRequest,
-  ListAgentDispatchRequest,
-  ListAgentDispatchResponse
-} from "@livekit/protocol";
-var svc, AgentDispatchClient;
-var init_AgentDispatchClient = __esm({
-  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AgentDispatchClient.js"() {
-    "use strict";
-    init_ServiceBase();
-    init_TwirpRPC();
-    svc = "AgentDispatchService";
-    AgentDispatchClient = class extends ServiceBase {
-      /**
-       * @param host - hostname including protocol. i.e. 'https://<project>.livekit.cloud'
-       * @param apiKey - API Key, can be set in env var LIVEKIT_API_KEY
-       * @param secret - API Secret, can be set in env var LIVEKIT_API_SECRET
-       * @param options - client options
-       */
-      constructor(host, apiKey, secret, options) {
-        super(apiKey, secret);
-        const rpcOptions = (options == null ? void 0 : options.requestTimeout) ? { requestTimeout: options.requestTimeout } : void 0;
-        this.rpc = new TwirpRpc(host, livekitPackage, rpcOptions);
-      }
-      /**
-       * Create an explicit dispatch for an agent to join a room. To use explicit
-       * dispatch, your agent must be registered with an `agentName`.
-       * @param roomName - name of the room to dispatch to
-       * @param agentName - name of the agent to dispatch
-       * @param options - optional metadata to send along with the dispatch
-       * @returns the dispatch that was created
-       */
-      async createDispatch(roomName, agentName, options) {
-        const req = new CreateAgentDispatchRequest({
-          room: roomName,
-          agentName,
-          metadata: options == null ? void 0 : options.metadata,
-          restartPolicy: options == null ? void 0 : options.restartPolicy
-        }).toJson();
-        const data = await this.rpc.request(
-          svc,
-          "CreateDispatch",
-          req,
-          await this.authHeader({ roomAdmin: true, room: roomName })
-        );
-        return AgentDispatch.fromJson(data, { ignoreUnknownFields: true });
-      }
-      /**
-       * Delete an explicit dispatch for an agent in a room.
-       * @param dispatchId - id of the dispatch to delete
-       * @param roomName - name of the room the dispatch is for
-       */
-      async deleteDispatch(dispatchId, roomName) {
-        const req = new DeleteAgentDispatchRequest({
-          dispatchId,
-          room: roomName
-        }).toJson();
-        await this.rpc.request(
-          svc,
-          "DeleteDispatch",
-          req,
-          await this.authHeader({ roomAdmin: true, room: roomName })
-        );
-      }
-      /**
-       * Get an Agent dispatch by ID
-       * @param dispatchId - id of the dispatch to get
-       * @param roomName - name of the room the dispatch is for
-       * @returns the dispatch that was found, or undefined if not found
-       */
-      async getDispatch(dispatchId, roomName) {
-        const req = new ListAgentDispatchRequest({
-          dispatchId,
-          room: roomName
-        }).toJson();
-        const data = await this.rpc.request(
-          svc,
-          "ListDispatch",
-          req,
-          await this.authHeader({ roomAdmin: true, room: roomName })
-        );
-        const res = ListAgentDispatchResponse.fromJson(data, { ignoreUnknownFields: true });
-        if (res.agentDispatches.length === 0) {
-          return void 0;
-        }
-        return res.agentDispatches[0];
-      }
-      /**
-       * List all agent dispatches for a room
-       * @param roomName - name of the room to list dispatches for
-       * @returns the list of dispatches
-       */
-      async listDispatch(roomName) {
-        const req = new ListAgentDispatchRequest({
-          room: roomName
-        }).toJson();
-        const data = await this.rpc.request(
-          svc,
-          "ListDispatch",
-          req,
-          await this.authHeader({ roomAdmin: true, room: roomName })
-        );
-        const res = ListAgentDispatchResponse.fromJson(data, { ignoreUnknownFields: true });
-        return res.agentDispatches;
-      }
-    };
-  }
-});
-
 // node_modules/.pnpm/@bufbuild+protobuf@1.10.1/node_modules/@bufbuild/protobuf/dist/esm/private/assert.js
 function assert(condition, msg) {
   if (!condition) {
@@ -21166,9 +18843,10 @@ var init_api_pb = __esm({
 });
 
 // node_modules/.pnpm/@bufbuild+protobuf@1.10.1/node_modules/@bufbuild/protobuf/dist/esm/index.js
-var init_esm2 = __esm({
+var init_esm = __esm({
   "node_modules/.pnpm/@bufbuild+protobuf@1.10.1/node_modules/@bufbuild/protobuf/dist/esm/index.js"() {
     "use strict";
+    init_proto3();
     init_plugin_pb();
     init_api_pb();
     init_any_pb();
@@ -21184,24 +18862,6981 @@ var init_esm2 = __esm({
   }
 });
 
+// node_modules/.pnpm/@livekit+protocol@1.45.8/node_modules/@livekit/protocol/dist/index.mjs
+var AudioCodec, VideoCodec, ImageCodec, BackupCodecPolicy, TrackType, TrackSource, VideoQuality, DisconnectReason, AudioTrackFeature, PacketTrailerFeature, Pagination, TokenPagination, ListUpdate, Room, Codec, ParticipantPermission, ParticipantInfo, ParticipantInfo_State, ParticipantInfo_Kind, ParticipantInfo_KindDetail, Encryption_Type, SimulcastCodecInfo, TrackInfo, DataTrackInfo, VideoLayer, VideoLayer_Mode, DataPacket_Kind, ParticipantTracks, TimedVersion, FilterParams, WebhookConfig, JobType, JobStatus, Job, JobState, JobRestartPolicy, CreateAgentDispatchRequest, RoomAgentDispatch, DeleteAgentDispatchRequest, ListAgentDispatchRequest, ListAgentDispatchResponse, AgentDispatch, AgentDispatchState, AudioChannel, EncodingOptionsPreset, EncodedFileType, StreamProtocol, SegmentedFileProtocol, SegmentedFileSuffix, ImageFileSuffix, EgressSourceType, EgressStatus, AudioMixing, TemplateSource, WebSource, MediaSource, ParticipantVideo, AudioConfig, AudioRoute, DataConfig, DataSelector, EncodingOptions, Output, FileOutput, StreamOutput, SegmentedFileOutput, ImageOutput, StorageConfig, S3Upload, GCPUpload, AzureBlobUpload, AliOSSUpload, ProxyConfig, ListEgressRequest, ListEgressResponse, StopEgressRequest, EgressInfo, StreamInfo, StreamInfo_Status, FileInfo, SegmentsInfo, ImagesInfo, AutoParticipantEgress, AutoTrackEgress, ExportReplayRequest, RoomCompositeEgressRequest, WebEgressRequest, ParticipantEgressRequest, TrackCompositeEgressRequest, TrackEgressRequest, DirectFileOutput, EncodedFileOutput, UpdateLayoutRequest, UpdateStreamRequest, StreamInfoList, IngressInput, IngressAudioEncodingPreset, IngressVideoEncodingPreset, CreateIngressRequest, IngressAudioOptions, IngressVideoOptions, IngressAudioEncodingOptions, IngressVideoEncodingOptions, IngressInfo, IngressState, IngressState_Status, InputVideoState, InputAudioState, UpdateIngressRequest, ListIngressRequest, ListIngressResponse, DeleteIngressRequest, CreateRoomRequest, RoomEgress, ListRoomsRequest, ListRoomsResponse, DeleteRoomRequest, ListParticipantsRequest, ListParticipantsResponse, RoomParticipantIdentity, MuteRoomTrackRequest, MuteRoomTrackResponse, UpdateParticipantRequest, UpdateSubscriptionsRequest, SendDataRequest, UpdateRoomMetadataRequest, RoomConfiguration, ForwardParticipantRequest, MoveParticipantRequest, SIPTransport, SIPHeaderOptions, SIPMediaEncryption, SIPCallStatus, CreateSIPTrunkRequest, SIPCodec, SIPMediaConfig, SIPTrunkInfo, SIPTrunkInfo_TrunkKind, CreateSIPInboundTrunkRequest, UpdateSIPInboundTrunkRequest, SIPInboundTrunkInfo, SIPInboundTrunkUpdate, CreateSIPOutboundTrunkRequest, UpdateSIPOutboundTrunkRequest, SIPOutboundTrunkInfo, SIPOutboundTrunkUpdate, ListSIPTrunkRequest, ListSIPTrunkResponse, ListSIPInboundTrunkRequest, ListSIPInboundTrunkResponse, ListSIPOutboundTrunkRequest, ListSIPOutboundTrunkResponse, DeleteSIPTrunkRequest, SIPDispatchRuleDirect, SIPDispatchRuleIndividual, SIPDispatchRuleCallee, SIPDispatchRule, CreateSIPDispatchRuleRequest, UpdateSIPDispatchRuleRequest, SIPDispatchRuleInfo, SIPDispatchRuleUpdate, ListSIPDispatchRuleRequest, ListSIPDispatchRuleResponse, DeleteSIPDispatchRuleRequest, SIPOutboundConfig, CreateSIPParticipantRequest, SIPParticipantInfo, TransferSIPParticipantRequest, Destination, ConnectTwilioCallRequest, ConnectTwilioCallRequest_TwilioCallDirection, ConnectTwilioCallResponse, SessionDescription, DialWhatsAppCallRequest, DialWhatsAppCallResponse, DisconnectWhatsAppCallRequest, DisconnectWhatsAppCallRequest_DisconnectReason, DisconnectWhatsAppCallResponse, ConnectWhatsAppCallRequest, ConnectWhatsAppCallResponse, AcceptWhatsAppCallRequest, AcceptWhatsAppCallResponse, WebhookEvent;
+var init_dist = __esm({
+  "node_modules/.pnpm/@livekit+protocol@1.45.8/node_modules/@livekit/protocol/dist/index.mjs"() {
+    "use strict";
+    init_esm();
+    AudioCodec = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.AudioCodec",
+      [
+        { no: 0, name: "DEFAULT_AC" },
+        { no: 1, name: "OPUS" },
+        { no: 2, name: "AAC" },
+        { no: 3, name: "AC_MP3" }
+      ]
+    );
+    VideoCodec = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.VideoCodec",
+      [
+        { no: 0, name: "DEFAULT_VC" },
+        { no: 1, name: "H264_BASELINE" },
+        { no: 2, name: "H264_MAIN" },
+        { no: 3, name: "H264_HIGH" },
+        { no: 4, name: "VP8" }
+      ]
+    );
+    ImageCodec = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.ImageCodec",
+      [
+        { no: 0, name: "IC_DEFAULT" },
+        { no: 1, name: "IC_JPEG" }
+      ]
+    );
+    BackupCodecPolicy = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.BackupCodecPolicy",
+      [
+        { no: 0, name: "PREFER_REGRESSION" },
+        { no: 1, name: "SIMULCAST" },
+        { no: 2, name: "REGRESSION" }
+      ]
+    );
+    TrackType = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.TrackType",
+      [
+        { no: 0, name: "AUDIO" },
+        { no: 1, name: "VIDEO" },
+        { no: 2, name: "DATA" }
+      ]
+    );
+    TrackSource = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.TrackSource",
+      [
+        { no: 0, name: "UNKNOWN" },
+        { no: 1, name: "CAMERA" },
+        { no: 2, name: "MICROPHONE" },
+        { no: 3, name: "SCREEN_SHARE" },
+        { no: 4, name: "SCREEN_SHARE_AUDIO" }
+      ]
+    );
+    VideoQuality = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.VideoQuality",
+      [
+        { no: 0, name: "LOW" },
+        { no: 1, name: "MEDIUM" },
+        { no: 2, name: "HIGH" },
+        { no: 3, name: "OFF" }
+      ]
+    );
+    DisconnectReason = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.DisconnectReason",
+      [
+        { no: 0, name: "UNKNOWN_REASON" },
+        { no: 1, name: "CLIENT_INITIATED" },
+        { no: 2, name: "DUPLICATE_IDENTITY" },
+        { no: 3, name: "SERVER_SHUTDOWN" },
+        { no: 4, name: "PARTICIPANT_REMOVED" },
+        { no: 5, name: "ROOM_DELETED" },
+        { no: 6, name: "STATE_MISMATCH" },
+        { no: 7, name: "JOIN_FAILURE" },
+        { no: 8, name: "MIGRATION" },
+        { no: 9, name: "SIGNAL_CLOSE" },
+        { no: 10, name: "ROOM_CLOSED" },
+        { no: 11, name: "USER_UNAVAILABLE" },
+        { no: 12, name: "USER_REJECTED" },
+        { no: 13, name: "SIP_TRUNK_FAILURE" },
+        { no: 14, name: "CONNECTION_TIMEOUT" },
+        { no: 15, name: "MEDIA_FAILURE" },
+        { no: 16, name: "AGENT_ERROR" }
+      ]
+    );
+    AudioTrackFeature = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.AudioTrackFeature",
+      [
+        { no: 0, name: "TF_STEREO" },
+        { no: 1, name: "TF_NO_DTX" },
+        { no: 2, name: "TF_AUTO_GAIN_CONTROL" },
+        { no: 3, name: "TF_ECHO_CANCELLATION" },
+        { no: 4, name: "TF_NOISE_SUPPRESSION" },
+        { no: 5, name: "TF_ENHANCED_NOISE_CANCELLATION" },
+        { no: 6, name: "TF_PRECONNECT_BUFFER" }
+      ]
+    );
+    PacketTrailerFeature = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.PacketTrailerFeature",
+      [
+        { no: 0, name: "PTF_USER_TIMESTAMP" },
+        { no: 1, name: "PTF_FRAME_ID" }
+      ]
+    );
+    Pagination = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.Pagination",
+      () => [
+        {
+          no: 1,
+          name: "after_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "limit",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        }
+      ]
+    );
+    TokenPagination = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TokenPagination",
+      () => [
+        {
+          no: 1,
+          name: "token",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListUpdate = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListUpdate",
+      () => [
+        { no: 1, name: "set", kind: "scalar", T: 9, repeated: true },
+        { no: 2, name: "add", kind: "scalar", T: 9, repeated: true },
+        { no: 3, name: "remove", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 4,
+          name: "clear",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    Room = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.Room",
+      () => [
+        {
+          no: 1,
+          name: "sid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "empty_timeout",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 14,
+          name: "departure_timeout",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 4,
+          name: "max_participants",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 5,
+          name: "creation_time",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 15,
+          name: "creation_time_ms",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 6,
+          name: "turn_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 7, name: "enabled_codecs", kind: "message", T: Codec, repeated: true },
+        {
+          no: 8,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "num_participants",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 11,
+          name: "num_publishers",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 10,
+          name: "active_recording",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 13, name: "version", kind: "message", T: TimedVersion }
+      ]
+    );
+    Codec = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.Codec",
+      () => [
+        {
+          no: 1,
+          name: "mime",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "fmtp_line",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ParticipantPermission = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ParticipantPermission",
+      () => [
+        {
+          no: 1,
+          name: "can_subscribe",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 2,
+          name: "can_publish",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 3,
+          name: "can_publish_data",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 9, name: "can_publish_sources", kind: "enum", T: proto3.getEnumType(TrackSource), repeated: true },
+        {
+          no: 7,
+          name: "hidden",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 8,
+          name: "recorder",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 10,
+          name: "can_update_metadata",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 11,
+          name: "agent",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 12,
+          name: "can_subscribe_metrics",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 13,
+          name: "can_manage_agent_session",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    ParticipantInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ParticipantInfo",
+      () => [
+        {
+          no: 1,
+          name: "sid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "state", kind: "enum", T: proto3.getEnumType(ParticipantInfo_State) },
+        { no: 4, name: "tracks", kind: "message", T: TrackInfo, repeated: true },
+        {
+          no: 5,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "joined_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 17,
+          name: "joined_at_ms",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 9,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 10,
+          name: "version",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        { no: 11, name: "permission", kind: "message", T: ParticipantPermission },
+        {
+          no: 12,
+          name: "region",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 13,
+          name: "is_publisher",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 14, name: "kind", kind: "enum", T: proto3.getEnumType(ParticipantInfo_Kind) },
+        { no: 15, name: "attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 16, name: "disconnect_reason", kind: "enum", T: proto3.getEnumType(DisconnectReason) },
+        { no: 18, name: "kind_details", kind: "enum", T: proto3.getEnumType(ParticipantInfo_KindDetail), repeated: true },
+        { no: 19, name: "data_tracks", kind: "message", T: DataTrackInfo, repeated: true },
+        {
+          no: 20,
+          name: "client_protocol",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        }
+      ]
+    );
+    ParticipantInfo_State = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.ParticipantInfo.State",
+      [
+        { no: 0, name: "JOINING" },
+        { no: 1, name: "JOINED" },
+        { no: 2, name: "ACTIVE" },
+        { no: 3, name: "DISCONNECTED" }
+      ]
+    );
+    ParticipantInfo_Kind = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.ParticipantInfo.Kind",
+      [
+        { no: 0, name: "STANDARD" },
+        { no: 1, name: "INGRESS" },
+        { no: 2, name: "EGRESS" },
+        { no: 3, name: "SIP" },
+        { no: 4, name: "AGENT" },
+        { no: 7, name: "CONNECTOR" },
+        { no: 8, name: "BRIDGE" }
+      ]
+    );
+    ParticipantInfo_KindDetail = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.ParticipantInfo.KindDetail",
+      [
+        { no: 0, name: "CLOUD_AGENT" },
+        { no: 1, name: "FORWARDED" },
+        { no: 2, name: "CONNECTOR_WHATSAPP" },
+        { no: 3, name: "CONNECTOR_TWILIO" },
+        { no: 4, name: "BRIDGE_RTSP" }
+      ]
+    );
+    Encryption_Type = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.Encryption.Type",
+      [
+        { no: 0, name: "NONE" },
+        { no: 1, name: "GCM" },
+        { no: 2, name: "CUSTOM" }
+      ]
+    );
+    SimulcastCodecInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SimulcastCodecInfo",
+      () => [
+        {
+          no: 1,
+          name: "mime_type",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "mid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "cid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "layers", kind: "message", T: VideoLayer, repeated: true },
+        { no: 5, name: "video_layer_mode", kind: "enum", T: proto3.getEnumType(VideoLayer_Mode) },
+        {
+          no: 6,
+          name: "sdp_cid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    TrackInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TrackInfo",
+      () => [
+        {
+          no: 1,
+          name: "sid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "type", kind: "enum", T: proto3.getEnumType(TrackType) },
+        {
+          no: 3,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "muted",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 5,
+          name: "width",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 6,
+          name: "height",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 7,
+          name: "simulcast",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 8,
+          name: "disable_dtx",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 9, name: "source", kind: "enum", T: proto3.getEnumType(TrackSource) },
+        { no: 10, name: "layers", kind: "message", T: VideoLayer, repeated: true },
+        {
+          no: 11,
+          name: "mime_type",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 12,
+          name: "mid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 13, name: "codecs", kind: "message", T: SimulcastCodecInfo, repeated: true },
+        {
+          no: 14,
+          name: "stereo",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 15,
+          name: "disable_red",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 16, name: "encryption", kind: "enum", T: proto3.getEnumType(Encryption_Type) },
+        {
+          no: 17,
+          name: "stream",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 18, name: "version", kind: "message", T: TimedVersion },
+        { no: 19, name: "audio_features", kind: "enum", T: proto3.getEnumType(AudioTrackFeature), repeated: true },
+        { no: 20, name: "backup_codec_policy", kind: "enum", T: proto3.getEnumType(BackupCodecPolicy) },
+        { no: 21, name: "packet_trailer_features", kind: "enum", T: proto3.getEnumType(PacketTrailerFeature), repeated: true }
+      ]
+    );
+    DataTrackInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DataTrackInfo",
+      () => [
+        {
+          no: 1,
+          name: "pub_handle",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 2,
+          name: "sid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "encryption", kind: "enum", T: proto3.getEnumType(Encryption_Type) }
+      ]
+    );
+    VideoLayer = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.VideoLayer",
+      () => [
+        { no: 1, name: "quality", kind: "enum", T: proto3.getEnumType(VideoQuality) },
+        {
+          no: 2,
+          name: "width",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 3,
+          name: "height",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 4,
+          name: "bitrate",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 5,
+          name: "ssrc",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 6,
+          name: "spatial_layer",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 7,
+          name: "rid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "repair_ssrc",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        }
+      ]
+    );
+    VideoLayer_Mode = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.VideoLayer.Mode",
+      [
+        { no: 0, name: "MODE_UNUSED" },
+        { no: 1, name: "ONE_SPATIAL_LAYER_PER_STREAM" },
+        { no: 2, name: "MULTIPLE_SPATIAL_LAYERS_PER_STREAM" },
+        { no: 3, name: "ONE_SPATIAL_LAYER_PER_STREAM_INCOMPLETE_RTCP_SR" }
+      ]
+    );
+    DataPacket_Kind = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.DataPacket.Kind",
+      [
+        { no: 0, name: "RELIABLE" },
+        { no: 1, name: "LOSSY" }
+      ]
+    );
+    ParticipantTracks = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ParticipantTracks",
+      () => [
+        {
+          no: 1,
+          name: "participant_sid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "track_sids", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    TimedVersion = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TimedVersion",
+      () => [
+        {
+          no: 1,
+          name: "unix_micro",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 2,
+          name: "ticks",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        }
+      ]
+    );
+    FilterParams = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.FilterParams",
+      () => [
+        { no: 1, name: "include_events", kind: "scalar", T: 9, repeated: true },
+        { no: 2, name: "exclude_events", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    WebhookConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.WebhookConfig",
+      () => [
+        {
+          no: 1,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "signing_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "filter_params", kind: "message", T: FilterParams }
+      ]
+    );
+    JobType = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.JobType",
+      [
+        { no: 0, name: "JT_ROOM" },
+        { no: 1, name: "JT_PUBLISHER" },
+        { no: 2, name: "JT_PARTICIPANT" }
+      ]
+    );
+    JobStatus = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.JobStatus",
+      [
+        { no: 0, name: "JS_PENDING" },
+        { no: 1, name: "JS_RUNNING" },
+        { no: 2, name: "JS_SUCCESS" },
+        { no: 3, name: "JS_FAILED" }
+      ]
+    );
+    Job = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.Job",
+      () => [
+        {
+          no: 1,
+          name: "id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "dispatch_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "type", kind: "enum", T: proto3.getEnumType(JobType) },
+        { no: 3, name: "room", kind: "message", T: Room },
+        { no: 4, name: "participant", kind: "message", T: ParticipantInfo, opt: true },
+        {
+          no: 5,
+          name: "namespace",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "agent_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 8, name: "state", kind: "message", T: JobState },
+        {
+          no: 10,
+          name: "enable_recording",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 11,
+          name: "deployment",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    JobState = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.JobState",
+      () => [
+        { no: 1, name: "status", kind: "enum", T: proto3.getEnumType(JobStatus) },
+        {
+          no: 2,
+          name: "error",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 4,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 5,
+          name: "updated_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 6,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "worker_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "agent_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    JobRestartPolicy = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.JobRestartPolicy",
+      [
+        { no: 0, name: "JRP_ON_FAILURE" },
+        { no: 1, name: "JRP_NEVER" }
+      ]
+    );
+    CreateAgentDispatchRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateAgentDispatchRequest",
+      () => [
+        {
+          no: 1,
+          name: "agent_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "restart_policy", kind: "enum", T: proto3.getEnumType(JobRestartPolicy) },
+        {
+          no: 5,
+          name: "deployment",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    RoomAgentDispatch = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.RoomAgentDispatch",
+      () => [
+        {
+          no: 1,
+          name: "agent_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "restart_policy", kind: "enum", T: proto3.getEnumType(JobRestartPolicy) },
+        {
+          no: 4,
+          name: "deployment",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    DeleteAgentDispatchRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DeleteAgentDispatchRequest",
+      () => [
+        {
+          no: 1,
+          name: "dispatch_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListAgentDispatchRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListAgentDispatchRequest",
+      () => [
+        {
+          no: 1,
+          name: "dispatch_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListAgentDispatchResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListAgentDispatchResponse",
+      () => [
+        { no: 1, name: "agent_dispatches", kind: "message", T: AgentDispatch, repeated: true }
+      ]
+    );
+    AgentDispatch = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AgentDispatch",
+      () => [
+        {
+          no: 1,
+          name: "id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "agent_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "state", kind: "message", T: AgentDispatchState },
+        { no: 6, name: "restart_policy", kind: "enum", T: proto3.getEnumType(JobRestartPolicy) },
+        {
+          no: 7,
+          name: "deployment",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    AgentDispatchState = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AgentDispatchState",
+      () => [
+        { no: 1, name: "jobs", kind: "message", T: Job, repeated: true },
+        {
+          no: 2,
+          name: "created_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 3,
+          name: "deleted_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        }
+      ]
+    );
+    AudioChannel = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.AudioChannel",
+      [
+        { no: 0, name: "AUDIO_CHANNEL_BOTH", localName: "BOTH" },
+        { no: 1, name: "AUDIO_CHANNEL_LEFT", localName: "LEFT" },
+        { no: 2, name: "AUDIO_CHANNEL_RIGHT", localName: "RIGHT" }
+      ]
+    );
+    EncodingOptionsPreset = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.EncodingOptionsPreset",
+      [
+        { no: 0, name: "H264_720P_30" },
+        { no: 1, name: "H264_720P_60" },
+        { no: 2, name: "H264_1080P_30" },
+        { no: 3, name: "H264_1080P_60" },
+        { no: 4, name: "PORTRAIT_H264_720P_30" },
+        { no: 5, name: "PORTRAIT_H264_720P_60" },
+        { no: 6, name: "PORTRAIT_H264_1080P_30" },
+        { no: 7, name: "PORTRAIT_H264_1080P_60" }
+      ]
+    );
+    EncodedFileType = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.EncodedFileType",
+      [
+        { no: 0, name: "DEFAULT_FILETYPE" },
+        { no: 1, name: "MP4" },
+        { no: 2, name: "OGG" },
+        { no: 3, name: "MP3" }
+      ]
+    );
+    StreamProtocol = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.StreamProtocol",
+      [
+        { no: 0, name: "DEFAULT_PROTOCOL" },
+        { no: 1, name: "RTMP" },
+        { no: 2, name: "SRT" },
+        { no: 3, name: "WEBSOCKET" }
+      ]
+    );
+    SegmentedFileProtocol = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SegmentedFileProtocol",
+      [
+        { no: 0, name: "DEFAULT_SEGMENTED_FILE_PROTOCOL" },
+        { no: 1, name: "HLS_PROTOCOL" }
+      ]
+    );
+    SegmentedFileSuffix = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SegmentedFileSuffix",
+      [
+        { no: 0, name: "INDEX" },
+        { no: 1, name: "TIMESTAMP" }
+      ]
+    );
+    ImageFileSuffix = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.ImageFileSuffix",
+      [
+        { no: 0, name: "IMAGE_SUFFIX_INDEX" },
+        { no: 1, name: "IMAGE_SUFFIX_TIMESTAMP" },
+        { no: 2, name: "IMAGE_SUFFIX_NONE_OVERWRITE" }
+      ]
+    );
+    EgressSourceType = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.EgressSourceType",
+      [
+        { no: 0, name: "EGRESS_SOURCE_TYPE_WEB", localName: "WEB" },
+        { no: 1, name: "EGRESS_SOURCE_TYPE_SDK", localName: "SDK" }
+      ]
+    );
+    EgressStatus = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.EgressStatus",
+      [
+        { no: 0, name: "EGRESS_STARTING" },
+        { no: 1, name: "EGRESS_ACTIVE" },
+        { no: 2, name: "EGRESS_ENDING" },
+        { no: 3, name: "EGRESS_COMPLETE" },
+        { no: 4, name: "EGRESS_FAILED" },
+        { no: 5, name: "EGRESS_ABORTED" },
+        { no: 6, name: "EGRESS_LIMIT_REACHED" }
+      ]
+    );
+    AudioMixing = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.AudioMixing",
+      [
+        { no: 0, name: "DEFAULT_MIXING" },
+        { no: 1, name: "DUAL_CHANNEL_AGENT" },
+        { no: 2, name: "DUAL_CHANNEL_ALTERNATE" }
+      ]
+    );
+    TemplateSource = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TemplateSource",
+      () => [
+        {
+          no: 1,
+          name: "layout",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "audio_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 3,
+          name: "video_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 4,
+          name: "custom_base_url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    WebSource = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.WebSource",
+      () => [
+        {
+          no: 1,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "audio_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 3,
+          name: "video_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 4,
+          name: "await_start_signal",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    MediaSource = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.MediaSource",
+      () => [
+        { no: 1, name: "video_track_id", kind: "scalar", T: 9, oneof: "video" },
+        { no: 2, name: "participant_video", kind: "message", T: ParticipantVideo, oneof: "video" },
+        { no: 3, name: "audio", kind: "message", T: AudioConfig },
+        { no: 4, name: "data", kind: "message", T: DataConfig }
+      ]
+    );
+    ParticipantVideo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ParticipantVideo",
+      () => [
+        {
+          no: 1,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "prefer_screen_share",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    AudioConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AudioConfig",
+      () => [
+        { no: 1, name: "routes", kind: "message", T: AudioRoute, repeated: true }
+      ]
+    );
+    AudioRoute = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AudioRoute",
+      () => [
+        { no: 1, name: "track_id", kind: "scalar", T: 9, oneof: "match" },
+        { no: 2, name: "participant_identity", kind: "scalar", T: 9, oneof: "match" },
+        { no: 3, name: "participant_kind", kind: "enum", T: proto3.getEnumType(ParticipantInfo_Kind), oneof: "match" },
+        { no: 4, name: "channel", kind: "enum", T: proto3.getEnumType(AudioChannel) }
+      ]
+    );
+    DataConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DataConfig",
+      () => [
+        { no: 1, name: "selectors", kind: "message", T: DataSelector, repeated: true }
+      ]
+    );
+    DataSelector = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DataSelector",
+      () => [
+        { no: 1, name: "track_id", kind: "scalar", T: 9, oneof: "match" },
+        { no: 2, name: "participant_identity", kind: "scalar", T: 9, oneof: "match" },
+        { no: 3, name: "topic", kind: "scalar", T: 9, oneof: "match" }
+      ]
+    );
+    EncodingOptions = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.EncodingOptions",
+      () => [
+        {
+          no: 1,
+          name: "width",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 2,
+          name: "height",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 3,
+          name: "depth",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 4,
+          name: "framerate",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        { no: 5, name: "audio_codec", kind: "enum", T: proto3.getEnumType(AudioCodec) },
+        {
+          no: 6,
+          name: "audio_bitrate",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 7,
+          name: "audio_frequency",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        { no: 8, name: "video_codec", kind: "enum", T: proto3.getEnumType(VideoCodec) },
+        {
+          no: 9,
+          name: "video_bitrate",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 10,
+          name: "key_frame_interval",
+          kind: "scalar",
+          T: 1
+          /* ScalarType.DOUBLE */
+        },
+        {
+          no: 11,
+          name: "audio_quality",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 12,
+          name: "video_quality",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        }
+      ]
+    );
+    Output = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.Output",
+      () => [
+        { no: 1, name: "file", kind: "message", T: FileOutput, oneof: "config" },
+        { no: 2, name: "stream", kind: "message", T: StreamOutput, oneof: "config" },
+        { no: 3, name: "segments", kind: "message", T: SegmentedFileOutput, oneof: "config" },
+        { no: 4, name: "images", kind: "message", T: ImageOutput, oneof: "config" },
+        { no: 6, name: "storage", kind: "message", T: StorageConfig }
+      ]
+    );
+    FileOutput = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.FileOutput",
+      () => [
+        { no: 1, name: "file_type", kind: "enum", T: proto3.getEnumType(EncodedFileType) },
+        {
+          no: 2,
+          name: "filepath",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "disable_manifest",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    StreamOutput = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.StreamOutput",
+      () => [
+        { no: 1, name: "protocol", kind: "enum", T: proto3.getEnumType(StreamProtocol) },
+        { no: 2, name: "urls", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    SegmentedFileOutput = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SegmentedFileOutput",
+      () => [
+        { no: 1, name: "protocol", kind: "enum", T: proto3.getEnumType(SegmentedFileProtocol) },
+        {
+          no: 2,
+          name: "filename_prefix",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "playlist_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 11,
+          name: "live_playlist_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "segment_duration",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        { no: 10, name: "filename_suffix", kind: "enum", T: proto3.getEnumType(SegmentedFileSuffix) },
+        {
+          no: 8,
+          name: "disable_manifest",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 5, name: "s3", kind: "message", T: S3Upload, oneof: "output" },
+        { no: 6, name: "gcp", kind: "message", T: GCPUpload, oneof: "output" },
+        { no: 7, name: "azure", kind: "message", T: AzureBlobUpload, oneof: "output" },
+        { no: 9, name: "aliOSS", kind: "message", T: AliOSSUpload, oneof: "output" }
+      ]
+    );
+    ImageOutput = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ImageOutput",
+      () => [
+        {
+          no: 1,
+          name: "capture_interval",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 2,
+          name: "width",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 3,
+          name: "height",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 4,
+          name: "filename_prefix",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "filename_suffix", kind: "enum", T: proto3.getEnumType(ImageFileSuffix) },
+        { no: 6, name: "image_codec", kind: "enum", T: proto3.getEnumType(ImageCodec) },
+        {
+          no: 7,
+          name: "disable_manifest",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 8, name: "s3", kind: "message", T: S3Upload, oneof: "output" },
+        { no: 9, name: "gcp", kind: "message", T: GCPUpload, oneof: "output" },
+        { no: 10, name: "azure", kind: "message", T: AzureBlobUpload, oneof: "output" },
+        { no: 11, name: "aliOSS", kind: "message", T: AliOSSUpload, oneof: "output" }
+      ]
+    );
+    StorageConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.StorageConfig",
+      () => [
+        { no: 1, name: "s3", kind: "message", T: S3Upload, oneof: "provider" },
+        { no: 2, name: "gcp", kind: "message", T: GCPUpload, oneof: "provider" },
+        { no: 3, name: "azure", kind: "message", T: AzureBlobUpload, oneof: "provider" },
+        { no: 4, name: "aliOSS", kind: "message", T: AliOSSUpload, oneof: "provider" }
+      ]
+    );
+    S3Upload = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.S3Upload",
+      () => [
+        {
+          no: 1,
+          name: "access_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "secret",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 11,
+          name: "session_token",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 12,
+          name: "assume_role_arn",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 13,
+          name: "assume_role_external_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "region",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "endpoint",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "bucket",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "force_path_style",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 7, name: "metadata", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 8,
+          name: "tagging",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "content_disposition",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 10, name: "proxy", kind: "message", T: ProxyConfig }
+      ]
+    );
+    GCPUpload = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.GCPUpload",
+      () => [
+        {
+          no: 1,
+          name: "credentials",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "bucket",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "proxy", kind: "message", T: ProxyConfig }
+      ]
+    );
+    AzureBlobUpload = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AzureBlobUpload",
+      () => [
+        {
+          no: 1,
+          name: "account_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "account_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "container_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    AliOSSUpload = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AliOSSUpload",
+      () => [
+        {
+          no: 1,
+          name: "access_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "secret",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "region",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "endpoint",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "bucket",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ProxyConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ProxyConfig",
+      () => [
+        {
+          no: 1,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "egress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "active",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    ListEgressResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListEgressResponse",
+      () => [
+        { no: 1, name: "items", kind: "message", T: EgressInfo, repeated: true }
+      ]
+    );
+    StopEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.StopEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "egress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    EgressInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.EgressInfo",
+      () => [
+        {
+          no: 1,
+          name: "egress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "room_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 13,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 26, name: "source_type", kind: "enum", T: proto3.getEnumType(EgressSourceType) },
+        { no: 3, name: "status", kind: "enum", T: proto3.getEnumType(EgressStatus) },
+        {
+          no: 10,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 11,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 18,
+          name: "updated_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        { no: 30, name: "replay", kind: "message", T: ExportReplayRequest, oneof: "request" },
+        { no: 4, name: "room_composite", kind: "message", T: RoomCompositeEgressRequest, oneof: "request" },
+        { no: 14, name: "web", kind: "message", T: WebEgressRequest, oneof: "request" },
+        { no: 19, name: "participant", kind: "message", T: ParticipantEgressRequest, oneof: "request" },
+        { no: 5, name: "track_composite", kind: "message", T: TrackCompositeEgressRequest, oneof: "request" },
+        { no: 6, name: "track", kind: "message", T: TrackEgressRequest, oneof: "request" },
+        { no: 15, name: "stream_results", kind: "message", T: StreamInfo, repeated: true },
+        { no: 16, name: "file_results", kind: "message", T: FileInfo, repeated: true },
+        { no: 17, name: "segment_results", kind: "message", T: SegmentsInfo, repeated: true },
+        { no: 20, name: "image_results", kind: "message", T: ImagesInfo, repeated: true },
+        {
+          no: 9,
+          name: "error",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 22,
+          name: "error_code",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        {
+          no: 21,
+          name: "details",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 23,
+          name: "manifest_location",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 25,
+          name: "backup_storage_used",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 27,
+          name: "retry_count",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        },
+        { no: 7, name: "stream", kind: "message", T: StreamInfoList, oneof: "result" },
+        { no: 8, name: "file", kind: "message", T: FileInfo, oneof: "result" },
+        { no: 12, name: "segments", kind: "message", T: SegmentsInfo, oneof: "result" }
+      ]
+    );
+    StreamInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.StreamInfo",
+      () => [
+        {
+          no: 1,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 3,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 4,
+          name: "duration",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        { no: 5, name: "status", kind: "enum", T: proto3.getEnumType(StreamInfo_Status) },
+        {
+          no: 6,
+          name: "error",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "last_retry_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 8,
+          name: "retries",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        }
+      ]
+    );
+    StreamInfo_Status = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.StreamInfo.Status",
+      [
+        { no: 0, name: "ACTIVE" },
+        { no: 1, name: "FINISHED" },
+        { no: 2, name: "FAILED" }
+      ]
+    );
+    FileInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.FileInfo",
+      () => [
+        {
+          no: 1,
+          name: "filename",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 3,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 6,
+          name: "duration",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 4,
+          name: "size",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 5,
+          name: "location",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SegmentsInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SegmentsInfo",
+      () => [
+        {
+          no: 1,
+          name: "playlist_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "live_playlist_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "duration",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 3,
+          name: "size",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 4,
+          name: "playlist_location",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "live_playlist_location",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "segment_count",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 6,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 7,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        }
+      ]
+    );
+    ImagesInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ImagesInfo",
+      () => [
+        {
+          no: 4,
+          name: "filename_prefix",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 1,
+          name: "image_count",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 2,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 3,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        }
+      ]
+    );
+    AutoParticipantEgress = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AutoParticipantEgress",
+      () => [
+        { no: 1, name: "preset", kind: "enum", T: proto3.getEnumType(EncodingOptionsPreset), oneof: "options" },
+        { no: 2, name: "advanced", kind: "message", T: EncodingOptions, oneof: "options" },
+        { no: 3, name: "file_outputs", kind: "message", T: EncodedFileOutput, repeated: true },
+        { no: 4, name: "segment_outputs", kind: "message", T: SegmentedFileOutput, repeated: true }
+      ]
+    );
+    AutoTrackEgress = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AutoTrackEgress",
+      () => [
+        {
+          no: 1,
+          name: "filepath",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "disable_manifest",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 2, name: "s3", kind: "message", T: S3Upload, oneof: "output" },
+        { no: 3, name: "gcp", kind: "message", T: GCPUpload, oneof: "output" },
+        { no: 4, name: "azure", kind: "message", T: AzureBlobUpload, oneof: "output" },
+        { no: 6, name: "aliOSS", kind: "message", T: AliOSSUpload, oneof: "output" }
+      ]
+    );
+    ExportReplayRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ExportReplayRequest",
+      () => [
+        {
+          no: 1,
+          name: "replay_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "start_offset_ms",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 3,
+          name: "end_offset_ms",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        { no: 4, name: "template", kind: "message", T: TemplateSource, oneof: "source" },
+        { no: 5, name: "web", kind: "message", T: WebSource, oneof: "source" },
+        { no: 6, name: "media", kind: "message", T: MediaSource, oneof: "source" },
+        { no: 7, name: "preset", kind: "enum", T: proto3.getEnumType(EncodingOptionsPreset), oneof: "encoding" },
+        { no: 8, name: "advanced", kind: "message", T: EncodingOptions, oneof: "encoding" },
+        { no: 9, name: "outputs", kind: "message", T: Output, repeated: true },
+        { no: 10, name: "storage", kind: "message", T: StorageConfig },
+        { no: 11, name: "webhooks", kind: "message", T: WebhookConfig, repeated: true }
+      ]
+    );
+    RoomCompositeEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.RoomCompositeEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "layout",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "audio_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 15, name: "audio_mixing", kind: "enum", T: proto3.getEnumType(AudioMixing) },
+        {
+          no: 4,
+          name: "video_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 5,
+          name: "custom_base_url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 6, name: "file", kind: "message", T: EncodedFileOutput, oneof: "output" },
+        { no: 7, name: "stream", kind: "message", T: StreamOutput, oneof: "output" },
+        { no: 10, name: "segments", kind: "message", T: SegmentedFileOutput, oneof: "output" },
+        { no: 8, name: "preset", kind: "enum", T: proto3.getEnumType(EncodingOptionsPreset), oneof: "options" },
+        { no: 9, name: "advanced", kind: "message", T: EncodingOptions, oneof: "options" },
+        { no: 11, name: "file_outputs", kind: "message", T: EncodedFileOutput, repeated: true },
+        { no: 12, name: "stream_outputs", kind: "message", T: StreamOutput, repeated: true },
+        { no: 13, name: "segment_outputs", kind: "message", T: SegmentedFileOutput, repeated: true },
+        { no: 14, name: "image_outputs", kind: "message", T: ImageOutput, repeated: true },
+        { no: 16, name: "webhooks", kind: "message", T: WebhookConfig, repeated: true }
+      ]
+    );
+    WebEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.WebEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "audio_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 3,
+          name: "video_only",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 12,
+          name: "await_start_signal",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 4, name: "file", kind: "message", T: EncodedFileOutput, oneof: "output" },
+        { no: 5, name: "stream", kind: "message", T: StreamOutput, oneof: "output" },
+        { no: 6, name: "segments", kind: "message", T: SegmentedFileOutput, oneof: "output" },
+        { no: 7, name: "preset", kind: "enum", T: proto3.getEnumType(EncodingOptionsPreset), oneof: "options" },
+        { no: 8, name: "advanced", kind: "message", T: EncodingOptions, oneof: "options" },
+        { no: 9, name: "file_outputs", kind: "message", T: EncodedFileOutput, repeated: true },
+        { no: 10, name: "stream_outputs", kind: "message", T: StreamOutput, repeated: true },
+        { no: 11, name: "segment_outputs", kind: "message", T: SegmentedFileOutput, repeated: true },
+        { no: 13, name: "image_outputs", kind: "message", T: ImageOutput, repeated: true },
+        { no: 14, name: "webhooks", kind: "message", T: WebhookConfig, repeated: true }
+      ]
+    );
+    ParticipantEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ParticipantEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "screen_share",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 4, name: "preset", kind: "enum", T: proto3.getEnumType(EncodingOptionsPreset), oneof: "options" },
+        { no: 5, name: "advanced", kind: "message", T: EncodingOptions, oneof: "options" },
+        { no: 6, name: "file_outputs", kind: "message", T: EncodedFileOutput, repeated: true },
+        { no: 7, name: "stream_outputs", kind: "message", T: StreamOutput, repeated: true },
+        { no: 8, name: "segment_outputs", kind: "message", T: SegmentedFileOutput, repeated: true },
+        { no: 9, name: "image_outputs", kind: "message", T: ImageOutput, repeated: true },
+        { no: 10, name: "webhooks", kind: "message", T: WebhookConfig, repeated: true }
+      ]
+    );
+    TrackCompositeEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TrackCompositeEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "audio_track_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "video_track_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "file", kind: "message", T: EncodedFileOutput, oneof: "output" },
+        { no: 5, name: "stream", kind: "message", T: StreamOutput, oneof: "output" },
+        { no: 8, name: "segments", kind: "message", T: SegmentedFileOutput, oneof: "output" },
+        { no: 6, name: "preset", kind: "enum", T: proto3.getEnumType(EncodingOptionsPreset), oneof: "options" },
+        { no: 7, name: "advanced", kind: "message", T: EncodingOptions, oneof: "options" },
+        { no: 11, name: "file_outputs", kind: "message", T: EncodedFileOutput, repeated: true },
+        { no: 12, name: "stream_outputs", kind: "message", T: StreamOutput, repeated: true },
+        { no: 13, name: "segment_outputs", kind: "message", T: SegmentedFileOutput, repeated: true },
+        { no: 14, name: "image_outputs", kind: "message", T: ImageOutput, repeated: true },
+        { no: 15, name: "webhooks", kind: "message", T: WebhookConfig, repeated: true }
+      ]
+    );
+    TrackEgressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TrackEgressRequest",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "track_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "file", kind: "message", T: DirectFileOutput, oneof: "output" },
+        { no: 4, name: "websocket_url", kind: "scalar", T: 9, oneof: "output" },
+        { no: 5, name: "webhooks", kind: "message", T: WebhookConfig, repeated: true }
+      ]
+    );
+    DirectFileOutput = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DirectFileOutput",
+      () => [
+        {
+          no: 1,
+          name: "filepath",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "disable_manifest",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 2, name: "s3", kind: "message", T: S3Upload, oneof: "output" },
+        { no: 3, name: "gcp", kind: "message", T: GCPUpload, oneof: "output" },
+        { no: 4, name: "azure", kind: "message", T: AzureBlobUpload, oneof: "output" },
+        { no: 6, name: "aliOSS", kind: "message", T: AliOSSUpload, oneof: "output" }
+      ]
+    );
+    EncodedFileOutput = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.EncodedFileOutput",
+      () => [
+        { no: 1, name: "file_type", kind: "enum", T: proto3.getEnumType(EncodedFileType) },
+        {
+          no: 2,
+          name: "filepath",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "disable_manifest",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 3, name: "s3", kind: "message", T: S3Upload, oneof: "output" },
+        { no: 4, name: "gcp", kind: "message", T: GCPUpload, oneof: "output" },
+        { no: 5, name: "azure", kind: "message", T: AzureBlobUpload, oneof: "output" },
+        { no: 7, name: "aliOSS", kind: "message", T: AliOSSUpload, oneof: "output" }
+      ]
+    );
+    UpdateLayoutRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateLayoutRequest",
+      () => [
+        {
+          no: 1,
+          name: "egress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "layout",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    UpdateStreamRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateStreamRequest",
+      () => [
+        {
+          no: 1,
+          name: "egress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "add_output_urls", kind: "scalar", T: 9, repeated: true },
+        { no: 3, name: "remove_output_urls", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    StreamInfoList = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.StreamInfoList",
+      () => [
+        { no: 1, name: "info", kind: "message", T: StreamInfo, repeated: true }
+      ]
+    );
+    IngressInput = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.IngressInput",
+      [
+        { no: 0, name: "RTMP_INPUT" },
+        { no: 1, name: "WHIP_INPUT" },
+        { no: 2, name: "URL_INPUT" }
+      ]
+    );
+    IngressAudioEncodingPreset = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.IngressAudioEncodingPreset",
+      [
+        { no: 0, name: "OPUS_STEREO_96KBPS" },
+        { no: 1, name: "OPUS_MONO_64KBS" }
+      ]
+    );
+    IngressVideoEncodingPreset = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.IngressVideoEncodingPreset",
+      [
+        { no: 0, name: "H264_720P_30FPS_3_LAYERS" },
+        { no: 1, name: "H264_1080P_30FPS_3_LAYERS" },
+        { no: 2, name: "H264_540P_25FPS_2_LAYERS" },
+        { no: 3, name: "H264_720P_30FPS_1_LAYER" },
+        { no: 4, name: "H264_1080P_30FPS_1_LAYER" },
+        { no: 5, name: "H264_720P_30FPS_3_LAYERS_HIGH_MOTION" },
+        { no: 6, name: "H264_1080P_30FPS_3_LAYERS_HIGH_MOTION" },
+        { no: 7, name: "H264_540P_25FPS_2_LAYERS_HIGH_MOTION" },
+        { no: 8, name: "H264_720P_30FPS_1_LAYER_HIGH_MOTION" },
+        { no: 9, name: "H264_1080P_30FPS_1_LAYER_HIGH_MOTION" }
+      ]
+    );
+    CreateIngressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateIngressRequest",
+      () => [
+        { no: 1, name: "input_type", kind: "enum", T: proto3.getEnumType(IngressInput) },
+        {
+          no: 9,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 10,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "bypass_transcoding",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 11, name: "enable_transcoding", kind: "scalar", T: 8, opt: true },
+        { no: 6, name: "audio", kind: "message", T: IngressAudioOptions },
+        { no: 7, name: "video", kind: "message", T: IngressVideoOptions },
+        { no: 12, name: "enabled", kind: "scalar", T: 8, opt: true }
+      ]
+    );
+    IngressAudioOptions = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.IngressAudioOptions",
+      () => [
+        {
+          no: 1,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "source", kind: "enum", T: proto3.getEnumType(TrackSource) },
+        { no: 3, name: "preset", kind: "enum", T: proto3.getEnumType(IngressAudioEncodingPreset), oneof: "encoding_options" },
+        { no: 4, name: "options", kind: "message", T: IngressAudioEncodingOptions, oneof: "encoding_options" }
+      ]
+    );
+    IngressVideoOptions = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.IngressVideoOptions",
+      () => [
+        {
+          no: 1,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "source", kind: "enum", T: proto3.getEnumType(TrackSource) },
+        { no: 3, name: "preset", kind: "enum", T: proto3.getEnumType(IngressVideoEncodingPreset), oneof: "encoding_options" },
+        { no: 4, name: "options", kind: "message", T: IngressVideoEncodingOptions, oneof: "encoding_options" }
+      ]
+    );
+    IngressAudioEncodingOptions = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.IngressAudioEncodingOptions",
+      () => [
+        { no: 1, name: "audio_codec", kind: "enum", T: proto3.getEnumType(AudioCodec) },
+        {
+          no: 2,
+          name: "bitrate",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 3,
+          name: "disable_dtx",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 4,
+          name: "channels",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        }
+      ]
+    );
+    IngressVideoEncodingOptions = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.IngressVideoEncodingOptions",
+      () => [
+        { no: 1, name: "video_codec", kind: "enum", T: proto3.getEnumType(VideoCodec) },
+        {
+          no: 2,
+          name: "frame_rate",
+          kind: "scalar",
+          T: 1
+          /* ScalarType.DOUBLE */
+        },
+        { no: 3, name: "layers", kind: "message", T: VideoLayer, repeated: true }
+      ]
+    );
+    IngressInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.IngressInfo",
+      () => [
+        {
+          no: 1,
+          name: "ingress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "stream_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "input_type", kind: "enum", T: proto3.getEnumType(IngressInput) },
+        {
+          no: 13,
+          name: "bypass_transcoding",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 15, name: "enable_transcoding", kind: "scalar", T: 8, opt: true },
+        { no: 6, name: "audio", kind: "message", T: IngressAudioOptions },
+        { no: 7, name: "video", kind: "message", T: IngressVideoOptions },
+        {
+          no: 8,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 10,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 14,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 11,
+          name: "reusable",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 12, name: "state", kind: "message", T: IngressState },
+        { no: 16, name: "enabled", kind: "scalar", T: 8, opt: true }
+      ]
+    );
+    IngressState = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.IngressState",
+      () => [
+        { no: 1, name: "status", kind: "enum", T: proto3.getEnumType(IngressState_Status) },
+        {
+          no: 2,
+          name: "error",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "video", kind: "message", T: InputVideoState },
+        { no: 4, name: "audio", kind: "message", T: InputAudioState },
+        {
+          no: 5,
+          name: "room_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "started_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 8,
+          name: "ended_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 10,
+          name: "updated_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 9,
+          name: "resource_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 6, name: "tracks", kind: "message", T: TrackInfo, repeated: true }
+      ]
+    );
+    IngressState_Status = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.IngressState.Status",
+      [
+        { no: 0, name: "ENDPOINT_INACTIVE" },
+        { no: 1, name: "ENDPOINT_BUFFERING" },
+        { no: 2, name: "ENDPOINT_PUBLISHING" },
+        { no: 3, name: "ENDPOINT_ERROR" },
+        { no: 4, name: "ENDPOINT_COMPLETE" }
+      ]
+    );
+    InputVideoState = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.InputVideoState",
+      () => [
+        {
+          no: 1,
+          name: "mime_type",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "average_bitrate",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 3,
+          name: "width",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 4,
+          name: "height",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 5,
+          name: "framerate",
+          kind: "scalar",
+          T: 1
+          /* ScalarType.DOUBLE */
+        }
+      ]
+    );
+    InputAudioState = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.InputAudioState",
+      () => [
+        {
+          no: 1,
+          name: "mime_type",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "average_bitrate",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 3,
+          name: "channels",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 4,
+          name: "sample_rate",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        }
+      ]
+    );
+    UpdateIngressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateIngressRequest",
+      () => [
+        {
+          no: 1,
+          name: "ingress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 8, name: "bypass_transcoding", kind: "scalar", T: 8, opt: true },
+        { no: 10, name: "enable_transcoding", kind: "scalar", T: 8, opt: true },
+        { no: 6, name: "audio", kind: "message", T: IngressAudioOptions },
+        { no: 7, name: "video", kind: "message", T: IngressVideoOptions },
+        { no: 11, name: "enabled", kind: "scalar", T: 8, opt: true }
+      ]
+    );
+    ListIngressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListIngressRequest",
+      () => [
+        { no: 3, name: "page_token", kind: "message", T: TokenPagination },
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "ingress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListIngressResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListIngressResponse",
+      () => [
+        { no: 2, name: "next_page_token", kind: "message", T: TokenPagination },
+        { no: 1, name: "items", kind: "message", T: IngressInfo, repeated: true }
+      ]
+    );
+    DeleteIngressRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DeleteIngressRequest",
+      () => [
+        {
+          no: 1,
+          name: "ingress_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    CreateRoomRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateRoomRequest",
+      () => [
+        {
+          no: 1,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 12,
+          name: "room_preset",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "empty_timeout",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 10,
+          name: "departure_timeout",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 3,
+          name: "max_participants",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 4,
+          name: "node_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 15, name: "tags", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 6, name: "egress", kind: "message", T: RoomEgress },
+        {
+          no: 7,
+          name: "min_playout_delay",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 8,
+          name: "max_playout_delay",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 9,
+          name: "sync_streams",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 13,
+          name: "replay_enabled",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 14, name: "agents", kind: "message", T: RoomAgentDispatch, repeated: true }
+      ]
+    );
+    RoomEgress = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.RoomEgress",
+      () => [
+        { no: 1, name: "room", kind: "message", T: RoomCompositeEgressRequest },
+        { no: 3, name: "participant", kind: "message", T: AutoParticipantEgress },
+        { no: 2, name: "tracks", kind: "message", T: AutoTrackEgress }
+      ]
+    );
+    ListRoomsRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListRoomsRequest",
+      () => [
+        { no: 1, name: "names", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    ListRoomsResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListRoomsResponse",
+      () => [
+        { no: 1, name: "rooms", kind: "message", T: Room, repeated: true }
+      ]
+    );
+    DeleteRoomRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DeleteRoomRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListParticipantsRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListParticipantsRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ListParticipantsResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListParticipantsResponse",
+      () => [
+        { no: 1, name: "participants", kind: "message", T: ParticipantInfo, repeated: true }
+      ]
+    );
+    RoomParticipantIdentity = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.RoomParticipantIdentity",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    MuteRoomTrackRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.MuteRoomTrackRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "track_sid",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "muted",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    MuteRoomTrackResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.MuteRoomTrackResponse",
+      () => [
+        { no: 1, name: "track", kind: "message", T: TrackInfo }
+      ]
+    );
+    UpdateParticipantRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateParticipantRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "permission", kind: "message", T: ParticipantPermission },
+        {
+          no: 5,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 6, name: "attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } }
+      ]
+    );
+    UpdateSubscriptionsRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateSubscriptionsRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "track_sids", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 4,
+          name: "subscribe",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 5, name: "participant_tracks", kind: "message", T: ParticipantTracks, repeated: true }
+      ]
+    );
+    SendDataRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SendDataRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "data",
+          kind: "scalar",
+          T: 12
+          /* ScalarType.BYTES */
+        },
+        { no: 3, name: "kind", kind: "enum", T: proto3.getEnumType(DataPacket_Kind) },
+        { no: 4, name: "destination_sids", kind: "scalar", T: 9, repeated: true },
+        { no: 6, name: "destination_identities", kind: "scalar", T: 9, repeated: true },
+        { no: 5, name: "topic", kind: "scalar", T: 9, opt: true },
+        {
+          no: 7,
+          name: "nonce",
+          kind: "scalar",
+          T: 12
+          /* ScalarType.BYTES */
+        }
+      ]
+    );
+    UpdateRoomMetadataRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateRoomMetadataRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    RoomConfiguration = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.RoomConfiguration",
+      () => [
+        {
+          no: 1,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "empty_timeout",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 3,
+          name: "departure_timeout",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 4,
+          name: "max_participants",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 11,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "egress", kind: "message", T: RoomEgress },
+        {
+          no: 7,
+          name: "min_playout_delay",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 8,
+          name: "max_playout_delay",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        {
+          no: 9,
+          name: "sync_streams",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 10, name: "agents", kind: "message", T: RoomAgentDispatch, repeated: true },
+        { no: 12, name: "tags", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } }
+      ]
+    );
+    ForwardParticipantRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ForwardParticipantRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "destination_room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    MoveParticipantRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.MoveParticipantRequest",
+      () => [
+        {
+          no: 1,
+          name: "room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "destination_room",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SIPTransport = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SIPTransport",
+      [
+        { no: 0, name: "SIP_TRANSPORT_AUTO" },
+        { no: 1, name: "SIP_TRANSPORT_UDP" },
+        { no: 2, name: "SIP_TRANSPORT_TCP" },
+        { no: 3, name: "SIP_TRANSPORT_TLS" }
+      ]
+    );
+    SIPHeaderOptions = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SIPHeaderOptions",
+      [
+        { no: 0, name: "SIP_NO_HEADERS" },
+        { no: 1, name: "SIP_X_HEADERS" },
+        { no: 2, name: "SIP_ALL_HEADERS" }
+      ]
+    );
+    SIPMediaEncryption = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SIPMediaEncryption",
+      [
+        { no: 0, name: "SIP_MEDIA_ENCRYPT_DISABLE" },
+        { no: 1, name: "SIP_MEDIA_ENCRYPT_ALLOW" },
+        { no: 2, name: "SIP_MEDIA_ENCRYPT_REQUIRE" }
+      ]
+    );
+    SIPCallStatus = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SIPCallStatus",
+      [
+        { no: 0, name: "SCS_CALL_INCOMING" },
+        { no: 1, name: "SCS_PARTICIPANT_JOINED" },
+        { no: 2, name: "SCS_ACTIVE" },
+        { no: 3, name: "SCS_DISCONNECTED" },
+        { no: 4, name: "SCS_ERROR" }
+      ]
+    );
+    CreateSIPTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateSIPTrunkRequest",
+      () => [
+        { no: 1, name: "inbound_addresses", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 2,
+          name: "outbound_address",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "outbound_number",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "inbound_numbers_regex", kind: "scalar", T: 9, repeated: true },
+        { no: 9, name: "inbound_numbers", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 5,
+          name: "inbound_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "inbound_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "outbound_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "outbound_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 10,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 11,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SIPCodec = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPCodec",
+      () => [
+        {
+          no: 1,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "rate",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        }
+      ]
+    );
+    SIPMediaConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPMediaConfig",
+      () => [
+        {
+          no: 1,
+          name: "only_listed_codecs",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 2, name: "codecs", kind: "message", T: SIPCodec, repeated: true },
+        { no: 3, name: "encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption), opt: true }
+      ]
+    );
+    SIPTrunkInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPTrunkInfo",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 14, name: "kind", kind: "enum", T: proto3.getEnumType(SIPTrunkInfo_TrunkKind) },
+        { no: 2, name: "inbound_addresses", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 3,
+          name: "outbound_address",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "outbound_number",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 13, name: "transport", kind: "enum", T: proto3.getEnumType(SIPTransport) },
+        { no: 5, name: "inbound_numbers_regex", kind: "scalar", T: 9, repeated: true },
+        { no: 10, name: "inbound_numbers", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 6,
+          name: "inbound_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "inbound_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "outbound_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "outbound_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 11,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 12,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SIPTrunkInfo_TrunkKind = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.SIPTrunkInfo.TrunkKind",
+      [
+        { no: 0, name: "TRUNK_LEGACY" },
+        { no: 1, name: "TRUNK_INBOUND" },
+        { no: 2, name: "TRUNK_OUTBOUND" }
+      ]
+    );
+    CreateSIPInboundTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateSIPInboundTrunkRequest",
+      () => [
+        { no: 1, name: "trunk", kind: "message", T: SIPInboundTrunkInfo }
+      ]
+    );
+    UpdateSIPInboundTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateSIPInboundTrunkRequest",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "replace", kind: "message", T: SIPInboundTrunkInfo, oneof: "action" },
+        { no: 3, name: "update", kind: "message", T: SIPInboundTrunkUpdate, oneof: "action" }
+      ]
+    );
+    SIPInboundTrunkInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPInboundTrunkInfo",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 4, name: "numbers", kind: "scalar", T: 9, repeated: true },
+        { no: 5, name: "allowed_addresses", kind: "scalar", T: 9, repeated: true },
+        { no: 6, name: "allowed_numbers", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 7,
+          name: "auth_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "auth_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 9, name: "headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 10, name: "headers_to_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 14, name: "attributes_to_headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 15, name: "include_headers", kind: "enum", T: proto3.getEnumType(SIPHeaderOptions) },
+        { no: 11, name: "ringing_timeout", kind: "message", T: Duration },
+        { no: 12, name: "max_call_duration", kind: "message", T: Duration },
+        {
+          no: 13,
+          name: "krisp_enabled",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 16, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption) },
+        { no: 17, name: "created_at", kind: "message", T: Timestamp },
+        { no: 18, name: "updated_at", kind: "message", T: Timestamp }
+      ]
+    );
+    SIPInboundTrunkUpdate = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPInboundTrunkUpdate",
+      () => [
+        { no: 1, name: "numbers", kind: "message", T: ListUpdate },
+        { no: 2, name: "allowed_addresses", kind: "message", T: ListUpdate },
+        { no: 3, name: "allowed_numbers", kind: "message", T: ListUpdate },
+        { no: 4, name: "auth_username", kind: "scalar", T: 9, opt: true },
+        { no: 5, name: "auth_password", kind: "scalar", T: 9, opt: true },
+        { no: 6, name: "name", kind: "scalar", T: 9, opt: true },
+        { no: 7, name: "metadata", kind: "scalar", T: 9, opt: true },
+        { no: 8, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption), opt: true }
+      ]
+    );
+    CreateSIPOutboundTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateSIPOutboundTrunkRequest",
+      () => [
+        { no: 1, name: "trunk", kind: "message", T: SIPOutboundTrunkInfo }
+      ]
+    );
+    UpdateSIPOutboundTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateSIPOutboundTrunkRequest",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "replace", kind: "message", T: SIPOutboundTrunkInfo, oneof: "action" },
+        { no: 3, name: "update", kind: "message", T: SIPOutboundTrunkUpdate, oneof: "action" }
+      ]
+    );
+    SIPOutboundTrunkInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPOutboundTrunkInfo",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "address",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 14,
+          name: "destination_country",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "transport", kind: "enum", T: proto3.getEnumType(SIPTransport) },
+        { no: 6, name: "numbers", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 7,
+          name: "auth_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "auth_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 9, name: "headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 10, name: "headers_to_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 11, name: "attributes_to_headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 12, name: "include_headers", kind: "enum", T: proto3.getEnumType(SIPHeaderOptions) },
+        { no: 13, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption) },
+        {
+          no: 15,
+          name: "from_host",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 16, name: "created_at", kind: "message", T: Timestamp },
+        { no: 17, name: "updated_at", kind: "message", T: Timestamp }
+      ]
+    );
+    SIPOutboundTrunkUpdate = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPOutboundTrunkUpdate",
+      () => [
+        { no: 1, name: "address", kind: "scalar", T: 9, opt: true },
+        { no: 2, name: "transport", kind: "enum", T: proto3.getEnumType(SIPTransport), opt: true },
+        { no: 9, name: "destination_country", kind: "scalar", T: 9, opt: true },
+        { no: 3, name: "numbers", kind: "message", T: ListUpdate },
+        { no: 4, name: "auth_username", kind: "scalar", T: 9, opt: true },
+        { no: 5, name: "auth_password", kind: "scalar", T: 9, opt: true },
+        { no: 6, name: "name", kind: "scalar", T: 9, opt: true },
+        { no: 7, name: "metadata", kind: "scalar", T: 9, opt: true },
+        { no: 8, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption), opt: true },
+        { no: 10, name: "from_host", kind: "scalar", T: 9, opt: true }
+      ]
+    );
+    ListSIPTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPTrunkRequest",
+      () => [
+        { no: 1, name: "page", kind: "message", T: Pagination }
+      ]
+    );
+    ListSIPTrunkResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPTrunkResponse",
+      () => [
+        { no: 1, name: "items", kind: "message", T: SIPTrunkInfo, repeated: true }
+      ]
+    );
+    ListSIPInboundTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPInboundTrunkRequest",
+      () => [
+        { no: 3, name: "page", kind: "message", T: Pagination },
+        { no: 1, name: "trunk_ids", kind: "scalar", T: 9, repeated: true },
+        { no: 2, name: "numbers", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    ListSIPInboundTrunkResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPInboundTrunkResponse",
+      () => [
+        { no: 1, name: "items", kind: "message", T: SIPInboundTrunkInfo, repeated: true }
+      ]
+    );
+    ListSIPOutboundTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPOutboundTrunkRequest",
+      () => [
+        { no: 3, name: "page", kind: "message", T: Pagination },
+        { no: 1, name: "trunk_ids", kind: "scalar", T: 9, repeated: true },
+        { no: 2, name: "numbers", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    ListSIPOutboundTrunkResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPOutboundTrunkResponse",
+      () => [
+        { no: 1, name: "items", kind: "message", T: SIPOutboundTrunkInfo, repeated: true }
+      ]
+    );
+    DeleteSIPTrunkRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DeleteSIPTrunkRequest",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SIPDispatchRuleDirect = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPDispatchRuleDirect",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "pin",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SIPDispatchRuleIndividual = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPDispatchRuleIndividual",
+      () => [
+        {
+          no: 1,
+          name: "room_prefix",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "pin",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "no_randomness",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    SIPDispatchRuleCallee = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPDispatchRuleCallee",
+      () => [
+        {
+          no: 1,
+          name: "room_prefix",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "pin",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "randomize",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    SIPDispatchRule = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPDispatchRule",
+      () => [
+        { no: 1, name: "dispatch_rule_direct", kind: "message", T: SIPDispatchRuleDirect, oneof: "rule" },
+        { no: 2, name: "dispatch_rule_individual", kind: "message", T: SIPDispatchRuleIndividual, oneof: "rule" },
+        { no: 3, name: "dispatch_rule_callee", kind: "message", T: SIPDispatchRuleCallee, oneof: "rule" }
+      ]
+    );
+    CreateSIPDispatchRuleRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateSIPDispatchRuleRequest",
+      () => [
+        { no: 10, name: "dispatch_rule", kind: "message", T: SIPDispatchRuleInfo },
+        { no: 1, name: "rule", kind: "message", T: SIPDispatchRule },
+        { no: 2, name: "trunk_ids", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 3,
+          name: "hide_phone_number",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 6, name: "inbound_numbers", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 4,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 7, name: "attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 8,
+          name: "room_preset",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 9, name: "room_config", kind: "message", T: RoomConfiguration }
+      ]
+    );
+    UpdateSIPDispatchRuleRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.UpdateSIPDispatchRuleRequest",
+      () => [
+        {
+          no: 1,
+          name: "sip_dispatch_rule_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "replace", kind: "message", T: SIPDispatchRuleInfo, oneof: "action" },
+        { no: 3, name: "update", kind: "message", T: SIPDispatchRuleUpdate, oneof: "action" }
+      ]
+    );
+    SIPDispatchRuleInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPDispatchRuleInfo",
+      () => [
+        {
+          no: 1,
+          name: "sip_dispatch_rule_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "rule", kind: "message", T: SIPDispatchRule },
+        { no: 3, name: "trunk_ids", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 4,
+          name: "hide_phone_number",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 7, name: "inbound_numbers", kind: "scalar", T: 9, repeated: true },
+        { no: 13, name: "numbers", kind: "scalar", T: 9, repeated: true },
+        {
+          no: 5,
+          name: "name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 8, name: "attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 9,
+          name: "room_preset",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 10, name: "room_config", kind: "message", T: RoomConfiguration },
+        { no: 16, name: "media", kind: "message", T: SIPMediaConfig },
+        {
+          no: 11,
+          name: "krisp_enabled",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 12, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption) },
+        { no: 14, name: "created_at", kind: "message", T: Timestamp },
+        { no: 15, name: "updated_at", kind: "message", T: Timestamp }
+      ]
+    );
+    SIPDispatchRuleUpdate = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPDispatchRuleUpdate",
+      () => [
+        { no: 1, name: "trunk_ids", kind: "message", T: ListUpdate },
+        { no: 2, name: "rule", kind: "message", T: SIPDispatchRule },
+        { no: 3, name: "name", kind: "scalar", T: 9, opt: true },
+        { no: 4, name: "metadata", kind: "scalar", T: 9, opt: true },
+        { no: 5, name: "attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 6, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption), opt: true },
+        { no: 7, name: "media", kind: "message", T: SIPMediaConfig }
+      ]
+    );
+    ListSIPDispatchRuleRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPDispatchRuleRequest",
+      () => [
+        { no: 3, name: "page", kind: "message", T: Pagination },
+        { no: 1, name: "dispatch_rule_ids", kind: "scalar", T: 9, repeated: true },
+        { no: 2, name: "trunk_ids", kind: "scalar", T: 9, repeated: true }
+      ]
+    );
+    ListSIPDispatchRuleResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ListSIPDispatchRuleResponse",
+      () => [
+        { no: 1, name: "items", kind: "message", T: SIPDispatchRuleInfo, repeated: true }
+      ]
+    );
+    DeleteSIPDispatchRuleRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DeleteSIPDispatchRuleRequest",
+      () => [
+        {
+          no: 1,
+          name: "sip_dispatch_rule_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SIPOutboundConfig = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPOutboundConfig",
+      () => [
+        {
+          no: 1,
+          name: "hostname",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "destination_country",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "transport", kind: "enum", T: proto3.getEnumType(SIPTransport) },
+        {
+          no: 3,
+          name: "auth_username",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "auth_password",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "headers_to_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 6, name: "attributes_to_headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 8,
+          name: "from_host",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    CreateSIPParticipantRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.CreateSIPParticipantRequest",
+      () => [
+        {
+          no: 1,
+          name: "sip_trunk_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 20, name: "trunk", kind: "message", T: SIPOutboundConfig },
+        {
+          no: 2,
+          name: "sip_call_to",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 15,
+          name: "sip_number",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 9, name: "participant_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 5,
+          name: "dtmf",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "play_ringtone",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 13,
+          name: "play_dialtone",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        {
+          no: 10,
+          name: "hide_phone_number",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 16, name: "headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 17, name: "include_headers", kind: "enum", T: proto3.getEnumType(SIPHeaderOptions) },
+        { no: 11, name: "ringing_timeout", kind: "message", T: Duration },
+        { no: 12, name: "max_call_duration", kind: "message", T: Duration },
+        {
+          no: 14,
+          name: "krisp_enabled",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 18, name: "media_encryption", kind: "enum", T: proto3.getEnumType(SIPMediaEncryption) },
+        { no: 23, name: "media", kind: "message", T: SIPMediaConfig },
+        {
+          no: 19,
+          name: "wait_until_answered",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 21, name: "display_name", kind: "scalar", T: 9, opt: true },
+        { no: 22, name: "destination", kind: "message", T: Destination, opt: true }
+      ]
+    );
+    SIPParticipantInfo = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SIPParticipantInfo",
+      () => [
+        {
+          no: 1,
+          name: "participant_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "sip_call_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    TransferSIPParticipantRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.TransferSIPParticipantRequest",
+      () => [
+        {
+          no: 1,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "transfer_to",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "play_dialtone",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        },
+        { no: 5, name: "headers", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        { no: 6, name: "ringing_timeout", kind: "message", T: Duration }
+      ]
+    );
+    Destination = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.Destination",
+      () => [
+        {
+          no: 1,
+          name: "city",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "country",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "region",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ConnectTwilioCallRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ConnectTwilioCallRequest",
+      () => [
+        { no: 1, name: "twilio_call_direction", kind: "enum", T: proto3.getEnumType(ConnectTwilioCallRequest_TwilioCallDirection) },
+        {
+          no: 2,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "agents", kind: "message", T: RoomAgentDispatch, repeated: true },
+        {
+          no: 4,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 6,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 7, name: "participant_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 8,
+          name: "destination_country",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    ConnectTwilioCallRequest_TwilioCallDirection = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.ConnectTwilioCallRequest.TwilioCallDirection",
+      [
+        { no: 0, name: "TWILIO_CALL_DIRECTION_INBOUND", localName: "INBOUND" },
+        { no: 1, name: "TWILIO_CALL_DIRECTION_OUTBOUND", localName: "OUTBOUND" }
+      ]
+    );
+    ConnectTwilioCallResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ConnectTwilioCallResponse",
+      () => [
+        {
+          no: 1,
+          name: "connect_url",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    SessionDescription = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.SessionDescription",
+      () => [
+        {
+          no: 1,
+          name: "type",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "sdp",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "id",
+          kind: "scalar",
+          T: 13
+          /* ScalarType.UINT32 */
+        },
+        { no: 4, name: "mid_to_track_id", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } }
+      ]
+    );
+    DialWhatsAppCallRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DialWhatsAppCallRequest",
+      () => [
+        {
+          no: 1,
+          name: "whatsapp_phone_number_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "whatsapp_to_phone_number",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "whatsapp_api_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 12,
+          name: "whatsapp_cloud_api_version",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "whatsapp_biz_opaque_callback_data",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 5,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 6, name: "agents", kind: "message", T: RoomAgentDispatch, repeated: true },
+        {
+          no: 7,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 8,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 10, name: "participant_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 11,
+          name: "destination_country",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 13, name: "ringing_timeout", kind: "message", T: Duration }
+      ]
+    );
+    DialWhatsAppCallResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DialWhatsAppCallResponse",
+      () => [
+        {
+          no: 1,
+          name: "whatsapp_call_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    DisconnectWhatsAppCallRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DisconnectWhatsAppCallRequest",
+      () => [
+        {
+          no: 1,
+          name: "whatsapp_call_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "whatsapp_api_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 3, name: "disconnect_reason", kind: "enum", T: proto3.getEnumType(DisconnectWhatsAppCallRequest_DisconnectReason) }
+      ]
+    );
+    DisconnectWhatsAppCallRequest_DisconnectReason = /* @__PURE__ */ proto3.makeEnum(
+      "livekit.DisconnectWhatsAppCallRequest.DisconnectReason",
+      [
+        { no: 0, name: "BUSINESS_INITIATED" },
+        { no: 1, name: "USER_INITIATED" }
+      ]
+    );
+    DisconnectWhatsAppCallResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.DisconnectWhatsAppCallResponse",
+      []
+    );
+    ConnectWhatsAppCallRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ConnectWhatsAppCallRequest",
+      () => [
+        {
+          no: 1,
+          name: "whatsapp_call_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "sdp", kind: "message", T: SessionDescription }
+      ]
+    );
+    ConnectWhatsAppCallResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.ConnectWhatsAppCallResponse",
+      []
+    );
+    AcceptWhatsAppCallRequest = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AcceptWhatsAppCallRequest",
+      () => [
+        {
+          no: 1,
+          name: "whatsapp_phone_number_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 2,
+          name: "whatsapp_api_key",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 13,
+          name: "whatsapp_cloud_api_version",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 3,
+          name: "whatsapp_call_id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 4,
+          name: "whatsapp_biz_opaque_callback_data",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 5, name: "sdp", kind: "message", T: SessionDescription },
+        {
+          no: 6,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 7, name: "agents", kind: "message", T: RoomAgentDispatch, repeated: true },
+        {
+          no: 8,
+          name: "participant_identity",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 9,
+          name: "participant_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 10,
+          name: "participant_metadata",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 11, name: "participant_attributes", kind: "map", K: 9, V: {
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        } },
+        {
+          no: 12,
+          name: "destination_country",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 14, name: "ringing_timeout", kind: "message", T: Duration },
+        {
+          no: 15,
+          name: "wait_until_answered",
+          kind: "scalar",
+          T: 8
+          /* ScalarType.BOOL */
+        }
+      ]
+    );
+    AcceptWhatsAppCallResponse = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.AcceptWhatsAppCallResponse",
+      () => [
+        {
+          no: 1,
+          name: "room_name",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        }
+      ]
+    );
+    WebhookEvent = /* @__PURE__ */ proto3.makeMessageType(
+      "livekit.WebhookEvent",
+      () => [
+        {
+          no: 1,
+          name: "event",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        { no: 2, name: "room", kind: "message", T: Room },
+        { no: 3, name: "participant", kind: "message", T: ParticipantInfo },
+        { no: 9, name: "egress_info", kind: "message", T: EgressInfo },
+        { no: 10, name: "ingress_info", kind: "message", T: IngressInfo },
+        { no: 8, name: "track", kind: "message", T: TrackInfo },
+        {
+          no: 6,
+          name: "id",
+          kind: "scalar",
+          T: 9
+          /* ScalarType.STRING */
+        },
+        {
+          no: 7,
+          name: "created_at",
+          kind: "scalar",
+          T: 3
+          /* ScalarType.INT64 */
+        },
+        {
+          no: 11,
+          name: "num_dropped",
+          kind: "scalar",
+          T: 5
+          /* ScalarType.INT32 */
+        }
+      ]
+    );
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/buffer_utils.js
+function concat(...buffers) {
+  const size = buffers.reduce((acc, { length }) => acc + length, 0);
+  const buf = new Uint8Array(size);
+  let i = 0;
+  for (const buffer of buffers) {
+    buf.set(buffer, i);
+    i += buffer.length;
+  }
+  return buf;
+}
+var encoder, decoder, MAX_INT32;
+var init_buffer_utils = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/buffer_utils.js"() {
+    "use strict";
+    encoder = new TextEncoder();
+    decoder = new TextDecoder();
+    MAX_INT32 = 2 ** 32;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/base64url.js
+import { Buffer as Buffer2 } from "node:buffer";
+function normalize(input) {
+  let encoded = input;
+  if (encoded instanceof Uint8Array) {
+    encoded = decoder.decode(encoded);
+  }
+  return encoded;
+}
+var encode, decode;
+var init_base64url = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/base64url.js"() {
+    "use strict";
+    init_buffer_utils();
+    encode = (input) => Buffer2.from(input).toString("base64url");
+    decode = (input) => new Uint8Array(Buffer2.from(normalize(input), "base64url"));
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/errors.js
+var JOSEError, JWTClaimValidationFailed, JWTExpired, JOSEAlgNotAllowed, JOSENotSupported, JWSInvalid, JWTInvalid, JWSSignatureVerificationFailed;
+var init_errors = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/errors.js"() {
+    "use strict";
+    JOSEError = class extends Error {
+      static code = "ERR_JOSE_GENERIC";
+      code = "ERR_JOSE_GENERIC";
+      constructor(message2, options) {
+        super(message2, options);
+        this.name = this.constructor.name;
+        Error.captureStackTrace?.(this, this.constructor);
+      }
+    };
+    JWTClaimValidationFailed = class extends JOSEError {
+      static code = "ERR_JWT_CLAIM_VALIDATION_FAILED";
+      code = "ERR_JWT_CLAIM_VALIDATION_FAILED";
+      claim;
+      reason;
+      payload;
+      constructor(message2, payload, claim = "unspecified", reason = "unspecified") {
+        super(message2, { cause: { claim, reason, payload } });
+        this.claim = claim;
+        this.reason = reason;
+        this.payload = payload;
+      }
+    };
+    JWTExpired = class extends JOSEError {
+      static code = "ERR_JWT_EXPIRED";
+      code = "ERR_JWT_EXPIRED";
+      claim;
+      reason;
+      payload;
+      constructor(message2, payload, claim = "unspecified", reason = "unspecified") {
+        super(message2, { cause: { claim, reason, payload } });
+        this.claim = claim;
+        this.reason = reason;
+        this.payload = payload;
+      }
+    };
+    JOSEAlgNotAllowed = class extends JOSEError {
+      static code = "ERR_JOSE_ALG_NOT_ALLOWED";
+      code = "ERR_JOSE_ALG_NOT_ALLOWED";
+    };
+    JOSENotSupported = class extends JOSEError {
+      static code = "ERR_JOSE_NOT_SUPPORTED";
+      code = "ERR_JOSE_NOT_SUPPORTED";
+    };
+    JWSInvalid = class extends JOSEError {
+      static code = "ERR_JWS_INVALID";
+      code = "ERR_JWS_INVALID";
+    };
+    JWTInvalid = class extends JOSEError {
+      static code = "ERR_JWT_INVALID";
+      code = "ERR_JWT_INVALID";
+    };
+    JWSSignatureVerificationFailed = class extends JOSEError {
+      static code = "ERR_JWS_SIGNATURE_VERIFICATION_FAILED";
+      code = "ERR_JWS_SIGNATURE_VERIFICATION_FAILED";
+      constructor(message2 = "signature verification failed", options) {
+        super(message2, options);
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_object.js
+import * as util from "node:util";
+var is_key_object_default;
+var init_is_key_object = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_object.js"() {
+    "use strict";
+    is_key_object_default = (obj) => util.types.isKeyObject(obj);
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/webcrypto.js
+import * as crypto2 from "node:crypto";
+import * as util2 from "node:util";
+var webcrypto2, webcrypto_default, isCryptoKey;
+var init_webcrypto = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/webcrypto.js"() {
+    "use strict";
+    webcrypto2 = crypto2.webcrypto;
+    webcrypto_default = webcrypto2;
+    isCryptoKey = (key) => util2.types.isCryptoKey(key);
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/crypto_key.js
+function unusable(name, prop = "algorithm.name") {
+  return new TypeError(`CryptoKey does not support this operation, its ${prop} must be ${name}`);
+}
+function isAlgorithm(algorithm, name) {
+  return algorithm.name === name;
+}
+function getHashLength(hash) {
+  return parseInt(hash.name.slice(4), 10);
+}
+function getNamedCurve(alg) {
+  switch (alg) {
+    case "ES256":
+      return "P-256";
+    case "ES384":
+      return "P-384";
+    case "ES512":
+      return "P-521";
+    default:
+      throw new Error("unreachable");
+  }
+}
+function checkUsage(key, usages) {
+  if (usages.length && !usages.some((expected) => key.usages.includes(expected))) {
+    let msg = "CryptoKey does not support this operation, its usages must include ";
+    if (usages.length > 2) {
+      const last = usages.pop();
+      msg += `one of ${usages.join(", ")}, or ${last}.`;
+    } else if (usages.length === 2) {
+      msg += `one of ${usages[0]} or ${usages[1]}.`;
+    } else {
+      msg += `${usages[0]}.`;
+    }
+    throw new TypeError(msg);
+  }
+}
+function checkSigCryptoKey(key, alg, ...usages) {
+  switch (alg) {
+    case "HS256":
+    case "HS384":
+    case "HS512": {
+      if (!isAlgorithm(key.algorithm, "HMAC"))
+        throw unusable("HMAC");
+      const expected = parseInt(alg.slice(2), 10);
+      const actual = getHashLength(key.algorithm.hash);
+      if (actual !== expected)
+        throw unusable(`SHA-${expected}`, "algorithm.hash");
+      break;
+    }
+    case "RS256":
+    case "RS384":
+    case "RS512": {
+      if (!isAlgorithm(key.algorithm, "RSASSA-PKCS1-v1_5"))
+        throw unusable("RSASSA-PKCS1-v1_5");
+      const expected = parseInt(alg.slice(2), 10);
+      const actual = getHashLength(key.algorithm.hash);
+      if (actual !== expected)
+        throw unusable(`SHA-${expected}`, "algorithm.hash");
+      break;
+    }
+    case "PS256":
+    case "PS384":
+    case "PS512": {
+      if (!isAlgorithm(key.algorithm, "RSA-PSS"))
+        throw unusable("RSA-PSS");
+      const expected = parseInt(alg.slice(2), 10);
+      const actual = getHashLength(key.algorithm.hash);
+      if (actual !== expected)
+        throw unusable(`SHA-${expected}`, "algorithm.hash");
+      break;
+    }
+    case "EdDSA": {
+      if (key.algorithm.name !== "Ed25519" && key.algorithm.name !== "Ed448") {
+        throw unusable("Ed25519 or Ed448");
+      }
+      break;
+    }
+    case "Ed25519": {
+      if (!isAlgorithm(key.algorithm, "Ed25519"))
+        throw unusable("Ed25519");
+      break;
+    }
+    case "ES256":
+    case "ES384":
+    case "ES512": {
+      if (!isAlgorithm(key.algorithm, "ECDSA"))
+        throw unusable("ECDSA");
+      const expected = getNamedCurve(alg);
+      const actual = key.algorithm.namedCurve;
+      if (actual !== expected)
+        throw unusable(expected, "algorithm.namedCurve");
+      break;
+    }
+    default:
+      throw new TypeError("CryptoKey does not support this operation");
+  }
+  checkUsage(key, usages);
+}
+var init_crypto_key = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/crypto_key.js"() {
+    "use strict";
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/invalid_key_input.js
+function message(msg, actual, ...types4) {
+  types4 = types4.filter(Boolean);
+  if (types4.length > 2) {
+    const last = types4.pop();
+    msg += `one of type ${types4.join(", ")}, or ${last}.`;
+  } else if (types4.length === 2) {
+    msg += `one of type ${types4[0]} or ${types4[1]}.`;
+  } else {
+    msg += `of type ${types4[0]}.`;
+  }
+  if (actual == null) {
+    msg += ` Received ${actual}`;
+  } else if (typeof actual === "function" && actual.name) {
+    msg += ` Received function ${actual.name}`;
+  } else if (typeof actual === "object" && actual != null) {
+    if (actual.constructor?.name) {
+      msg += ` Received an instance of ${actual.constructor.name}`;
+    }
+  }
+  return msg;
+}
+function withAlg(alg, actual, ...types4) {
+  return message(`Key for the ${alg} algorithm must be `, actual, ...types4);
+}
+var invalid_key_input_default;
+var init_invalid_key_input = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/invalid_key_input.js"() {
+    "use strict";
+    invalid_key_input_default = (actual, ...types4) => {
+      return message("Key must be ", actual, ...types4);
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_like.js
+var is_key_like_default, types3;
+var init_is_key_like = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/is_key_like.js"() {
+    "use strict";
+    init_webcrypto();
+    init_is_key_object();
+    is_key_like_default = (key) => is_key_object_default(key) || isCryptoKey(key);
+    types3 = ["KeyObject"];
+    if (globalThis.CryptoKey || webcrypto_default?.CryptoKey) {
+      types3.push("CryptoKey");
+    }
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_disjoint.js
+var isDisjoint, is_disjoint_default;
+var init_is_disjoint = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_disjoint.js"() {
+    "use strict";
+    isDisjoint = (...headers) => {
+      const sources = headers.filter(Boolean);
+      if (sources.length === 0 || sources.length === 1) {
+        return true;
+      }
+      let acc;
+      for (const header of sources) {
+        const parameters = Object.keys(header);
+        if (!acc || acc.size === 0) {
+          acc = new Set(parameters);
+          continue;
+        }
+        for (const parameter of parameters) {
+          if (acc.has(parameter)) {
+            return false;
+          }
+          acc.add(parameter);
+        }
+      }
+      return true;
+    };
+    is_disjoint_default = isDisjoint;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_object.js
+function isObjectLike(value) {
+  return typeof value === "object" && value !== null;
+}
+function isObject(input) {
+  if (!isObjectLike(input) || Object.prototype.toString.call(input) !== "[object Object]") {
+    return false;
+  }
+  if (Object.getPrototypeOf(input) === null) {
+    return true;
+  }
+  let proto = input;
+  while (Object.getPrototypeOf(proto) !== null) {
+    proto = Object.getPrototypeOf(proto);
+  }
+  return Object.getPrototypeOf(input) === proto;
+}
+var init_is_object = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_object.js"() {
+    "use strict";
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_jwk.js
+function isJWK(key) {
+  return isObject(key) && typeof key.kty === "string";
+}
+function isPrivateJWK(key) {
+  return key.kty !== "oct" && typeof key.d === "string";
+}
+function isPublicJWK(key) {
+  return key.kty !== "oct" && typeof key.d === "undefined";
+}
+function isSecretJWK(key) {
+  return isJWK(key) && key.kty === "oct" && typeof key.k === "string";
+}
+var init_is_jwk = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/is_jwk.js"() {
+    "use strict";
+    init_is_object();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_named_curve.js
+import { KeyObject } from "node:crypto";
+var namedCurveToJOSE, getNamedCurve2, get_named_curve_default;
+var init_get_named_curve = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_named_curve.js"() {
+    "use strict";
+    init_errors();
+    init_webcrypto();
+    init_is_key_object();
+    init_invalid_key_input();
+    init_is_key_like();
+    init_is_jwk();
+    namedCurveToJOSE = (namedCurve) => {
+      switch (namedCurve) {
+        case "prime256v1":
+          return "P-256";
+        case "secp384r1":
+          return "P-384";
+        case "secp521r1":
+          return "P-521";
+        case "secp256k1":
+          return "secp256k1";
+        default:
+          throw new JOSENotSupported("Unsupported key curve for this operation");
+      }
+    };
+    getNamedCurve2 = (kee, raw) => {
+      let key;
+      if (isCryptoKey(kee)) {
+        key = KeyObject.from(kee);
+      } else if (is_key_object_default(kee)) {
+        key = kee;
+      } else if (isJWK(kee)) {
+        return kee.crv;
+      } else {
+        throw new TypeError(invalid_key_input_default(kee, ...types3));
+      }
+      if (key.type === "secret") {
+        throw new TypeError('only "private" or "public" type keys can be used for this operation');
+      }
+      switch (key.asymmetricKeyType) {
+        case "ed25519":
+        case "ed448":
+          return `Ed${key.asymmetricKeyType.slice(2)}`;
+        case "x25519":
+        case "x448":
+          return `X${key.asymmetricKeyType.slice(1)}`;
+        case "ec": {
+          const namedCurve = key.asymmetricKeyDetails.namedCurve;
+          if (raw) {
+            return namedCurve;
+          }
+          return namedCurveToJOSE(namedCurve);
+        }
+        default:
+          throw new TypeError("Invalid asymmetric key type for this operation");
+      }
+    };
+    get_named_curve_default = getNamedCurve2;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/check_key_length.js
+import { KeyObject as KeyObject2 } from "node:crypto";
+var check_key_length_default;
+var init_check_key_length = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/check_key_length.js"() {
+    "use strict";
+    check_key_length_default = (key, alg) => {
+      let modulusLength;
+      try {
+        if (key instanceof KeyObject2) {
+          modulusLength = key.asymmetricKeyDetails?.modulusLength;
+        } else {
+          modulusLength = Buffer.from(key.n, "base64url").byteLength << 3;
+        }
+      } catch {
+      }
+      if (typeof modulusLength !== "number" || modulusLength < 2048) {
+        throw new TypeError(`${alg} requires key modulusLength to be 2048 bits or larger`);
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/jwk_to_key.js
+import { createPrivateKey, createPublicKey } from "node:crypto";
+var parse, jwk_to_key_default;
+var init_jwk_to_key = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/jwk_to_key.js"() {
+    "use strict";
+    parse = (key) => {
+      if (key.d) {
+        return createPrivateKey({ format: "jwk", key });
+      }
+      return createPublicKey({ format: "jwk", key });
+    };
+    jwk_to_key_default = parse;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/key/import.js
+async function importJWK(jwk, alg) {
+  if (!isObject(jwk)) {
+    throw new TypeError("JWK must be an object");
+  }
+  alg ||= jwk.alg;
+  switch (jwk.kty) {
+    case "oct":
+      if (typeof jwk.k !== "string" || !jwk.k) {
+        throw new TypeError('missing "k" (Key Value) Parameter value');
+      }
+      return decode(jwk.k);
+    case "RSA":
+      if ("oth" in jwk && jwk.oth !== void 0) {
+        throw new JOSENotSupported('RSA JWK "oth" (Other Primes Info) Parameter value is not supported');
+      }
+    case "EC":
+    case "OKP":
+      return jwk_to_key_default({ ...jwk, alg });
+    default:
+      throw new JOSENotSupported('Unsupported "kty" (Key Type) Parameter value');
+  }
+}
+var init_import = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/key/import.js"() {
+    "use strict";
+    init_base64url();
+    init_jwk_to_key();
+    init_errors();
+    init_is_object();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/check_key_type.js
+function checkKeyType(allowJwk, alg, key, usage) {
+  const symmetric = alg.startsWith("HS") || alg === "dir" || alg.startsWith("PBES2") || /^A\d{3}(?:GCM)?KW$/.test(alg);
+  if (symmetric) {
+    symmetricTypeCheck(alg, key, usage, allowJwk);
+  } else {
+    asymmetricTypeCheck(alg, key, usage, allowJwk);
+  }
+}
+var tag, jwkMatchesOp, symmetricTypeCheck, asymmetricTypeCheck, check_key_type_default, checkKeyTypeWithJwk;
+var init_check_key_type = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/check_key_type.js"() {
+    "use strict";
+    init_invalid_key_input();
+    init_is_key_like();
+    init_is_jwk();
+    tag = (key) => key?.[Symbol.toStringTag];
+    jwkMatchesOp = (alg, key, usage) => {
+      if (key.use !== void 0 && key.use !== "sig") {
+        throw new TypeError("Invalid key for this operation, when present its use must be sig");
+      }
+      if (key.key_ops !== void 0 && key.key_ops.includes?.(usage) !== true) {
+        throw new TypeError(`Invalid key for this operation, when present its key_ops must include ${usage}`);
+      }
+      if (key.alg !== void 0 && key.alg !== alg) {
+        throw new TypeError(`Invalid key for this operation, when present its alg must be ${alg}`);
+      }
+      return true;
+    };
+    symmetricTypeCheck = (alg, key, usage, allowJwk) => {
+      if (key instanceof Uint8Array)
+        return;
+      if (allowJwk && isJWK(key)) {
+        if (isSecretJWK(key) && jwkMatchesOp(alg, key, usage))
+          return;
+        throw new TypeError(`JSON Web Key for symmetric algorithms must have JWK "kty" (Key Type) equal to "oct" and the JWK "k" (Key Value) present`);
+      }
+      if (!is_key_like_default(key)) {
+        throw new TypeError(withAlg(alg, key, ...types3, "Uint8Array", allowJwk ? "JSON Web Key" : null));
+      }
+      if (key.type !== "secret") {
+        throw new TypeError(`${tag(key)} instances for symmetric algorithms must be of type "secret"`);
+      }
+    };
+    asymmetricTypeCheck = (alg, key, usage, allowJwk) => {
+      if (allowJwk && isJWK(key)) {
+        switch (usage) {
+          case "sign":
+            if (isPrivateJWK(key) && jwkMatchesOp(alg, key, usage))
+              return;
+            throw new TypeError(`JSON Web Key for this operation be a private JWK`);
+          case "verify":
+            if (isPublicJWK(key) && jwkMatchesOp(alg, key, usage))
+              return;
+            throw new TypeError(`JSON Web Key for this operation be a public JWK`);
+        }
+      }
+      if (!is_key_like_default(key)) {
+        throw new TypeError(withAlg(alg, key, ...types3, allowJwk ? "JSON Web Key" : null));
+      }
+      if (key.type === "secret") {
+        throw new TypeError(`${tag(key)} instances for asymmetric algorithms must not be of type "secret"`);
+      }
+      if (usage === "sign" && key.type === "public") {
+        throw new TypeError(`${tag(key)} instances for asymmetric algorithm signing must be of type "private"`);
+      }
+      if (usage === "decrypt" && key.type === "public") {
+        throw new TypeError(`${tag(key)} instances for asymmetric algorithm decryption must be of type "private"`);
+      }
+      if (key.algorithm && usage === "verify" && key.type === "private") {
+        throw new TypeError(`${tag(key)} instances for asymmetric algorithm verifying must be of type "public"`);
+      }
+      if (key.algorithm && usage === "encrypt" && key.type === "private") {
+        throw new TypeError(`${tag(key)} instances for asymmetric algorithm encryption must be of type "public"`);
+      }
+    };
+    check_key_type_default = checkKeyType.bind(void 0, false);
+    checkKeyTypeWithJwk = checkKeyType.bind(void 0, true);
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_crit.js
+function validateCrit(Err, recognizedDefault, recognizedOption, protectedHeader, joseHeader) {
+  if (joseHeader.crit !== void 0 && protectedHeader?.crit === void 0) {
+    throw new Err('"crit" (Critical) Header Parameter MUST be integrity protected');
+  }
+  if (!protectedHeader || protectedHeader.crit === void 0) {
+    return /* @__PURE__ */ new Set();
+  }
+  if (!Array.isArray(protectedHeader.crit) || protectedHeader.crit.length === 0 || protectedHeader.crit.some((input) => typeof input !== "string" || input.length === 0)) {
+    throw new Err('"crit" (Critical) Header Parameter MUST be an array of non-empty strings when present');
+  }
+  let recognized;
+  if (recognizedOption !== void 0) {
+    recognized = new Map([...Object.entries(recognizedOption), ...recognizedDefault.entries()]);
+  } else {
+    recognized = recognizedDefault;
+  }
+  for (const parameter of protectedHeader.crit) {
+    if (!recognized.has(parameter)) {
+      throw new JOSENotSupported(`Extension Header Parameter "${parameter}" is not recognized`);
+    }
+    if (joseHeader[parameter] === void 0) {
+      throw new Err(`Extension Header Parameter "${parameter}" is missing`);
+    }
+    if (recognized.get(parameter) && protectedHeader[parameter] === void 0) {
+      throw new Err(`Extension Header Parameter "${parameter}" MUST be integrity protected`);
+    }
+  }
+  return new Set(protectedHeader.crit);
+}
+var validate_crit_default;
+var init_validate_crit = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_crit.js"() {
+    "use strict";
+    init_errors();
+    validate_crit_default = validateCrit;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_algorithms.js
+var validateAlgorithms, validate_algorithms_default;
+var init_validate_algorithms = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/validate_algorithms.js"() {
+    "use strict";
+    validateAlgorithms = (option, algorithms) => {
+      if (algorithms !== void 0 && (!Array.isArray(algorithms) || algorithms.some((s) => typeof s !== "string"))) {
+        throw new TypeError(`"${option}" option must be an array of strings`);
+      }
+      if (!algorithms) {
+        return void 0;
+      }
+      return new Set(algorithms);
+    };
+    validate_algorithms_default = validateAlgorithms;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/dsa_digest.js
+function dsaDigest(alg) {
+  switch (alg) {
+    case "PS256":
+    case "RS256":
+    case "ES256":
+    case "ES256K":
+      return "sha256";
+    case "PS384":
+    case "RS384":
+    case "ES384":
+      return "sha384";
+    case "PS512":
+    case "RS512":
+    case "ES512":
+      return "sha512";
+    case "Ed25519":
+    case "EdDSA":
+      return void 0;
+    default:
+      throw new JOSENotSupported(`alg ${alg} is not supported either by JOSE or your javascript runtime`);
+  }
+}
+var init_dsa_digest = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/dsa_digest.js"() {
+    "use strict";
+    init_errors();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/node_key.js
+import { constants, KeyObject as KeyObject3 } from "node:crypto";
+function keyForCrypto(alg, key) {
+  let asymmetricKeyType;
+  let asymmetricKeyDetails;
+  let isJWK2;
+  if (key instanceof KeyObject3) {
+    asymmetricKeyType = key.asymmetricKeyType;
+    asymmetricKeyDetails = key.asymmetricKeyDetails;
+  } else {
+    isJWK2 = true;
+    switch (key.kty) {
+      case "RSA":
+        asymmetricKeyType = "rsa";
+        break;
+      case "EC":
+        asymmetricKeyType = "ec";
+        break;
+      case "OKP": {
+        if (key.crv === "Ed25519") {
+          asymmetricKeyType = "ed25519";
+          break;
+        }
+        if (key.crv === "Ed448") {
+          asymmetricKeyType = "ed448";
+          break;
+        }
+        throw new TypeError("Invalid key for this operation, its crv must be Ed25519 or Ed448");
+      }
+      default:
+        throw new TypeError("Invalid key for this operation, its kty must be RSA, OKP, or EC");
+    }
+  }
+  let options;
+  switch (alg) {
+    case "Ed25519":
+      if (asymmetricKeyType !== "ed25519") {
+        throw new TypeError(`Invalid key for this operation, its asymmetricKeyType must be ed25519`);
+      }
+      break;
+    case "EdDSA":
+      if (!["ed25519", "ed448"].includes(asymmetricKeyType)) {
+        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be ed25519 or ed448");
+      }
+      break;
+    case "RS256":
+    case "RS384":
+    case "RS512":
+      if (asymmetricKeyType !== "rsa") {
+        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be rsa");
+      }
+      check_key_length_default(key, alg);
+      break;
+    case "PS256":
+    case "PS384":
+    case "PS512":
+      if (asymmetricKeyType === "rsa-pss") {
+        const { hashAlgorithm, mgf1HashAlgorithm, saltLength } = asymmetricKeyDetails;
+        const length = parseInt(alg.slice(-3), 10);
+        if (hashAlgorithm !== void 0 && (hashAlgorithm !== `sha${length}` || mgf1HashAlgorithm !== hashAlgorithm)) {
+          throw new TypeError(`Invalid key for this operation, its RSA-PSS parameters do not meet the requirements of "alg" ${alg}`);
+        }
+        if (saltLength !== void 0 && saltLength > length >> 3) {
+          throw new TypeError(`Invalid key for this operation, its RSA-PSS parameter saltLength does not meet the requirements of "alg" ${alg}`);
+        }
+      } else if (asymmetricKeyType !== "rsa") {
+        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be rsa or rsa-pss");
+      }
+      check_key_length_default(key, alg);
+      options = {
+        padding: constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: constants.RSA_PSS_SALTLEN_DIGEST
+      };
+      break;
+    case "ES256":
+    case "ES256K":
+    case "ES384":
+    case "ES512": {
+      if (asymmetricKeyType !== "ec") {
+        throw new TypeError("Invalid key for this operation, its asymmetricKeyType must be ec");
+      }
+      const actual = get_named_curve_default(key);
+      const expected = ecCurveAlgMap.get(alg);
+      if (actual !== expected) {
+        throw new TypeError(`Invalid key curve for the algorithm, its curve must be ${expected}, got ${actual}`);
+      }
+      options = { dsaEncoding: "ieee-p1363" };
+      break;
+    }
+    default:
+      throw new JOSENotSupported(`alg ${alg} is not supported either by JOSE or your javascript runtime`);
+  }
+  if (isJWK2) {
+    return { format: "jwk", key, ...options };
+  }
+  return options ? { ...options, key } : key;
+}
+var ecCurveAlgMap;
+var init_node_key = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/node_key.js"() {
+    "use strict";
+    init_get_named_curve();
+    init_errors();
+    init_check_key_length();
+    ecCurveAlgMap = /* @__PURE__ */ new Map([
+      ["ES256", "P-256"],
+      ["ES256K", "secp256k1"],
+      ["ES384", "P-384"],
+      ["ES512", "P-521"]
+    ]);
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/hmac_digest.js
+function hmacDigest(alg) {
+  switch (alg) {
+    case "HS256":
+      return "sha256";
+    case "HS384":
+      return "sha384";
+    case "HS512":
+      return "sha512";
+    default:
+      throw new JOSENotSupported(`alg ${alg} is not supported either by JOSE or your javascript runtime`);
+  }
+}
+var init_hmac_digest = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/hmac_digest.js"() {
+    "use strict";
+    init_errors();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_sign_verify_key.js
+import { KeyObject as KeyObject4, createSecretKey } from "node:crypto";
+function getSignVerifyKey(alg, key, usage) {
+  if (key instanceof Uint8Array) {
+    if (!alg.startsWith("HS")) {
+      throw new TypeError(invalid_key_input_default(key, ...types3));
+    }
+    return createSecretKey(key);
+  }
+  if (key instanceof KeyObject4) {
+    return key;
+  }
+  if (isCryptoKey(key)) {
+    checkSigCryptoKey(key, alg, usage);
+    return KeyObject4.from(key);
+  }
+  if (isJWK(key)) {
+    if (alg.startsWith("HS")) {
+      return createSecretKey(Buffer.from(key.k, "base64url"));
+    }
+    return key;
+  }
+  throw new TypeError(invalid_key_input_default(key, ...types3, "Uint8Array", "JSON Web Key"));
+}
+var init_get_sign_verify_key = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/get_sign_verify_key.js"() {
+    "use strict";
+    init_webcrypto();
+    init_crypto_key();
+    init_invalid_key_input();
+    init_is_key_like();
+    init_is_jwk();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/sign.js
+import * as crypto3 from "node:crypto";
+import { promisify } from "node:util";
+var oneShotSign, sign2, sign_default;
+var init_sign = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/sign.js"() {
+    "use strict";
+    init_dsa_digest();
+    init_hmac_digest();
+    init_node_key();
+    init_get_sign_verify_key();
+    oneShotSign = promisify(crypto3.sign);
+    sign2 = async (alg, key, data) => {
+      const k = getSignVerifyKey(alg, key, "sign");
+      if (alg.startsWith("HS")) {
+        const hmac = crypto3.createHmac(hmacDigest(alg), k);
+        hmac.update(data);
+        return hmac.digest();
+      }
+      return oneShotSign(dsaDigest(alg), data, keyForCrypto(alg, k));
+    };
+    sign_default = sign2;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/verify.js
+import * as crypto4 from "node:crypto";
+import { promisify as promisify2 } from "node:util";
+var oneShotVerify, verify2, verify_default;
+var init_verify = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/runtime/verify.js"() {
+    "use strict";
+    init_dsa_digest();
+    init_node_key();
+    init_sign();
+    init_get_sign_verify_key();
+    oneShotVerify = promisify2(crypto4.verify);
+    verify2 = async (alg, key, signature, data) => {
+      const k = getSignVerifyKey(alg, key, "verify");
+      if (alg.startsWith("HS")) {
+        const expected = await sign_default(alg, k, data);
+        const actual = signature;
+        try {
+          return crypto4.timingSafeEqual(actual, expected);
+        } catch {
+          return false;
+        }
+      }
+      const algorithm = dsaDigest(alg);
+      const keyInput = keyForCrypto(alg, k);
+      try {
+        return await oneShotVerify(algorithm, data, keyInput, signature);
+      } catch {
+        return false;
+      }
+    };
+    verify_default = verify2;
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/verify.js
+async function flattenedVerify(jws, key, options) {
+  if (!isObject(jws)) {
+    throw new JWSInvalid("Flattened JWS must be an object");
+  }
+  if (jws.protected === void 0 && jws.header === void 0) {
+    throw new JWSInvalid('Flattened JWS must have either of the "protected" or "header" members');
+  }
+  if (jws.protected !== void 0 && typeof jws.protected !== "string") {
+    throw new JWSInvalid("JWS Protected Header incorrect type");
+  }
+  if (jws.payload === void 0) {
+    throw new JWSInvalid("JWS Payload missing");
+  }
+  if (typeof jws.signature !== "string") {
+    throw new JWSInvalid("JWS Signature missing or incorrect type");
+  }
+  if (jws.header !== void 0 && !isObject(jws.header)) {
+    throw new JWSInvalid("JWS Unprotected Header incorrect type");
+  }
+  let parsedProt = {};
+  if (jws.protected) {
+    try {
+      const protectedHeader = decode(jws.protected);
+      parsedProt = JSON.parse(decoder.decode(protectedHeader));
+    } catch {
+      throw new JWSInvalid("JWS Protected Header is invalid");
+    }
+  }
+  if (!is_disjoint_default(parsedProt, jws.header)) {
+    throw new JWSInvalid("JWS Protected and JWS Unprotected Header Parameter names must be disjoint");
+  }
+  const joseHeader = {
+    ...parsedProt,
+    ...jws.header
+  };
+  const extensions = validate_crit_default(JWSInvalid, /* @__PURE__ */ new Map([["b64", true]]), options?.crit, parsedProt, joseHeader);
+  let b64 = true;
+  if (extensions.has("b64")) {
+    b64 = parsedProt.b64;
+    if (typeof b64 !== "boolean") {
+      throw new JWSInvalid('The "b64" (base64url-encode payload) Header Parameter must be a boolean');
+    }
+  }
+  const { alg } = joseHeader;
+  if (typeof alg !== "string" || !alg) {
+    throw new JWSInvalid('JWS "alg" (Algorithm) Header Parameter missing or invalid');
+  }
+  const algorithms = options && validate_algorithms_default("algorithms", options.algorithms);
+  if (algorithms && !algorithms.has(alg)) {
+    throw new JOSEAlgNotAllowed('"alg" (Algorithm) Header Parameter value not allowed');
+  }
+  if (b64) {
+    if (typeof jws.payload !== "string") {
+      throw new JWSInvalid("JWS Payload must be a string");
+    }
+  } else if (typeof jws.payload !== "string" && !(jws.payload instanceof Uint8Array)) {
+    throw new JWSInvalid("JWS Payload must be a string or an Uint8Array instance");
+  }
+  let resolvedKey = false;
+  if (typeof key === "function") {
+    key = await key(parsedProt, jws);
+    resolvedKey = true;
+    checkKeyTypeWithJwk(alg, key, "verify");
+    if (isJWK(key)) {
+      key = await importJWK(key, alg);
+    }
+  } else {
+    checkKeyTypeWithJwk(alg, key, "verify");
+  }
+  const data = concat(encoder.encode(jws.protected ?? ""), encoder.encode("."), typeof jws.payload === "string" ? encoder.encode(jws.payload) : jws.payload);
+  let signature;
+  try {
+    signature = decode(jws.signature);
+  } catch {
+    throw new JWSInvalid("Failed to base64url decode the signature");
+  }
+  const verified = await verify_default(alg, key, signature, data);
+  if (!verified) {
+    throw new JWSSignatureVerificationFailed();
+  }
+  let payload;
+  if (b64) {
+    try {
+      payload = decode(jws.payload);
+    } catch {
+      throw new JWSInvalid("Failed to base64url decode the payload");
+    }
+  } else if (typeof jws.payload === "string") {
+    payload = encoder.encode(jws.payload);
+  } else {
+    payload = jws.payload;
+  }
+  const result = { payload };
+  if (jws.protected !== void 0) {
+    result.protectedHeader = parsedProt;
+  }
+  if (jws.header !== void 0) {
+    result.unprotectedHeader = jws.header;
+  }
+  if (resolvedKey) {
+    return { ...result, key };
+  }
+  return result;
+}
+var init_verify2 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/verify.js"() {
+    "use strict";
+    init_base64url();
+    init_verify();
+    init_errors();
+    init_buffer_utils();
+    init_is_disjoint();
+    init_is_object();
+    init_check_key_type();
+    init_validate_crit();
+    init_validate_algorithms();
+    init_is_jwk();
+    init_import();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/verify.js
+async function compactVerify(jws, key, options) {
+  if (jws instanceof Uint8Array) {
+    jws = decoder.decode(jws);
+  }
+  if (typeof jws !== "string") {
+    throw new JWSInvalid("Compact JWS must be a string or Uint8Array");
+  }
+  const { 0: protectedHeader, 1: payload, 2: signature, length } = jws.split(".");
+  if (length !== 3) {
+    throw new JWSInvalid("Invalid Compact JWS");
+  }
+  const verified = await flattenedVerify({ payload, protected: protectedHeader, signature }, key, options);
+  const result = { payload: verified.payload, protectedHeader: verified.protectedHeader };
+  if (typeof key === "function") {
+    return { ...result, key: verified.key };
+  }
+  return result;
+}
+var init_verify3 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/verify.js"() {
+    "use strict";
+    init_verify2();
+    init_errors();
+    init_buffer_utils();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/epoch.js
+var epoch_default;
+var init_epoch = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/epoch.js"() {
+    "use strict";
+    epoch_default = (date) => Math.floor(date.getTime() / 1e3);
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/secs.js
+var minute, hour, day, week, year, REGEX, secs_default;
+var init_secs = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/secs.js"() {
+    "use strict";
+    minute = 60;
+    hour = minute * 60;
+    day = hour * 24;
+    week = day * 7;
+    year = day * 365.25;
+    REGEX = /^(\+|\-)? ?(\d+|\d+\.\d+) ?(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)(?: (ago|from now))?$/i;
+    secs_default = (str) => {
+      const matched = REGEX.exec(str);
+      if (!matched || matched[4] && matched[1]) {
+        throw new TypeError("Invalid time period format");
+      }
+      const value = parseFloat(matched[2]);
+      const unit = matched[3].toLowerCase();
+      let numericDate;
+      switch (unit) {
+        case "sec":
+        case "secs":
+        case "second":
+        case "seconds":
+        case "s":
+          numericDate = Math.round(value);
+          break;
+        case "minute":
+        case "minutes":
+        case "min":
+        case "mins":
+        case "m":
+          numericDate = Math.round(value * minute);
+          break;
+        case "hour":
+        case "hours":
+        case "hr":
+        case "hrs":
+        case "h":
+          numericDate = Math.round(value * hour);
+          break;
+        case "day":
+        case "days":
+        case "d":
+          numericDate = Math.round(value * day);
+          break;
+        case "week":
+        case "weeks":
+        case "w":
+          numericDate = Math.round(value * week);
+          break;
+        default:
+          numericDate = Math.round(value * year);
+          break;
+      }
+      if (matched[1] === "-" || matched[4] === "ago") {
+        return -numericDate;
+      }
+      return numericDate;
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/jwt_claims_set.js
+var normalizeTyp, checkAudiencePresence, jwt_claims_set_default;
+var init_jwt_claims_set = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/lib/jwt_claims_set.js"() {
+    "use strict";
+    init_errors();
+    init_buffer_utils();
+    init_epoch();
+    init_secs();
+    init_is_object();
+    normalizeTyp = (value) => value.toLowerCase().replace(/^application\//, "");
+    checkAudiencePresence = (audPayload, audOption) => {
+      if (typeof audPayload === "string") {
+        return audOption.includes(audPayload);
+      }
+      if (Array.isArray(audPayload)) {
+        return audOption.some(Set.prototype.has.bind(new Set(audPayload)));
+      }
+      return false;
+    };
+    jwt_claims_set_default = (protectedHeader, encodedPayload, options = {}) => {
+      let payload;
+      try {
+        payload = JSON.parse(decoder.decode(encodedPayload));
+      } catch {
+      }
+      if (!isObject(payload)) {
+        throw new JWTInvalid("JWT Claims Set must be a top-level JSON object");
+      }
+      const { typ } = options;
+      if (typ && (typeof protectedHeader.typ !== "string" || normalizeTyp(protectedHeader.typ) !== normalizeTyp(typ))) {
+        throw new JWTClaimValidationFailed('unexpected "typ" JWT header value', payload, "typ", "check_failed");
+      }
+      const { requiredClaims = [], issuer, subject, audience, maxTokenAge } = options;
+      const presenceCheck = [...requiredClaims];
+      if (maxTokenAge !== void 0)
+        presenceCheck.push("iat");
+      if (audience !== void 0)
+        presenceCheck.push("aud");
+      if (subject !== void 0)
+        presenceCheck.push("sub");
+      if (issuer !== void 0)
+        presenceCheck.push("iss");
+      for (const claim of new Set(presenceCheck.reverse())) {
+        if (!(claim in payload)) {
+          throw new JWTClaimValidationFailed(`missing required "${claim}" claim`, payload, claim, "missing");
+        }
+      }
+      if (issuer && !(Array.isArray(issuer) ? issuer : [issuer]).includes(payload.iss)) {
+        throw new JWTClaimValidationFailed('unexpected "iss" claim value', payload, "iss", "check_failed");
+      }
+      if (subject && payload.sub !== subject) {
+        throw new JWTClaimValidationFailed('unexpected "sub" claim value', payload, "sub", "check_failed");
+      }
+      if (audience && !checkAudiencePresence(payload.aud, typeof audience === "string" ? [audience] : audience)) {
+        throw new JWTClaimValidationFailed('unexpected "aud" claim value', payload, "aud", "check_failed");
+      }
+      let tolerance;
+      switch (typeof options.clockTolerance) {
+        case "string":
+          tolerance = secs_default(options.clockTolerance);
+          break;
+        case "number":
+          tolerance = options.clockTolerance;
+          break;
+        case "undefined":
+          tolerance = 0;
+          break;
+        default:
+          throw new TypeError("Invalid clockTolerance option type");
+      }
+      const { currentDate } = options;
+      const now = epoch_default(currentDate || /* @__PURE__ */ new Date());
+      if ((payload.iat !== void 0 || maxTokenAge) && typeof payload.iat !== "number") {
+        throw new JWTClaimValidationFailed('"iat" claim must be a number', payload, "iat", "invalid");
+      }
+      if (payload.nbf !== void 0) {
+        if (typeof payload.nbf !== "number") {
+          throw new JWTClaimValidationFailed('"nbf" claim must be a number', payload, "nbf", "invalid");
+        }
+        if (payload.nbf > now + tolerance) {
+          throw new JWTClaimValidationFailed('"nbf" claim timestamp check failed', payload, "nbf", "check_failed");
+        }
+      }
+      if (payload.exp !== void 0) {
+        if (typeof payload.exp !== "number") {
+          throw new JWTClaimValidationFailed('"exp" claim must be a number', payload, "exp", "invalid");
+        }
+        if (payload.exp <= now - tolerance) {
+          throw new JWTExpired('"exp" claim timestamp check failed', payload, "exp", "check_failed");
+        }
+      }
+      if (maxTokenAge) {
+        const age = now - payload.iat;
+        const max = typeof maxTokenAge === "number" ? maxTokenAge : secs_default(maxTokenAge);
+        if (age - tolerance > max) {
+          throw new JWTExpired('"iat" claim timestamp check failed (too far in the past)', payload, "iat", "check_failed");
+        }
+        if (age < 0 - tolerance) {
+          throw new JWTClaimValidationFailed('"iat" claim timestamp check failed (it should be in the past)', payload, "iat", "check_failed");
+        }
+      }
+      return payload;
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/verify.js
+async function jwtVerify(jwt, key, options) {
+  const verified = await compactVerify(jwt, key, options);
+  if (verified.protectedHeader.crit?.includes("b64") && verified.protectedHeader.b64 === false) {
+    throw new JWTInvalid("JWTs MUST NOT use unencoded payload");
+  }
+  const payload = jwt_claims_set_default(verified.protectedHeader, verified.payload, options);
+  const result = { payload, protectedHeader: verified.protectedHeader };
+  if (typeof key === "function") {
+    return { ...result, key: verified.key };
+  }
+  return result;
+}
+var init_verify4 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/verify.js"() {
+    "use strict";
+    init_verify3();
+    init_jwt_claims_set();
+    init_errors();
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/sign.js
+var FlattenedSign;
+var init_sign2 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/flattened/sign.js"() {
+    "use strict";
+    init_base64url();
+    init_sign();
+    init_is_disjoint();
+    init_errors();
+    init_buffer_utils();
+    init_check_key_type();
+    init_validate_crit();
+    FlattenedSign = class {
+      _payload;
+      _protectedHeader;
+      _unprotectedHeader;
+      constructor(payload) {
+        if (!(payload instanceof Uint8Array)) {
+          throw new TypeError("payload must be an instance of Uint8Array");
+        }
+        this._payload = payload;
+      }
+      setProtectedHeader(protectedHeader) {
+        if (this._protectedHeader) {
+          throw new TypeError("setProtectedHeader can only be called once");
+        }
+        this._protectedHeader = protectedHeader;
+        return this;
+      }
+      setUnprotectedHeader(unprotectedHeader) {
+        if (this._unprotectedHeader) {
+          throw new TypeError("setUnprotectedHeader can only be called once");
+        }
+        this._unprotectedHeader = unprotectedHeader;
+        return this;
+      }
+      async sign(key, options) {
+        if (!this._protectedHeader && !this._unprotectedHeader) {
+          throw new JWSInvalid("either setProtectedHeader or setUnprotectedHeader must be called before #sign()");
+        }
+        if (!is_disjoint_default(this._protectedHeader, this._unprotectedHeader)) {
+          throw new JWSInvalid("JWS Protected and JWS Unprotected Header Parameter names must be disjoint");
+        }
+        const joseHeader = {
+          ...this._protectedHeader,
+          ...this._unprotectedHeader
+        };
+        const extensions = validate_crit_default(JWSInvalid, /* @__PURE__ */ new Map([["b64", true]]), options?.crit, this._protectedHeader, joseHeader);
+        let b64 = true;
+        if (extensions.has("b64")) {
+          b64 = this._protectedHeader.b64;
+          if (typeof b64 !== "boolean") {
+            throw new JWSInvalid('The "b64" (base64url-encode payload) Header Parameter must be a boolean');
+          }
+        }
+        const { alg } = joseHeader;
+        if (typeof alg !== "string" || !alg) {
+          throw new JWSInvalid('JWS "alg" (Algorithm) Header Parameter missing or invalid');
+        }
+        checkKeyTypeWithJwk(alg, key, "sign");
+        let payload = this._payload;
+        if (b64) {
+          payload = encoder.encode(encode(payload));
+        }
+        let protectedHeader;
+        if (this._protectedHeader) {
+          protectedHeader = encoder.encode(encode(JSON.stringify(this._protectedHeader)));
+        } else {
+          protectedHeader = encoder.encode("");
+        }
+        const data = concat(protectedHeader, encoder.encode("."), payload);
+        const signature = await sign_default(alg, key, data);
+        const jws = {
+          signature: encode(signature),
+          payload: ""
+        };
+        if (b64) {
+          jws.payload = decoder.decode(payload);
+        }
+        if (this._unprotectedHeader) {
+          jws.header = this._unprotectedHeader;
+        }
+        if (this._protectedHeader) {
+          jws.protected = decoder.decode(protectedHeader);
+        }
+        return jws;
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/sign.js
+var CompactSign;
+var init_sign3 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jws/compact/sign.js"() {
+    "use strict";
+    init_sign2();
+    CompactSign = class {
+      _flattened;
+      constructor(payload) {
+        this._flattened = new FlattenedSign(payload);
+      }
+      setProtectedHeader(protectedHeader) {
+        this._flattened.setProtectedHeader(protectedHeader);
+        return this;
+      }
+      async sign(key, options) {
+        const jws = await this._flattened.sign(key, options);
+        if (jws.payload === void 0) {
+          throw new TypeError("use the flattened module for creating JWS with b64: false");
+        }
+        return `${jws.protected}.${jws.payload}.${jws.signature}`;
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/produce.js
+function validateInput(label, input) {
+  if (!Number.isFinite(input)) {
+    throw new TypeError(`Invalid ${label} input`);
+  }
+  return input;
+}
+var ProduceJWT;
+var init_produce = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/produce.js"() {
+    "use strict";
+    init_epoch();
+    init_is_object();
+    init_secs();
+    ProduceJWT = class {
+      _payload;
+      constructor(payload = {}) {
+        if (!isObject(payload)) {
+          throw new TypeError("JWT Claims Set MUST be an object");
+        }
+        this._payload = payload;
+      }
+      setIssuer(issuer) {
+        this._payload = { ...this._payload, iss: issuer };
+        return this;
+      }
+      setSubject(subject) {
+        this._payload = { ...this._payload, sub: subject };
+        return this;
+      }
+      setAudience(audience) {
+        this._payload = { ...this._payload, aud: audience };
+        return this;
+      }
+      setJti(jwtId) {
+        this._payload = { ...this._payload, jti: jwtId };
+        return this;
+      }
+      setNotBefore(input) {
+        if (typeof input === "number") {
+          this._payload = { ...this._payload, nbf: validateInput("setNotBefore", input) };
+        } else if (input instanceof Date) {
+          this._payload = { ...this._payload, nbf: validateInput("setNotBefore", epoch_default(input)) };
+        } else {
+          this._payload = { ...this._payload, nbf: epoch_default(/* @__PURE__ */ new Date()) + secs_default(input) };
+        }
+        return this;
+      }
+      setExpirationTime(input) {
+        if (typeof input === "number") {
+          this._payload = { ...this._payload, exp: validateInput("setExpirationTime", input) };
+        } else if (input instanceof Date) {
+          this._payload = { ...this._payload, exp: validateInput("setExpirationTime", epoch_default(input)) };
+        } else {
+          this._payload = { ...this._payload, exp: epoch_default(/* @__PURE__ */ new Date()) + secs_default(input) };
+        }
+        return this;
+      }
+      setIssuedAt(input) {
+        if (typeof input === "undefined") {
+          this._payload = { ...this._payload, iat: epoch_default(/* @__PURE__ */ new Date()) };
+        } else if (input instanceof Date) {
+          this._payload = { ...this._payload, iat: validateInput("setIssuedAt", epoch_default(input)) };
+        } else if (typeof input === "string") {
+          this._payload = {
+            ...this._payload,
+            iat: validateInput("setIssuedAt", epoch_default(/* @__PURE__ */ new Date()) + secs_default(input))
+          };
+        } else {
+          this._payload = { ...this._payload, iat: validateInput("setIssuedAt", input) };
+        }
+        return this;
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/sign.js
+var SignJWT;
+var init_sign4 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/jwt/sign.js"() {
+    "use strict";
+    init_sign3();
+    init_errors();
+    init_buffer_utils();
+    init_produce();
+    SignJWT = class extends ProduceJWT {
+      _protectedHeader;
+      setProtectedHeader(protectedHeader) {
+        this._protectedHeader = protectedHeader;
+        return this;
+      }
+      async sign(key, options) {
+        const sig = new CompactSign(encoder.encode(JSON.stringify(this._payload)));
+        sig.setProtectedHeader(this._protectedHeader);
+        if (Array.isArray(this._protectedHeader?.crit) && this._protectedHeader.crit.includes("b64") && this._protectedHeader.b64 === false) {
+          throw new JWTInvalid("JWTs MUST NOT use unencoded payload");
+        }
+        return sig.sign(key, options);
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/base64url.js
+var init_base64url2 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/util/base64url.js"() {
+    "use strict";
+  }
+});
+
+// node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/index.js
+var init_esm2 = __esm({
+  "node_modules/.pnpm/jose@5.10.0/node_modules/jose/dist/node/esm/index.js"() {
+    "use strict";
+    init_verify4();
+    init_sign4();
+    init_errors();
+    init_base64url2();
+  }
+});
+
+// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/grants.js
+function trackSourceToString(source) {
+  switch (source) {
+    case TrackSource.CAMERA:
+      return "camera";
+    case TrackSource.MICROPHONE:
+      return "microphone";
+    case TrackSource.SCREEN_SHARE:
+      return "screen_share";
+    case TrackSource.SCREEN_SHARE_AUDIO:
+      return "screen_share_audio";
+    default:
+      throw new TypeError(`Cannot convert TrackSource ${source} to string`);
+  }
+}
+function claimsToJwtPayload(grant) {
+  var _a;
+  const claim = { ...grant };
+  if (Array.isArray((_a = claim.video) == null ? void 0 : _a.canPublishSources)) {
+    claim.video.canPublishSources = claim.video.canPublishSources.map(trackSourceToString);
+  }
+  return claim;
+}
+var init_grants = __esm({
+  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/grants.js"() {
+    "use strict";
+    init_dist();
+  }
+});
+
+// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AccessToken.js
+var defaultTTL, defaultClockToleranceSeconds, AccessToken, TokenVerifier;
+var init_AccessToken = __esm({
+  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AccessToken.js"() {
+    "use strict";
+    init_esm2();
+    init_grants();
+    defaultTTL = `6h`;
+    defaultClockToleranceSeconds = 10;
+    AccessToken = class {
+      /**
+       * Creates a new AccessToken
+       * @param apiKey - API Key, can be set in env LIVEKIT_API_KEY
+       * @param apiSecret - Secret, can be set in env LIVEKIT_API_SECRET
+       */
+      constructor(apiKey, apiSecret, options) {
+        if (!apiKey) {
+          apiKey = process.env.LIVEKIT_API_KEY;
+        }
+        if (!apiSecret) {
+          apiSecret = process.env.LIVEKIT_API_SECRET;
+        }
+        if (!apiKey || !apiSecret) {
+          throw Error("api-key and api-secret must be set");
+        } else if (typeof document !== "undefined") {
+          console.error(
+            "You should not include your API secret in your web client bundle.\n\nYour web client should request a token from your backend server which should then use the API secret to generate a token. See https://docs.livekit.io/client/connect/"
+          );
+        }
+        this.apiKey = apiKey;
+        this.apiSecret = apiSecret;
+        this.grants = {};
+        this.identity = options == null ? void 0 : options.identity;
+        this.ttl = (options == null ? void 0 : options.ttl) || defaultTTL;
+        if (typeof this.ttl === "number") {
+          this.ttl = `${this.ttl}s`;
+        }
+        if (options == null ? void 0 : options.metadata) {
+          this.metadata = options.metadata;
+        }
+        if (options == null ? void 0 : options.attributes) {
+          this.attributes = options.attributes;
+        }
+        if (options == null ? void 0 : options.name) {
+          this.name = options.name;
+        }
+      }
+      /**
+       * Adds a video grant to this token.
+       * @param grant -
+       */
+      addGrant(grant) {
+        this.grants.video = { ...this.grants.video ?? {}, ...grant };
+      }
+      /**
+       * Adds an inference grant to this token.
+       * @param grant -
+       */
+      addInferenceGrant(grant) {
+        this.grants.inference = { ...this.grants.inference ?? {}, ...grant };
+      }
+      /**
+       * Adds a SIP grant to this token.
+       * @param grant -
+       */
+      addSIPGrant(grant) {
+        this.grants.sip = { ...this.grants.sip ?? {}, ...grant };
+      }
+      /**
+       * Adds an observability grant to this token.
+       * @param grant -
+       */
+      addObservabilityGrant(grant) {
+        this.grants.observability = { ...this.grants.observability ?? {}, ...grant };
+      }
+      get name() {
+        return this.grants.name;
+      }
+      set name(name) {
+        this.grants.name = name;
+      }
+      get metadata() {
+        return this.grants.metadata;
+      }
+      /**
+       * Set metadata to be passed to the Participant, used only when joining the room
+       */
+      set metadata(md) {
+        this.grants.metadata = md;
+      }
+      get attributes() {
+        return this.grants.attributes;
+      }
+      set attributes(attrs) {
+        this.grants.attributes = attrs;
+      }
+      get kind() {
+        return this.grants.kind;
+      }
+      set kind(kind) {
+        this.grants.kind = kind;
+      }
+      get sha256() {
+        return this.grants.sha256;
+      }
+      set sha256(sha) {
+        this.grants.sha256 = sha;
+      }
+      get roomPreset() {
+        return this.grants.roomPreset;
+      }
+      set roomPreset(preset) {
+        this.grants.roomPreset = preset;
+      }
+      get roomConfig() {
+        return this.grants.roomConfig;
+      }
+      set roomConfig(config2) {
+        this.grants.roomConfig = config2;
+      }
+      /**
+       * @returns JWT encoded token
+       */
+      async toJwt() {
+        var _a;
+        const secret = new TextEncoder().encode(this.apiSecret);
+        const jwt = new SignJWT(claimsToJwtPayload(this.grants)).setProtectedHeader({ alg: "HS256" }).setIssuer(this.apiKey).setExpirationTime(this.ttl).setNotBefore(/* @__PURE__ */ new Date());
+        if (this.identity) {
+          jwt.setSubject(this.identity);
+        } else if ((_a = this.grants.video) == null ? void 0 : _a.roomJoin) {
+          throw Error("identity is required for join but not set");
+        }
+        return jwt.sign(secret);
+      }
+    };
+    TokenVerifier = class {
+      constructor(apiKey, apiSecret) {
+        this.apiKey = apiKey;
+        this.apiSecret = apiSecret;
+      }
+      async verify(token, clockTolerance = defaultClockToleranceSeconds) {
+        const secret = new TextEncoder().encode(this.apiSecret);
+        const { payload } = await jwtVerify(token, secret, {
+          issuer: this.apiKey,
+          clockTolerance
+        });
+        if (!payload) {
+          throw Error("invalid token");
+        }
+        return payload;
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/ServiceBase.js
+var ServiceBase;
+var init_ServiceBase = __esm({
+  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/ServiceBase.js"() {
+    "use strict";
+    init_AccessToken();
+    ServiceBase = class {
+      /**
+       * @param apiKey - API Key.
+       * @param secret - API Secret.
+       * @param ttl - token TTL
+       */
+      constructor(apiKey, secret, ttl) {
+        this.apiKey = apiKey;
+        this.secret = secret;
+        this.ttl = ttl || "10m";
+      }
+      async authHeader(grant, sip) {
+        const at = new AccessToken(this.apiKey, this.secret, { ttl: this.ttl });
+        if (grant) {
+          at.addGrant(grant);
+        }
+        if (sip) {
+          at.addSIPGrant(sip);
+        }
+        return {
+          Authorization: `Bearer ${await at.toJwt()}`
+        };
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/map-obj@5.0.0/node_modules/map-obj/index.js
+function mapObject(object, mapper, options) {
+  if (!isObject2(object)) {
+    throw new TypeError(`Expected an object, got \`${object}\` (${typeof object})`);
+  }
+  return _mapObject(object, mapper, options);
+}
+var isObject2, isObjectCustom, mapObjectSkip, _mapObject;
+var init_map_obj = __esm({
+  "node_modules/.pnpm/map-obj@5.0.0/node_modules/map-obj/index.js"() {
+    "use strict";
+    isObject2 = (value) => typeof value === "object" && value !== null;
+    isObjectCustom = (value) => isObject2(value) && !(value instanceof RegExp) && !(value instanceof Error) && !(value instanceof Date);
+    mapObjectSkip = /* @__PURE__ */ Symbol("mapObjectSkip");
+    _mapObject = (object, mapper, options, isSeen = /* @__PURE__ */ new WeakMap()) => {
+      options = {
+        deep: false,
+        target: {},
+        ...options
+      };
+      if (isSeen.has(object)) {
+        return isSeen.get(object);
+      }
+      isSeen.set(object, options.target);
+      const { target } = options;
+      delete options.target;
+      const mapArray = (array) => array.map((element) => isObjectCustom(element) ? _mapObject(element, mapper, options, isSeen) : element);
+      if (Array.isArray(object)) {
+        return mapArray(object);
+      }
+      for (const [key, value] of Object.entries(object)) {
+        const mapResult = mapper(key, value, object);
+        if (mapResult === mapObjectSkip) {
+          continue;
+        }
+        let [newKey, newValue, { shouldRecurse = true } = {}] = mapResult;
+        if (newKey === "__proto__") {
+          continue;
+        }
+        if (options.deep && shouldRecurse && isObjectCustom(newValue)) {
+          newValue = Array.isArray(newValue) ? mapArray(newValue) : _mapObject(newValue, mapper, options, isSeen);
+        }
+        target[newKey] = newValue;
+      }
+      return target;
+    };
+  }
+});
+
+// node_modules/.pnpm/camelcase@8.0.0/node_modules/camelcase/index.js
+function camelCase(input, options) {
+  if (!(typeof input === "string" || Array.isArray(input))) {
+    throw new TypeError("Expected the input to be `string | string[]`");
+  }
+  options = {
+    pascalCase: false,
+    preserveConsecutiveUppercase: false,
+    ...options
+  };
+  if (Array.isArray(input)) {
+    input = input.map((x) => x.trim()).filter((x) => x.length).join("-");
+  } else {
+    input = input.trim();
+  }
+  if (input.length === 0) {
+    return "";
+  }
+  const toLowerCase = options.locale === false ? (string) => string.toLowerCase() : (string) => string.toLocaleLowerCase(options.locale);
+  const toUpperCase = options.locale === false ? (string) => string.toUpperCase() : (string) => string.toLocaleUpperCase(options.locale);
+  if (input.length === 1) {
+    if (SEPARATORS.test(input)) {
+      return "";
+    }
+    return options.pascalCase ? toUpperCase(input) : toLowerCase(input);
+  }
+  const hasUpperCase = input !== toLowerCase(input);
+  if (hasUpperCase) {
+    input = preserveCamelCase(input, toLowerCase, toUpperCase, options.preserveConsecutiveUppercase);
+  }
+  input = input.replace(LEADING_SEPARATORS, "");
+  input = options.preserveConsecutiveUppercase ? preserveConsecutiveUppercase(input, toLowerCase) : toLowerCase(input);
+  if (options.pascalCase) {
+    input = toUpperCase(input.charAt(0)) + input.slice(1);
+  }
+  return postProcess(input, toUpperCase);
+}
+var UPPERCASE, LOWERCASE, LEADING_CAPITAL, IDENTIFIER, SEPARATORS, LEADING_SEPARATORS, SEPARATORS_AND_IDENTIFIER, NUMBERS_AND_IDENTIFIER, preserveCamelCase, preserveConsecutiveUppercase, postProcess;
+var init_camelcase = __esm({
+  "node_modules/.pnpm/camelcase@8.0.0/node_modules/camelcase/index.js"() {
+    "use strict";
+    UPPERCASE = /[\p{Lu}]/u;
+    LOWERCASE = /[\p{Ll}]/u;
+    LEADING_CAPITAL = /^[\p{Lu}](?![\p{Lu}])/gu;
+    IDENTIFIER = /([\p{Alpha}\p{N}_]|$)/u;
+    SEPARATORS = /[_.\- ]+/;
+    LEADING_SEPARATORS = new RegExp("^" + SEPARATORS.source);
+    SEPARATORS_AND_IDENTIFIER = new RegExp(SEPARATORS.source + IDENTIFIER.source, "gu");
+    NUMBERS_AND_IDENTIFIER = new RegExp("\\d+" + IDENTIFIER.source, "gu");
+    preserveCamelCase = (string, toLowerCase, toUpperCase, preserveConsecutiveUppercase2) => {
+      let isLastCharLower = false;
+      let isLastCharUpper = false;
+      let isLastLastCharUpper = false;
+      let isLastLastCharPreserved = false;
+      for (let index = 0; index < string.length; index++) {
+        const character = string[index];
+        isLastLastCharPreserved = index > 2 ? string[index - 3] === "-" : true;
+        if (isLastCharLower && UPPERCASE.test(character)) {
+          string = string.slice(0, index) + "-" + string.slice(index);
+          isLastCharLower = false;
+          isLastLastCharUpper = isLastCharUpper;
+          isLastCharUpper = true;
+          index++;
+        } else if (isLastCharUpper && isLastLastCharUpper && LOWERCASE.test(character) && (!isLastLastCharPreserved || preserveConsecutiveUppercase2)) {
+          string = string.slice(0, index - 1) + "-" + string.slice(index - 1);
+          isLastLastCharUpper = isLastCharUpper;
+          isLastCharUpper = false;
+          isLastCharLower = true;
+        } else {
+          isLastCharLower = toLowerCase(character) === character && toUpperCase(character) !== character;
+          isLastLastCharUpper = isLastCharUpper;
+          isLastCharUpper = toUpperCase(character) === character && toLowerCase(character) !== character;
+        }
+      }
+      return string;
+    };
+    preserveConsecutiveUppercase = (input, toLowerCase) => {
+      LEADING_CAPITAL.lastIndex = 0;
+      return input.replaceAll(LEADING_CAPITAL, (match) => toLowerCase(match));
+    };
+    postProcess = (input, toUpperCase) => {
+      SEPARATORS_AND_IDENTIFIER.lastIndex = 0;
+      NUMBERS_AND_IDENTIFIER.lastIndex = 0;
+      return input.replaceAll(NUMBERS_AND_IDENTIFIER, (match, pattern, offset) => ["_", "-"].includes(input.charAt(offset + match.length)) ? match : toUpperCase(match)).replaceAll(SEPARATORS_AND_IDENTIFIER, (_, identifier) => toUpperCase(identifier));
+    };
+  }
+});
+
+// node_modules/.pnpm/quick-lru@6.1.2/node_modules/quick-lru/index.js
+var QuickLRU;
+var init_quick_lru = __esm({
+  "node_modules/.pnpm/quick-lru@6.1.2/node_modules/quick-lru/index.js"() {
+    "use strict";
+    QuickLRU = class extends Map {
+      constructor(options = {}) {
+        super();
+        if (!(options.maxSize && options.maxSize > 0)) {
+          throw new TypeError("`maxSize` must be a number greater than 0");
+        }
+        if (typeof options.maxAge === "number" && options.maxAge === 0) {
+          throw new TypeError("`maxAge` must be a number greater than 0");
+        }
+        this.maxSize = options.maxSize;
+        this.maxAge = options.maxAge || Number.POSITIVE_INFINITY;
+        this.onEviction = options.onEviction;
+        this.cache = /* @__PURE__ */ new Map();
+        this.oldCache = /* @__PURE__ */ new Map();
+        this._size = 0;
+      }
+      // TODO: Use private class methods when targeting Node.js 16.
+      _emitEvictions(cache2) {
+        if (typeof this.onEviction !== "function") {
+          return;
+        }
+        for (const [key, item] of cache2) {
+          this.onEviction(key, item.value);
+        }
+      }
+      _deleteIfExpired(key, item) {
+        if (typeof item.expiry === "number" && item.expiry <= Date.now()) {
+          if (typeof this.onEviction === "function") {
+            this.onEviction(key, item.value);
+          }
+          return this.delete(key);
+        }
+        return false;
+      }
+      _getOrDeleteIfExpired(key, item) {
+        const deleted = this._deleteIfExpired(key, item);
+        if (deleted === false) {
+          return item.value;
+        }
+      }
+      _getItemValue(key, item) {
+        return item.expiry ? this._getOrDeleteIfExpired(key, item) : item.value;
+      }
+      _peek(key, cache2) {
+        const item = cache2.get(key);
+        return this._getItemValue(key, item);
+      }
+      _set(key, value) {
+        this.cache.set(key, value);
+        this._size++;
+        if (this._size >= this.maxSize) {
+          this._size = 0;
+          this._emitEvictions(this.oldCache);
+          this.oldCache = this.cache;
+          this.cache = /* @__PURE__ */ new Map();
+        }
+      }
+      _moveToRecent(key, item) {
+        this.oldCache.delete(key);
+        this._set(key, item);
+      }
+      *_entriesAscending() {
+        for (const item of this.oldCache) {
+          const [key, value] = item;
+          if (!this.cache.has(key)) {
+            const deleted = this._deleteIfExpired(key, value);
+            if (deleted === false) {
+              yield item;
+            }
+          }
+        }
+        for (const item of this.cache) {
+          const [key, value] = item;
+          const deleted = this._deleteIfExpired(key, value);
+          if (deleted === false) {
+            yield item;
+          }
+        }
+      }
+      get(key) {
+        if (this.cache.has(key)) {
+          const item = this.cache.get(key);
+          return this._getItemValue(key, item);
+        }
+        if (this.oldCache.has(key)) {
+          const item = this.oldCache.get(key);
+          if (this._deleteIfExpired(key, item) === false) {
+            this._moveToRecent(key, item);
+            return item.value;
+          }
+        }
+      }
+      set(key, value, { maxAge = this.maxAge } = {}) {
+        const expiry = typeof maxAge === "number" && maxAge !== Number.POSITIVE_INFINITY ? Date.now() + maxAge : void 0;
+        if (this.cache.has(key)) {
+          this.cache.set(key, {
+            value,
+            expiry
+          });
+        } else {
+          this._set(key, { value, expiry });
+        }
+        return this;
+      }
+      has(key) {
+        if (this.cache.has(key)) {
+          return !this._deleteIfExpired(key, this.cache.get(key));
+        }
+        if (this.oldCache.has(key)) {
+          return !this._deleteIfExpired(key, this.oldCache.get(key));
+        }
+        return false;
+      }
+      peek(key) {
+        if (this.cache.has(key)) {
+          return this._peek(key, this.cache);
+        }
+        if (this.oldCache.has(key)) {
+          return this._peek(key, this.oldCache);
+        }
+      }
+      delete(key) {
+        const deleted = this.cache.delete(key);
+        if (deleted) {
+          this._size--;
+        }
+        return this.oldCache.delete(key) || deleted;
+      }
+      clear() {
+        this.cache.clear();
+        this.oldCache.clear();
+        this._size = 0;
+      }
+      resize(newSize) {
+        if (!(newSize && newSize > 0)) {
+          throw new TypeError("`maxSize` must be a number greater than 0");
+        }
+        const items = [...this._entriesAscending()];
+        const removeCount = items.length - newSize;
+        if (removeCount < 0) {
+          this.cache = new Map(items);
+          this.oldCache = /* @__PURE__ */ new Map();
+          this._size = items.length;
+        } else {
+          if (removeCount > 0) {
+            this._emitEvictions(items.slice(0, removeCount));
+          }
+          this.oldCache = new Map(items.slice(removeCount));
+          this.cache = /* @__PURE__ */ new Map();
+          this._size = 0;
+        }
+        this.maxSize = newSize;
+      }
+      *keys() {
+        for (const [key] of this) {
+          yield key;
+        }
+      }
+      *values() {
+        for (const [, value] of this) {
+          yield value;
+        }
+      }
+      *[Symbol.iterator]() {
+        for (const item of this.cache) {
+          const [key, value] = item;
+          const deleted = this._deleteIfExpired(key, value);
+          if (deleted === false) {
+            yield [key, value.value];
+          }
+        }
+        for (const item of this.oldCache) {
+          const [key, value] = item;
+          if (!this.cache.has(key)) {
+            const deleted = this._deleteIfExpired(key, value);
+            if (deleted === false) {
+              yield [key, value.value];
+            }
+          }
+        }
+      }
+      *entriesDescending() {
+        let items = [...this.cache];
+        for (let i = items.length - 1; i >= 0; --i) {
+          const item = items[i];
+          const [key, value] = item;
+          const deleted = this._deleteIfExpired(key, value);
+          if (deleted === false) {
+            yield [key, value.value];
+          }
+        }
+        items = [...this.oldCache];
+        for (let i = items.length - 1; i >= 0; --i) {
+          const item = items[i];
+          const [key, value] = item;
+          if (!this.cache.has(key)) {
+            const deleted = this._deleteIfExpired(key, value);
+            if (deleted === false) {
+              yield [key, value.value];
+            }
+          }
+        }
+      }
+      *entriesAscending() {
+        for (const [key, value] of this._entriesAscending()) {
+          yield [key, value.value];
+        }
+      }
+      get size() {
+        if (!this._size) {
+          return this.oldCache.size;
+        }
+        let oldCacheSize = 0;
+        for (const key of this.oldCache.keys()) {
+          if (!this.cache.has(key)) {
+            oldCacheSize++;
+          }
+        }
+        return Math.min(this._size + oldCacheSize, this.maxSize);
+      }
+      entries() {
+        return this.entriesAscending();
+      }
+      forEach(callbackFunction, thisArgument = this) {
+        for (const [key, value] of this.entriesAscending()) {
+          callbackFunction.call(thisArgument, value, key, this);
+        }
+      }
+      get [Symbol.toStringTag]() {
+        return JSON.stringify([...this.entriesAscending()]);
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/camelcase-keys@9.1.3/node_modules/camelcase-keys/index.js
+var camelcase_keys_exports = {};
+__export(camelcase_keys_exports, {
+  default: () => camelcaseKeys
+});
+function camelcaseKeys(input, options) {
+  if (Array.isArray(input)) {
+    return Object.keys(input).map((key) => transform(input[key], options));
+  }
+  return transform(input, options);
+}
+var has, cache, isObject3, transform;
+var init_camelcase_keys = __esm({
+  "node_modules/.pnpm/camelcase-keys@9.1.3/node_modules/camelcase-keys/index.js"() {
+    "use strict";
+    init_map_obj();
+    init_camelcase();
+    init_quick_lru();
+    has = (array, key) => array.some((element) => {
+      if (typeof element === "string") {
+        return element === key;
+      }
+      element.lastIndex = 0;
+      return element.test(key);
+    });
+    cache = new QuickLRU({ maxSize: 1e5 });
+    isObject3 = (value) => typeof value === "object" && value !== null && !(value instanceof RegExp) && !(value instanceof Error) && !(value instanceof Date);
+    transform = (input, options = {}) => {
+      if (!isObject3(input)) {
+        return input;
+      }
+      const {
+        exclude,
+        pascalCase = false,
+        stopPaths,
+        deep = false,
+        preserveConsecutiveUppercase: preserveConsecutiveUppercase2 = false
+      } = options;
+      const stopPathsSet = new Set(stopPaths);
+      const makeMapper = (parentPath) => (key, value) => {
+        if (deep && isObject3(value)) {
+          const path2 = parentPath === void 0 ? key : `${parentPath}.${key}`;
+          if (!stopPathsSet.has(path2)) {
+            value = mapObject(value, makeMapper(path2));
+          }
+        }
+        if (!(exclude && has(exclude, key))) {
+          const cacheKey = pascalCase ? `${key}_` : key;
+          if (cache.has(cacheKey)) {
+            key = cache.get(cacheKey);
+          } else {
+            const returnValue = camelCase(key, { pascalCase, locale: false, preserveConsecutiveUppercase: preserveConsecutiveUppercase2 });
+            if (key.length < 100) {
+              cache.set(cacheKey, returnValue);
+            }
+            key = returnValue;
+          }
+        }
+        return [key, value];
+      };
+      return mapObject(input, makeMapper(void 0));
+    };
+  }
+});
+
+// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/TwirpRPC.js
+var defaultPrefix, defaultTimeoutSeconds, livekitPackage, TwirpError, TwirpRpc;
+var init_TwirpRPC = __esm({
+  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/TwirpRPC.js"() {
+    "use strict";
+    defaultPrefix = "/twirp";
+    defaultTimeoutSeconds = 60;
+    livekitPackage = "livekit";
+    TwirpError = class extends Error {
+      constructor(name, message2, status, code, metadata) {
+        super(message2);
+        this.name = name;
+        this.status = status;
+        this.code = code;
+        this.metadata = metadata;
+      }
+    };
+    TwirpRpc = class {
+      constructor(host, pkg, options) {
+        if (host.startsWith("ws")) {
+          host = host.replace("ws", "http");
+        }
+        this.host = host;
+        this.pkg = pkg;
+        this.requestTimeout = (options == null ? void 0 : options.requestTimeout) ?? defaultTimeoutSeconds;
+        this.prefix = (options == null ? void 0 : options.prefix) || defaultPrefix;
+      }
+      async request(service, method, data, headers, timeout = this.requestTimeout) {
+        const path2 = `${this.prefix}/${this.pkg}.${service}/${method}`;
+        const url = new URL(path2, this.host);
+        const init = {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json;charset=UTF-8",
+            ...headers
+          },
+          body: JSON.stringify(data)
+        };
+        if (timeout) {
+          init.signal = AbortSignal.timeout(timeout * 1e3);
+        }
+        const response = await fetch(url, init);
+        if (!response.ok) {
+          const isJson = response.headers.get("content-type") === "application/json";
+          let errorMessage = "Unknown internal error";
+          let errorCode = void 0;
+          let metadata = void 0;
+          try {
+            if (isJson) {
+              const parsedError = await response.json();
+              if ("msg" in parsedError) {
+                errorMessage = parsedError.msg;
+              }
+              if ("code" in parsedError) {
+                errorCode = parsedError.code;
+              }
+              if ("meta" in parsedError) {
+                metadata = parsedError.meta;
+              }
+            } else {
+              errorMessage = await response.text();
+            }
+          } catch (e) {
+            console.debug(`Error when trying to parse error message, using defaults`, e);
+          }
+          throw new TwirpError(response.statusText, errorMessage, response.status, errorCode, metadata);
+        }
+        const parsedResp = await response.json();
+        const camelcaseKeys2 = await Promise.resolve().then(() => (init_camelcase_keys(), camelcase_keys_exports)).then((mod) => mod.default);
+        return camelcaseKeys2(parsedResp, { deep: true });
+      }
+    };
+  }
+});
+
+// node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AgentDispatchClient.js
+var svc, AgentDispatchClient;
+var init_AgentDispatchClient = __esm({
+  "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/AgentDispatchClient.js"() {
+    "use strict";
+    init_dist();
+    init_ServiceBase();
+    init_TwirpRPC();
+    svc = "AgentDispatchService";
+    AgentDispatchClient = class extends ServiceBase {
+      /**
+       * @param host - hostname including protocol. i.e. 'https://<project>.livekit.cloud'
+       * @param apiKey - API Key, can be set in env var LIVEKIT_API_KEY
+       * @param secret - API Secret, can be set in env var LIVEKIT_API_SECRET
+       * @param options - client options
+       */
+      constructor(host, apiKey, secret, options) {
+        super(apiKey, secret);
+        const rpcOptions = (options == null ? void 0 : options.requestTimeout) ? { requestTimeout: options.requestTimeout } : void 0;
+        this.rpc = new TwirpRpc(host, livekitPackage, rpcOptions);
+      }
+      /**
+       * Create an explicit dispatch for an agent to join a room. To use explicit
+       * dispatch, your agent must be registered with an `agentName`.
+       * @param roomName - name of the room to dispatch to
+       * @param agentName - name of the agent to dispatch
+       * @param options - optional metadata to send along with the dispatch
+       * @returns the dispatch that was created
+       */
+      async createDispatch(roomName, agentName, options) {
+        const req = new CreateAgentDispatchRequest({
+          room: roomName,
+          agentName,
+          metadata: options == null ? void 0 : options.metadata,
+          restartPolicy: options == null ? void 0 : options.restartPolicy
+        }).toJson();
+        const data = await this.rpc.request(
+          svc,
+          "CreateDispatch",
+          req,
+          await this.authHeader({ roomAdmin: true, room: roomName })
+        );
+        return AgentDispatch.fromJson(data, { ignoreUnknownFields: true });
+      }
+      /**
+       * Delete an explicit dispatch for an agent in a room.
+       * @param dispatchId - id of the dispatch to delete
+       * @param roomName - name of the room the dispatch is for
+       */
+      async deleteDispatch(dispatchId, roomName) {
+        const req = new DeleteAgentDispatchRequest({
+          dispatchId,
+          room: roomName
+        }).toJson();
+        await this.rpc.request(
+          svc,
+          "DeleteDispatch",
+          req,
+          await this.authHeader({ roomAdmin: true, room: roomName })
+        );
+      }
+      /**
+       * Get an Agent dispatch by ID
+       * @param dispatchId - id of the dispatch to get
+       * @param roomName - name of the room the dispatch is for
+       * @returns the dispatch that was found, or undefined if not found
+       */
+      async getDispatch(dispatchId, roomName) {
+        const req = new ListAgentDispatchRequest({
+          dispatchId,
+          room: roomName
+        }).toJson();
+        const data = await this.rpc.request(
+          svc,
+          "ListDispatch",
+          req,
+          await this.authHeader({ roomAdmin: true, room: roomName })
+        );
+        const res = ListAgentDispatchResponse.fromJson(data, { ignoreUnknownFields: true });
+        if (res.agentDispatches.length === 0) {
+          return void 0;
+        }
+        return res.agentDispatches[0];
+      }
+      /**
+       * List all agent dispatches for a room
+       * @param roomName - name of the room to list dispatches for
+       * @returns the list of dispatches
+       */
+      async listDispatch(roomName) {
+        const req = new ListAgentDispatchRequest({
+          room: roomName
+        }).toJson();
+        const data = await this.rpc.request(
+          svc,
+          "ListDispatch",
+          req,
+          await this.authHeader({ roomAdmin: true, room: roomName })
+        );
+        const res = ListAgentDispatchResponse.fromJson(data, { ignoreUnknownFields: true });
+        return res.agentDispatches;
+      }
+    };
+  }
+});
+
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/ConnectorClient.js
-import {
-  AcceptWhatsAppCallRequest,
-  AcceptWhatsAppCallResponse,
-  ConnectTwilioCallRequest,
-  ConnectTwilioCallResponse,
-  ConnectWhatsAppCallRequest,
-  ConnectWhatsAppCallResponse,
-  DialWhatsAppCallRequest,
-  DialWhatsAppCallResponse,
-  DisconnectWhatsAppCallRequest,
-  DisconnectWhatsAppCallResponse
-} from "@livekit/protocol";
 var svc2, ConnectorClient;
 var init_ConnectorClient = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/ConnectorClient.js"() {
     "use strict";
-    init_esm2();
+    init_esm();
+    init_dist();
     init_ServiceBase();
     init_TwirpRPC();
     svc2 = "Connector";
@@ -21366,24 +26001,11 @@ var init_ConnectorClient = __esm({
 });
 
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/EgressClient.js
-import {
-  AudioMixing,
-  EgressInfo,
-  ListEgressRequest,
-  ListEgressResponse,
-  ParticipantEgressRequest,
-  RoomCompositeEgressRequest,
-  StopEgressRequest,
-  TrackCompositeEgressRequest,
-  TrackEgressRequest,
-  UpdateLayoutRequest,
-  UpdateStreamRequest,
-  WebEgressRequest
-} from "@livekit/protocol";
 var svc3, EgressClient;
 var init_EgressClient = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/EgressClient.js"() {
     "use strict";
+    init_dist();
     init_ServiceBase();
     init_TwirpRPC();
     svc3 = "Egress";
@@ -21747,18 +26369,11 @@ var init_EgressClient = __esm({
 });
 
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/IngressClient.js
-import {
-  CreateIngressRequest,
-  DeleteIngressRequest,
-  IngressInfo,
-  ListIngressRequest,
-  ListIngressResponse,
-  UpdateIngressRequest
-} from "@livekit/protocol";
 var svc4, IngressClient;
 var init_IngressClient = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/IngressClient.js"() {
     "use strict";
+    init_dist();
     init_ServiceBase();
     init_TwirpRPC();
     svc4 = "Ingress";
@@ -21905,30 +26520,11 @@ var init_uuid = __esm({
 });
 
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/RoomServiceClient.js
-import {
-  CreateRoomRequest,
-  DeleteRoomRequest,
-  ForwardParticipantRequest,
-  ListParticipantsRequest,
-  ListParticipantsResponse,
-  ListRoomsRequest,
-  ListRoomsResponse,
-  MoveParticipantRequest,
-  MuteRoomTrackRequest,
-  MuteRoomTrackResponse,
-  ParticipantInfo,
-  ParticipantPermission,
-  Room,
-  RoomParticipantIdentity,
-  SendDataRequest,
-  UpdateParticipantRequest,
-  UpdateRoomMetadataRequest,
-  UpdateSubscriptionsRequest
-} from "@livekit/protocol";
 var svc5, RoomServiceClient;
 var init_RoomServiceClient = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/RoomServiceClient.js"() {
     "use strict";
+    init_dist();
     init_ServiceBase();
     init_TwirpRPC();
     init_uuid();
@@ -22174,41 +26770,12 @@ var init_RoomServiceClient = __esm({
 });
 
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/SipClient.js
-import {
-  CreateSIPDispatchRuleRequest,
-  CreateSIPInboundTrunkRequest,
-  CreateSIPOutboundTrunkRequest,
-  CreateSIPParticipantRequest,
-  CreateSIPTrunkRequest,
-  DeleteSIPDispatchRuleRequest,
-  DeleteSIPTrunkRequest,
-  ListSIPDispatchRuleRequest,
-  ListSIPDispatchRuleResponse,
-  ListSIPInboundTrunkRequest,
-  ListSIPInboundTrunkResponse,
-  ListSIPOutboundTrunkRequest,
-  ListSIPOutboundTrunkResponse,
-  ListSIPTrunkRequest,
-  ListSIPTrunkResponse,
-  SIPDispatchRule,
-  SIPDispatchRuleDirect,
-  SIPDispatchRuleIndividual,
-  SIPDispatchRuleInfo,
-  SIPInboundTrunkInfo,
-  SIPOutboundTrunkInfo,
-  SIPParticipantInfo,
-  SIPTransport,
-  SIPTrunkInfo,
-  TransferSIPParticipantRequest,
-  UpdateSIPDispatchRuleRequest,
-  UpdateSIPInboundTrunkRequest,
-  UpdateSIPOutboundTrunkRequest
-} from "@livekit/protocol";
 var svc6, SipClient;
 var init_SipClient = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/SipClient.js"() {
     "use strict";
-    init_esm2();
+    init_esm();
+    init_dist();
     init_ServiceBase();
     init_TwirpRPC();
     svc6 = "SIP";
@@ -22725,15 +27292,15 @@ var init_digest = __esm({
 });
 
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/WebhookReceiver.js
-import { WebhookEvent as ProtoWebhookEvent } from "@livekit/protocol";
-var authorizeHeader, WebhookEvent, WebhookReceiver;
+var authorizeHeader, WebhookEvent2, WebhookReceiver;
 var init_WebhookReceiver = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/WebhookReceiver.js"() {
     "use strict";
+    init_dist();
     init_AccessToken();
     init_digest();
     authorizeHeader = "Authorize";
-    WebhookEvent = class _WebhookEvent extends ProtoWebhookEvent {
+    WebhookEvent2 = class _WebhookEvent extends WebhookEvent {
       constructor() {
         super(...arguments);
         this.event = "";
@@ -22773,7 +27340,7 @@ var init_WebhookReceiver = __esm({
             throw new Error("sha256 checksum of body does not match");
           }
         }
-        return WebhookEvent.fromJson(JSON.parse(body), { ignoreUnknownFields: true });
+        return WebhookEvent2.fromJson(JSON.parse(body), { ignoreUnknownFields: true });
       }
     };
   }
@@ -22782,9 +27349,9 @@ var init_WebhookReceiver = __esm({
 // node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/index.js
 var dist_exports2 = {};
 __export(dist_exports2, {
-  AcceptWhatsAppCallResponse: () => AcceptWhatsAppCallResponse2,
+  AcceptWhatsAppCallResponse: () => AcceptWhatsAppCallResponse,
   AccessToken: () => AccessToken,
-  AgentDispatch: () => AgentDispatch2,
+  AgentDispatch: () => AgentDispatch,
   AgentDispatchClient: () => AgentDispatchClient,
   AliOSSUpload: () => AliOSSUpload,
   AudioCodec: () => AudioCodec,
@@ -22792,16 +27359,16 @@ __export(dist_exports2, {
   AutoTrackEgress: () => AutoTrackEgress,
   AzureBlobUpload: () => AzureBlobUpload,
   ConnectTwilioCallRequest_TwilioCallDirection: () => ConnectTwilioCallRequest_TwilioCallDirection,
-  ConnectTwilioCallResponse: () => ConnectTwilioCallResponse2,
-  ConnectWhatsAppCallResponse: () => ConnectWhatsAppCallResponse2,
+  ConnectTwilioCallResponse: () => ConnectTwilioCallResponse,
+  ConnectWhatsAppCallResponse: () => ConnectWhatsAppCallResponse,
   ConnectorClient: () => ConnectorClient,
   DataPacket_Kind: () => DataPacket_Kind,
-  DialWhatsAppCallResponse: () => DialWhatsAppCallResponse2,
+  DialWhatsAppCallResponse: () => DialWhatsAppCallResponse,
   DirectFileOutput: () => DirectFileOutput,
   DisconnectWhatsAppCallRequest_DisconnectReason: () => DisconnectWhatsAppCallRequest_DisconnectReason,
-  DisconnectWhatsAppCallResponse: () => DisconnectWhatsAppCallResponse2,
+  DisconnectWhatsAppCallResponse: () => DisconnectWhatsAppCallResponse,
   EgressClient: () => EgressClient,
-  EgressInfo: () => EgressInfo2,
+  EgressInfo: () => EgressInfo,
   EgressStatus: () => EgressStatus,
   EncodedFileOutput: () => EncodedFileOutput,
   EncodedFileType: () => EncodedFileType,
@@ -22815,33 +27382,33 @@ __export(dist_exports2, {
   IngressAudioEncodingPreset: () => IngressAudioEncodingPreset,
   IngressAudioOptions: () => IngressAudioOptions,
   IngressClient: () => IngressClient,
-  IngressInfo: () => IngressInfo2,
+  IngressInfo: () => IngressInfo,
   IngressInput: () => IngressInput,
   IngressState: () => IngressState,
   IngressVideoEncodingOptions: () => IngressVideoEncodingOptions,
   IngressVideoEncodingPreset: () => IngressVideoEncodingPreset,
   IngressVideoOptions: () => IngressVideoOptions,
   JobRestartPolicy: () => JobRestartPolicy,
-  ParticipantEgressRequest: () => ParticipantEgressRequest2,
-  ParticipantInfo: () => ParticipantInfo2,
+  ParticipantEgressRequest: () => ParticipantEgressRequest,
+  ParticipantInfo: () => ParticipantInfo,
   ParticipantInfo_State: () => ParticipantInfo_State,
-  ParticipantPermission: () => ParticipantPermission2,
-  Room: () => Room2,
+  ParticipantPermission: () => ParticipantPermission,
+  Room: () => Room,
   RoomAgentDispatch: () => RoomAgentDispatch,
-  RoomCompositeEgressRequest: () => RoomCompositeEgressRequest2,
+  RoomCompositeEgressRequest: () => RoomCompositeEgressRequest,
   RoomConfiguration: () => RoomConfiguration,
   RoomEgress: () => RoomEgress,
   RoomServiceClient: () => RoomServiceClient,
   S3Upload: () => S3Upload,
   SIPCallStatus: () => SIPCallStatus,
-  SIPDispatchRule: () => SIPDispatchRule2,
-  SIPDispatchRuleDirect: () => SIPDispatchRuleDirect2,
-  SIPDispatchRuleIndividual: () => SIPDispatchRuleIndividual2,
-  SIPDispatchRuleInfo: () => SIPDispatchRuleInfo2,
-  SIPInboundTrunkInfo: () => SIPInboundTrunkInfo2,
-  SIPOutboundTrunkInfo: () => SIPOutboundTrunkInfo2,
-  SIPParticipantInfo: () => SIPParticipantInfo2,
-  SIPTrunkInfo: () => SIPTrunkInfo2,
+  SIPDispatchRule: () => SIPDispatchRule,
+  SIPDispatchRuleDirect: () => SIPDispatchRuleDirect,
+  SIPDispatchRuleIndividual: () => SIPDispatchRuleIndividual,
+  SIPDispatchRuleInfo: () => SIPDispatchRuleInfo,
+  SIPInboundTrunkInfo: () => SIPInboundTrunkInfo,
+  SIPOutboundTrunkInfo: () => SIPOutboundTrunkInfo,
+  SIPParticipantInfo: () => SIPParticipantInfo,
+  SIPTrunkInfo: () => SIPTrunkInfo,
   SegmentedFileOutput: () => SegmentedFileOutput,
   SegmentedFileProtocol: () => SegmentedFileProtocol,
   SessionDescription: () => SessionDescription,
@@ -22849,93 +27416,25 @@ __export(dist_exports2, {
   StreamOutput: () => StreamOutput,
   StreamProtocol: () => StreamProtocol,
   TokenVerifier: () => TokenVerifier,
-  TrackCompositeEgressRequest: () => TrackCompositeEgressRequest2,
-  TrackEgressRequest: () => TrackEgressRequest2,
+  TrackCompositeEgressRequest: () => TrackCompositeEgressRequest,
+  TrackEgressRequest: () => TrackEgressRequest,
   TrackInfo: () => TrackInfo,
-  TrackSource: () => TrackSource2,
+  TrackSource: () => TrackSource,
   TrackType: () => TrackType,
   TwirpError: () => TwirpError,
   VideoCodec: () => VideoCodec,
-  WebEgressRequest: () => WebEgressRequest2,
+  WebEgressRequest: () => WebEgressRequest,
   WebhookConfig: () => WebhookConfig,
-  WebhookEvent: () => WebhookEvent,
+  WebhookEvent: () => WebhookEvent2,
   WebhookReceiver: () => WebhookReceiver,
   authorizeHeader: () => authorizeHeader,
   claimsToJwtPayload: () => claimsToJwtPayload,
   trackSourceToString: () => trackSourceToString
 });
-import {
-  AcceptWhatsAppCallResponse as AcceptWhatsAppCallResponse2,
-  AliOSSUpload,
-  AgentDispatch as AgentDispatch2,
-  AudioCodec,
-  AutoParticipantEgress,
-  AutoTrackEgress,
-  AzureBlobUpload,
-  ConnectTwilioCallRequest_TwilioCallDirection,
-  ConnectTwilioCallResponse as ConnectTwilioCallResponse2,
-  ConnectWhatsAppCallResponse as ConnectWhatsAppCallResponse2,
-  DataPacket_Kind,
-  DialWhatsAppCallResponse as DialWhatsAppCallResponse2,
-  DirectFileOutput,
-  DisconnectWhatsAppCallRequest_DisconnectReason,
-  DisconnectWhatsAppCallResponse as DisconnectWhatsAppCallResponse2,
-  EgressInfo as EgressInfo2,
-  EgressStatus,
-  EncodedFileOutput,
-  EncodedFileType,
-  EncodingOptions,
-  EncodingOptionsPreset,
-  GCPUpload,
-  ImageCodec,
-  ImageFileSuffix,
-  ImageOutput,
-  IngressAudioEncodingOptions,
-  IngressAudioEncodingPreset,
-  IngressAudioOptions,
-  IngressInfo as IngressInfo2,
-  IngressInput,
-  IngressState,
-  IngressVideoEncodingOptions,
-  IngressVideoEncodingPreset,
-  IngressVideoOptions,
-  JobRestartPolicy,
-  ParticipantEgressRequest as ParticipantEgressRequest2,
-  ParticipantInfo as ParticipantInfo2,
-  ParticipantInfo_State,
-  ParticipantPermission as ParticipantPermission2,
-  Room as Room2,
-  RoomAgentDispatch,
-  RoomCompositeEgressRequest as RoomCompositeEgressRequest2,
-  RoomConfiguration,
-  RoomEgress,
-  S3Upload,
-  SessionDescription,
-  SIPDispatchRule as SIPDispatchRule2,
-  SIPDispatchRuleInfo as SIPDispatchRuleInfo2,
-  SIPDispatchRuleDirect as SIPDispatchRuleDirect2,
-  SIPDispatchRuleIndividual as SIPDispatchRuleIndividual2,
-  SIPParticipantInfo as SIPParticipantInfo2,
-  SIPOutboundTrunkInfo as SIPOutboundTrunkInfo2,
-  SIPInboundTrunkInfo as SIPInboundTrunkInfo2,
-  SIPTrunkInfo as SIPTrunkInfo2,
-  SIPCallStatus,
-  SegmentedFileOutput,
-  SegmentedFileProtocol,
-  StreamOutput,
-  StreamProtocol,
-  TrackCompositeEgressRequest as TrackCompositeEgressRequest2,
-  TrackEgressRequest as TrackEgressRequest2,
-  TrackInfo,
-  TrackSource as TrackSource2,
-  TrackType,
-  WebEgressRequest as WebEgressRequest2,
-  VideoCodec,
-  WebhookConfig
-} from "@livekit/protocol";
-var init_dist = __esm({
+var init_dist2 = __esm({
   "node_modules/.pnpm/livekit-server-sdk@2.15.3/node_modules/livekit-server-sdk/dist/index.js"() {
     "use strict";
+    init_dist();
     init_AccessToken();
     init_AgentDispatchClient();
     init_ConnectorClient();
@@ -32135,7 +36634,7 @@ function shouldShowDeprecationWarning() {
 if (shouldShowDeprecationWarning()) console.warn("\u26A0\uFE0F  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217");
 
 // agent/tools/index.ts
-init_dist();
+init_dist2();
 import { llm } from "@livekit/agents";
 var TOOL_TIMEOUT_MS = 8e3;
 function withTimeout(promise, ms) {
@@ -32866,7 +37365,7 @@ var worker_core_default = defineAgent({
         const lkKey = process.env["LIVEKIT_API_KEY"];
         const lkSecret = process.env["LIVEKIT_API_SECRET"];
         if (httpUrl && lkKey && lkSecret) {
-          const { RoomServiceClient: RSC } = await Promise.resolve().then(() => (init_dist(), dist_exports2));
+          const { RoomServiceClient: RSC } = await Promise.resolve().then(() => (init_dist2(), dist_exports2));
           new RSC(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
         }
         return { ended: true, reason: args.reason };
@@ -32989,7 +37488,7 @@ var worker_core_default = defineAgent({
           const lkKey = process.env["LIVEKIT_API_KEY"];
           const lkSecret = process.env["LIVEKIT_API_SECRET"];
           if (httpUrl && lkKey && lkSecret) {
-            const { RoomServiceClient: RSC } = await Promise.resolve().then(() => (init_dist(), dist_exports2));
+            const { RoomServiceClient: RSC } = await Promise.resolve().then(() => (init_dist2(), dist_exports2));
             new RSC(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
           }
           return { transitioned: true, new_state: "end_call", ended: true };
@@ -33200,7 +37699,7 @@ var worker_core_default = defineAgent({
             const lkKey = process.env["LIVEKIT_API_KEY"];
             const lkSecret = process.env["LIVEKIT_API_SECRET"];
             if (httpUrl && lkKey && lkSecret) {
-              const { RoomServiceClient: RoomServiceClient2 } = await Promise.resolve().then(() => (init_dist(), dist_exports2));
+              const { RoomServiceClient: RoomServiceClient2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports2));
               new RoomServiceClient2(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
             }
           }

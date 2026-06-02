@@ -38,7 +38,11 @@ RUN node_modules/.pnpm/node_modules/.bin/esbuild agent/worker_core.ts \
   --format=esm \
   --target=node22 \
   --tsconfig=tsconfig.json \
-  --external:@livekit/* \
+  --external:@livekit/agents \
+  --external:@livekit/agents-plugin-deepgram \
+  --external:@livekit/agents-plugin-openai \
+  --external:@livekit/agents-plugin-cartesia \
+  --external:@livekit/rtc-node \
   --external:fsevents \
   --outfile=dist/worker.mjs
 
