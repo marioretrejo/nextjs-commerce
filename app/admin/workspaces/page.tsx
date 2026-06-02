@@ -41,6 +41,7 @@ export default async function AdminWorkspacesPage() {
 
   return (
     <WorkspaceCommandCenter
+      isSuperAdmin={true}
       workspaces={(workspaces ?? []).map((w) => ({
         ...w,
         owner: ownerMap[(w as { owner_id: string }).owner_id] ?? null,

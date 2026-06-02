@@ -56,9 +56,12 @@ const FLAG_LABELS: Record<string, string> = {
   max_agents:              'Max Agents',
 };
 
-interface Props { workspaces: WorkspaceRow[] }
+interface Props {
+  workspaces:    WorkspaceRow[];
+  isSuperAdmin:  boolean;
+}
 
-export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
+export function WorkspaceCommandCenter({ workspaces: initial, isSuperAdmin }: Props) {
   const [workspaces, setWorkspaces]         = useState(initial);
   const [search, setSearch]                 = useState('');
   const [expanded, setExpanded]             = useState<string | null>(null);
@@ -591,19 +594,22 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                     </button>
                   )}
 
-                  {/* White-label Branding */}
-                  <button
-                    onClick={() => openBrandingModal(ws)}
-                    disabled={loading[ws.id]}
-                    title={ws.branding ? `Branding activo: ${ws.branding.app_name}` : 'Configurar white-label branding'}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
-                      ws.branding
-                        ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                        : 'border-[#e5e5e5] bg-white text-[#606060] hover:bg-[#f5f5f5]'
-                    }`}
-                  >
-                    <Palette className="h-4 w-4" />
-                  </button>
+                  {/* White-label Branding — superadmin only */}
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => openBrandingModal(ws)}
+                      disabled={loading[ws.id]}
+                      title={ws.branding ? `Branding activo: ${ws.branding.app_name}` : 'Configurar white-label branding'}
+                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                        ws.branding
+                          ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                          : 'border-violet-200 bg-white text-violet-600 hover:bg-violet-50'
+                      }`}
+                    >
+                      <Palette className="h-3.5 w-3.5" />
+                      Branding
+                    </button>
+                  )}
 
                   {/* Feature flags expand */}
                   <button
