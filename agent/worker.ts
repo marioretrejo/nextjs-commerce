@@ -11,4 +11,11 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-await import(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'worker.mjs'));
+// Dynamic import() works in CJS; top-level await does NOT — hence the .catch()
+// instead of await. The process stays alive because worker.mjs starts servers.
+import(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'worker.mjs')).catch(
+  (err: Error) => {
+    process.stderr.write(`[worker-launcher] ${err.stack ?? err.message}\n`);
+    process.exit(1);
+  },
+);
