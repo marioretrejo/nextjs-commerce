@@ -2,9 +2,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "agent": "tsx agent/worker.ts dev",
-    "agent:prod": "tsx agent/worker.ts start",
-    "start:worker": "node --import tsx/esm agent/worker.ts start",
+    "agent": "tsx agent/worker_core.ts dev",
+    "agent:prod": "node dist/worker.mjs start",
+    "build:worker": "node_modules/.pnpm/node_modules/.bin/esbuild agent/worker_core.ts --bundle --platform=node --format=esm --target=node22 --tsconfig=tsconfig.json --external:@livekit/* --external:fsevents --outfile=dist/worker.mjs",
+    "start:worker": "tsx agent/worker.ts start",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
