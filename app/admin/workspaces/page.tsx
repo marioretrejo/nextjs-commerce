@@ -15,11 +15,34 @@ export default async function AdminWorkspacesPage() {
   if (!(me as { is_superadmin: boolean } | null)?.is_superadmin) redirect('/dashboard');
 
   const admin = createAdminClient();
-  const { data: workspaces } = await admin
+
+  // Core workspace fields — no new columns that might not exist yet
+  const { data: workspaces, error: wsErr } = await admin
     .from('workspaces')
-    .select('id, name, plan, minutes_used, minutes_limit, is_suspended, suspended_reason, suspended_at, active_calls, concurrent_calls_limit, owner_id, created_at, minute_cap, billing_status, stripe_balance_cents, branding, has_compliance_qa')
+    .select('id, name, plan, minutes_used, minutes_limit, is_suspended, suspended_reason, suspended_at, active_calls, concurrent_calls_limit, owner_id, created_at, minute_cap, billing_status, stripe_balance_cents, branding')
     .order('created_at', { ascending: false })
     .limit(200);
+
+  if (wsErr) {
+    console.error('admin/workspaces: failed to fetch workspaces', wsErr.message);
+  }
+
+  // has_compliance_qa — fetched separately so the page works before migration 038 is applied
+  let complianceQaMap: Record<string, boolean> = {};
+  try {
+    const { data: qaFlags } = await admin
+      .from('workspaces')
+      .select('id, has_compliance_qa')
+      .in('id', (workspaces ?? []).map(w => w.id));
+    complianceQaMap = Object.fromEntries(
+      (qaFlags ?? []).map((w) => [
+        (w as { id: string }).id,
+        Boolean((w as { has_compliance_qa?: boolean }).has_compliance_qa),
+      ])
+    );
+  } catch {
+    // Column doesn't exist yet — migration 038 pending. Fall back to false for all.
+  }
 
   // Fetch owner emails
   const ownerIds = [...new Set((workspaces ?? []).map((w) => (w as { owner_id: string }).owner_id))];
@@ -43,8 +66,9 @@ export default async function AdminWorkspacesPage() {
     <WorkspaceCommandCenter
       workspaces={(workspaces ?? []).map((w) => ({
         ...w,
-        owner: ownerMap[(w as { owner_id: string }).owner_id] ?? null,
-        flags: flagsByWs[w.id] ?? [],
+        has_compliance_qa: complianceQaMap[w.id] ?? false,
+        owner:  ownerMap[(w as { owner_id: string }).owner_id] ?? null,
+        flags:  flagsByWs[w.id] ?? [],
       }))}
     />
   );
