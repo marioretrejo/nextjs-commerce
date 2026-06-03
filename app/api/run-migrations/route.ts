@@ -160,6 +160,14 @@ function buildAttempts(): ConnAttempt[] {
   attempts.push({ host: `db.${PROJECT_REF}.supabase.co`, port: 5432, user: 'postgres' });
   attempts.push({ host: `db.${PROJECT_REF}.supabase.co`, port: 6543, user: 'postgres' });
 
+  // Try the Supabase API host itself on Postgres port (some setups expose this)
+  attempts.push({ host: `${PROJECT_REF}.supabase.co`, port: 5432, user: 'postgres' });
+  attempts.push({ host: `${PROJECT_REF}.supabase.co`, port: 5432, user: `postgres.${PROJECT_REF}` });
+
+  // Re-try the two reachable Supavisor hosts but with plain 'postgres' username
+  attempts.push({ host: 'aws-0-us-east-1.pooler.supabase.com', port: 5432, user: 'postgres' });
+  attempts.push({ host: 'aws-0-eu-west-2.pooler.supabase.com', port: 5432, user: 'postgres' });
+
   return attempts;
 }
 
