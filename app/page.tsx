@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 const SOCIAL_PROOF_LOGOS = [
@@ -16,7 +15,7 @@ const FAQ = [
   },
   {
     q: 'What languages are supported?',
-    a: 'We support 70+ languages through Retell AI and ElevenLabs voice engines. You can configure a primary language per agent and enable auto-detection to match the caller\'s language on the first turn.',
+    a: "We support 70+ languages through Retell AI and ElevenLabs voice engines. You can configure a primary language per agent and enable auto-detection to match the caller's language on the first turn.",
   },
   {
     q: 'Can I use my own phone numbers?',
@@ -24,11 +23,11 @@ const FAQ = [
   },
   {
     q: 'How does billing work for extra minutes?',
-    a: 'Free plan includes 50 minutes/month. Pro includes 1,000 minutes. Scale includes 5,000 minutes. Additional minutes on Scale are billed at $0.05/minute. No surprise charges — you\'ll get an alert at 80% and 100% usage.',
+    a: "Free plan includes 50 minutes/month. Pro includes 1,000 minutes. Scale includes 5,000 minutes. Additional minutes on Scale are billed at $0.05/minute. No surprise charges — you'll get an alert at 80% and 100% usage.",
   },
   {
     q: 'Can I embed the voice agent on my website?',
-    a: 'Yes. Every agent has a built-in web widget that you can embed via a single <script> tag or <iframe>. Visitors can start a voice call directly in the browser with no phone needed.',
+    a: 'Yes. Every agent has a built-in web widget that you can embed via a single script tag or iframe. Visitors can start a voice call directly in the browser with no phone needed.',
   },
 ];
 
@@ -110,52 +109,52 @@ const TESTIMONIALS = [
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-[#f7f5f0] text-[#0a0a0a]">
+    <main className="min-h-screen bg-white text-black">
 
-      {/* ── Nav ── */}
-      <nav className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-[#0a0a0a]/10 bg-[#f7f5f0]/95 px-6 backdrop-blur-sm sm:px-12">
+      {/* Nav */}
+      <nav className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-black/10 bg-white/95 px-6 backdrop-blur-sm sm:px-12">
         <span className="text-sm font-semibold tracking-tight">VoiceOS</span>
         <div className="hidden items-center gap-8 text-xs tracking-wide text-[#888] sm:flex uppercase">
-          <Link href="#features" className="hover:text-[#0a0a0a] transition-colors">Features</Link>
-          <Link href="#how-it-works" className="hover:text-[#0a0a0a] transition-colors">How it works</Link>
-          <Link href="#pricing" className="hover:text-[#0a0a0a] transition-colors">Pricing</Link>
-          <Link href="#faq" className="hover:text-[#0a0a0a] transition-colors">FAQ</Link>
+          <Link href="#features" className="hover:text-black transition-colors">Features</Link>
+          <Link href="#how-it-works" className="hover:text-black transition-colors">How it works</Link>
+          <Link href="#pricing" className="hover:text-black transition-colors">Pricing</Link>
+          <Link href="#faq" className="hover:text-black transition-colors">FAQ</Link>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/login" className="text-xs text-[#888] hover:text-[#0a0a0a] transition-colors">
+          <Link href="/login" className="text-xs text-[#888] hover:text-black transition-colors">
             Sign in
           </Link>
           <Link href="/register">
-            <button className="rounded-none border border-[#0a0a0a] bg-[#0a0a0a] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#222] transition-colors">
+            <button className="rounded-none border border-black bg-black px-4 py-1.5 text-xs font-medium text-white hover:bg-[#222] transition-colors">
               Get started
             </button>
           </Link>
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="px-6 pb-32 pt-24 sm:px-12 lg:pt-36 lg:pb-40">
+      {/* Hero */}
+      <section className="bg-white px-6 pb-32 pt-24 sm:px-12 lg:pt-36 lg:pb-40">
         <div className="mx-auto max-w-5xl">
           <p className="mb-8 text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">
-            AI Voice Platform — Now with ElevenLabs voice cloning
+            AI Voice Platform
           </p>
-          <h1 className="max-w-3xl text-5xl font-light leading-[1.08] tracking-tight text-[#0a0a0a] sm:text-6xl lg:text-7xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+          <h1 className="max-w-3xl text-5xl font-light leading-[1.08] tracking-tight text-black sm:text-6xl lg:text-7xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
             AI Voice Agents That<br />
             Close Deals While<br />
             You Sleep
           </h1>
-          <p className="mt-10 max-w-lg text-base leading-relaxed text-[#666]">
+          <p className="mt-10 max-w-lg text-base leading-relaxed text-[#555]">
             Deploy AI voice agents that call your leads, handle objections, book appointments,
             and convert — 24/7, in 70+ languages. No code. No hiring. No limits.
           </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
             <Link href="/register">
-              <button className="border border-[#0a0a0a] bg-[#0a0a0a] px-8 py-3 text-sm font-medium text-white hover:bg-[#222] transition-colors">
+              <button className="border border-black bg-black px-8 py-3 text-sm font-medium text-white hover:bg-[#222] transition-colors">
                 Start for free — no card needed
               </button>
             </Link>
             <Link href="#how-it-works">
-              <button className="border border-[#0a0a0a]/20 bg-transparent px-8 py-3 text-sm font-medium text-[#0a0a0a] hover:border-[#0a0a0a] transition-colors">
+              <button className="border border-black/20 bg-transparent px-8 py-3 text-sm font-medium text-black hover:border-black transition-colors">
                 See how it works
               </button>
             </Link>
@@ -164,8 +163,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Social Proof ── */}
-      <section className="border-y border-[#0a0a0a]/8 bg-[#f0ede6] px-6 py-8 sm:px-12">
+      {/* Social Proof */}
+      <section className="border-y border-black/8 bg-[#f2f2f2] px-6 py-8 sm:px-12">
         <div className="mx-auto max-w-5xl">
           <p className="mb-5 text-[10px] font-medium uppercase tracking-[0.2em] text-[#888]">
             Trusted by revenue teams at
@@ -180,12 +179,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Stats ── */}
-      <section className="border-b border-[#0a0a0a]/8 px-6 py-16 sm:px-12">
+      {/* Stats */}
+      <section className="border-b border-black/8 bg-white px-6 py-16 sm:px-12">
         <div className="mx-auto grid max-w-5xl grid-cols-2 gap-12 md:grid-cols-4">
           {STATS.map((s) => (
             <div key={s.label}>
-              <p className="text-4xl font-light tracking-tight" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+              <p className="text-4xl font-light tracking-tight text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
                 {s.value}
               </p>
               <p className="mt-1 text-xs text-[#888] uppercase tracking-wider">{s.label}</p>
@@ -194,33 +193,33 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section className="px-6 py-28 sm:px-12" id="features">
+      {/* Features */}
+      <section className="bg-white px-6 py-28 sm:px-12" id="features">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-16 flex items-end justify-between border-b border-[#0a0a0a]/10 pb-6">
+          <div className="mb-16 flex items-end justify-between border-b border-black/10 pb-6">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">Platform</p>
-            <h2 className="text-2xl font-light tracking-tight sm:text-3xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+            <h2 className="text-2xl font-light tracking-tight sm:text-3xl text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
               Everything you need to scale outreach
             </h2>
           </div>
-          <div className="divide-y divide-[#0a0a0a]/8">
+          <div className="divide-y divide-black/8">
             {FEATURES.map((f) => (
               <div key={f.title} className="grid grid-cols-[40px_1fr_2fr] items-start gap-8 py-8 sm:py-10">
                 <span className="text-xs font-medium text-[#bbb] pt-0.5">{f.index}</span>
-                <h3 className="text-sm font-semibold text-[#0a0a0a]">{f.title}</h3>
-                <p className="text-sm leading-relaxed text-[#666]">{f.desc}</p>
+                <h3 className="text-sm font-semibold text-black">{f.title}</h3>
+                <p className="text-sm leading-relaxed text-[#555]">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── How it works ── */}
-      <section className="border-t border-[#0a0a0a]/8 bg-[#f0ede6] px-6 py-28 sm:px-12" id="how-it-works">
+      {/* How it works */}
+      <section className="border-t border-black/8 bg-[#f2f2f2] px-6 py-28 sm:px-12" id="how-it-works">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-16 flex items-end justify-between border-b border-[#0a0a0a]/10 pb-6">
+          <div className="mb-16 flex items-end justify-between border-b border-black/10 pb-6">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">Process</p>
-            <h2 className="text-2xl font-light tracking-tight sm:text-3xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+            <h2 className="text-2xl font-light tracking-tight sm:text-3xl text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
               Live in under 10 minutes
             </h2>
           </div>
@@ -230,23 +229,23 @@ export default function LandingPage() {
                 <p className="mb-5 text-5xl font-light text-[#ccc]" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
                   {h.step}
                 </p>
-                <h3 className="mb-2 text-sm font-semibold">{h.title}</h3>
-                <p className="text-sm leading-relaxed text-[#666]">{h.desc}</p>
+                <h3 className="mb-2 text-sm font-semibold text-black">{h.title}</h3>
+                <p className="text-sm leading-relaxed text-[#555]">{h.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Demo ── */}
-      <section className="border-t border-[#0a0a0a]/8 px-6 py-20 sm:px-12">
+      {/* Demo */}
+      <section className="border-t border-black/8 bg-white px-6 py-20 sm:px-12">
         <div className="mx-auto max-w-3xl">
           <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">Live demo</p>
-          <h2 className="mb-10 text-2xl font-light tracking-tight sm:text-3xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+          <h2 className="mb-10 text-2xl font-light tracking-tight sm:text-3xl text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
             See it in action
           </h2>
-          <div className="relative aspect-video border border-[#0a0a0a]/15 bg-[#f0ede6] flex flex-col items-center justify-center gap-4 cursor-pointer group hover:border-[#0a0a0a]/40 transition-colors">
-            <div className="flex h-14 w-14 items-center justify-center border border-[#0a0a0a] bg-[#0a0a0a] text-white group-hover:bg-[#222] transition-colors">
+          <div className="relative aspect-video border border-black/15 bg-[#f2f2f2] flex flex-col items-center justify-center gap-4 cursor-pointer group hover:border-black/40 transition-colors">
+            <div className="flex h-14 w-14 items-center justify-center border border-black bg-black text-white group-hover:bg-[#222] transition-colors">
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 ml-0.5">
                 <path d="M8 5v14l11-7z" />
               </svg>
@@ -256,21 +255,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
-      <section className="border-t border-[#0a0a0a]/8 bg-[#f0ede6] px-6 py-28 sm:px-12">
+      {/* Testimonials */}
+      <section className="border-t border-black/8 bg-[#f2f2f2] px-6 py-28 sm:px-12">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-16 flex items-end justify-between border-b border-[#0a0a0a]/10 pb-6">
+          <div className="mb-16 flex items-end justify-between border-b border-black/10 pb-6">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">Social proof</p>
-            <h2 className="text-2xl font-light tracking-tight sm:text-3xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+            <h2 className="text-2xl font-light tracking-tight sm:text-3xl text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
               Trusted by revenue teams worldwide
             </h2>
           </div>
           <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             {TESTIMONIALS.map((t) => (
-              <div key={t.author} className="border-t-2 border-[#0a0a0a] pt-6">
+              <div key={t.author} className="border-t-2 border-black pt-6">
                 <p className="mb-6 text-sm leading-relaxed text-[#333]">&ldquo;{t.quote}&rdquo;</p>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider">{t.author}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-black">{t.author}</p>
                   <p className="mt-0.5 text-xs text-[#888]">{t.role}</p>
                 </div>
               </div>
@@ -279,16 +278,16 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Pricing ── */}
-      <section className="border-t border-[#0a0a0a]/8 px-6 py-28 sm:px-12" id="pricing">
+      {/* Pricing */}
+      <section className="border-t border-black/8 bg-white px-6 py-28 sm:px-12" id="pricing">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-16 flex items-end justify-between border-b border-[#0a0a0a]/10 pb-6">
+          <div className="mb-16 flex items-end justify-between border-b border-black/10 pb-6">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">Pricing</p>
-            <h2 className="text-2xl font-light tracking-tight sm:text-3xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+            <h2 className="text-2xl font-light tracking-tight sm:text-3xl text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
               Simple, transparent pricing
             </h2>
           </div>
-          <div className="grid grid-cols-1 gap-0 sm:grid-cols-3 border border-[#0a0a0a]/15">
+          <div className="grid grid-cols-1 gap-0 sm:grid-cols-3 border border-black/15">
             {[
               {
                 name: 'Free',
@@ -336,14 +335,14 @@ export default function LandingPage() {
                 key={plan.name}
                 className={`relative p-8 ${
                   plan.highlight
-                    ? 'bg-[#0a0a0a] text-white'
-                    : 'bg-transparent text-[#0a0a0a]'
-                } ${i > 0 ? 'border-l border-[#0a0a0a]/15' : ''}`}
+                    ? 'bg-black text-white'
+                    : 'bg-white text-black'
+                } ${i > 0 ? 'border-l border-black/15' : ''}`}
               >
                 {plan.highlight && (
                   <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.2em] text-[#888]">Most popular</p>
                 )}
-                <p className={`text-[11px] font-medium uppercase tracking-[0.15em] ${plan.highlight ? 'text-[#888]' : 'text-[#888]'}`}>
+                <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-[#888]">
                   {plan.name}
                 </p>
                 <div className="mt-3 flex items-end gap-1">
@@ -351,16 +350,16 @@ export default function LandingPage() {
                     {plan.price}
                   </span>
                   {plan.price !== '$0' && (
-                    <span className={`mb-1 text-xs ${plan.highlight ? 'text-[#666]' : 'text-[#888]'}`}>
+                    <span className={`mb-1 text-xs ${plan.highlight ? 'text-[#888]' : 'text-[#888]'}`}>
                       /{plan.period.split(' ')[0]}
                     </span>
                   )}
                 </div>
-                <p className={`mt-2 text-xs ${plan.highlight ? 'text-[#666]' : 'text-[#888]'}`}>{plan.desc}</p>
+                <p className={`mt-2 text-xs ${plan.highlight ? 'text-[#888]' : 'text-[#888]'}`}>{plan.desc}</p>
                 <ul className="my-7 space-y-2.5">
                   {plan.features.map((f) => (
-                    <li key={f} className={`flex items-start gap-2 text-xs leading-relaxed ${plan.highlight ? 'text-[#bbb]' : 'text-[#666]'}`}>
-                      <span className={`mt-0.5 shrink-0 ${plan.highlight ? 'text-white' : 'text-[#0a0a0a]'}`}>—</span>
+                    <li key={f} className={`flex items-start gap-2 text-xs leading-relaxed ${plan.highlight ? 'text-[#bbb]' : 'text-[#555]'}`}>
+                      <span className={`mt-0.5 shrink-0 ${plan.highlight ? 'text-white' : 'text-black'}`}>-</span>
                       {f}
                     </li>
                   ))}
@@ -369,8 +368,8 @@ export default function LandingPage() {
                   <button
                     className={`w-full border py-2.5 text-xs font-medium uppercase tracking-wider transition-colors ${
                       plan.highlight
-                        ? 'border-white bg-white text-[#0a0a0a] hover:bg-[#f0ede6]'
-                        : 'border-[#0a0a0a] bg-transparent text-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-white'
+                        ? 'border-white bg-white text-black hover:bg-[#f2f2f2]'
+                        : 'border-black bg-transparent text-black hover:bg-black hover:text-white'
                     }`}
                   >
                     {plan.cta}
@@ -383,44 +382,44 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── FAQ ── */}
-      <section className="border-t border-[#0a0a0a]/8 bg-[#f0ede6] px-6 py-28 sm:px-12" id="faq">
+      {/* FAQ */}
+      <section className="border-t border-black/8 bg-[#f2f2f2] px-6 py-28 sm:px-12" id="faq">
         <div className="mx-auto max-w-3xl">
-          <div className="mb-16 flex items-end justify-between border-b border-[#0a0a0a]/10 pb-6">
+          <div className="mb-16 flex items-end justify-between border-b border-black/10 pb-6">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">FAQ</p>
-            <h2 className="text-2xl font-light tracking-tight sm:text-3xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+            <h2 className="text-2xl font-light tracking-tight sm:text-3xl text-black" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
               Frequently asked questions
             </h2>
           </div>
-          <div className="divide-y divide-[#0a0a0a]/8">
+          <div className="divide-y divide-black/8">
             {FAQ.map((item) => (
               <details key={item.q} className="group py-6">
-                <summary className="flex cursor-pointer items-start justify-between gap-6 text-sm font-medium text-[#0a0a0a] list-none">
+                <summary className="flex cursor-pointer items-start justify-between gap-6 text-sm font-medium text-black list-none">
                   {item.q}
                   <span className="mt-0.5 shrink-0 text-[#888] group-open:rotate-45 transition-transform duration-200 inline-block">+</span>
                 </summary>
-                <p className="mt-4 text-sm leading-relaxed text-[#666] pr-8">{item.a}</p>
+                <p className="mt-4 text-sm leading-relaxed text-[#555] pr-8">{item.a}</p>
               </details>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Final CTA ── */}
-      <section className="border-t border-[#0a0a0a]/8 px-6 py-32 sm:px-12">
+      {/* Final CTA */}
+      <section className="border-t border-black/8 bg-white px-6 py-32 sm:px-12">
         <div className="mx-auto max-w-5xl">
           <p className="mb-6 text-[11px] font-medium uppercase tracking-[0.18em] text-[#888]">Get started</p>
-          <h2 className="mb-10 max-w-2xl text-4xl font-light leading-tight tracking-tight sm:text-5xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-            Ready to 10× your outreach?
+          <h2 className="mb-10 max-w-2xl text-4xl font-light leading-tight tracking-tight text-black sm:text-5xl" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+            Ready to 10x your outreach?
           </h2>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link href="/register">
-              <button className="border border-[#0a0a0a] bg-[#0a0a0a] px-8 py-3 text-sm font-medium text-white hover:bg-[#222] transition-colors">
+              <button className="border border-black bg-black px-8 py-3 text-sm font-medium text-white hover:bg-[#222] transition-colors">
                 Start for free
               </button>
             </Link>
             <Link href="/login">
-              <button className="border border-[#0a0a0a]/20 px-8 py-3 text-sm font-medium text-[#0a0a0a] hover:border-[#0a0a0a] transition-colors">
+              <button className="border border-black/20 px-8 py-3 text-sm font-medium text-black hover:border-black transition-colors">
                 Sign in
               </button>
             </Link>
@@ -428,25 +427,25 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer className="border-t border-[#0a0a0a]/8 px-6 py-10 sm:px-12">
+      {/* Footer */}
+      <footer className="border-t border-black/8 bg-white px-6 py-10 sm:px-12">
         <div className="mx-auto max-w-5xl flex flex-col items-start justify-between gap-8 sm:flex-row">
           <div>
-            <span className="text-sm font-semibold">VoiceOS</span>
+            <span className="text-sm font-semibold text-black">VoiceOS</span>
             <p className="mt-1 max-w-xs text-xs text-[#888] leading-relaxed">
               The AI voice agent platform for modern revenue teams.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-x-16 gap-y-2 text-xs text-[#888]">
-            <Link href="#features" className="hover:text-[#0a0a0a] transition-colors">Features</Link>
-            <Link href="/login" className="hover:text-[#0a0a0a] transition-colors">Sign in</Link>
-            <Link href="#how-it-works" className="hover:text-[#0a0a0a] transition-colors">How it works</Link>
-            <Link href="/register" className="hover:text-[#0a0a0a] transition-colors">Get started</Link>
-            <Link href="#pricing" className="hover:text-[#0a0a0a] transition-colors">Pricing</Link>
+            <Link href="#features" className="hover:text-black transition-colors">Features</Link>
+            <Link href="/login" className="hover:text-black transition-colors">Sign in</Link>
+            <Link href="#how-it-works" className="hover:text-black transition-colors">How it works</Link>
+            <Link href="/register" className="hover:text-black transition-colors">Get started</Link>
+            <Link href="#pricing" className="hover:text-black transition-colors">Pricing</Link>
           </div>
         </div>
-        <div className="mx-auto max-w-5xl mt-8 border-t border-[#0a0a0a]/8 pt-6 text-xs text-[#bbb]">
-          © {new Date().getFullYear()} VoiceOS. All rights reserved.
+        <div className="mx-auto max-w-5xl mt-8 border-t border-black/8 pt-6 text-xs text-[#bbb]">
+          &copy; {new Date().getFullYear()} VoiceOS. All rights reserved.
         </div>
       </footer>
     </main>
