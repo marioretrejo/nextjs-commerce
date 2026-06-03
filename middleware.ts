@@ -22,7 +22,7 @@ const PUBLIC_PATHS = [
   '/api/auth/set-session',
   '/api/auth/signout',
   '/api/auth/direct-access',
-  '/api/_migrate',
+  '/api/run-migrations',
 ];
 
 const ADMIN_PATHS = ['/admin'];
