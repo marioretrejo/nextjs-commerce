@@ -144,13 +144,22 @@ function buildAttempts(): ConnAttempt[] {
     'aws-0-ap-southeast-1', 'aws-0-ap-northeast-1', 'aws-0-sa-east-1',
   ];
   const attempts: ConnAttempt[] = [];
+
+  // Supabase Supavisor (new) — username format postgres.PROJECT_REF
   for (const r of regions) {
-    // Session mode (supports DDL) on both ports
     attempts.push({ host: `${r}.pooler.supabase.com`, port: 5432, user: `postgres.${PROJECT_REF}` });
     attempts.push({ host: `${r}.pooler.supabase.com`, port: 6543, user: `postgres.${PROJECT_REF}` });
   }
-  // Also try direct connection (requires DB password — might work with JWT on some setups)
+
+  // Legacy pgBouncer — project-specific hostname, username = postgres.PROJECT_REF or postgres
+  attempts.push({ host: `${PROJECT_REF}.pooler.supabase.com`, port: 6543, user: `postgres.${PROJECT_REF}` });
+  attempts.push({ host: `${PROJECT_REF}.pooler.supabase.com`, port: 5432, user: `postgres.${PROJECT_REF}` });
+  attempts.push({ host: `${PROJECT_REF}.pooler.supabase.com`, port: 6543, user: 'postgres' });
+
+  // Direct connection — old Supabase infrastructure (some projects still have this)
   attempts.push({ host: `db.${PROJECT_REF}.supabase.co`, port: 5432, user: 'postgres' });
+  attempts.push({ host: `db.${PROJECT_REF}.supabase.co`, port: 6543, user: 'postgres' });
+
   return attempts;
 }
 
