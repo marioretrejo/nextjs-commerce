@@ -132,25 +132,37 @@ DO $$ BEGIN
 END $$;
 `;
 
-// Supabase Supavisor session pooler — supports DDL, JWT auth
-// Region candidates to try in order
-const POOLER_REGIONS = [
-  'aws-0-us-east-1',
-  'aws-0-us-west-1',
-  'aws-0-eu-west-1',
-  'aws-0-ap-southeast-1',
-];
 const PROJECT_REF = 'blyzfuwwxwpuihrjdpuh';
 
-async function tryConnect(host: string): Promise<Client> {
+interface ConnAttempt { host: string; port: number; user: string }
+
+// All known Supabase pooler endpoints + direct host, both ports
+function buildAttempts(): ConnAttempt[] {
+  const regions = [
+    'aws-0-us-east-1', 'aws-0-us-east-2', 'aws-0-us-west-1', 'aws-0-us-west-2',
+    'aws-0-eu-west-1', 'aws-0-eu-west-2', 'aws-0-eu-central-1',
+    'aws-0-ap-southeast-1', 'aws-0-ap-northeast-1', 'aws-0-sa-east-1',
+  ];
+  const attempts: ConnAttempt[] = [];
+  for (const r of regions) {
+    // Session mode (supports DDL) on both ports
+    attempts.push({ host: `${r}.pooler.supabase.com`, port: 5432, user: `postgres.${PROJECT_REF}` });
+    attempts.push({ host: `${r}.pooler.supabase.com`, port: 6543, user: `postgres.${PROJECT_REF}` });
+  }
+  // Also try direct connection (requires DB password — might work with JWT on some setups)
+  attempts.push({ host: `db.${PROJECT_REF}.supabase.co`, port: 5432, user: 'postgres' });
+  return attempts;
+}
+
+async function tryConnect(attempt: ConnAttempt, password: string): Promise<Client> {
   const client = new Client({
-    host,
-    port: 5432,
+    host: attempt.host,
+    port: attempt.port,
     database: 'postgres',
-    user: `postgres.${PROJECT_REF}`,
-    password: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    user: attempt.user,
+    password,
     ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 8000,
+    connectionTimeoutMillis: 10000,
   });
   await client.connect();
   return client;
@@ -162,25 +174,25 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const password = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   let client: Client | null = null;
-  let connectedHost = '';
+  let connectedAt = '';
+  const errors: string[] = [];
 
-  // Try each region until one connects
-  for (const region of POOLER_REGIONS) {
-    const host = `${region}.pooler.supabase.com`;
+  for (const attempt of buildAttempts()) {
     try {
-      client = await tryConnect(host);
-      connectedHost = host;
+      client = await tryConnect(attempt, password);
+      connectedAt = `${attempt.user}@${attempt.host}:${attempt.port}`;
       break;
     } catch (err) {
-      console.log(`_migrate: failed to connect to ${host}:`, (err as Error).message);
+      errors.push(`${attempt.host}:${attempt.port} — ${(err as Error).message.slice(0, 80)}`);
     }
   }
 
   if (!client) {
     return NextResponse.json({
-      error: 'Could not connect to any Supabase pooler region',
-      tried: POOLER_REGIONS.map(r => `${r}.pooler.supabase.com:5432`),
+      error: 'Could not connect to any Supabase endpoint',
+      attempts: errors,
     }, { status: 503 });
   }
 
@@ -201,5 +213,5 @@ export async function GET(req: Request) {
 
   await client.end().catch(() => null);
 
-  return NextResponse.json({ ok: true, host: connectedHost, migrations: results });
+  return NextResponse.json({ ok: true, connectedAt, migrations: results });
 }
