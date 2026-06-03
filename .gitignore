@@ -47,3 +47,8 @@ supabase/.temp/
 
 # pnpm auto-generated
 .pnpm-build-config.json
+
+# Claude Code local config
+.claude/
+.agents/
+skills-lock.json
