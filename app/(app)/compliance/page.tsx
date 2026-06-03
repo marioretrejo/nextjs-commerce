@@ -11,11 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Shield, PhoneOff, Clock, Lock, FileText, Trash2, Plus, Upload,
-  CheckCircle2, AlertTriangle, Download
+  CheckCircle2, AlertTriangle, Download, ShieldCheck,
 } from 'lucide-react';
 import type { DncEntry, ComplianceSettings } from '@/lib/supabase/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { QARulesManager } from './QARulesManager';
 
 const DEFAULT_SETTINGS: Partial<ComplianceSettings> = {
   calling_hours_enabled: false,
@@ -181,6 +182,7 @@ export default function CompliancePage() {
           <TabsTrigger value="hours"><Clock className="h-3.5 w-3.5 mr-1.5" />Calling Hours</TabsTrigger>
           <TabsTrigger value="privacy"><Lock className="h-3.5 w-3.5 mr-1.5" />Data & Privacy</TabsTrigger>
           <TabsTrigger value="report"><FileText className="h-3.5 w-3.5 mr-1.5" />Compliance Report</TabsTrigger>
+          <TabsTrigger value="qa-rules"><ShieldCheck className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />QA Rules</TabsTrigger>
         </TabsList>
 
         {/* DNC List Tab */}
@@ -482,6 +484,11 @@ export default function CompliancePage() {
               ))}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* QA Rules Tab */}
+        <TabsContent value="qa-rules" className="pt-4">
+          <QARulesManager />
         </TabsContent>
       </Tabs>
     </div>
