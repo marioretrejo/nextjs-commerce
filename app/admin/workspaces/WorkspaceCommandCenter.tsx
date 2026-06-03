@@ -44,6 +44,8 @@ interface WorkspaceRow {
     primary_color: string;
     favicon_url?:  string | null;
   } | null;
+  // Upsell entitlements
+  has_compliance_qa?: boolean;
 }
 
 const FLAG_LABELS: Record<string, string> = {
@@ -600,6 +602,11 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                         {ws.branding.app_name}
                       </span>
                     )}
+                    {ws.has_compliance_qa && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        QA
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-[#a0a0a0] mt-0.5 truncate">
                     {ws.owner?.email ?? 'No owner'} · {ws.active_calls} active calls ·{' '}
@@ -710,6 +717,36 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                       );
                     })}
                   </div>
+                  {/* Upsell module entitlements */}
+                  <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
+                    Module Entitlements (Upsell)
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                    <label className="flex cursor-pointer items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
+                      <span className="font-medium text-emerald-800">Compliance & QA</span>
+                      <input
+                        type="checkbox"
+                        checked={ws.has_compliance_qa ?? false}
+                        onChange={async (e) => {
+                          const enabled = e.target.checked;
+                          try {
+                            const res = await fetch(`/api/admin/workspaces/${ws.id}/compliance-qa`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ enabled }),
+                            });
+                            if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+                            setWorkspaces(prev => prev.map(w =>
+                              w.id === ws.id ? { ...w, has_compliance_qa: enabled } : w
+                            ));
+                            toast.success(`Compliance QA ${enabled ? 'enabled' : 'disabled'} for "${ws.name}"`);
+                          } catch (e) { toast.error(String(e)); }
+                        }}
+                        className="ml-2 h-3.5 w-3.5 accent-emerald-600"
+                      />
+                    </label>
+                  </div>
+
                   {ws.is_suspended && ws.suspended_reason && (
                     <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                       <strong>Suspension reason:</strong> {ws.suspended_reason}

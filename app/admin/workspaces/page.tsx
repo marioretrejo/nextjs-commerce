@@ -17,7 +17,7 @@ export default async function AdminWorkspacesPage() {
   const admin = createAdminClient();
   const { data: workspaces } = await admin
     .from('workspaces')
-    .select('id, name, plan, minutes_used, minutes_limit, is_suspended, suspended_reason, suspended_at, active_calls, concurrent_calls_limit, owner_id, created_at, minute_cap, billing_status, stripe_balance_cents, branding')
+    .select('id, name, plan, minutes_used, minutes_limit, is_suspended, suspended_reason, suspended_at, active_calls, concurrent_calls_limit, owner_id, created_at, minute_cap, billing_status, stripe_balance_cents, branding, has_compliance_qa')
     .order('created_at', { ascending: false })
     .limit(200);
 
