@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,7 @@ import {
 import {
   Activity, AlertTriangle, BookOpen, ChevronDown, ChevronRight,
   CheckCircle2, Copy, Globe, Loader2, MessageSquare, Phone, PlayCircle,
-  Plus, Settings2, ShieldAlert, TrendingDown, TrendingUp,
+  Plus, Search, Settings2, ShieldAlert, TrendingDown, TrendingUp,
   Trash2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -304,9 +305,18 @@ function InteractionRow({
             </div>
           )}
 
-          <p className="text-[10px] text-[#c0c0c0]">
-            Analyzed {format(new Date(evaluation.evaluated_at), 'MMM d, yyyy HH:mm')} · {evaluation.rules_applied} rules applied
-          </p>
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-[10px] text-[#c0c0c0]">
+              Analyzed {format(new Date(evaluation.evaluated_at), 'MMM d, yyyy HH:mm')} · {evaluation.rules_applied} rules applied
+            </p>
+            <Link
+              href={`/qa-center/calls/${interaction.id}`}
+              className="flex items-center gap-1 text-[10px] font-medium text-[#9b9b9b] hover:text-[#111] transition-colors border border-[#e0e0e0] rounded-lg px-2 py-1 hover:border-[#111]"
+              onClick={e => e.stopPropagation()}
+            >
+              View Full Review →
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -528,18 +538,48 @@ export default function QACenterPage() {
 
   const [activeTab,    setActiveTab]    = useState('dashboard');
 
-  const fetchAll = useCallback(async () => {
+  // ── Filter / Segmenter state ───────────────────────────────────────────────
+  const [filterAgent,  setFilterAgent]  = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterRange,  setFilterRange]  = useState('');  // 'today'|'week'|'month'|''
+  const [filterRisk,   setFilterRisk]   = useState('');
+  const [totalCount,   setTotalCount]   = useState(0);
+
+  const buildInteractionsUrl = useCallback((agent: string, status: string, range: string, risk: string) => {
+    const p = new URLSearchParams({ limit: '100' });
+    if (agent)  p.set('agent',  agent);
+    if (status) p.set('status', status);
+    if (risk)   p.set('risk_level', risk);
+    if (range) {
+      const now = new Date();
+      if (range === 'today') {
+        const start = new Date(now); start.setHours(0, 0, 0, 0);
+        p.set('date_from', start.toISOString());
+      } else if (range === 'week') {
+        const start = new Date(now); start.setDate(now.getDate() - 7);
+        p.set('date_from', start.toISOString());
+      } else if (range === 'month') {
+        const start = new Date(now); start.setDate(now.getDate() - 30);
+        p.set('date_from', start.toISOString());
+      }
+    }
+    return `/api/qac/interactions?${p.toString()}`;
+  }, []);
+
+  const fetchAll = useCallback(async (agent = filterAgent, status = filterStatus, range = filterRange, risk = filterRisk) => {
+    const url = buildInteractionsUrl(agent, status, range, risk);
     const [intRes, statsRes] = await Promise.all([
-      fetch('/api/qac/interactions?limit=50'),
+      fetch(url),
       fetch('/api/qac/stats'),
     ]);
     if (intRes.ok) {
-      const d = await intRes.json() as { interactions: QACInteraction[] };
+      const d = await intRes.json() as { interactions: QACInteraction[]; total: number };
       setInteractions(d.interactions ?? []);
+      setTotalCount(d.total ?? 0);
     }
     if (statsRes.ok) setStats(await statsRes.json() as QACStats);
     setLoading(false);
-  }, []);
+  }, [filterAgent, filterStatus, filterRange, filterRisk, buildInteractionsUrl]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -798,15 +838,88 @@ export default function QACenterPage() {
         </TabsContent>
 
         {/* ── INTERACTIONS ───────────────────────────────────────────── */}
-        <TabsContent value="interactions" className="pt-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-              <div>
-                <CardTitle>Interactions</CardTitle>
-                <CardDescription className="mt-0.5">
-                  {interactions.length} uploaded · {interactions.filter(i => i.status === 'analyzed').length} analyzed
-                </CardDescription>
-              </div>
+        <TabsContent value="interactions" className="pt-4 space-y-3">
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Agent search */}
+            <div className="relative flex-1 min-w-[160px] max-w-[220px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9b9b9b] pointer-events-none" />
+              <input
+                className="w-full h-8 rounded-lg border border-[#e0e0e0] bg-white pl-8 pr-3 text-xs placeholder:text-[#b0b0b0] focus:outline-none focus:ring-1 focus:ring-[#111]"
+                placeholder="Filter by agent…"
+                value={filterAgent}
+                onChange={e => {
+                  setFilterAgent(e.target.value);
+                  void fetchAll(e.target.value, filterStatus, filterRange, filterRisk);
+                }}
+              />
+            </div>
+
+            {/* Status */}
+            <select
+              className="h-8 rounded-lg border border-[#e0e0e0] bg-white px-2.5 text-xs text-[#555] focus:outline-none focus:ring-1 focus:ring-[#111]"
+              value={filterStatus}
+              onChange={e => {
+                setFilterStatus(e.target.value);
+                void fetchAll(filterAgent, e.target.value, filterRange, filterRisk);
+              }}
+            >
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="analyzed">Analyzed</option>
+              <option value="analyzing">Analyzing</option>
+              <option value="failed">Failed</option>
+            </select>
+
+            {/* Date range */}
+            <div className="flex items-center rounded-lg border border-[#e0e0e0] bg-white p-0.5 gap-px">
+              {([['', 'All'], ['today', 'Today'], ['week', '7d'], ['month', '30d']] as [string, string][]).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => { setFilterRange(val); void fetchAll(filterAgent, filterStatus, val, filterRisk); }}
+                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                    filterRange === val ? 'bg-[#111] text-white' : 'text-[#6b6b6b] hover:text-[#111] hover:bg-[#f5f5f5]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Risk level */}
+            <select
+              className="h-8 rounded-lg border border-[#e0e0e0] bg-white px-2.5 text-xs text-[#555] focus:outline-none focus:ring-1 focus:ring-[#111]"
+              value={filterRisk}
+              onChange={e => {
+                setFilterRisk(e.target.value);
+                void fetchAll(filterAgent, filterStatus, filterRange, e.target.value);
+              }}
+            >
+              <option value="">All risk levels</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+
+            {/* Clear filters */}
+            {(filterAgent || filterStatus || filterRange || filterRisk) && (
+              <button
+                className="flex items-center gap-1 text-[10px] font-medium text-[#9b9b9b] hover:text-[#111] transition-colors"
+                onClick={() => {
+                  setFilterAgent(''); setFilterStatus(''); setFilterRange(''); setFilterRisk('');
+                  void fetchAll('', '', '', '');
+                }}
+              >
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-[#9b9b9b]">
+                {interactions.length}{totalCount > interactions.length ? ` of ${totalCount}` : ''} interaction{interactions.length !== 1 ? 's' : ''}
+                {' · '}{interactions.filter(i => i.status === 'analyzed').length} analyzed
+              </span>
               {interactions.some(i => i.status === 'pending' || i.status === 'failed') && (
                 <Button
                   size="sm"
@@ -821,16 +934,28 @@ export default function QACenterPage() {
                   Analyze All Pending
                 </Button>
               )}
-            </CardHeader>
-            <CardContent className="p-0 mt-4">
+            </div>
+          </div>
+
+          <Card>
+            <CardContent className="p-0 mt-0">
               {interactions.length === 0 ? (
                 <div className="py-16 text-center">
                   <Activity className="h-8 w-8 text-[#e0e0e0] mx-auto mb-3" />
-                  <p className="text-sm text-[#555] font-medium">No interactions uploaded</p>
-                  <p className="text-xs text-[#9b9b9b] mt-1 mb-4">Upload a call center transcript to start 100% QA coverage.</p>
-                  <Button size="sm" onClick={() => setActiveTab('new')}>
-                    <Plus className="h-4 w-4 mr-1.5" /> New Evaluation
-                  </Button>
+                  {filterAgent || filterStatus || filterRange || filterRisk ? (
+                    <>
+                      <p className="text-sm text-[#555] font-medium">No interactions match the current filters</p>
+                      <p className="text-xs text-[#9b9b9b] mt-1 mb-4">Try adjusting or clearing the filters above.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-[#555] font-medium">No interactions uploaded</p>
+                      <p className="text-xs text-[#9b9b9b] mt-1 mb-4">Upload a call center transcript to start 100% QA coverage.</p>
+                      <Button size="sm" onClick={() => setActiveTab('new')}>
+                        <Plus className="h-4 w-4 mr-1.5" /> New Evaluation
+                      </Button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div>

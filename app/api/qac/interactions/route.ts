@@ -33,10 +33,17 @@ export async function GET(req: Request) {
 
   const admin = createAdminClient();
 
+  const dateFrom  = url.searchParams.get('date_from');
+  const dateTo    = url.searchParams.get('date_to');
+  const riskLevel = url.searchParams.get('risk_level');
+  const minScore  = url.searchParams.get('min_score');
+  const maxScore  = url.searchParams.get('max_score');
+
   let query = admin
     .from('qac_interactions')
     .select(`
-      id, agent_name, agent_id, channel, duration_s, status, created_at,
+      id, agent_name, agent_id, channel, direction, duration_s, status,
+      audio_url, risk_level, language, created_at,
       qac_evaluations (
         id, overall_score, risk_score, tone, summary, criteria_scores, evaluated_at,
         qac_flags ( id, category, severity, label, regulation )
@@ -46,8 +53,11 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (status) query = query.eq('status', status);
-  if (agent)  query = query.ilike('agent_name', `%${agent}%`);
+  if (status)    query = query.eq('status', status);
+  if (agent)     query = query.ilike('agent_name', `%${agent}%`);
+  if (dateFrom)  query = query.gte('created_at', dateFrom);
+  if (dateTo)    query = query.lte('created_at', dateTo);
+  if (riskLevel) query = query.eq('risk_level', riskLevel);
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
