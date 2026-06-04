@@ -1189,7 +1189,7 @@ function QACIntegrationsPanel() {
 
   useEffect(() => {
     fetch('/api/qac/integrations')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d: QACIntegrationConfig) => {
         setConfig(d);
         setAccountSid(d.twilio_account_sid ?? '');

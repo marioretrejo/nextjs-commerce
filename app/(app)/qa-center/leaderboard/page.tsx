@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -264,7 +265,7 @@ export default function LeaderboardPage() {
         setData(json);
       }
     } catch {
-      // silently fail — UI shows empty state
+      toast.error('Failed to load leaderboard data');
     } finally {
       setLoading(false);
     }

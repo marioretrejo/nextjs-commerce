@@ -170,13 +170,14 @@ export async function deliverWebhook(
 
       // Record delivery outcome for webhook_endpoints (not integrations)
       if (!target.id.startsWith('integration:')) {
-        void Promise.resolve(
-          admin.rpc('record_webhook_delivery', {
+        void (async () => {
+          const { error: rpcErr } = await admin.rpc('record_webhook_delivery', {
             p_endpoint_id:  target.id,
             p_status:       status,
             p_status_code:  statusCode,
-          })
-        ).catch(() => null);
+          });
+          if (rpcErr) console.error('[webhooks] record_webhook_delivery failed:', rpcErr.message);
+        })();
       }
     })
   );

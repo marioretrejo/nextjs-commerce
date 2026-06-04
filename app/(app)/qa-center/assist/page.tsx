@@ -339,7 +339,7 @@ export default function AgentAssistPage() {
 
   async function copyResponse() {
     if (!suggestedResponse) return;
-    await navigator.clipboard.writeText(suggestedResponse);
+    await navigator.clipboard.writeText(suggestedResponse).catch(() => null);
     toast.success('Response copied to clipboard');
   }
 

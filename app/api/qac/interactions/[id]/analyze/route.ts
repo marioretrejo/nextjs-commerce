@@ -386,22 +386,31 @@ export async function POST(
   if (!interaction) {
     return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
   }
-  if (interaction.status === 'analyzing') {
+  // ── Atomic lock: only succeed if status is NOT already 'analyzing' ─────────
+  const { data: lockData } = await admin
+    .from('qac_interactions')
+    .update({ status: 'analyzing' })
+    .eq('id', id)
+    .neq('status', 'analyzing')
+    .select('id')
+    .maybeSingle();
+
+  if (!lockData) {
     return NextResponse.json({ error: 'Analysis already in progress' }, { status: 409 });
   }
 
-  // ── Lock the row ───────────────────────────────────────────────────────────
-  await admin.from('qac_interactions').update({ status: 'analyzing' }).eq('id', id);
-
-  // Write audit log entry
-  void admin.from('qac_audit_logs').insert({
-    workspace_id: workspaceId,
-    user_id:      userId ?? null,
-    action:       'analyze',
-    entity_type:  'interaction',
-    entity_id:    id,
-    details:      { triggered_by: userId ? 'user' : 'internal' },
-  });
+  // Write audit log entry (fire-and-forget)
+  void (async () => {
+    const { error: auditErr } = await admin.from('qac_audit_logs').insert({
+      workspace_id: workspaceId,
+      user_id:      userId ?? null,
+      action:       'analyze',
+      entity_type:  'interaction',
+      entity_id:    id,
+      details:      { triggered_by: userId ? 'user' : 'internal' },
+    });
+    if (auditErr) console.error('[qac-analyze] Audit log insert failed:', auditErr.message);
+  })();
 
   // ── Fetch active QA rules for this workspace ───────────────────────────────
   const { data: rulesData } = await admin
@@ -537,7 +546,7 @@ export async function POST(
   const VALID_SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
 
   if (compliance.violations.length > 0) {
-    await admin.from('qac_flags').insert(
+    const { error: flagErr } = await admin.from('qac_flags').insert(
       compliance.violations.map(v => ({
         evaluation_id:       evalId,
         workspace_id:        workspaceId,
@@ -552,18 +561,20 @@ export async function POST(
         suggested_correction: v.suggested_correction ?? null,
       })),
     );
+    if (flagErr) console.error('[qac-analyze] Flag insert failed:', flagErr.message);
   }
 
   // ── Update interaction status + risk_level + overall_sentiment ────────────
-  await admin.from('qac_interactions').update({
+  const { error: statusErr } = await admin.from('qac_interactions').update({
     status:           'analyzed',
     risk_level:       riskLevel,
     overall_sentiment: summary.overall_sentiment,
     outcome:          summary.outcome,
   }).eq('id', id);
+  if (statusErr) console.error('[qac-analyze] Status update failed:', statusErr.message);
 
   // ── Save coaching report ──────────────────────────────────────────────────
-  await admin.from('qac_coaching_reports').insert({
+  const { error: coachErr } = await admin.from('qac_coaching_reports').insert({
     workspace_id:        workspaceId,
     interaction_id:      id,
     agent_id:            interaction.agent_id ?? null,
@@ -574,6 +585,7 @@ export async function POST(
     coaching_plan:       coaching.coaching_plan,
     priority_score:      coaching.priority_score,
   });
+  if (coachErr) console.error('[qac-analyze] Coaching report insert failed:', coachErr.message);
 
   return NextResponse.json({
     ok:                 true,

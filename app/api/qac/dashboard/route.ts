@@ -81,31 +81,22 @@ export async function GET() {
 
   const admin = createAdminClient();
 
-  const { data: wsRaw } = await admin
+  const { data: wsRaw, error: wsErr } = await admin
     .from('workspaces')
     .select('id')
     .eq('owner_id', user.id)
     .single();
 
-  const ws = wsRaw as { id: string } | null;
-  if (!ws) {
+  if (wsErr || !wsRaw) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
   }
+  const ws = wsRaw as { id: string };
 
   const workspaceId = ws.id;
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  // ── Parallel data fetches ──────────────────────────────────────────────────
-  const [
-    countTotal,
-    countAnalyzed,
-    countPending,
-    evalsResult,
-    flagsResult,
-    interactionsRecentResult,
-    flagsRecentResult,
-    interactionsAllResult,
-  ] = await Promise.all([
+  // ── Parallel data fetches (allSettled so a single failure doesn't crash all) ─
+  const settled = await Promise.allSettled([
     // 1. Total call count
     admin
       .from('qac_interactions')
@@ -194,6 +185,19 @@ export async function GET() {
       .eq('workspace_id', workspaceId)
       .not('qac_evaluations', 'is', null),
   ]);
+
+  const [s0, s1, s2, s3, s4, s5, s6, s7] = settled;
+  const val = <T>(r: PromiseSettledResult<{ data: T | null; count?: number | null; error: unknown }>) =>
+    r.status === 'fulfilled' ? r.value : { data: null as T | null, count: null as number | null, error: null };
+
+  const countTotal             = val(s0!);
+  const countAnalyzed          = val(s1!);
+  const countPending           = val(s2!);
+  const evalsResult            = val(s3!);
+  const flagsResult            = val(s4!);
+  const interactionsRecentResult = val(s5!);
+  const flagsRecentResult      = val(s6!);
+  const interactionsAllResult  = val(s7!);
 
   // ── Process evaluations ───────────────────────────────────────────────────
   type EvalRow = {
