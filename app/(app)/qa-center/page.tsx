@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import {
   Activity, AlertTriangle, BookOpen, ChevronDown, ChevronRight,
-  CheckCircle2, Loader2, MessageSquare, Phone, PlayCircle,
+  CheckCircle2, Copy, Globe, Loader2, MessageSquare, Phone, PlayCircle,
   Plus, Settings2, ShieldAlert, TrendingDown, TrendingUp,
   Trash2, X,
 } from 'lucide-react';
@@ -645,6 +645,9 @@ export default function QACenterPage() {
           <TabsTrigger value="rules" className="text-xs gap-1.5">
             <Settings2 className="h-3.5 w-3.5" />QA Rules
           </TabsTrigger>
+          <TabsTrigger value="integrations" className="text-xs gap-1.5">
+            <Globe className="h-3.5 w-3.5" />Integrations
+          </TabsTrigger>
         </TabsList>
 
         {/* ── DASHBOARD ──────────────────────────────────────────────── */}
@@ -959,7 +962,213 @@ export default function QACenterPage() {
         <TabsContent value="rules" className="pt-4">
           <QACRulesManager />
         </TabsContent>
+
+        {/* ── INTEGRATIONS ───────────────────────────────────────────── */}
+        <TabsContent value="integrations" className="pt-4">
+          <QACIntegrationsPanel />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ─── Integrations Panel ───────────────────────────────────────────────────────
+
+interface QACIntegrationConfig {
+  id: string;
+  webhook_token: string;
+  twilio_account_sid: string | null;
+  auto_analyze: boolean;
+  agent_name_field: string;
+  is_active: boolean;
+}
+
+function QACIntegrationsPanel() {
+  const [config,    setConfig]    = useState<QACIntegrationConfig | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [accountSid, setAccountSid] = useState('');
+  const [authToken,  setAuthToken]  = useState('');
+  const [showToken,  setShowToken]  = useState(false);
+
+  useEffect(() => {
+    fetch('/api/qac/integrations')
+      .then(r => r.json())
+      .then((d: QACIntegrationConfig) => {
+        setConfig(d);
+        setAccountSid(d.twilio_account_sid ?? '');
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const webhookUrl = config
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/qac/webhooks/${config.webhook_token}`
+    : '';
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/qac/integrations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          twilio_account_sid: accountSid.trim() || null,
+          twilio_auth_token:  authToken.trim()  || null,
+          auto_analyze:       config?.auto_analyze ?? true,
+          agent_name_field:   config?.agent_name_field ?? 'To',
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      const updated = await res.json() as QACIntegrationConfig;
+      setConfig(updated);
+      setAuthToken('');
+      toast.success('Integration settings saved');
+    } catch (e) { toast.error(String(e)); }
+    finally { setSaving(false); }
+  }
+
+  function copyUrl() {
+    void navigator.clipboard.writeText(webhookUrl);
+    toast.success('Webhook URL copied');
+  }
+
+  if (loading) return <div className="h-64 bg-[#f5f5f5] rounded-xl animate-pulse" />;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-semibold text-[#111]">Integrations</h3>
+        <p className="text-xs text-[#6b6b6b] mt-0.5">
+          Connect your call center platform to automatically ingest recordings and trigger QA analysis.
+        </p>
+      </div>
+
+      {/* Webhook URL card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <div className="h-6 w-6 rounded bg-[#111] flex items-center justify-center">
+              <Globe className="h-3.5 w-3.5 text-white" />
+            </div>
+            Webhook URL
+          </CardTitle>
+          <CardDescription>
+            Configure this URL as the Recording Status Callback in your Twilio number or campaign settings.
+            When a call recording is ready, Twilio will POST to this endpoint and QA analysis starts automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-lg bg-[#f5f5f5] border border-[#e8e8e8] px-3 py-2.5 text-xs font-mono text-[#111] break-all">
+              {webhookUrl}
+            </code>
+            <Button size="sm" variant="outline" onClick={copyUrl} className="shrink-0 gap-1.5">
+              <Copy className="h-3.5 w-3.5" />Copy
+            </Button>
+          </div>
+          <div className="flex gap-2 rounded-xl bg-[#f8f8f8] border border-[#efefef] p-3">
+            <div className="space-y-1 text-xs text-[#6b6b6b]">
+              <p className="font-semibold text-[#555]">How to configure in Twilio:</p>
+              <ol className="list-decimal pl-4 space-y-0.5">
+                <li>Go to Twilio Console → Phone Numbers → Active Numbers</li>
+                <li>Select the number your agents use</li>
+                <li>Under <strong>Voice &amp; Fax</strong> → <strong>Call Status Changes</strong>, paste this URL</li>
+                <li>Enable <strong>Record Calls</strong> in your TwiML or number settings</li>
+              </ol>
+              <p className="pt-1">Alternatively, set <code className="bg-[#f0f0f0] px-1 rounded">RecordingStatusCallback</code> in your TwiML &lt;Record&gt; verb.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Twilio credentials */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Twilio Credentials</CardTitle>
+          <CardDescription>
+            Required to download protected recordings. Leave blank if your recordings are publicly accessible.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Account SID</Label>
+              <Input
+                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                value={accountSid}
+                onChange={e => setAccountSid(e.target.value)}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Auth Token {config?.twilio_account_sid && <span className="text-green-600 font-normal text-[10px] ml-1">● saved</span>}</Label>
+              <div className="relative">
+                <Input
+                  type={showToken ? 'text' : 'password'}
+                  placeholder={config?.twilio_account_sid ? '••••••••••• (leave blank to keep existing)' : 'Your Twilio Auth Token'}
+                  value={authToken}
+                  onChange={e => setAuthToken(e.target.value)}
+                  className="font-mono text-xs pr-16"
+                />
+                <button
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#9b9b9b] font-medium"
+                  onClick={() => setShowToken(s => !s)}
+                >
+                  {showToken ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <Switch
+              checked={config?.auto_analyze ?? true}
+              onCheckedChange={v => setConfig(c => c ? { ...c, auto_analyze: v } : c)}
+            />
+            <div>
+              <Label>Auto-analyze recordings</Label>
+              <p className="text-xs text-[#9b9b9b] mt-0.5">QA analysis starts immediately when a recording arrives</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Agent Name Source</Label>
+            <Select
+              value={config?.agent_name_field ?? 'To'}
+              onValueChange={v => setConfig(c => c ? { ...c, agent_name_field: v } : c)}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="To">To number (destination — agent's line)</SelectItem>
+                <SelectItem value="From">From number (caller)</SelectItem>
+                <SelectItem value="CallSid">Call SID</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-[#9b9b9b]">Which field to use as the agent's name in QA reports</p>
+          </div>
+
+          <Button onClick={save} disabled={saving} size="sm" className="gap-2">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Save Settings
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Other platforms */}
+      <Card className="border-dashed">
+        <CardContent className="py-6 text-center space-y-2">
+          <p className="text-sm font-medium text-[#555]">Other Platforms</p>
+          <p className="text-xs text-[#9b9b9b] max-w-sm mx-auto">
+            The webhook endpoint accepts any JSON or form-encoded payload. For platforms like Genesys, NICE CXone,
+            or Five9, send a POST with <code className="bg-[#f0f0f0] px-1 rounded text-[10px]">recording_url</code>,
+            <code className="bg-[#f0f0f0] px-1 rounded text-[10px]">agent_name</code>, and optionally
+            <code className="bg-[#f0f0f0] px-1 rounded text-[10px]">transcript</code> fields.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
