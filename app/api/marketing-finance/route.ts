@@ -148,14 +148,22 @@ async function loginTracker(): Promise<string | null> {
 }
 
 // ── Fetch stats_campaign_country endpoint ─────────────────────────────────────
-const STATS_PATH =
+const STATS_BASE =
   '/get_data.php?type=stats_pb&export=1' +
   '&stats_type=Campaigns&sec_stats_type=Country' +
   '&third_stats_type=none&id=0';
 
-async function fetchStats(cookie: string): Promise<{ data: unknown[][] | null; detail: string }> {
+function buildStatsPath(dateFrom?: string, dateTo?: string): string {
+  let path = STATS_BASE;
+  if (dateFrom) path += `&date_from=${encodeURIComponent(dateFrom)}`;
+  if (dateTo)   path += `&date_to=${encodeURIComponent(dateTo)}`;
+  return path;
+}
+
+async function fetchStats(cookie: string, dateFrom?: string, dateTo?: string): Promise<{ data: unknown[][] | null; detail: string }> {
+  const path = buildStatsPath(dateFrom, dateTo);
   try {
-    const res = await fetch(`${TRACKER_BASE}${STATS_PATH}`, {
+    const res = await fetch(`${TRACKER_BASE}${path}`, {
       headers: {
         Cookie:          cookie,
         'User-Agent':    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
@@ -254,7 +262,7 @@ function buildReport(rawData: unknown[][]): FinanceReport {
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(req: Request) {
   // Auth: superadmin only
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -270,6 +278,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const url      = new URL(req.url);
+  const dateFrom = url.searchParams.get('from')  ?? undefined;
+  const dateTo   = url.searchParams.get('to')    ?? undefined;
+
   // Login to tracker
   const cookie = await loginTracker();
   if (!cookie) {
@@ -281,8 +293,8 @@ export async function GET() {
     } satisfies FinanceReport, { status: 502 });
   }
 
-  // Fetch data
-  const { data: raw, detail } = await fetchStats(cookie);
+  // Fetch data with optional date range
+  const { data: raw, detail } = await fetchStats(cookie, dateFrom, dateTo);
   if (!raw) {
     console.error('[mf-scraper] fetchStats failed:', detail);
     return NextResponse.json({
