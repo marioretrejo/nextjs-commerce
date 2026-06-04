@@ -5,7 +5,7 @@ import {
   BarChart2, Bell, BookOpen, Bot, Code2, Cpu, Mic,
   CreditCard, DollarSign, Globe, LayoutDashboard,
   Megaphone, Phone, PhoneCall, Radio, Settings, Shield,
-  ShieldCheck, Star, Users
+  ShieldAlert, ShieldCheck, Star, Users
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -38,9 +38,10 @@ interface SidebarProps {
   isSuperadmin?: boolean;
   appName?: string;
   visibleModules?: string[];
+  hasComplianceQa?: boolean;
 }
 
-export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModules }: SidebarProps) {
+export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModules, hasComplianceQa = false }: SidebarProps) {
   const pathname = usePathname();
   const t = useTranslations('nav');
 
@@ -74,6 +75,7 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModu
       items: [
         { href: '/numbers',               labelKey: 'numbers',      icon: Phone,      module: 'numbers' },
         { href: '/compliance',            labelKey: 'compliance',   icon: ShieldCheck, module: 'compliance' },
+        ...(isSuperadmin || hasComplianceQa ? [{ href: '/qa-center', labelKey: 'qaCenter', icon: ShieldAlert, module: 'compliance' }] : []),
         { href: '/integrations',          labelKey: 'integrations', icon: Globe,      module: 'integrations' },
         { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell,       module: 'integrations' },
         { href: '/team',                  labelKey: 'team',         icon: Users,      module: 'team' },

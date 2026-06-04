@@ -1,0 +1,965 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Activity, AlertTriangle, BookOpen, ChevronDown, ChevronRight,
+  CheckCircle2, Loader2, MessageSquare, Phone, PlayCircle,
+  Plus, Settings2, ShieldAlert, TrendingDown, TrendingUp,
+  Trash2, X,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface QACFlag {
+  id: string;
+  category: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  label: string;
+  transcript_fragment?: string;
+  regulation?: string;
+  coaching_note?: string;
+  timestamp_s?: number;
+}
+
+interface QACEvaluation {
+  id: string;
+  overall_score: number;
+  risk_score: number;
+  tone: string;
+  summary: string;
+  criteria_scores: { opening: number; compliance: number; objection_handling: number; closing: number; empathy: number };
+  rules_applied: number;
+  evaluated_at: string;
+  qac_flags: QACFlag[];
+}
+
+interface QACInteraction {
+  id: string;
+  agent_name: string;
+  agent_id: string | null;
+  channel: string;
+  duration_s: number | null;
+  status: 'pending' | 'analyzing' | 'analyzed' | 'failed';
+  created_at: string;
+  qac_evaluations: QACEvaluation[];
+}
+
+interface QACRule {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  severity: string;
+  regulation: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface QACStats {
+  totalInteractions: number;
+  analyzedInteractions: number;
+  pendingInteractions: number;
+  avgOverallScore: number | null;
+  avgRiskScore: number | null;
+  complianceRate: number | null;
+  totalFlags: number;
+  flagsBySeverity: { low: number; medium: number; high: number; critical: number };
+  flagsByCategory: { compliance: number; quality: number; disclosure: number; prohibited: number; coaching: number };
+  topRiskAgents: { name: string; interactions: number; avg_risk: number }[];
+}
+
+// ─── Config maps ──────────────────────────────────────────────────────────────
+
+const SEV: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  low:      { bg: 'bg-gray-100',    text: 'text-gray-700',   dot: 'bg-gray-400',   label: 'Low'      },
+  medium:   { bg: 'bg-yellow-50',   text: 'text-yellow-800', dot: 'bg-yellow-500', label: 'Medium'   },
+  high:     { bg: 'bg-orange-50',   text: 'text-orange-800', dot: 'bg-orange-500', label: 'High'     },
+  critical: { bg: 'bg-red-50',      text: 'text-red-800',    dot: 'bg-red-500',    label: 'Critical' },
+};
+
+const CAT_COLOR: Record<string, string> = {
+  compliance:  'bg-red-50 text-red-700',
+  quality:     'bg-blue-50 text-blue-700',
+  disclosure:  'bg-purple-50 text-purple-700',
+  prohibited:  'bg-gray-900 text-white',
+  coaching:    'bg-green-50 text-green-700',
+};
+
+const CHANNEL_ICON: Record<string, React.ReactNode> = {
+  call:   <Phone className="h-3.5 w-3.5" />,
+  chat:   <MessageSquare className="h-3.5 w-3.5" />,
+  email:  <Activity className="h-3.5 w-3.5" />,
+  sms:    <MessageSquare className="h-3.5 w-3.5" />,
+  social: <Activity className="h-3.5 w-3.5" />,
+  other:  <Activity className="h-3.5 w-3.5" />,
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function ScorePill({ score, size = 'sm' }: { score: number; size?: 'sm' | 'lg' }) {
+  const color = score >= 80 ? 'text-green-700 bg-green-50 border-green-200'
+               : score >= 60 ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
+               : score >= 40 ? 'text-orange-700 bg-orange-50 border-orange-200'
+               :               'text-red-700 bg-red-50 border-red-200';
+  const sz = size === 'lg' ? 'text-2xl font-bold px-3 py-1' : 'text-xs font-semibold px-2 py-0.5';
+  return <span className={`inline-flex items-center rounded-full border ${color} ${sz}`}>{score}</span>;
+}
+
+function RiskBar({ score }: { score: number }) {
+  const color = score < 30 ? 'bg-green-500' : score < 60 ? 'bg-yellow-500' : score < 80 ? 'bg-orange-500' : 'bg-red-500';
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-[#f0f0f0] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
+      </div>
+      <span className="text-xs font-medium text-[#555] w-6 text-right">{score}</span>
+    </div>
+  );
+}
+
+// ─── Interaction Row ───────────────────────────────────────────────────────────
+
+function InteractionRow({
+  interaction, onAnalyze, analyzing,
+}: {
+  interaction: QACInteraction;
+  onAnalyze: (id: string) => void;
+  analyzing: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const evaluation = interaction.qac_evaluations?.[0];
+  const flags = evaluation?.qac_flags ?? [];
+  const criticalCount = flags.filter(f => f.severity === 'critical' || f.severity === 'high').length;
+  const isBusy = analyzing === interaction.id || interaction.status === 'analyzing';
+
+  return (
+    <div className="border-b border-[#f0f0f0] last:border-0">
+      {/* Summary row */}
+      <div
+        className="flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-[#fafafa] transition-colors select-none"
+        onClick={() => evaluation && setOpen(o => !o)}
+      >
+        <span className="text-[#c0c0c0] w-4 shrink-0">
+          {evaluation
+            ? (open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)
+            : <span className="h-4 w-4 block" />}
+        </span>
+
+        {/* Channel */}
+        <span className="flex items-center gap-1 text-[#9b9b9b] shrink-0">
+          {CHANNEL_ICON[interaction.channel] ?? CHANNEL_ICON.other}
+        </span>
+
+        {/* Agent */}
+        <span className="font-semibold text-sm text-[#111] w-36 truncate shrink-0">
+          {interaction.agent_name}
+        </span>
+
+        {/* Date */}
+        <span className="text-xs text-[#9b9b9b] w-28 shrink-0">
+          {format(new Date(interaction.created_at), 'MMM d, HH:mm')}
+        </span>
+
+        {/* Overall score */}
+        {evaluation ? (
+          <ScorePill score={Math.round(Number(evaluation.overall_score))} />
+        ) : (
+          <span className="w-10" />
+        )}
+
+        {/* Risk */}
+        {evaluation && (
+          <div className="w-24 shrink-0 hidden md:block">
+            <RiskBar score={Math.round(Number(evaluation.risk_score))} />
+          </div>
+        )}
+
+        {/* High/critical flags */}
+        {criticalCount > 0 && (
+          <span className="flex items-center gap-1 text-xs font-semibold text-red-600 shrink-0">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {criticalCount}
+          </span>
+        )}
+
+        {/* Tone */}
+        {evaluation?.tone && (
+          <span className={`text-[10px] font-medium capitalize px-1.5 py-0.5 rounded hidden lg:inline ${
+            evaluation.tone === 'professional' || evaluation.tone === 'friendly' ? 'bg-green-50 text-green-700' :
+            evaluation.tone === 'unprofessional' || evaluation.tone === 'aggressive' ? 'bg-red-50 text-red-700' :
+            'bg-gray-100 text-gray-600'
+          }`}>
+            {evaluation.tone}
+          </span>
+        )}
+
+        {/* Status */}
+        <span className="ml-auto shrink-0">
+          {interaction.status === 'analyzed'  && <Badge className="bg-green-50 text-green-700 border-transparent text-[10px]">Analyzed</Badge>}
+          {interaction.status === 'analyzing' && <Badge className="bg-blue-50 text-blue-700 border-transparent text-[10px]"><Loader2 className="h-2.5 w-2.5 animate-spin mr-1" />Analyzing</Badge>}
+          {interaction.status === 'failed'    && <Badge className="bg-red-50 text-red-700 border-transparent text-[10px]">Failed</Badge>}
+          {interaction.status === 'pending'   && <Badge variant="secondary" className="text-[10px]">Pending</Badge>}
+        </span>
+
+        {(interaction.status === 'pending' || interaction.status === 'failed') && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs shrink-0 gap-1"
+            disabled={!!analyzing || isBusy}
+            onClick={e => { e.stopPropagation(); onAnalyze(interaction.id); }}
+          >
+            {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />}
+            Analyze
+          </Button>
+        )}
+      </div>
+
+      {/* Expanded detail */}
+      {open && evaluation && (
+        <div className="px-5 pb-5 space-y-4 bg-[#fafafa] border-t border-[#f0f0f0]">
+          {/* Summary */}
+          {evaluation.summary && (
+            <p className="text-sm text-[#555] pt-3">{evaluation.summary}</p>
+          )}
+
+          {/* Criteria scores */}
+          {evaluation.criteria_scores && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {Object.entries(evaluation.criteria_scores).map(([key, val]) => {
+                const v = Math.round(Number(val));
+                return (
+                  <div key={key} className="rounded-xl border border-[#efefef] bg-white p-2.5 text-center">
+                    <p className="text-[10px] font-medium text-[#9b9b9b] capitalize mb-1.5">
+                      {key.replace(/_/g, ' ')}
+                    </p>
+                    <p className={`text-xl font-bold ${v >= 70 ? 'text-green-600' : v >= 45 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {v}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Flags */}
+          {flags.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-[#9b9b9b] uppercase tracking-widest">
+                {flags.length} Flag{flags.length !== 1 ? 's' : ''} Detected
+              </p>
+              {flags.map((flag) => {
+                const sc = SEV[flag.severity] ?? SEV['medium']!;
+                return (
+                  <div key={flag.id} className={`rounded-xl p-3 ${sc.bg}`}>
+                    <div className="flex items-start gap-2 mb-1.5">
+                      <span className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${sc.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`font-semibold text-sm ${sc.text}`}>{flag.label}</span>
+                          {flag.regulation && (
+                            <span className="text-[10px] font-mono bg-black/[0.06] px-1.5 py-0.5 rounded">
+                              {flag.regulation}
+                            </span>
+                          )}
+                          <span className={`text-[10px] capitalize font-medium px-1.5 py-0.5 rounded ${CAT_COLOR[flag.category] ?? ''}`}>
+                            {flag.category}
+                          </span>
+                        </div>
+                        {flag.transcript_fragment && (
+                          <p className={`text-xs italic border-l-2 border-current/20 pl-2 mt-1.5 mb-1 line-clamp-3 ${sc.text}`}>
+                            "{flag.transcript_fragment}"
+                          </p>
+                        )}
+                        {flag.coaching_note && (
+                          <p className={`text-xs ${sc.text} opacity-80`}>
+                            <span className="font-semibold">Coaching:</span> {flag.coaching_note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-xl p-3 border border-green-100">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              No flags detected — fully compliant interaction.
+            </div>
+          )}
+
+          <p className="text-[10px] text-[#c0c0c0]">
+            Analyzed {format(new Date(evaluation.evaluated_at), 'MMM d, yyyy HH:mm')} · {evaluation.rules_applied} rules applied
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── QA Rules Manager (own UI, not shared with compliance page) ───────────────
+
+function QACRulesManager() {
+  const [rules, setRules]         = useState<QACRule[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [saving, setSaving]       = useState(false);
+
+  const [name, setName]           = useState('');
+  const [desc, setDesc]           = useState('');
+  const [category, setCategory]   = useState('quality');
+  const [severity, setSeverity]   = useState('medium');
+  const [regulation, setRegulation] = useState('');
+
+  const fetchRules = useCallback(async () => {
+    const res = await fetch('/api/qac/rules');
+    if (res.ok) setRules(await res.json() as QACRule[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchRules(); }, [fetchRules]);
+
+  async function createRule() {
+    if (!name.trim() || !desc.trim()) { toast.error('Name and description are required'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/qac/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), description: desc.trim(), category, severity, regulation: regulation.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      toast.success('Rule created');
+      setName(''); setDesc(''); setCategory('quality'); setSeverity('medium'); setRegulation('');
+      setShowForm(false);
+      fetchRules();
+    } catch (e) { toast.error(String(e)); }
+    finally { setSaving(false); }
+  }
+
+  async function toggleRule(id: string, is_active: boolean) {
+    await fetch(`/api/qac/rules/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active }),
+    });
+    setRules(prev => prev.map(r => r.id === id ? { ...r, is_active } : r));
+  }
+
+  async function deleteRule(id: string) {
+    await fetch(`/api/qac/rules/${id}`, { method: 'DELETE' });
+    setRules(prev => prev.filter(r => r.id !== id));
+    toast.success('Rule deleted');
+  }
+
+  if (loading) return <div className="h-48 bg-[#f5f5f5] rounded-xl animate-pulse" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-[#111]">QA Rules</h3>
+          <p className="text-xs text-[#6b6b6b] mt-0.5">
+            Define what the AI auditor checks on every interaction. Each rule maps to a regulation and category.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setShowForm(s => !s)} variant={showForm ? 'outline' : 'default'}>
+          {showForm ? <><X className="h-3.5 w-3.5 mr-1" />Cancel</> : <><Plus className="h-3.5 w-3.5 mr-1" />Add Rule</>}
+        </Button>
+      </div>
+
+      {/* Create form */}
+      {showForm && (
+        <Card className="border-[#e0e0e0]">
+          <CardContent className="pt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Rule Name <span className="text-red-500">*</span></Label>
+                <Input placeholder="e.g. FDCPA Mini-Miranda Required" value={name} onChange={e => setName(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Regulation Reference</Label>
+                <Input placeholder="e.g. FDCPA §807(11), TCPA, GDPR Art.13" value={regulation} onChange={e => setRegulation(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description <span className="text-red-500">*</span></Label>
+              <Textarea
+                rows={2}
+                placeholder="Describe what the agent must do or must not do..."
+                value={desc}
+                onChange={e => setDesc(e.target.value)}
+                className="resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="compliance">Compliance</SelectItem>
+                    <SelectItem value="disclosure">Disclosure</SelectItem>
+                    <SelectItem value="prohibited">Prohibited</SelectItem>
+                    <SelectItem value="quality">Quality</SelectItem>
+                    <SelectItem value="coaching">Coaching</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Severity</Label>
+                <Select value={severity} onValueChange={setSeverity}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" onClick={createRule} disabled={saving}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                Create Rule
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Rules list */}
+      {rules.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <BookOpen className="h-8 w-8 text-[#e0e0e0] mx-auto mb-3" />
+            <p className="text-sm font-medium text-[#555]">No QA rules yet</p>
+            <p className="text-xs text-[#9b9b9b] mt-1 mb-4">
+              Add rules to define what the AI checks on every interaction — disclosures, prohibited phrases, quality criteria.
+            </p>
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add First Rule
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y divide-[#f0f0f0]">
+              {rules.map(rule => {
+                const rs = SEV[rule.severity] ?? SEV['medium']!;
+                return (
+                  <div key={rule.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className={`h-2 w-2 rounded-full shrink-0 ${rule.is_active ? rs.dot : 'bg-gray-200'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-sm font-medium ${rule.is_active ? 'text-[#111]' : 'text-[#9b9b9b]'}`}>
+                          {rule.name}
+                        </span>
+                        {rule.regulation && (
+                          <span className="text-[10px] font-mono bg-[#f0f0f0] px-1.5 py-0.5 rounded">
+                            {rule.regulation}
+                          </span>
+                        )}
+                        <span className={`text-[10px] capitalize font-medium px-1.5 py-0.5 rounded ${CAT_COLOR[rule.category] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {rule.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#9b9b9b] mt-0.5 line-clamp-1">{rule.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Switch
+                        checked={rule.is_active}
+                        onCheckedChange={v => toggleRule(rule.id, v)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-[#c0c0c0] hover:text-red-500"
+                        onClick={() => deleteRule(rule.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function QACenterPage() {
+  const [interactions, setInteractions] = useState<QACInteraction[]>([]);
+  const [stats,        setStats]        = useState<QACStats | null>(null);
+  const [loading,      setLoading]      = useState(true);
+  const [analyzing,    setAnalyzing]    = useState<string | null>(null);
+
+  // Upload form
+  const [agentName,    setAgentName]    = useState('');
+  const [agentId,      setAgentId]      = useState('');
+  const [channel,      setChannel]      = useState('call');
+  const [transcript,   setTranscript]   = useState('');
+  const [durationMin,  setDurationMin]  = useState('');
+  const [submitting,   setSubmitting]   = useState(false);
+
+  const [activeTab,    setActiveTab]    = useState('dashboard');
+
+  const fetchAll = useCallback(async () => {
+    const [intRes, statsRes] = await Promise.all([
+      fetch('/api/qac/interactions?limit=50'),
+      fetch('/api/qac/stats'),
+    ]);
+    if (intRes.ok) {
+      const d = await intRes.json() as { interactions: QACInteraction[] };
+      setInteractions(d.interactions ?? []);
+    }
+    if (statsRes.ok) setStats(await statsRes.json() as QACStats);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  async function handleAnalyze(id: string) {
+    setAnalyzing(id);
+    setInteractions(prev => prev.map(i => i.id === id ? { ...i, status: 'analyzing' } : i));
+    try {
+      const res = await fetch(`/api/qac/interactions/${id}/analyze`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      toast.success('Analysis complete');
+      await fetchAll();
+    } catch (e) {
+      toast.error(`Analysis failed: ${String(e)}`);
+      setInteractions(prev => prev.map(i => i.id === id ? { ...i, status: 'failed' } : i));
+    } finally {
+      setAnalyzing(null);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!agentName.trim())             { toast.error('Agent name is required'); return; }
+    if (transcript.trim().length < 20) { toast.error('Transcript too short (min 20 chars)'); return; }
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/qac/interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_name: agentName.trim(),
+          agent_id:   agentId.trim() || undefined,
+          channel,
+          transcript: transcript.trim(),
+          duration_s: durationMin ? Math.round(Number(durationMin) * 60) : undefined,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      const newInt = await res.json() as QACInteraction;
+      toast.success('Interaction uploaded — starting analysis…');
+      setAgentName(''); setAgentId(''); setTranscript(''); setDurationMin(''); setChannel('call');
+      setInteractions(prev => [{ ...newInt, qac_evaluations: [] }, ...prev]);
+      setActiveTab('interactions');
+      await handleAnalyze(newInt.id);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="h-9 w-40 bg-[#f5f5f5] rounded-lg animate-pulse mb-6" />
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-[#f5f5f5] rounded-xl animate-pulse" />)}
+        </div>
+        <div className="h-80 bg-[#f5f5f5] rounded-xl animate-pulse" />
+      </div>
+    );
+  }
+
+  const s = stats;
+  const criticalFlags = s?.flagsBySeverity.critical ?? 0;
+  const highFlags     = s?.flagsBySeverity.high ?? 0;
+
+  return (
+    <div className="p-6 mx-auto max-w-6xl space-y-6">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start gap-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#111] shrink-0">
+          <ShieldAlert className="h-5 w-5 text-white" />
+        </div>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight text-[#111]">QA Center</h1>
+          <p className="text-sm text-[#6b6b6b]">
+            100% QA coverage for call center interactions — AI-powered scoring, compliance flags, and agent coaching
+          </p>
+        </div>
+        {s && criticalFlags + highFlags > 0 && (
+          <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2 shrink-0">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <span className="text-sm font-semibold text-red-700">
+              {criticalFlags + highFlags} high-risk flag{criticalFlags + highFlags !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="h-9">
+          <TabsTrigger value="dashboard" className="text-xs gap-1.5">
+            <TrendingUp className="h-3.5 w-3.5" />Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="interactions" className="text-xs gap-1.5">
+            <Activity className="h-3.5 w-3.5" />Interactions
+            {interactions.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#111] text-white text-[9px] px-1.5 py-px leading-none">
+                {interactions.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="new" className="text-xs gap-1.5">
+            <Plus className="h-3.5 w-3.5" />New Evaluation
+          </TabsTrigger>
+          <TabsTrigger value="rules" className="text-xs gap-1.5">
+            <Settings2 className="h-3.5 w-3.5" />QA Rules
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── DASHBOARD ──────────────────────────────────────────────── */}
+        <TabsContent value="dashboard" className="space-y-4 pt-4">
+          {/* KPI row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <p className="text-3xl font-bold text-[#111]">{s?.analyzedInteractions ?? 0}</p>
+                <p className="text-xs font-medium text-[#555] mt-1">Calls Analyzed</p>
+                <p className="text-[10px] text-[#9b9b9b]">of {s?.totalInteractions ?? 0} total</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <p className={`text-3xl font-bold ${(s?.avgOverallScore ?? 0) >= 70 ? 'text-green-600' : (s?.avgOverallScore ?? 0) >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  {s?.avgOverallScore !== null && s?.avgOverallScore !== undefined ? s.avgOverallScore : '—'}
+                </p>
+                <p className="text-xs font-medium text-[#555] mt-1">Avg QA Score</p>
+                <p className="text-[10px] text-[#9b9b9b]">0 = poor · 100 = perfect</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <p className={`text-3xl font-bold ${
+                  (s?.complianceRate ?? 0) >= 80 ? 'text-green-600' :
+                  (s?.complianceRate ?? 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {s?.complianceRate !== null && s?.complianceRate !== undefined ? `${s.complianceRate}%` : '—'}
+                </p>
+                <p className="text-xs font-medium text-[#555] mt-1">Compliance Rate</p>
+                <p className="text-[10px] text-[#9b9b9b]">interactions with risk &lt; 30</p>
+              </CardContent>
+            </Card>
+            <Card className={(criticalFlags + highFlags) > 0 ? 'border-red-200' : ''}>
+              <CardContent className="pt-5 pb-4">
+                <p className={`text-3xl font-bold ${(criticalFlags + highFlags) > 0 ? 'text-red-600' : 'text-[#111]'}`}>
+                  {criticalFlags + highFlags}
+                </p>
+                <p className="text-xs font-medium text-[#555] mt-1">High-Risk Flags</p>
+                <p className="text-[10px] text-[#9b9b9b]">critical + high severity</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Flags by severity */}
+            {s && s.totalFlags > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Flags by Severity</CardTitle>
+                  <CardDescription>{s.totalFlags} total flags across all interactions</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(['critical', 'high', 'medium', 'low'] as const).map(sev => {
+                    const count = s?.flagsBySeverity[sev] ?? 0;
+                    const total = s?.totalFlags ?? 0;
+                    const pct   = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const cfg   = SEV[sev]!;
+                    return (
+                      <div key={sev} className="flex items-center gap-3">
+                        <span className={`capitalize text-xs font-semibold w-14 ${cfg.text}`}>{sev}</span>
+                        <div className="flex-1 h-2 bg-[#f0f0f0] rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${cfg.dot}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-[#555] w-6 text-right">{count}</span>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Top risk agents */}
+            {s && s.topRiskAgents.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Top Risk Agents</CardTitle>
+                  <CardDescription>Agents with highest average risk score</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2.5">
+                  {s.topRiskAgents.map((agent, i) => (
+                    <div key={agent.name} className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-[#c0c0c0] w-4">{i + 1}</span>
+                      <span className="text-sm font-medium text-[#111] flex-1 truncate">{agent.name}</span>
+                      <span className="text-[10px] text-[#9b9b9b]">{agent.interactions} call{agent.interactions !== 1 ? 's' : ''}</span>
+                      <div className="w-20">
+                        <RiskBar score={agent.avg_risk} />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Flags by category */}
+            {s && s.totalFlags > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Flags by Category</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(s.flagsByCategory).filter(([, v]) => v > 0).map(([cat, count]) => (
+                      <div key={cat} className={`rounded-lg px-3 py-2 flex items-center justify-between ${CAT_COLOR[cat] ?? 'bg-gray-100 text-gray-600'}`}>
+                        <span className="text-xs font-medium capitalize">{cat}</span>
+                        <span className="text-sm font-bold">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Before/After comparison (Sedric-style insight) */}
+          {s && s.totalInteractions === 0 && (
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center space-y-3">
+                <ShieldAlert className="h-10 w-10 text-[#e0e0e0] mx-auto" />
+                <p className="font-semibold text-[#555]">Zero interactions analyzed yet</p>
+                <p className="text-sm text-[#9b9b9b] max-w-sm mx-auto">
+                  Traditional QA reviews only 1–5% of calls. Upload your first interaction and get 100% AI-powered coverage.
+                </p>
+                <Button size="sm" onClick={() => setActiveTab('new')}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Upload First Interaction
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {s && s.pendingInteractions > 0 && (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardContent className="py-3 flex items-center gap-3">
+                <TrendingDown className="h-4 w-4 text-yellow-600 shrink-0" />
+                <p className="text-sm text-yellow-800">
+                  <span className="font-semibold">{s.pendingInteractions} interaction{s.pendingInteractions !== 1 ? 's' : ''}</span> pending analysis —
+                  go to <button className="underline font-medium" onClick={() => setActiveTab('interactions')}>Interactions</button> to run them.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── INTERACTIONS ───────────────────────────────────────────── */}
+        <TabsContent value="interactions" className="pt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+              <div>
+                <CardTitle>Interactions</CardTitle>
+                <CardDescription className="mt-0.5">
+                  {interactions.length} uploaded · {interactions.filter(i => i.status === 'analyzed').length} analyzed
+                </CardDescription>
+              </div>
+              {interactions.some(i => i.status === 'pending' || i.status === 'failed') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!!analyzing}
+                  onClick={async () => {
+                    const pending = interactions.filter(i => i.status === 'pending' || i.status === 'failed');
+                    for (const p of pending) await handleAnalyze(p.id);
+                  }}
+                >
+                  {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <PlayCircle className="h-3.5 w-3.5 mr-1.5" />}
+                  Analyze All Pending
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-0 mt-4">
+              {interactions.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Activity className="h-8 w-8 text-[#e0e0e0] mx-auto mb-3" />
+                  <p className="text-sm text-[#555] font-medium">No interactions uploaded</p>
+                  <p className="text-xs text-[#9b9b9b] mt-1 mb-4">Upload a call center transcript to start 100% QA coverage.</p>
+                  <Button size="sm" onClick={() => setActiveTab('new')}>
+                    <Plus className="h-4 w-4 mr-1.5" /> New Evaluation
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  {/* Table header */}
+                  <div className="hidden md:flex items-center gap-3 px-5 py-2 border-b border-[#f0f0f0] text-[10px] font-semibold text-[#9b9b9b] uppercase tracking-wider">
+                    <span className="w-4" />
+                    <span className="w-4" />
+                    <span className="w-36">Agent</span>
+                    <span className="w-28">Date</span>
+                    <span className="w-10">Score</span>
+                    <span className="w-24">Risk</span>
+                    <span className="w-12">Flags</span>
+                    <span className="flex-1" />
+                  </div>
+                  {interactions.map(interaction => (
+                    <InteractionRow
+                      key={interaction.id}
+                      interaction={interaction}
+                      onAnalyze={handleAnalyze}
+                      analyzing={analyzing}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── NEW EVALUATION ─────────────────────────────────────────── */}
+        <TabsContent value="new" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>New Interaction Evaluation</CardTitle>
+              <CardDescription>
+                Paste the transcript of a human agent interaction. The AI auditor will score it across 5 dimensions,
+                flag violations with regulation references, and generate coaching notes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Agent Name <span className="text-red-500">*</span></Label>
+                  <Input
+                    placeholder="e.g. Maria González"
+                    value={agentName}
+                    onChange={e => setAgentName(e.target.value)}
+                  />
+                  <p className="text-xs text-[#9b9b9b]">Name of the human call center agent</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Agent ID <span className="text-[#9b9b9b] font-normal">(optional)</span></Label>
+                  <Input
+                    placeholder="e.g. EMP-0042"
+                    value={agentId}
+                    onChange={e => setAgentId(e.target.value)}
+                  />
+                  <p className="text-xs text-[#9b9b9b]">Internal HR or CRM identifier</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Channel</Label>
+                  <Select value={channel} onValueChange={setChannel}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="call">Phone Call</SelectItem>
+                      <SelectItem value="chat">Live Chat</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="sms">SMS</SelectItem>
+                      <SelectItem value="social">Social Media</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Duration (minutes) <span className="text-[#9b9b9b] font-normal">(optional)</span></Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 8"
+                    value={durationMin}
+                    onChange={e => setDurationMin(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Transcript <span className="text-red-500">*</span></Label>
+                <Textarea
+                  rows={16}
+                  placeholder={`Agent: Thank you for calling collections, this is Maria. May I speak with John Smith?\nCustomer: This is John.\nAgent: Hi John, I'm calling regarding your account ending in 4521 with ABC Collections...\n...`}
+                  value={transcript}
+                  onChange={e => setTranscript(e.target.value)}
+                  className="font-mono text-xs resize-none"
+                />
+                <p className="text-xs text-[#9b9b9b]">{transcript.length} chars — the AI processes up to 8,000 characters</p>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-xl bg-[#f8f8f8] border border-[#efefef] p-3.5">
+                <ShieldAlert className="h-4 w-4 text-[#9b9b9b] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-[#555] font-medium mb-0.5">AI auditor uses your active QA Rules</p>
+                  <p className="text-xs text-[#9b9b9b]">
+                    Configure rules in the QA Rules tab to customize what gets flagged — required disclosures,
+                    prohibited phrases, quality criteria, regulation references (FDCPA, TCPA, GDPR…).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting || !agentName.trim() || transcript.trim().length < 20}
+                  className="gap-2"
+                >
+                  {submitting
+                    ? <><Loader2 className="h-4 w-4 animate-spin" />Uploading &amp; Analyzing…</>
+                    : <><PlayCircle className="h-4 w-4" />Upload &amp; Analyze</>}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setAgentName(''); setAgentId(''); setTranscript(''); setDurationMin(''); setChannel('call'); }}
+                  disabled={submitting}
+                >
+                  Clear
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── QA RULES ───────────────────────────────────────────────── */}
+        <TabsContent value="rules" className="pt-4">
+          <QACRulesManager />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

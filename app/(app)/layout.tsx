@@ -88,9 +88,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const unread = notifications.data?.length ?? 0;
 
-  const branding    = (workspace.branding ?? null) as WorkspaceBranding | null;
-  const appName     = branding?.app_name     ?? 'VoiceOS';
-  const primaryColor = branding?.primary_color ?? '#0a0a0a';
+  const branding         = (workspace.branding ?? null) as WorkspaceBranding | null;
+  const appName          = branding?.app_name     ?? 'VoiceOS';
+  const primaryColor     = branding?.primary_color ?? '#0a0a0a';
+  const hasComplianceQa  = !!(workspace as unknown as { has_compliance_qa?: boolean }).has_compliance_qa;
 
   return (
     <div
@@ -104,7 +105,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         />
       )}
       <div className="hidden md:block">
-        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} visibleModules={visibleModules} />
+        <Sidebar isSuperadmin={userProfile.is_superadmin} appName={appName} visibleModules={visibleModules} hasComplianceQa={hasComplianceQa} />
       </div>
       <RouteGuard visibleModules={visibleModules} />
       <div className={`flex flex-1 flex-col md:pl-56 ${isImpersonating ? 'mt-10' : ''}`}>
