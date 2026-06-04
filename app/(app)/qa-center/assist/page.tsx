@@ -339,8 +339,12 @@ export default function AgentAssistPage() {
 
   async function copyResponse() {
     if (!suggestedResponse) return;
-    await navigator.clipboard.writeText(suggestedResponse).catch(() => null);
-    toast.success('Response copied to clipboard');
+    try {
+      await navigator.clipboard.writeText(suggestedResponse);
+      toast.success('Response copied to clipboard');
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
   }
 
   const riskCfg = RISK_CFG[complianceRisk];
