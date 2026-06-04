@@ -761,7 +761,7 @@ export default function QACenterPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="h-9">
+        <TabsList className="h-9 w-full justify-start overflow-x-auto flex-nowrap scrollbar-none">
           <TabsTrigger value="dashboard" className="text-xs gap-1.5">
             <TrendingUp className="h-3.5 w-3.5" />Dashboard
           </TabsTrigger>
@@ -780,16 +780,16 @@ export default function QACenterPage() {
             <Settings2 className="h-3.5 w-3.5" />QA Rules
           </TabsTrigger>
           <TabsTrigger value="compliance" className="text-xs gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />Compliance Rules
+            <ShieldCheck className="h-3.5 w-3.5" />Compliance
           </TabsTrigger>
           <TabsTrigger value="monitoring" className="text-xs gap-1.5">
-            <Users2 className="h-3.5 w-3.5" />Agent Monitoring
+            <Users2 className="h-3.5 w-3.5" />Monitoring
           </TabsTrigger>
           <TabsTrigger value="integrations" className="text-xs gap-1.5">
             <Globe className="h-3.5 w-3.5" />Integrations
           </TabsTrigger>
           <TabsTrigger value="docs" className="text-xs gap-1.5">
-            <BookOpen className="h-3.5 w-3.5" />Developer Docs
+            <BookOpen className="h-3.5 w-3.5" />Docs
           </TabsTrigger>
         </TabsList>
 
