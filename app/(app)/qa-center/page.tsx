@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import {
   Activity, AlertTriangle, BookOpen, ChevronDown, ChevronRight,
   CheckCircle2, Copy, Globe, Loader2, MessageSquare, Phone, PlayCircle,
   Plus, Search, Settings2, ShieldAlert, TrendingDown, TrendingUp,
-  Trash2, X,
+  Trash2, Users2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -121,6 +121,39 @@ function ScorePill({ score, size = 'sm' }: { score: number; size?: 'sm' | 'lg' }
   return <span className={`inline-flex items-center rounded-full border ${color} ${sz}`}>{score}</span>;
 }
 
+const CRITERIA_LABELS: Record<string, string> = {
+  opening:            'Call Introduction & Greeting',
+  compliance:         'Compliance',
+  objection_handling: 'Objection Handling',
+  closing:            'Action & Closure',
+  empathy:            'Empathy',
+};
+
+function ScoreGauge({ score }: { score: number }) {
+  const r = 52, cx = 64, cy = 68;
+  const circumference = 2 * Math.PI * r;
+  const semi = circumference / 2;
+  const filled = (score / 100) * semi;
+  const color = score >= 80 ? '#16a34a' : score >= 60 ? '#ca8a04' : '#dc2626';
+  const angle = (score / 100) * Math.PI;
+  const dotX = cx - r * Math.cos(angle);
+  const dotY = cy - r * Math.sin(angle);
+  const rot = `rotate(-180, ${cx}, ${cy})`;
+  return (
+    <svg viewBox="0 0 128 78" className="w-44 mx-auto">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth="8" strokeLinecap="round"
+        strokeDasharray={`${semi} ${semi}`} transform={rot} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+        strokeDasharray={`${filled} ${circumference}`} transform={rot} />
+      {score > 0 && <circle cx={dotX} cy={dotY} r="5" fill={color} />}
+      <text x={cx} y={cy - 6} textAnchor="middle" fontSize="20" fontWeight="700" fill="#111">{score}%</text>
+      <text x={cx} y={cy + 8} textAnchor="middle" fontSize="8.5" fill="#9b9b9b">Overall Score</text>
+      <text x={cx - r + 2} y={cy + 20} textAnchor="middle" fontSize="7.5" fill="#c0c0c0">0%</text>
+      <text x={cx + r - 2} y={cy + 20} textAnchor="middle" fontSize="7.5" fill="#c0c0c0">100%</text>
+    </svg>
+  );
+}
+
 function RiskBar({ score }: { score: number }) {
   const color = score < 30 ? 'bg-green-500' : score < 60 ? 'bg-yellow-500' : score < 80 ? 'bg-orange-500' : 'bg-red-500';
   return (
@@ -183,9 +216,33 @@ function InteractionRow({
           <span className="w-10" />
         )}
 
+        {/* Failed criteria tags (Sedric-style) */}
+        {evaluation?.criteria_scores && (() => {
+          const failed = Object.entries(evaluation.criteria_scores)
+            .filter(([, v]) => Math.round(Number(v)) < 70)
+            .map(([k]) => CRITERIA_LABELS[k] ?? k);
+          if (failed.length === 0) return null;
+          const visible = failed.slice(0, 2);
+          const extra = failed.length - visible.length;
+          return (
+            <div className="hidden lg:flex items-center gap-1 flex-wrap min-w-0 flex-1">
+              {visible.map(label => (
+                <span key={label} className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 whitespace-nowrap">
+                  {label}
+                </span>
+              ))}
+              {extra > 0 && (
+                <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
+                  +{extra}
+                </span>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Risk */}
         {evaluation && (
-          <div className="w-24 shrink-0 hidden md:block">
+          <div className="w-24 shrink-0 hidden xl:block">
             <RiskBar score={Math.round(Number(evaluation.risk_score))} />
           </div>
         )}
@@ -537,6 +594,7 @@ export default function QACenterPage() {
   const [submitting,   setSubmitting]   = useState(false);
 
   const [activeTab,    setActiveTab]    = useState('dashboard');
+  const [interactionView, setInteractionView] = useState<'all' | 'flagged' | 'review'>('all');
 
   // ── Filter / Segmenter state ───────────────────────────────────────────────
   const [filterAgent,  setFilterAgent]  = useState('');
@@ -582,6 +640,40 @@ export default function QACenterPage() {
   }, [filterAgent, filterStatus, filterRange, filterRisk, buildInteractionsUrl]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const displayedInteractions = useMemo(() => {
+    if (interactionView === 'flagged') {
+      return interactions.filter(i => {
+        const flags = i.qac_evaluations?.[0]?.qac_flags ?? [];
+        return flags.some(f => f.severity === 'critical' || f.severity === 'high');
+      });
+    }
+    if (interactionView === 'review') return interactions.filter(i => i.status === 'pending' || i.status === 'failed');
+    return interactions;
+  }, [interactions, interactionView]);
+
+  const agentStats = useMemo(() => {
+    const map = new Map<string, { name: string; count: number; scoreSum: number; scored: number; flagged: number; passed: number }>();
+    for (const i of interactions) {
+      if (!map.has(i.agent_name)) map.set(i.agent_name, { name: i.agent_name, count: 0, scoreSum: 0, scored: 0, flagged: 0, passed: 0 });
+      const a = map.get(i.agent_name)!;
+      a.count++;
+      const ev = i.qac_evaluations?.[0];
+      if (ev) {
+        a.scoreSum += Number(ev.overall_score);
+        a.scored++;
+        if (Number(ev.overall_score) >= 70) a.passed++;
+        if (ev.qac_flags?.some(f => f.severity === 'critical' || f.severity === 'high')) a.flagged++;
+      }
+    }
+    return Array.from(map.values())
+      .map(a => ({
+        ...a,
+        avgScore: a.scored > 0 ? Math.round(a.scoreSum / a.scored) : null,
+        passRate: a.scored > 0 ? Math.round((a.passed / a.scored) * 100) : null,
+      }))
+      .sort((a, b) => (a.avgScore ?? 999) - (b.avgScore ?? 999));
+  }, [interactions]);
 
   async function handleAnalyze(id: string) {
     setAnalyzing(id);
@@ -690,6 +782,9 @@ export default function QACenterPage() {
           <TabsTrigger value="compliance" className="text-xs gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5" />Compliance Rules
           </TabsTrigger>
+          <TabsTrigger value="monitoring" className="text-xs gap-1.5">
+            <Users2 className="h-3.5 w-3.5" />Agent Monitoring
+          </TabsTrigger>
           <TabsTrigger value="integrations" className="text-xs gap-1.5">
             <Globe className="h-3.5 w-3.5" />Integrations
           </TabsTrigger>
@@ -698,44 +793,52 @@ export default function QACenterPage() {
         {/* ── DASHBOARD ──────────────────────────────────────────────── */}
         <TabsContent value="dashboard" className="space-y-4 pt-4">
           {/* KPI row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-5 pb-4">
-                <p className="text-3xl font-bold text-[#111]">{s?.analyzedInteractions ?? 0}</p>
-                <p className="text-xs font-medium text-[#555] mt-1">Calls Analyzed</p>
-                <p className="text-[10px] text-[#9b9b9b]">of {s?.totalInteractions ?? 0} total</p>
-              </CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Overall Score gauge — Sedric-style */}
+            <Card className="flex flex-col items-center py-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#b0b0b0] mb-2">Avg QA Score</p>
+              <ScoreGauge score={s?.avgOverallScore ?? 0} />
+              <p className="text-[10px] text-[#c0c0c0] mt-1">across {s?.analyzedInteractions ?? 0} analyzed calls</p>
             </Card>
-            <Card>
-              <CardContent className="pt-5 pb-4">
-                <p className={`text-3xl font-bold ${(s?.avgOverallScore ?? 0) >= 70 ? 'text-green-600' : (s?.avgOverallScore ?? 0) >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                  {s?.avgOverallScore !== null && s?.avgOverallScore !== undefined ? s.avgOverallScore : '—'}
-                </p>
-                <p className="text-xs font-medium text-[#555] mt-1">Avg QA Score</p>
-                <p className="text-[10px] text-[#9b9b9b]">0 = poor · 100 = perfect</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 pb-4">
-                <p className={`text-3xl font-bold ${
-                  (s?.complianceRate ?? 0) >= 80 ? 'text-green-600' :
-                  (s?.complianceRate ?? 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
-                }`}>
-                  {s?.complianceRate !== null && s?.complianceRate !== undefined ? `${s.complianceRate}%` : '—'}
-                </p>
-                <p className="text-xs font-medium text-[#555] mt-1">Compliance Rate</p>
-                <p className="text-[10px] text-[#9b9b9b]">interactions with risk &lt; 30</p>
-              </CardContent>
-            </Card>
-            <Card className={(criticalFlags + highFlags) > 0 ? 'border-red-200' : ''}>
-              <CardContent className="pt-5 pb-4">
-                <p className={`text-3xl font-bold ${(criticalFlags + highFlags) > 0 ? 'text-red-600' : 'text-[#111]'}`}>
-                  {criticalFlags + highFlags}
-                </p>
-                <p className="text-xs font-medium text-[#555] mt-1">High-Risk Flags</p>
-                <p className="text-[10px] text-[#9b9b9b]">critical + high severity</p>
-              </CardContent>
-            </Card>
+
+            {/* Secondary metrics 2×2 */}
+            <div className="md:col-span-2 grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="pt-5 pb-4">
+                  <p className="text-3xl font-bold text-[#111]">{s?.analyzedInteractions ?? 0}</p>
+                  <p className="text-xs font-medium text-[#555] mt-1">Calls Analyzed</p>
+                  <p className="text-[10px] text-[#9b9b9b]">of {s?.totalInteractions ?? 0} total</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-5 pb-4">
+                  <p className={`text-3xl font-bold ${
+                    (s?.complianceRate ?? 0) >= 80 ? 'text-green-600' :
+                    (s?.complianceRate ?? 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {s?.complianceRate !== null && s?.complianceRate !== undefined ? `${s.complianceRate}%` : '—'}
+                  </p>
+                  <p className="text-xs font-medium text-[#555] mt-1">Compliance Rate</p>
+                  <p className="text-[10px] text-[#9b9b9b]">interactions with risk &lt; 30</p>
+                </CardContent>
+              </Card>
+              <Card className={(criticalFlags + highFlags) > 0 ? 'border-red-200' : ''}>
+                <CardContent className="pt-5 pb-4">
+                  <p className={`text-3xl font-bold ${(criticalFlags + highFlags) > 0 ? 'text-red-600' : 'text-[#111]'}`}>
+                    {criticalFlags + highFlags}
+                  </p>
+                  <p className="text-xs font-medium text-[#555] mt-1">High-Risk Flags</p>
+                  <p className="text-[10px] text-[#9b9b9b]">critical + high severity</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-5 pb-4">
+                  <p className="text-3xl font-bold text-[#111]">{s?.pendingInteractions ?? 0}</p>
+                  <p className="text-xs font-medium text-[#555] mt-1">Pending Analysis</p>
+                  <p className="text-[10px] text-[#9b9b9b]">awaiting QA review</p>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -839,6 +942,32 @@ export default function QACenterPage() {
 
         {/* ── INTERACTIONS ───────────────────────────────────────────── */}
         <TabsContent value="interactions" className="pt-4 space-y-3">
+          {/* Sedric-style view tabs */}
+          <div className="flex items-center gap-0 border-b border-[#e0e0e0] -mb-1">
+            {([
+              ['all',     'All',       interactions.length],
+              ['flagged', 'Flagged',   interactions.filter(i => i.qac_evaluations?.[0]?.qac_flags?.some(f => f.severity === 'critical' || f.severity === 'high')).length],
+              ['review',  'To review', interactions.filter(i => i.status === 'pending' || i.status === 'failed').length],
+            ] as [string, string, number][]).map(([val, label, count]) => (
+              <button
+                key={val}
+                onClick={() => setInteractionView(val as 'all' | 'flagged' | 'review')}
+                className={`relative flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors ${
+                  interactionView === val
+                    ? 'text-[#111] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#111] after:rounded-t'
+                    : 'text-[#9b9b9b] hover:text-[#555]'
+                }`}
+              >
+                {label}
+                {count > 0 && (
+                  <span className={`rounded-full px-1.5 py-px text-[10px] font-semibold ${
+                    interactionView === val ? 'bg-[#111] text-white' : 'bg-[#f0f0f0] text-[#6b6b6b]'
+                  }`}>{count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Agent search */}
@@ -917,16 +1046,16 @@ export default function QACenterPage() {
 
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-[#9b9b9b]">
-                {interactions.length}{totalCount > interactions.length ? ` of ${totalCount}` : ''} interaction{interactions.length !== 1 ? 's' : ''}
-                {' · '}{interactions.filter(i => i.status === 'analyzed').length} analyzed
+                {displayedInteractions.length}{totalCount > interactions.length ? ` of ${totalCount}` : ''} interaction{displayedInteractions.length !== 1 ? 's' : ''}
+                {' · '}{displayedInteractions.filter(i => i.status === 'analyzed').length} analyzed
               </span>
-              {interactions.some(i => i.status === 'pending' || i.status === 'failed') && (
+              {displayedInteractions.some(i => i.status === 'pending' || i.status === 'failed') && (
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={!!analyzing}
                   onClick={async () => {
-                    const pending = interactions.filter(i => i.status === 'pending' || i.status === 'failed');
+                    const pending = displayedInteractions.filter(i => i.status === 'pending' || i.status === 'failed');
                     for (const p of pending) await handleAnalyze(p.id);
                   }}
                 >
@@ -939,10 +1068,10 @@ export default function QACenterPage() {
 
           <Card>
             <CardContent className="p-0 mt-0">
-              {interactions.length === 0 ? (
+              {displayedInteractions.length === 0 ? (
                 <div className="py-16 text-center">
                   <Activity className="h-8 w-8 text-[#e0e0e0] mx-auto mb-3" />
-                  {filterAgent || filterStatus || filterRange || filterRisk ? (
+                  {filterAgent || filterStatus || filterRange || filterRisk || interactionView !== 'all' ? (
                     <>
                       <p className="text-sm text-[#555] font-medium">No interactions match the current filters</p>
                       <p className="text-xs text-[#9b9b9b] mt-1 mb-4">Try adjusting or clearing the filters above.</p>
@@ -966,11 +1095,11 @@ export default function QACenterPage() {
                     <span className="w-36">Agent</span>
                     <span className="w-28">Date</span>
                     <span className="w-10">Score</span>
-                    <span className="w-24">Risk</span>
+                    <span className="flex-1">Failed Criteria</span>
                     <span className="w-12">Flags</span>
-                    <span className="flex-1" />
+                    <span className="w-16" />
                   </div>
-                  {interactions.map(interaction => (
+                  {displayedInteractions.map(interaction => (
                     <InteractionRow
                       key={interaction.id}
                       interaction={interaction}
@@ -1096,6 +1225,81 @@ export default function QACenterPage() {
         {/* ── COMPLIANCE RULES ───────────────────────────────────────── */}
         <TabsContent value="compliance" className="pt-4">
           <CompliancePanel />
+        </TabsContent>
+
+        {/* ── AGENT MONITORING ───────────────────────────────────────── */}
+        <TabsContent value="monitoring" className="pt-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-[#111]">Agent Monitoring Dashboard</h3>
+              <p className="text-xs text-[#6b6b6b] mt-0.5">Performance breakdown per agent — sorted by lowest score first</p>
+            </div>
+            <span className="text-xs text-[#9b9b9b]">{agentStats.length} agent{agentStats.length !== 1 ? 's' : ''}</span>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              {agentStats.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Users2 className="h-8 w-8 text-[#e0e0e0] mx-auto mb-3" />
+                  <p className="text-sm text-[#555] font-medium">No agent data yet</p>
+                  <p className="text-xs text-[#9b9b9b] mt-1">Analyze interactions first to see agent-level metrics.</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-5 py-2.5 border-b border-[#f0f0f0] text-[10px] font-semibold text-[#9b9b9b] uppercase tracking-wider">
+                    <span>Agent</span>
+                    <span className="text-right">Interactions</span>
+                    <span className="text-right">Avg Score</span>
+                    <span className="text-right">Pass Rate</span>
+                    <span className="text-right">Flagged</span>
+                    <span className="text-right">Score Bar</span>
+                  </div>
+                  <div className="divide-y divide-[#f5f5f5]">
+                    {agentStats.map((agent, idx) => (
+                      <div key={agent.name} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 items-center px-5 py-3 hover:bg-[#fafafa] transition-colors">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-[10px] font-bold text-[#c0c0c0] w-4 shrink-0">{idx + 1}</span>
+                          <div className="h-7 w-7 rounded-full bg-[#f0f0f0] flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold text-[#555]">{agent.name.slice(0, 2).toUpperCase()}</span>
+                          </div>
+                          <span className="text-sm font-semibold text-[#111] truncate">{agent.name}</span>
+                        </div>
+                        <span className="text-sm text-[#555] text-right">{agent.count}</span>
+                        <span className={`text-sm font-bold text-right ${
+                          agent.avgScore === null ? 'text-[#c0c0c0]' :
+                          agent.avgScore >= 80 ? 'text-green-600' :
+                          agent.avgScore >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {agent.avgScore !== null ? `${agent.avgScore}%` : '—'}
+                        </span>
+                        <span className={`text-sm text-right ${
+                          agent.passRate === null ? 'text-[#c0c0c0]' :
+                          agent.passRate >= 80 ? 'text-green-600' :
+                          agent.passRate >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {agent.passRate !== null ? `${agent.passRate}%` : '—'}
+                        </span>
+                        <span className={`text-sm text-right ${agent.flagged > 0 ? 'text-red-600 font-semibold' : 'text-[#9b9b9b]'}`}>
+                          {agent.flagged > 0 ? `⚑ ${agent.flagged}` : '—'}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex-1 h-1.5 bg-[#f0f0f0] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                (agent.avgScore ?? 0) >= 80 ? 'bg-green-500' :
+                                (agent.avgScore ?? 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${agent.avgScore ?? 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── INTEGRATIONS ───────────────────────────────────────────── */}
