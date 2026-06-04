@@ -73,14 +73,20 @@ export default function MarketingFinancePage() {
     setError(null);
     try {
       const res = await fetch('/api/marketing-finance');
-      const data = await res.json() as FinanceReport;
+      let data: FinanceReport;
+      try {
+        data = await res.json() as FinanceReport;
+      } catch {
+        setError(`El servidor devolvió una respuesta inválida (HTTP ${res.status}). Revisa los logs de Vercel.`);
+        return;
+      }
       if (!res.ok || data.error) {
-        setError(data.error ?? 'Error fetching data');
+        setError(data.error ?? `Error del servidor (HTTP ${res.status})`);
       } else {
         setReport(data);
       }
-    } catch {
-      setError('Network error — could not reach the tracker.');
+    } catch (e) {
+      setError(`Error de red: ${String(e)}`);
     } finally {
       setLoading(false);
     }

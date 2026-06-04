@@ -7,6 +7,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+// Give the function enough time to login + fetch (Vercel Hobby allows up to 60s)
+export const maxDuration = 60;
+
 const TRACKER_BASE = 'https://tracker.machukllc.xyz';
 const TRACKER_USER = process.env.TRACKER_USER ?? 'conversion@tresenlinea.xyz';
 const TRACKER_PASS = process.env.TRACKER_PASS ?? '24731840Mt.';
@@ -76,6 +79,10 @@ function extractCookies(headers: Headers): string[] {
   return raw.split(/,(?=[^ ])/).map(c => c.split(';')[0]!.trim()).filter(Boolean);
 }
 
+function makeSignal(ms: number) {
+  return AbortSignal.timeout(ms);
+}
+
 // ── Tracker login ─────────────────────────────────────────────────────────────
 async function loginTracker(): Promise<string | null> {
   const body = new URLSearchParams({
@@ -87,23 +94,27 @@ async function loginTracker(): Promise<string | null> {
 
   const cookies: string[] = [];
 
-  // Step 1: POST login.php (manual redirect to capture cookies)
+  // Step 1: POST login.php — follow redirects automatically and capture final cookies
   let res: Response;
   try {
     res = await fetch(`${TRACKER_BASE}/login.php`, {
       method: 'POST',
       headers: {
         'Content-Type':  'application/x-www-form-urlencoded',
-        'User-Agent':    'Mozilla/5.0 VoiceOS-App/1.0',
+        'User-Agent':    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+        'Accept':        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
       },
       body:     body.toString(),
       redirect: 'manual',
+      signal:   makeSignal(20_000),
     });
   } catch (e) {
-    console.error('[mf-scraper] login fetch error:', e);
+    console.error('[mf-scraper] login POST error:', e);
     return null;
   }
 
+  console.log('[mf-scraper] login status:', res.status, 'location:', res.headers.get('location'));
   cookies.push(...extractCookies(res.headers));
 
   // Follow up to 3 redirects manually to accumulate cookies
@@ -112,16 +123,27 @@ async function loginTracker(): Promise<string | null> {
     const loc = cur.headers.get('location');
     if (!loc || cur.status < 300 || cur.status >= 400) break;
     const url = loc.startsWith('http') ? loc : `${TRACKER_BASE}${loc}`;
-    cur = await fetch(url, {
-      headers: {
-        Cookie:       cookies.join('; '),
-        'User-Agent': 'Mozilla/5.0 VoiceOS-App/1.0',
-      },
-      redirect: 'manual',
-    });
+    console.log('[mf-scraper] following redirect to:', url);
+    try {
+      cur = await fetch(url, {
+        headers: {
+          Cookie:          cookies.join('; '),
+          'User-Agent':    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+          'Accept':        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        },
+        redirect: 'manual',
+        signal:   makeSignal(15_000),
+      });
+    } catch (e) {
+      console.error('[mf-scraper] redirect fetch error:', e);
+      break;
+    }
     cookies.push(...extractCookies(cur.headers));
+    console.log('[mf-scraper] redirect', i + 1, 'status:', cur.status, 'new cookies:', extractCookies(cur.headers));
   }
 
+  console.log('[mf-scraper] total cookies collected:', cookies.length, cookies.join('; ').slice(0, 80));
   return cookies.length > 0 ? cookies.join('; ') : null;
 }
 
@@ -131,21 +153,33 @@ const STATS_PATH =
   '&stats_type=Campaigns&sec_stats_type=Country' +
   '&third_stats_type=none&id=0';
 
-async function fetchStats(cookie: string): Promise<unknown[][] | null> {
+async function fetchStats(cookie: string): Promise<{ data: unknown[][] | null; detail: string }> {
   try {
     const res = await fetch(`${TRACKER_BASE}${STATS_PATH}`, {
       headers: {
-        Cookie:       cookie,
-        'User-Agent': 'Mozilla/5.0 VoiceOS-App/1.0',
+        Cookie:          cookie,
+        'User-Agent':    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+        'Accept':        'application/json, text/plain, */*',
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'Referer':       `${TRACKER_BASE}/crm.new.php`,
       },
+      signal: makeSignal(20_000),
     });
-    if (!res.ok) return null;
-    const data = await res.json() as unknown[][];
-    if (!Array.isArray(data) || data.length < 2) return null;
-    // Detect session expiry (returns HTML login page, not JSON)
-    return data;
-  } catch {
-    return null;
+    console.log('[mf-scraper] stats status:', res.status, 'content-type:', res.headers.get('content-type'));
+    if (!res.ok) return { data: null, detail: `HTTP ${res.status}` };
+    const text = await res.text();
+    // Detect session expiry — tracker returns HTML login page
+    if (text.includes('name="password"') || text.trim().startsWith('<!')) {
+      return { data: null, detail: 'Session expired after login' };
+    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch { return { data: null, detail: 'Response is not JSON' }; }
+    if (!Array.isArray(parsed) || parsed.length < 2) {
+      return { data: null, detail: `Unexpected response format (${text.slice(0, 80)})` };
+    }
+    return { data: parsed as unknown[][], detail: 'ok' };
+  } catch (e) {
+    return { data: null, detail: String(e) };
   }
 }
 
@@ -248,10 +282,11 @@ export async function GET() {
   }
 
   // Fetch data
-  const raw = await fetchStats(cookie);
+  const { data: raw, detail } = await fetchStats(cookie);
   if (!raw) {
+    console.error('[mf-scraper] fetchStats failed:', detail);
     return NextResponse.json({
-      error:          'Could not fetch stats from tracker',
+      error:          `No se pudo obtener datos del tracker: ${detail}`,
       total_leads:    0, total_ftds: 0, original_ftds: 0,
       duplicate_ftds: 0, total_cpa: 0, ecpa: 0, detail: [],
       scraped_at: new Date().toISOString(),
