@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 
 export type AuthActionState =
   | { status: 'idle' }
@@ -29,10 +30,9 @@ export async function loginAction(
 
   if (error) return { status: 'error', error: error.message };
 
-  // Return success with the redirect target. The client calls router.refresh()
-  // before router.push() so the new session cookies are visible to middleware
-  // before the navigation — avoids the redirect() race condition in Server Actions.
-  return { status: 'success', redirectTo };
+  // redirect() sends cookies + redirect in the same response, so middleware
+  // always sees the session on the first request to the destination page.
+  redirect(redirectTo);
 }
 
 export async function registerAction(

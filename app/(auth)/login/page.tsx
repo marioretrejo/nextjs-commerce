@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { loginAction, type AuthActionState } from '@/app/actions/auth';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -27,7 +27,6 @@ function LoginForm() {
     searchParams.get('callbackUrl') ?? searchParams.get('redirect')
   );
 
-  const router = useRouter();
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -35,13 +34,9 @@ function LoginForm() {
     if (state.status === 'error') {
       toast.error(state.error);
     }
-    if (state.status === 'success') {
-      // router.refresh() flushes the Next.js client cache so the new session
-      // cookies written by the Server Action are visible before navigation.
-      router.refresh();
-      router.push(state.redirectTo);
-    }
-  }, [state, router]);
+    // On success the server action calls redirect() directly, so no client
+    // navigation is needed here — the browser follows the server redirect.
+  }, [state]);
 
   async function handleGoogle() {
     setGoogleLoading(true);
