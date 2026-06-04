@@ -23,9 +23,11 @@ export async function GET() {
 
   const admin = createAdminClient();
 
+  const COLS = 'id, webhook_token, twilio_account_sid, auto_analyze, agent_name_field, is_active, field_mappings, provider_name, created_at';
+
   let { data } = await admin
     .from('qac_integrations')
-    .select('id, webhook_token, twilio_account_sid, auto_analyze, agent_name_field, is_active, created_at')
+    .select(COLS)
     .eq('workspace_id', ws.id)
     .single();
 
@@ -34,7 +36,7 @@ export async function GET() {
     const { data: created } = await admin
       .from('qac_integrations')
       .insert({ workspace_id: ws.id })
-      .select('id, webhook_token, twilio_account_sid, auto_analyze, agent_name_field, is_active, created_at')
+      .select(COLS)
       .single();
     data = created;
   }
@@ -58,6 +60,10 @@ export async function PATCH(req: Request) {
   if ('auto_analyze'        in body && typeof body.auto_analyze   === 'boolean') update.auto_analyze   = body.auto_analyze;
   if ('agent_name_field'    in body && typeof body.agent_name_field === 'string') update.agent_name_field = body.agent_name_field;
   if ('is_active'           in body && typeof body.is_active       === 'boolean') update.is_active       = body.is_active;
+  if ('provider_name'       in body && typeof body.provider_name   === 'string') update.provider_name   = body.provider_name || null;
+  if ('field_mappings'      in body && typeof body.field_mappings  === 'object' && body.field_mappings !== null) {
+    update.field_mappings = body.field_mappings;
+  }
 
   const admin = createAdminClient();
 
@@ -65,7 +71,7 @@ export async function PATCH(req: Request) {
   const { data, error } = await admin
     .from('qac_integrations')
     .upsert({ workspace_id: ws.id, ...update }, { onConflict: 'workspace_id' })
-    .select('id, webhook_token, twilio_account_sid, auto_analyze, agent_name_field, is_active')
+    .select('id, webhook_token, twilio_account_sid, auto_analyze, agent_name_field, is_active, field_mappings, provider_name')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
