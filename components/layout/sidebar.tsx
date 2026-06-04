@@ -5,7 +5,7 @@ import {
   BarChart2, Bell, BookOpen, Bot, Code2, Cpu, Headphones, Mic,
   CreditCard, DollarSign, Globe, LayoutDashboard,
   Megaphone, Palette, Phone, PhoneCall, Radio, Settings, Shield,
-  ShieldAlert, ShieldCheck, Star, Trophy, Users
+  ShieldAlert, ShieldCheck, Star, Trophy, TrendingUp, Users
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -30,10 +30,11 @@ interface NavGroup {
 }
 
 const adminItems = [
-  { href: '/admin',                labelKey: 'Superadmin',     icon: Shield },
-  { href: '/admin/workspaces',     labelKey: 'Workspaces',     icon: Cpu },
-  { href: '/admin/infrastructure', labelKey: 'Infrastructure', icon: Cpu },
-  { href: '/settings/workspace',   labelKey: 'Design',         icon: Palette },
+  { href: '/admin',                   labelKey: 'Superadmin',        icon: Shield },
+  { href: '/admin/workspaces',        labelKey: 'Workspaces',        icon: Cpu },
+  { href: '/admin/infrastructure',    labelKey: 'Infrastructure',    icon: Cpu },
+  { href: '/settings/workspace',      labelKey: 'Design',            icon: Palette },
+  { href: '/admin/marketing-finance', labelKey: 'Marketing Finance', icon: TrendingUp },
 ];
 
 interface SidebarProps {
