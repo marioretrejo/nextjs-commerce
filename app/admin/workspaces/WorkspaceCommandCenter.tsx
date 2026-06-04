@@ -676,6 +676,28 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                   )}
 
 
+                  {/* Plan */}
+                  <button
+                    onClick={() => openPlanModal(ws)}
+                    disabled={loading[ws.id]}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 transition-colors disabled:opacity-50"
+                    title="Change billing plan"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    {ws.plan.charAt(0).toUpperCase() + ws.plan.slice(1)}
+                  </button>
+
+                  {/* White-label Branding */}
+                  <button
+                    onClick={() => openBrandingModal(ws)}
+                    disabled={loading[ws.id]}
+                    className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50 hover:border-violet-400 transition-colors disabled:opacity-50"
+                    title="Set white-label branding"
+                  >
+                    <Palette className="h-3.5 w-3.5" />
+                    Design
+                  </button>
+
                   {/* Feature flags expand */}
                   <button
                     onClick={() => setExpanded((p) => p === ws.id ? null : ws.id)}

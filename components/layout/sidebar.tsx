@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import {
   BarChart2, Bell, BookOpen, Bot, Code2, Cpu, Mic,
   CreditCard, DollarSign, Globe, LayoutDashboard,
-  Megaphone, Phone, PhoneCall, Radio, Settings, Shield,
+  Megaphone, Palette, Phone, PhoneCall, Radio, Settings, Shield,
   ShieldAlert, ShieldCheck, Star, Users
 } from 'lucide-react';
 import Link from 'next/link';
@@ -73,10 +73,11 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModu
     {
       label: 'WORKSPACE',
       items: [
-        { href: '/numbers',               labelKey: 'numbers',      icon: Phone,      module: 'numbers' },
+        { href: '/numbers',               labelKey: 'numbers',      icon: Phone,       module: 'numbers' },
         { href: '/compliance',            labelKey: 'compliance',   icon: ShieldCheck, module: 'compliance' },
-        ...(isSuperadmin || hasComplianceQa ? [{ href: '/qa-center', labelKey: 'qaCenter', icon: ShieldAlert, module: 'compliance' }] : []),
-        { href: '/integrations',          labelKey: 'integrations', icon: Globe,      module: 'integrations' },
+        { href: '/qa-center',             labelKey: 'qaCenter',     icon: ShieldAlert, module: 'compliance' },
+        { href: '/settings/workspace',    labelKey: 'design',       icon: Palette,     module: 'settings' },
+        { href: '/integrations',          labelKey: 'integrations', icon: Globe,       module: 'integrations' },
         { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell,       module: 'integrations' },
         { href: '/team',                  labelKey: 'team',         icon: Users,      module: 'team' },
         { href: '/billing',               labelKey: 'billing',      icon: CreditCard, module: 'billing' },

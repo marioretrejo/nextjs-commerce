@@ -18,7 +18,8 @@
     "team": "Team",
     "billing": "Billing",
     "settings": "Settings",
-    "developers": "Developers"
+    "developers": "Developers",
+    "design": "Design"
   },
   "common": {
     "save": "Save",
