@@ -147,11 +147,12 @@ async function loginTracker(): Promise<string | null> {
   return cookies.length > 0 ? cookies.join('; ') : null;
 }
 
-// ── Fetch stats_campaign_country endpoint ─────────────────────────────────────
+// ── Fetch stats with campaign × subsource × country (3 dimensions) ───────────
+// This endpoint gives us Campaign, SubSource (traffic source), Country, Leads, FTDs
 const STATS_BASE =
   '/get_data.php?type=stats_pb&export=1' +
-  '&stats_type=Campaigns&sec_stats_type=Country' +
-  '&third_stats_type=none&id=0';
+  '&stats_type=Campaigns&sec_stats_type=SubSources' +
+  '&third_stats_type=Country&id=0';
 
 function buildStatsPath(dateFrom?: string, dateTo?: string): string {
   let path = STATS_BASE;
@@ -194,6 +195,7 @@ async function fetchStats(cookie: string, dateFrom?: string, dateTo?: string): P
 // ── Build finance report ──────────────────────────────────────────────────────
 export interface FinanceRow {
   campaign:   string;
+  subsource:  string;   // traffic source
   country:    string;
   leads:      number;
   ftds:       number;
@@ -223,13 +225,15 @@ function buildReport(rawData: unknown[][]): FinanceReport {
 
   for (const row of rows) {
     const rec = Object.fromEntries(headers.map((h, i) => [h, String((row as unknown[])[i] ?? '')]));
-    const campaign = (rec['Campaigns'] ?? rec['Campaign'] ?? '').trim();
-    const country  = normalizeCountry(rec['Country'] ?? '');
-    const leads    = parseInt((rec['Leads'] ?? '0').replace(',', ''), 10) || 0;
-    const ftds     = parseInt((rec['FTDs']  ?? '0').replace(',', ''), 10) || 0;
+    const campaign  = (rec['Campaigns'] ?? rec['Campaign'] ?? '').trim();
+    // SubSources header may appear as 'SubSources', 'Sub Sources', 'Sub Source', 'SubSource'
+    const subsource = (rec['SubSources'] ?? rec['Sub Sources'] ?? rec['SubSource'] ?? rec['Sub Source'] ?? '').trim();
+    const country   = normalizeCountry(rec['Country'] ?? '');
+    const leads     = parseInt((rec['Leads'] ?? '0').replace(/,/g, ''), 10) || 0;
+    const ftds      = parseInt((rec['FTDs']  ?? '0').replace(/,/g, ''), 10) || 0;
 
-    const price   = getCpaPrice(campaign, country);
-    const rowCpa  = price !== null ? ftds * price : 0;
+    const price  = getCpaPrice(campaign, country);
+    const rowCpa = price !== null ? ftds * price : 0;
     if (price === null) dupFtds += ftds;
 
     totalLeads += leads;
@@ -238,6 +242,7 @@ function buildReport(rawData: unknown[][]): FinanceReport {
 
     detail.push({
       campaign,
+      subsource,
       country,
       leads,
       ftds,
