@@ -39,9 +39,10 @@ interface SidebarProps {
   appName?: string;
   visibleModules?: string[];
   hasComplianceQa?: boolean;
+  hasDesignAccess?: boolean;
 }
 
-export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModules, hasComplianceQa = false }: SidebarProps) {
+export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModules, hasComplianceQa = false, hasDesignAccess = false }: SidebarProps) {
   const pathname = usePathname();
   const t = useTranslations('nav');
 
@@ -74,9 +75,8 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModu
       label: 'WORKSPACE',
       items: [
         { href: '/numbers',               labelKey: 'numbers',      icon: Phone,       module: 'numbers' },
-        { href: '/compliance',            labelKey: 'compliance',   icon: ShieldCheck, module: 'compliance' },
-        { href: '/qa-center',             labelKey: 'qaCenter',     icon: ShieldAlert, module: 'compliance' },
-        { href: '/settings/workspace',    labelKey: 'design',       icon: Palette,     module: 'settings' },
+        ...(isSuperadmin || hasComplianceQa ? [{ href: '/qa-center', labelKey: 'qaCenter', icon: ShieldAlert, module: 'compliance' }] : []),
+        ...(isSuperadmin ? [{ href: '/settings/workspace', labelKey: 'design', icon: Palette, module: 'settings' }] : []),
         { href: '/integrations',          labelKey: 'integrations', icon: Globe,       module: 'integrations' },
         { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell,       module: 'integrations' },
         { href: '/team',                  labelKey: 'team',         icon: Users,      module: 'team' },

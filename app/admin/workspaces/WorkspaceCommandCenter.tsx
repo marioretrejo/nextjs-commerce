@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Shield, ShieldOff, LogIn, ChevronDown, ChevronUp,
   Settings2, Search, AlertTriangle, CheckCircle2, Users, Zap,
-  Building2, BanknoteIcon, X, Palette, CreditCard,
+  Building2, BanknoteIcon, X, Palette, CreditCard, ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -215,6 +215,23 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
     } catch (e) { toast.error(String(e)); }
     finally { setPlanLoading(false); }
   }, [planTarget, planValue]);
+
+  // ─── QA Center Access ───────────────────────────────────────────────────────
+  const toggleQaAccess = useCallback(async (ws: WorkspaceRow) => {
+    const enabled = !ws.has_compliance_qa;
+    try {
+      const res = await fetch(`/api/admin/workspaces/${ws.id}/compliance-qa`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      setWorkspaces(prev => prev.map(w =>
+        w.id === ws.id ? { ...w, has_compliance_qa: enabled } : w
+      ));
+      toast.success(`QA Center ${enabled ? 'enabled' : 'disabled'} for "${ws.name}"`);
+    } catch (e) { toast.error(String(e)); }
+  }, []);
 
   // ─── White-label Branding ────────────────────────────────────────────────────
   const openBrandingModal = (ws: WorkspaceRow) => {
@@ -675,6 +692,21 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
                     </button>
                   )}
 
+
+                  {/* QA Center Access */}
+                  <button
+                    onClick={() => toggleQaAccess(ws)}
+                    disabled={loading[ws.id]}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                      ws.has_compliance_qa
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        : 'border-[#e5e5e5] bg-white text-[#6b6b6b] hover:bg-[#f5f5f5]'
+                    }`}
+                    title={ws.has_compliance_qa ? 'Click to revoke QA Center access' : 'Click to grant QA Center access'}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    {ws.has_compliance_qa ? 'QA On' : 'QA Off'}
+                  </button>
 
                   {/* Plan */}
                   <button

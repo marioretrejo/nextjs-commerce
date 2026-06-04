@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { CompliancePanel } from '../compliance/CompliancePanel';
+import { ShieldCheck } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -645,6 +647,9 @@ export default function QACenterPage() {
           <TabsTrigger value="rules" className="text-xs gap-1.5">
             <Settings2 className="h-3.5 w-3.5" />QA Rules
           </TabsTrigger>
+          <TabsTrigger value="compliance" className="text-xs gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" />Compliance Rules
+          </TabsTrigger>
           <TabsTrigger value="integrations" className="text-xs gap-1.5">
             <Globe className="h-3.5 w-3.5" />Integrations
           </TabsTrigger>
@@ -961,6 +966,11 @@ export default function QACenterPage() {
         {/* ── QA RULES ───────────────────────────────────────────────── */}
         <TabsContent value="rules" className="pt-4">
           <QACRulesManager />
+        </TabsContent>
+
+        {/* ── COMPLIANCE RULES ───────────────────────────────────────── */}
+        <TabsContent value="compliance" className="pt-4">
+          <CompliancePanel />
         </TabsContent>
 
         {/* ── INTEGRATIONS ───────────────────────────────────────────── */}
