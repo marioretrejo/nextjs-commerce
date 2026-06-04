@@ -19,7 +19,9 @@
     "billing": "Facturación",
     "settings": "Configuración",
     "developers": "Desarrolladores",
-    "design": "Diseño"
+    "design": "Diseño",
+    "leaderboard": "Clasificación",
+    "agentAssist": "Asistente de Agente"
   },
   "common": {
     "save": "Guardar",

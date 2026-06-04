@@ -19,7 +19,9 @@
     "billing": "청구",
     "settings": "설정",
     "developers": "개발자",
-    "design": "디자인"
+    "design": "디자인",
+    "leaderboard": "리더보드",
+    "agentAssist": "에이전트 어시스트"
   },
   "common": {
     "save": "저장",

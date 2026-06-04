@@ -19,7 +19,9 @@
     "billing": "Billing",
     "settings": "Settings",
     "developers": "Developers",
-    "design": "Design"
+    "design": "Design",
+    "leaderboard": "Leaderboard",
+    "agentAssist": "Agent Assist"
   },
   "common": {
     "save": "Save",

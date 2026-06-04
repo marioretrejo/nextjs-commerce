@@ -19,7 +19,9 @@
     "billing": "Abrechnung",
     "settings": "Einstellungen",
     "developers": "Entwickler",
-    "design": "Design"
+    "design": "Design",
+    "leaderboard": "Rangliste",
+    "agentAssist": "Agenten-Assistent"
   },
   "common": {
     "save": "Speichern",

@@ -19,7 +19,9 @@
     "billing": "बिलिंग",
     "settings": "सेटिंग्स",
     "developers": "डेवलपर्स",
-    "design": "डिज़ाइन"
+    "design": "डिज़ाइन",
+    "leaderboard": "लीडरबोर्ड",
+    "agentAssist": "एजेंट असिस्टेंट"
   },
   "common": {
     "save": "सहेजें",

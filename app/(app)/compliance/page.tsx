@@ -1,3 +1,5 @@
+// Compliance content has been merged into QA Center → /qa-center (Compliance Rules tab).
+// This page is kept for backwards-compatibility with direct links.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
