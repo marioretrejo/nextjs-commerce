@@ -33,6 +33,7 @@ const adminItems = [
   { href: '/admin',                labelKey: 'Superadmin',     icon: Shield },
   { href: '/admin/workspaces',     labelKey: 'Workspaces',     icon: Cpu },
   { href: '/admin/infrastructure', labelKey: 'Infrastructure', icon: Cpu },
+  { href: '/settings/workspace',   labelKey: 'Design',         icon: Palette },
 ];
 
 interface SidebarProps {
@@ -81,7 +82,6 @@ export function Sidebar({ isSuperadmin = false, appName = 'VoiceOS', visibleModu
           { href: '/qa-center/leaderboard', labelKey: 'leaderboard', icon: Trophy,      module: 'compliance', sub: true },
           { href: '/qa-center/assist',      labelKey: 'agentAssist', icon: Headphones,  module: 'compliance', sub: true },
         ] : []),
-        ...(isSuperadmin ? [{ href: '/settings/workspace', labelKey: 'design', icon: Palette, module: 'settings' }] : []),
         { href: '/integrations',          labelKey: 'integrations', icon: Globe,       module: 'integrations' },
         { href: '/integrations/webhooks', labelKey: 'webhooks',     icon: Bell,       module: 'integrations' },
         { href: '/team',                  labelKey: 'team',         icon: Users,      module: 'team' },
