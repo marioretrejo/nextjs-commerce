@@ -9,8 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
-import type { PhoneNumber } from '@/lib/supabase/types';
-import { Phone, Search, Plus, Trash2, Server, ChevronRight, ShieldCheck, Loader2, Plug, CheckCircle2 } from 'lucide-react';
+import type { PhoneNumber, SipProtocol } from '@/lib/supabase/types';
+import { Phone, Search, Plus, Trash2, Server, ChevronRight, ShieldCheck, Loader2, Plug, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AvailableNumber {
@@ -141,12 +141,17 @@ export default function NumbersPage() {
   const [twilioAccountSid, setTwilioAccountSid] = useState<string | null>(null);
 
   // SIP trunk connection
-  const [sipTrunkProvider, setSipTrunkProvider] = useState('');
+  const [sipTrunkProvider, setSipTrunkProvider] = useState('Squaretalk');
   const [sipTrunkHost, setSipTrunkHost] = useState('');
+  const [sipTrunkPort, setSipTrunkPort] = useState('5060');
   const [sipTrunkUser, setSipTrunkUser] = useState('');
   const [sipTrunkPass, setSipTrunkPass] = useState('');
+  const [sipTrunkNetmask, setSipTrunkNetmask] = useState('32');
+  const [sipTrunkProtocol, setSipTrunkProtocol] = useState<SipProtocol>('UDP');
+  const [sipTrunkShowPass, setSipTrunkShowPass] = useState(false);
   const [sipTrunkConnecting, setSipTrunkConnecting] = useState(false);
   const [activeSipProvider, setActiveSipProvider] = useState<string | null>(null);
+  const [activeSipTrunkId, setActiveSipTrunkId] = useState<string | null>(null);
 
   // Twilio number search & buy
   const [selectedCountry, setSelectedCountry] = useState('US');
@@ -173,10 +178,14 @@ export default function NumbersPage() {
   useEffect(() => {
     fetchNumbers();
 
-    fetch('/api/settings/sip')
+    fetch('/api/settings/sip-trunks')
       .then(r => r.ok ? r.json() : null)
-      .then((d: { connected?: boolean; provider_name?: string } | null) => {
-        if (d?.connected) setActiveSipProvider(d.provider_name ?? 'SIP Trunk');
+      .then((d: { trunks?: Array<{ id: string; name: string; status: string; provider: string }> } | null) => {
+        const active = (d?.trunks ?? []).find(t => t.status === 'active');
+        if (active) {
+          setActiveSipProvider(active.name);
+          setActiveSipTrunkId(active.id);
+        }
       })
       .catch(() => null);
 
@@ -342,35 +351,57 @@ export default function NumbersPage() {
   }
 
   async function connectSipTrunk() {
-    if (!sipTrunkProvider.trim()) { toast.error('Enter a provider name.'); return; }
-    if (!sipTrunkHost.trim())     { toast.error('Enter the SIP Host/URI.'); return; }
-    if (!sipTrunkUser.trim())     { toast.error('Enter a username.'); return; }
-    if (!sipTrunkPass.trim())     { toast.error('Enter a password.'); return; }
+    if (!sipTrunkHost.trim()) { toast.error('Enter the SIP server URL.'); return; }
+    if (!sipTrunkUser.trim()) { toast.error('Enter a username.'); return; }
+    if (!activeSipTrunkId && !sipTrunkPass.trim()) { toast.error('Enter a password.'); return; }
+    const portNum = parseInt(sipTrunkPort, 10);
+    const netmaskNum = parseInt(sipTrunkNetmask, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) { toast.error('Port must be 1–65535.'); return; }
+    if (isNaN(netmaskNum) || netmaskNum < 0 || netmaskNum > 32) { toast.error('Net mask must be 0–32.'); return; }
+
     setSipTrunkConnecting(true);
-    const res = await fetch('/api/settings/sip', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider_name: sipTrunkProvider.trim(),
-        sip_host:      sipTrunkHost.trim(),
-        username:      sipTrunkUser.trim(),
-        password:      sipTrunkPass.trim(),
-      }),
-    });
-    setSipTrunkConnecting(false);
-    if (res.ok) {
-      setActiveSipProvider(sipTrunkProvider.trim());
-      toast.success(`${sipTrunkProvider.trim()} connected as SIP trunk.`);
+    try {
+      const payload: Record<string, unknown> = {
+        name:     sipTrunkProvider.trim() || 'Squaretalk',
+        provider: 'squaretalk',
+        sip_host: sipTrunkHost.trim(),
+        port:     portNum,
+        username: sipTrunkUser.trim(),
+        netmask:  netmaskNum,
+        protocol: sipTrunkProtocol,
+      };
+      if (sipTrunkPass.trim()) payload.password = sipTrunkPass.trim();
+
+      const url    = activeSipTrunkId ? `/api/settings/sip-trunks/${activeSipTrunkId}` : '/api/settings/sip-trunks';
+      const method = activeSipTrunkId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+        throw new Error(err.error ?? 'Failed to save SIP trunk.');
+      }
+      const d = await res.json() as { trunk?: { id: string; name: string } };
+      const name = d.trunk?.name ?? (sipTrunkProvider.trim() || 'Squaretalk');
+      setActiveSipProvider(name);
+      setActiveSipTrunkId(d.trunk?.id ?? activeSipTrunkId);
+      toast.success(activeSipTrunkId ? `${name} updated.` : `${name} connected as SIP trunk.`);
       setDialogOpen(false);
-    } else {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
-      toast.error(err.error ?? 'Failed to connect SIP trunk.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSipTrunkConnecting(false);
     }
   }
 
   async function disconnectSipTrunk() {
-    await fetch('/api/settings/sip', { method: 'DELETE' });
+    if (activeSipTrunkId) {
+      await fetch(`/api/settings/sip-trunks/${activeSipTrunkId}`, { method: 'DELETE' });
+    }
     setActiveSipProvider(null);
+    setActiveSipTrunkId(null);
     toast.success('SIP trunk disconnected.');
   }
 
@@ -441,8 +472,9 @@ export default function NumbersPage() {
               variant="outline"
               className="border-green-500 text-green-700 hover:bg-green-50"
               onClick={() => {
-                setSipTrunkProvider(''); setSipTrunkHost('');
-                setSipTrunkUser(''); setSipTrunkPass('');
+                setSipTrunkProvider(activeSipProvider); setSipTrunkHost('');
+                setSipTrunkPort('5060'); setSipTrunkUser(''); setSipTrunkPass('');
+                setSipTrunkNetmask('32'); setSipTrunkProtocol('UDP'); setSipTrunkShowPass(false);
                 setMode('connect-sip'); setDialogOpen(true);
               }}
             >
@@ -455,8 +487,9 @@ export default function NumbersPage() {
               size="sm"
               variant="outline"
               onClick={() => {
-                setSipTrunkProvider(''); setSipTrunkHost('');
-                setSipTrunkUser(''); setSipTrunkPass('');
+                setSipTrunkProvider('Squaretalk'); setSipTrunkHost('');
+                setSipTrunkPort('5060'); setSipTrunkUser(''); setSipTrunkPass('');
+                setSipTrunkNetmask('32'); setSipTrunkProtocol('UDP'); setSipTrunkShowPass(false);
                 setMode('connect-sip'); setDialogOpen(true);
               }}
             >
@@ -668,7 +701,7 @@ export default function NumbersPage() {
                   <ChevronRight className="w-4 h-4 text-[#6b6b6b] shrink-0" />
                 </button>
                 <button
-                  onClick={() => { setSipTrunkProvider(''); setSipTrunkHost(''); setSipTrunkUser(''); setSipTrunkPass(''); setMode('connect-sip'); }}
+                  onClick={() => { setSipTrunkProvider('Squaretalk'); setSipTrunkHost(''); setSipTrunkPort('5060'); setSipTrunkUser(''); setSipTrunkPass(''); setSipTrunkNetmask('32'); setSipTrunkProtocol('UDP'); setSipTrunkShowPass(false); setMode('connect-sip'); }}
                   className="w-full flex items-center gap-4 rounded-lg border border-[#e0e0e0] bg-white p-4 text-left hover:border-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
@@ -862,62 +895,121 @@ export default function NumbersPage() {
                   {activeSipProvider ? 'Update SIP Trunk' : 'Add SIP Trunk'}
                 </DialogTitle>
                 <DialogDescription>
-                  Connect any VoIP provider (Squaretalk, CommPeak, Telnyx, Vonage…).
-                  Outbound calls will route through this trunk automatically.
+                  Ingresa los datos que te proporciona Squaretalk en Settings → SIP Trunk.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-3">
+                {/* Label */}
                 <div className="space-y-1.5">
-                  <Label>Provider Name</Label>
+                  <Label>Nombre</Label>
                   <Input
-                    placeholder="e.g. Squaretalk, CommPeak, Telnyx"
+                    placeholder="Squaretalk"
                     value={sipTrunkProvider}
                     onChange={e => setSipTrunkProvider(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>SIP Host / URI</Label>
-                  <Input
-                    placeholder="sip.squaretalk.com"
-                    value={sipTrunkHost}
-                    onChange={e => setSipTrunkHost(e.target.value)}
-                  />
-                  <p className="text-xs text-[#6b6b6b]">Domain or IP of your SIP server (without sip: prefix).</p>
+                {/* URL + Port */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2 space-y-1.5">
+                    <Label>URL <span className="text-red-500">*</span></Label>
+                    <Input
+                      placeholder="sip.squaretalk.com"
+                      value={sipTrunkHost}
+                      onChange={e => setSipTrunkHost(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Port <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="number"
+                      placeholder="5060"
+                      value={sipTrunkPort}
+                      onChange={e => setSipTrunkPort(e.target.value)}
+                      min={1} max={65535}
+                    />
+                  </div>
                 </div>
+                {/* Username */}
                 <div className="space-y-1.5">
-                  <Label>Username</Label>
+                  <Label>Username <span className="text-red-500">*</span></Label>
                   <Input
-                    placeholder="sip_username"
+                    placeholder="SIP username"
                     autoComplete="off"
                     value={sipTrunkUser}
                     onChange={e => setSipTrunkUser(e.target.value)}
                   />
                 </div>
+                {/* Password */}
                 <div className="space-y-1.5">
-                  <Label>Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="••••••••••••"
-                    autoComplete="new-password"
-                    value={sipTrunkPass}
-                    onChange={e => setSipTrunkPass(e.target.value)}
-                  />
+                  <Label>Password {!activeSipTrunkId && <span className="text-red-500">*</span>}</Label>
+                  <div className="relative">
+                    <Input
+                      type={sipTrunkShowPass ? 'text' : 'password'}
+                      placeholder={activeSipTrunkId ? 'Dejar en blanco para no cambiar' : '••••••••'}
+                      autoComplete="new-password"
+                      value={sipTrunkPass}
+                      onChange={e => setSipTrunkPass(e.target.value)}
+                      className="pr-9"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSipTrunkShowPass(s => !s)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6b6b6b] hover:text-[#0a0a0a]"
+                    >
+                      {sipTrunkShowPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                {/* Netmask + Protocol */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label>Net Mask (0–32)</Label>
+                    <Input
+                      type="number"
+                      placeholder="32"
+                      value={sipTrunkNetmask}
+                      onChange={e => setSipTrunkNetmask(e.target.value)}
+                      min={0} max={32}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Protocol</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {(['UDP','TCP','TLS','TLS/SRTP'] as SipProtocol[]).map(p => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => {
+                            setSipTrunkProtocol(p);
+                            setSipTrunkPort(p === 'UDP' || p === 'TCP' ? '5060' : '5061');
+                          }}
+                          className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                            sipTrunkProtocol === p
+                              ? 'bg-[#0a0a0a] text-white border-[#0a0a0a]'
+                              : 'text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a]'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 {activeSipProvider && (
                   <button
                     onClick={disconnectSipTrunk}
                     className="text-xs text-red-500 hover:text-red-700 underline"
                   >
-                    Disconnect current trunk ({activeSipProvider})
+                    Desconectar trunk actual ({activeSipProvider})
                   </button>
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
                 <Button onClick={connectSipTrunk} disabled={sipTrunkConnecting}>
                   {sipTrunkConnecting
-                    ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Saving…</>
-                    : activeSipProvider ? 'Update' : 'Connect'
+                    ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Guardando…</>
+                    : activeSipProvider ? 'Actualizar' : 'Conectar'
                   }
                 </Button>
               </DialogFooter>
