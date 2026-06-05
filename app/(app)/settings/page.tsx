@@ -18,7 +18,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import type { User, NotificationType } from '@/lib/supabase/types';
-import { User as UserIcon, Lock, Bell, AlertTriangle, Upload, Check, Key, Building2 } from 'lucide-react';
+import { User as UserIcon, Lock, Bell, AlertTriangle, Upload, Check, Key, Building2, Phone } from 'lucide-react';
 import Link from 'next/link';
 
 const TIMEZONES = [
@@ -211,6 +211,9 @@ export default function SettingsPage() {
           </Link>
           <Link href="/settings/workspace" className="inline-flex items-center gap-1 rounded-md border border-[#e0e0e0] px-3 py-1 text-xs font-medium text-[#6b6b6b] hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors">
             <Building2 className="h-3 w-3" /> Workspace
+          </Link>
+          <Link href="/settings/sip-trunks" className="inline-flex items-center gap-1 rounded-md border border-[#e0e0e0] px-3 py-1 text-xs font-medium text-[#6b6b6b] hover:border-[#0a0a0a] hover:text-[#0a0a0a] transition-colors">
+            <Phone className="h-3 w-3" /> SIP Trunks
           </Link>
         </div>
       </div>

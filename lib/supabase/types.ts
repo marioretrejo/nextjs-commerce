@@ -370,14 +370,19 @@ export interface ApiKey {
 export type SipProvider = 'commpeak' | 'squaretalk' | 'telnyx' | 'vonage' | 'twilio' | 'custom';
 export type SipTrunkStatus = 'active' | 'testing' | 'error' | 'disabled';
 
+export type SipProtocol = 'UDP' | 'TCP' | 'TLS' | 'TLS/SRTP';
+
 export interface SipTrunk {
   id: string;
   workspace_id: string;
   name: string;
   provider: SipProvider;
   sip_host: string;
+  port: number;
   username: string;
   password: string;
+  netmask: number;
+  protocol: SipProtocol;
   livekit_trunk_id: string | null;
   priority: number;
   region: string | null;

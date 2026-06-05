@@ -32,14 +32,24 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const allowed = ['name', 'provider', 'sip_host', 'username', 'password', 'region', 'priority', 'status'] as const;
+  const allowed = ['name', 'provider', 'sip_host', 'port', 'username', 'password', 'netmask', 'protocol', 'region', 'priority', 'status'] as const;
   const update: Record<string, unknown> = {};
   for (const k of allowed) {
     if (k in body) update[k] = body[k];
   }
+  if ('port' in update) {
+    const p = Number(update['port']);
+    if (p < 1 || p > 65535) return NextResponse.json({ error: 'port must be 1–65535' }, { status: 400 });
+    update['port'] = p;
+  }
+  if ('netmask' in update) {
+    const n = Number(update['netmask']);
+    if (n < 0 || n > 32) return NextResponse.json({ error: 'netmask must be 0–32' }, { status: 400 });
+    update['netmask'] = n;
+  }
 
   // Reset cached LiveKit trunk ID whenever credentials change
-  if ('sip_host' in update || 'username' in update || 'password' in update) {
+  if ('sip_host' in update || 'port' in update || 'username' in update || 'password' in update || 'protocol' in update) {
     update['livekit_trunk_id'] = null;
   }
 
@@ -49,7 +59,7 @@ export async function PATCH(
     .update(update)
     .eq('id', id)
     .eq('workspace_id', wsId)
-    .select('id, name, provider, sip_host, username, region, status, priority')
+    .select('id, name, provider, sip_host, port, username, netmask, protocol, region, status, priority')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
