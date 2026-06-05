@@ -346,9 +346,60 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
   return activeCookie;
 }
 
+// ── Scan tracker JS to discover exact stats_pb call parameters ───────────────
+async function scanForStatsPbContext(cookie: string): Promise<string[]> {
+  const lines: string[] = [];
+  try {
+    const res = await fetch(`${TRACKER_BASE}/crm.new.php`, {
+      headers: { ...BROWSER_HEADERS, Cookie: cookie, Accept: 'text/html,*/*' },
+      redirect: 'follow', signal: makeSignal(15_000),
+    });
+    const html = await res.text();
+
+    const allScripts: Array<{ name: string; content: string }> = [];
+    for (const m of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)) {
+      allScripts.push({ name: 'inline', content: m[1]! });
+    }
+
+    const extUrls = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
+      .map(m => m[1]!.startsWith('http') ? m[1]! : `${TRACKER_BASE}/${m[1]!.replace(/^\//, '')}`)
+      .slice(0, 12);
+
+    lines.push(`[scan] ${extUrls.length} external scripts`);
+
+    await Promise.allSettled(extUrls.map(async (url) => {
+      try {
+        const r = await fetch(url, { signal: makeSignal(8_000) });
+        const js = await r.text();
+        allScripts.push({ name: url.split('/').pop()?.split('?')[0] ?? url, content: js });
+      } catch { /* skip */ }
+    }));
+
+    let found = 0;
+    for (const { name, content } of allScripts) {
+      // Find stats_pb occurrences
+      let si = 0;
+      while (true) {
+        const idx = content.indexOf('stats_pb', si);
+        if (idx === -1) break;
+        const ctx = content.slice(Math.max(0, idx - 250), Math.min(content.length, idx + 450)).replace(/\s+/g, ' ');
+        lines.push(`[JS:${name}:stats_pb] ${ctx.slice(0, 600)}`);
+        found++;
+        si = idx + 8;
+      }
+      // Find get_data.php call patterns
+      for (const m of content.matchAll(/['"]get_data\.php['"][^;]{0,500}/g)) {
+        lines.push(`[JS:${name}:get_data] ${m[0].replace(/\s+/g, ' ').slice(0, 400)}`);
+      }
+    }
+    if (found === 0) lines.push('[scan] stats_pb NOT found in any script — endpoint may be different');
+  } catch (e) { lines.push(`[scan:error] ${e}`); }
+  return lines;
+}
+
 // ── Try GET and POST stats calls with multiple date formats ───────────────────
 // stats_pb returns [[headers, ...], [row1, ...], ...] — keeps header row needed by parser
-const STATS_PARAMS = 'type=stats_pb&export=1&stats_type=Campaigns&sec_stats_type=Sub+Sources&third_stats_type=Country&id=0';
+const STATS_BASE = 'type=stats_pb&export=1&stats_type=Campaigns&sec_stats_type=Sub+Sources&third_stats_type=Country&id=0';
 
 async function tryStatsCall(
   cookie: string,
@@ -356,7 +407,7 @@ async function tryStatsCall(
   extraParams: Record<string, string>,
 ): Promise<{ data: unknown[][] | null; detail: string }> {
   const paramStr = Object.entries(extraParams).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-  const fullParams = STATS_PARAMS + (paramStr ? `&${paramStr}` : '');
+  const fullParams = STATS_BASE + (paramStr ? `&${paramStr}` : '');
 
   try {
     const opts: RequestInit = {
@@ -394,49 +445,81 @@ async function tryStatsCall(
   }
 }
 
+function countFtds(data: unknown[][]): number {
+  const hdrs = (data[0] as string[]).map(String);
+  const ftdIdx = hdrs.findIndex(h => /^ftds?$/i.test(h));
+  if (ftdIdx === -1) return 0;
+  let total = 0;
+  for (const row of data.slice(1)) {
+    const v = String((row as unknown[])[ftdIdx] ?? '0').replace(/,/g, '');
+    total += parseInt(v, 10) || 0;
+  }
+  return total;
+}
+
 async function fetchStats(
   cookie: string,
   dateFrom?: string,
   dateTo?: string,
 ): Promise<{ data: unknown[][] | null; detail: string; debugLines: string[] }> {
   const debugLines: string[] = [];
-  const strategies: Array<{ method: 'GET' | 'POST'; params: Record<string, string>; label: string }> = [];
 
-  if (dateFrom && dateTo) {
-    const usFrom = toUS(dateFrom), usTo = toUS(dateTo);
-    strategies.push(
-      { method: 'GET',  label: 'GET ISO',       params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
-      { method: 'GET',  label: 'GET US-format',  params: { date_from: usFrom,   date_to: usTo,   period: 'custom' } },
-      { method: 'GET',  label: 'GET from/to',    params: { from: dateFrom, to: dateTo } },
-      { method: 'POST', label: 'POST ISO',       params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
-      { method: 'POST', label: 'POST US-format', params: { date_from: usFrom,   date_to: usTo,   period: 'custom' } },
-    );
+  // ── 1. Baseline (no dates) ────────────────────────────────────────────────
+  const baseline = await tryStatsCall(cookie, 'GET', {});
+  const baselineRows = baseline.data ? baseline.data.length - 1 : 0;
+  const baselineFtds = baseline.data ? countFtds(baseline.data) : 0;
+  debugLines.push(`baseline → ${baseline.detail} | rows:${baselineRows} FTDs:${baselineFtds}`);
+  console.log(`[mf-scraper] baseline → ${baseline.detail} | rows:${baselineRows} FTDs:${baselineFtds}`);
+
+  if (!dateFrom || !dateTo) {
+    if (baseline.data) {
+      const hdrs = (baseline.data[0] as string[]).map(String);
+      debugLines.push(`USANDO: baseline | headers: ${hdrs.join(', ')}`);
+      return { data: baseline.data, detail: 'ok', debugLines };
+    }
+    return { data: null, detail: 'No data', debugLines };
   }
-  strategies.push({ method: 'GET', label: 'GET sin fecha (baseline)', params: {} });
 
-  // Run ALL strategies and collect results to compare FTD totals
-  const allResults: Array<{ label: string; rows: number; ftds: number; detail: string }> = [];
+  // ── 2. Date strategies — try many param name variants ─────────────────────
+  const usFrom = toUS(dateFrom), usTo = toUS(dateTo);
+  const strategies: Array<{ method: 'GET' | 'POST'; params: Record<string, string>; label: string }> = [
+    // Standard param names
+    { method: 'GET',  label: 'GET date_from/to ISO',    params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
+    { method: 'GET',  label: 'GET date_from/to US',     params: { date_from: usFrom, date_to: usTo, period: 'custom' } },
+    { method: 'GET',  label: 'GET start_date/end_date', params: { start_date: dateFrom, end_date: dateTo, period: 'custom' } },
+    { method: 'GET',  label: 'GET from/to',             params: { from: dateFrom, to: dateTo } },
+    { method: 'GET',  label: 'GET from_date/to_date',   params: { from_date: dateFrom, to_date: dateTo } },
+    { method: 'GET',  label: 'GET filter[date_from]',   params: { 'filter[date_from]': dateFrom, 'filter[date_to]': dateTo } },
+    // POST variants
+    { method: 'POST', label: 'POST date_from/to ISO',   params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
+    { method: 'POST', label: 'POST start_date/end_date',params: { start_date: dateFrom, end_date: dateTo, period: 'custom' } },
+    // No period param (some trackers ignore period=custom)
+    { method: 'GET',  label: 'GET date_from/to noPeriod', params: { date_from: dateFrom, date_to: dateTo } },
+  ];
+
+  const allResults: Array<{ label: string; rows: number; ftds: number; detail: string; diffFromBase: boolean }> = [];
   let winner: { data: unknown[][]; label: string } | null = null;
 
   for (const s of strategies) {
     const result = await tryStatsCall(cookie, s.method, s.params);
     if (result.data && result.detail === 'ok') {
-      const hdrs = (result.data[0] as string[]).map(String);
-      const ftdIdx = hdrs.findIndex(h => /^ftds?$/i.test(h));
-      let ftdTotal = 0;
-      for (const row of result.data.slice(1)) {
-        const v = String((row as unknown[])[ftdIdx] ?? '0').replace(/,/g, '');
-        ftdTotal += parseInt(v, 10) || 0;
+      const rows = result.data.length - 1;
+      const ftds = countFtds(result.data);
+      // If rows or FTDs differ from baseline, this strategy is actually filtering
+      const diffFromBase = rows !== baselineRows || ftds !== baselineFtds;
+      allResults.push({ label: s.label, rows, ftds, detail: result.detail, diffFromBase });
+      // Prefer strategies that differ from baseline (i.e., actually filter)
+      if (!winner || (diffFromBase && !allResults.find(r => r.label === winner?.label)?.diffFromBase)) {
+        winner = { data: result.data, label: s.label };
       }
-      allResults.push({ label: s.label, rows: result.data.length - 1, ftds: ftdTotal, detail: result.detail });
-      if (!winner) winner = { data: result.data, label: s.label };
     } else {
-      allResults.push({ label: s.label, rows: 0, ftds: 0, detail: result.detail });
+      allResults.push({ label: s.label, rows: 0, ftds: 0, detail: result.detail, diffFromBase: false });
     }
   }
 
   for (const r of allResults) {
-    const line = `${r.label} → ${r.detail} | rows:${r.rows} FTDs:${r.ftds}`;
+    const diff = r.diffFromBase ? ' ← FILTRA' : '';
+    const line = `${r.label} → ${r.detail} | rows:${r.rows} FTDs:${r.ftds}${diff}`;
     debugLines.push(line);
     console.log(`[mf-scraper] ${line}`);
   }
@@ -446,6 +529,12 @@ async function fetchStats(
     debugLines.push(`USANDO: ${winner.label} | headers: ${hdrs.join(', ')}`);
     console.log('[mf-scraper] headers:', hdrs.join(', '));
     return { data: winner.data, detail: 'ok', debugLines };
+  }
+
+  // Fallback to baseline if all date strategies fail
+  if (baseline.data) {
+    debugLines.push('FALLBACK: ninguna estrategia con fecha funcionó, usando baseline');
+    return { data: baseline.data, detail: 'fallback_baseline', debugLines };
   }
 
   return { data: null, detail: 'All strategies failed', debugLines };
@@ -552,14 +641,18 @@ export async function GET(req: Request) {
   let activeCookie = cookie;
   const sessionDebug: string[] = [];
 
-  if (dateFrom && dateTo) {
-    // Run analysis and date-range setup in parallel with a fresh analysis fetch
-    const analysis = await analyseTrackerForDateFilter(cookie);
+  // Run JS scan and session setup in parallel
+  const [scanLines, analysis] = await Promise.all([
+    scanForStatsPbContext(cookie),
+    dateFrom && dateTo ? analyseTrackerForDateFilter(cookie) : Promise.resolve(null),
+  ]);
+  sessionDebug.push(...scanLines);
+
+  if (dateFrom && dateTo && analysis) {
     sessionDebug.push(`crm inputs: ${analysis.allInputNames.join(', ').slice(0, 200)}`);
     sessionDebug.push(`form action: ${analysis.formAction}`);
     sessionDebug.push(`ajax endpoints: ${analysis.ajaxEndpoints.join(', ').slice(0, 200)}`);
     sessionDebug.push(`date params in JS: ${analysis.dateParamNames.join(', ').slice(0, 200)}`);
-
     activeCookie = await setTrackerDateRange(cookie, dateFrom, dateTo);
   }
 
