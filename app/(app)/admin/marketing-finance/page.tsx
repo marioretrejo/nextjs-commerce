@@ -334,8 +334,8 @@ export default function MarketingFinancePage() {
   const [tab, setTab] = useState<'report' | 'prices'>('report');
 
   // Date range
-  const [dateFrom,     setDateFrom]     = useState(startOfMonth);
-  const [dateTo,       setDateTo]       = useState(today);
+  const [dateFrom,     setDateFrom]     = useState(startOfMonth());
+  const [dateTo,       setDateTo]       = useState(today());
   const [activePreset, setActivePreset] = useState('Este mes');
 
   // Client-side filters

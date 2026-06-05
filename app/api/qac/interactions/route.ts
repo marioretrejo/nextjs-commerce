@@ -58,8 +58,8 @@ export async function GET(req: Request) {
   if (dateFrom)  query = query.gte('created_at', dateFrom);
   if (dateTo)    query = query.lte('created_at', dateTo);
   if (riskLevel) query = query.eq('risk_level', riskLevel);
-  if (minScore)  query = (query as typeof query).gte('overall_score', Number(minScore));
-  if (maxScore)  query = (query as typeof query).lte('overall_score', Number(maxScore));
+  if (minScore)  query = (query as typeof query).gte('qac_evaluations.overall_score', Number(minScore));
+  if (maxScore)  query = (query as typeof query).lte('qac_evaluations.overall_score', Number(maxScore));
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

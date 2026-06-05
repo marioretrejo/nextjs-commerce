@@ -260,10 +260,9 @@ export default function LeaderboardPage() {
     setLoading(true);
     try {
       const res = await fetch(`/api/qac/stats?range=${dateRange}`);
-      if (res.ok) {
-        const json = await res.json() as DashboardData;
-        setData(json);
-      }
+      if (!res.ok) throw new Error('Failed to load leaderboard data');
+      const json = await res.json() as DashboardData;
+      setData(json);
     } catch {
       toast.error('Failed to load leaderboard data');
     } finally {

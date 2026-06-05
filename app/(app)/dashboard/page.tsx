@@ -53,6 +53,8 @@ async function DashboardContent() {
   const dashErr = agentsErr ?? activeErr ?? todayErr ?? recentErr ?? campaignsErr;
   if (dashErr) console.error('dashboard: query error', dashErr.message);
 
+  const hasError = Boolean(dashErr);
+
   const totalCalls = recentCalls?.length ?? 0;
   const converted = recentCalls?.filter((c) => c.outcome === 'converted').length ?? 0;
   const conversionRate = totalCalls > 0 ? Math.round((converted / totalCalls) * 100) : 0;
@@ -63,6 +65,11 @@ async function DashboardContent() {
 
   return (
     <>
+      {hasError && (
+        <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          Error loading dashboard data. Some metrics may be unavailable.
+        </div>
+      )}
       {/* Metric cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard title="Active Agents" value={String(activeAgents ?? 0)} sub={`of ${totalAgents ?? 0} total`} />
