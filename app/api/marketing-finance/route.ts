@@ -270,6 +270,8 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
         sec_reports_type: 'Sub Sources',
         third_reports_type: 'Country',
         stats_type: 'Campaigns',
+        sec_stats_type: 'Sub Sources',
+        third_stats_type: 'Country',
         filter: '1',
         period: 'custom',
       });
@@ -302,6 +304,9 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
       reports_type: 'Campaigns',
       sec_reports_type: 'Sub Sources',
       third_reports_type: 'Country',
+      stats_type: 'Campaigns',
+      sec_stats_type: 'Sub Sources',
+      third_stats_type: 'Country',
       date_from: dateFrom, date_to: dateTo,
       period: 'custom',
     });
@@ -342,9 +347,8 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
 }
 
 // ── Try GET and POST stats calls with multiple date formats ───────────────────
-// Form action on crm.new.php is get_data.php?type=reports&id=0
-// Field names discovered: reports_type, sec_reports_type, third_reports_type
-const STATS_PARAMS = 'type=reports&export=1&reports_type=Campaigns&sec_reports_type=Sub+Sources&third_reports_type=Country&id=0';
+// stats_pb returns [[headers, ...], [row1, ...], ...] — keeps header row needed by parser
+const STATS_PARAMS = 'type=stats_pb&export=1&stats_type=Campaigns&sec_stats_type=Sub+Sources&third_stats_type=Country&id=0';
 
 async function tryStatsCall(
   cookie: string,
