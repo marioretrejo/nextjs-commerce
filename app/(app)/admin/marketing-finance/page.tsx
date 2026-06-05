@@ -343,9 +343,11 @@ export default function MarketingFinancePage() {
   const [filterSubsource, setFilterSubsource] = useState('');
 
   // Data
-  const [rawReport, setRawReport] = useState<FinanceReport | null>(null);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState<string | null>(null);
+  const [rawReport,  setRawReport]  = useState<FinanceReport | null>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+  const [debugLines, setDebugLines] = useState<string[]>([]);
+  const [showDebug,  setShowDebug]  = useState(false);
 
   // Table sort
   const [sortKey, setSortKey] = useState<SortKey>('cpa_total');
@@ -362,6 +364,7 @@ export default function MarketingFinancePage() {
       let data: FinanceReport;
       try { data = await res.json() as FinanceReport; }
       catch { setError(`Respuesta inválida del servidor (HTTP ${res.status})`); return; }
+      if (data._debug) setDebugLines(data._debug);
       if (!res.ok || data.error) { setError(data.error ?? `Error ${res.status}`); }
       else { setRawReport(data); }
     } catch (e) {
@@ -564,6 +567,24 @@ export default function MarketingFinancePage() {
             <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
               <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
               <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
+          {/* Debug panel */}
+          {debugLines.length > 0 && (
+            <div className="rounded-xl border border-[#e8e8e8] bg-[#fafafa] text-xs">
+              <button
+                onClick={() => setShowDebug(s => !s)}
+                className="w-full flex items-center justify-between px-4 py-2.5 font-semibold text-[#555] hover:bg-[#f5f5f5] rounded-xl"
+              >
+                <span>🔍 Debug — Diagnóstico del tracker ({debugLines.length} líneas)</span>
+                <span>{showDebug ? '▲' : '▼'}</span>
+              </button>
+              {showDebug && (
+                <pre className="px-4 pb-3 text-[10px] leading-5 text-[#555] overflow-x-auto whitespace-pre-wrap font-mono">
+                  {debugLines.join('\n')}
+                </pre>
+              )}
             </div>
           )}
 

@@ -353,40 +353,38 @@ async function fetchStats(
   cookie: string,
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ data: unknown[][] | null; detail: string }> {
+): Promise<{ data: unknown[][] | null; detail: string; debugLines: string[] }> {
+  const debugLines: string[] = [];
   const strategies: Array<{ method: 'GET' | 'POST'; params: Record<string, string>; label: string }> = [];
 
   if (dateFrom && dateTo) {
     const usFrom = toUS(dateFrom), usTo = toUS(dateTo);
-    // GET with multiple date param combinations
     strategies.push(
-      { method: 'GET', label: 'GET period=custom ISO',    params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
-      { method: 'GET', label: 'GET period=custom US',     params: { date_from: usFrom,   date_to: usTo,   period: 'custom' } },
-      { method: 'GET', label: 'GET from/to ISO',          params: { from: dateFrom, to: dateTo, period: 'custom' } },
-      { method: 'GET', label: 'GET dateFrom/dateTo',      params: { dateFrom: dateFrom, dateTo: dateTo, period: 'custom' } },
-      // POST with multiple date param combinations
-      { method: 'POST', label: 'POST ISO dates',          params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
-      { method: 'POST', label: 'POST US dates',           params: { date_from: usFrom,   date_to: usTo,   period: 'custom' } },
+      { method: 'GET',  label: 'GET ISO',       params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
+      { method: 'GET',  label: 'GET US-format',  params: { date_from: usFrom,   date_to: usTo,   period: 'custom' } },
+      { method: 'GET',  label: 'GET from/to',    params: { from: dateFrom, to: dateTo } },
+      { method: 'POST', label: 'POST ISO',       params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
+      { method: 'POST', label: 'POST US-format', params: { date_from: usFrom,   date_to: usTo,   period: 'custom' } },
     );
   }
-
-  // Always include a no-date baseline to compare
-  strategies.push({ method: 'GET', label: 'GET no-date (baseline)', params: {} });
+  strategies.push({ method: 'GET', label: 'GET sin fecha (baseline)', params: {} });
 
   for (const s of strategies) {
     const result = await tryStatsCall(cookie, s.method, s.params);
     const rowCount = result.data ? result.data.length - 1 : 0;
-    console.log(`[mf-scraper] ${s.label} → ${result.detail}, rows: ${rowCount}`);
+    const line = `${s.label} → ${result.detail} | rows: ${rowCount}`;
+    debugLines.push(line);
+    console.log(`[mf-scraper] ${line}`);
 
     if (result.data && result.detail === 'ok') {
       const hdrs = (result.data[0] as string[]).map(String);
+      debugLines.push(`headers: ${hdrs.join(', ')}`);
       console.log('[mf-scraper] headers:', hdrs.join(', '));
-      console.log('[mf-scraper] first row:', JSON.stringify(result.data[1]).slice(0, 200));
-      return result;
+      return { ...result, debugLines };
     }
   }
 
-  return { data: null, detail: 'All strategies failed' };
+  return { data: null, detail: 'All strategies failed', debugLines };
 }
 
 // ── Build finance report ──────────────────────────────────────────────────────
@@ -411,6 +409,7 @@ export interface FinanceReport {
   detail:         FinanceRow[];
   scraped_at:     string;
   error?:         string;
+  _debug?:        string[];
 }
 
 function buildReport(rawData: unknown[][], cpaMap: CpaMap): FinanceReport {
@@ -487,19 +486,33 @@ export async function GET(req: Request) {
   }
 
   let activeCookie = cookie;
+  const sessionDebug: string[] = [];
+
   if (dateFrom && dateTo) {
+    // Run analysis and date-range setup in parallel with a fresh analysis fetch
+    const analysis = await analyseTrackerForDateFilter(cookie);
+    sessionDebug.push(`crm inputs: ${analysis.allInputNames.join(', ').slice(0, 200)}`);
+    sessionDebug.push(`form action: ${analysis.formAction}`);
+    sessionDebug.push(`ajax endpoints: ${analysis.ajaxEndpoints.join(', ').slice(0, 200)}`);
+    sessionDebug.push(`date params in JS: ${analysis.dateParamNames.join(', ').slice(0, 200)}`);
+
     activeCookie = await setTrackerDateRange(cookie, dateFrom, dateTo);
   }
 
-  const { data: raw, detail } = await fetchStats(activeCookie, dateFrom, dateTo);
+  const { data: raw, detail, debugLines } = await fetchStats(activeCookie, dateFrom, dateTo);
+  const allDebug = [...sessionDebug, ...debugLines];
+
   if (!raw) {
     return NextResponse.json({
       error: `No se pudo obtener datos del tracker: ${detail}`,
       total_leads: 0, total_ftds: 0, original_ftds: 0,
       duplicate_ftds: 0, total_cpa: 0, ecpa: 0, detail: [],
       scraped_at: new Date().toISOString(),
+      _debug: allDebug,
     } satisfies FinanceReport, { status: 502 });
   }
 
-  return NextResponse.json(buildReport(raw, cpaMap));
+  const report = buildReport(raw, cpaMap);
+  report._debug = allDebug;
+  return NextResponse.json(report);
 }
