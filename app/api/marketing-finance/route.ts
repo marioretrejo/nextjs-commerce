@@ -261,6 +261,9 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
         from: from, to: to,
         start_date: from, end_date: to,
         dateFrom: from, dateTo: to,
+        reports_type: 'Campaigns',
+        sec_reports_type: 'Sub Sources',
+        third_reports_type: 'Country',
         stats_type: 'Campaigns',
         filter: '1',
         period: 'custom',
@@ -303,7 +306,9 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
 }
 
 // ── Try GET and POST stats calls with multiple date formats ───────────────────
-const STATS_PARAMS = 'type=stats_pb&export=1&stats_type=Campaigns&sec_stats_type=SubSources&third_stats_type=Country&id=0';
+// Form action on crm.new.php is get_data.php?type=reports&id=0
+// Field names discovered: reports_type, sec_reports_type, third_reports_type
+const STATS_PARAMS = 'type=reports&export=1&reports_type=Campaigns&sec_reports_type=Sub+Sources&third_reports_type=Country&id=0';
 
 async function tryStatsCall(
   cookie: string,
@@ -415,7 +420,7 @@ export interface FinanceReport {
 function buildReport(rawData: unknown[][], cpaMap: CpaMap): FinanceReport {
   const headers = (rawData[0] as string[]).map(String);
   const rows    = rawData.slice(1);
-  const subsourceKey = headers.find(h => /subsource|sub.?source/i.test(h)) ?? '';
+  const subsourceKey = headers.find(h => /sub.?source/i.test(h)) ?? '';
 
   let totalLeads = 0, totalFtds = 0, totalCpa = 0, dupFtds = 0;
   const detail: FinanceRow[] = [];
