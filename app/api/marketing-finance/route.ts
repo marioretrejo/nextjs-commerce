@@ -141,82 +141,115 @@ async function loginTracker(): Promise<string | null> {
   return cookies.length > 0 ? cookies.join('; ') : null;
 }
 
+// ── Cookie merge helper ───────────────────────────────────────────────────────
+function mergeCookies(base: string, additions: string[]): string {
+  const map = new Map<string, string>();
+  for (const c of base.split('; ').filter(Boolean)) {
+    const idx = c.indexOf('=');
+    if (idx > 0) map.set(c.slice(0, idx), c);
+  }
+  for (const c of additions) {
+    const idx = c.indexOf('=');
+    if (idx > 0) map.set(c.slice(0, idx), c);
+  }
+  return [...map.values()].join('; ');
+}
+
 // ── Set date range in tracker PHP session ─────────────────────────────────────
-// The tracker stores date filters in the PHP session via a form POST on crm.new.php.
-// URL params on get_data.php are ignored — we must POST here first.
+// Fetches crm.new.php to discover actual form field names, then submits those
+// fields to set the PHP session date range before calling get_data.php.
 async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: string): Promise<string> {
-  const formBody = new URLSearchParams({
-    date_from:   dateFrom,
-    date_to:     dateTo,
-    stats_type:  'Campaigns',
-    filter_type: 'date',
-  });
+  let activeCookie = cookie;
 
-  let updatedCookie = cookie;
-
-  try {
-    const res = await fetch(`${TRACKER_BASE}/crm.new.php`, {
-      method: 'POST',
-      headers: {
-        ...BROWSER_HEADERS,
-        Cookie:         cookie,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept':       'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Referer':      `${TRACKER_BASE}/crm.new.php`,
-      },
-      body:     formBody.toString(),
-      redirect: 'manual',
-      signal:   makeSignal(15_000),
-    });
-    const newCookies = extractCookies(res.headers);
-    if (newCookies.length > 0) {
-      // Merge new cookies, replacing any existing ones with the same name
-      const existing = new Map(cookie.split('; ').map(c => {
-        const idx = c.indexOf('=');
-        return [c.slice(0, idx), c] as [string, string];
-      }));
-      for (const nc of newCookies) {
-        const idx = nc.indexOf('=');
-        existing.set(nc.slice(0, idx), nc);
-      }
-      updatedCookie = [...existing.values()].join('; ');
-    }
-    console.log('[mf-scraper] date range set via POST to crm.new.php, status:', res.status);
-  } catch (e) {
-    console.warn('[mf-scraper] setTrackerDateRange failed (non-fatal):', e);
+  // Convert ISO date to MM/DD/YYYY (some tracker PHP backends use this format)
+  function toUSFmt(iso: string) {
+    const [y, m, d] = iso.split('-');
+    return `${m}/${d}/${y}`;
   }
 
-  // Also try GET with date params as query string (some tracker versions use this)
+  // Step 1: GET the crm page to find actual form input names + hidden CSRF fields
+  let html = '';
   try {
-    const getUrl = `${TRACKER_BASE}/crm.new.php?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&stats_type=Campaigns`;
-    const res2 = await fetch(getUrl, {
+    const pageRes = await fetch(`${TRACKER_BASE}/crm.new.php`, {
       headers: {
         ...BROWSER_HEADERS,
-        Cookie:   updatedCookie,
-        Accept:   'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        Referer:  `${TRACKER_BASE}/crm.new.php`,
+        Cookie: activeCookie,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
-      redirect: 'manual',
-      signal:   makeSignal(10_000),
+      redirect: 'follow',
+      signal: makeSignal(15_000),
     });
-    const newCookies2 = extractCookies(res2.headers);
-    if (newCookies2.length > 0) {
-      const existing = new Map(updatedCookie.split('; ').map(c => {
-        const idx = c.indexOf('=');
-        return [c.slice(0, idx), c] as [string, string];
-      }));
-      for (const nc of newCookies2) {
-        const idx = nc.indexOf('=');
-        existing.set(nc.slice(0, idx), nc);
-      }
-      updatedCookie = [...existing.values()].join('; ');
-    }
-    console.log('[mf-scraper] date range GET to crm.new.php, status:', res2.status);
+    activeCookie = mergeCookies(activeCookie, extractCookies(pageRes.headers));
+    html = await pageRes.text();
+
+    // Log form structure for debugging (check Vercel function logs)
+    const allNames = [...html.matchAll(/\bname=["']([^"']+)["']/gi)].map(m => m[1]!);
+    const dateNames = allNames.filter(n => /date|from|to|start|end|range|period|filter/i.test(n));
+    console.log('[mf-scraper] crm.new.php — all inputs:', allNames.slice(0, 30).join(', '));
+    console.log('[mf-scraper] crm.new.php — date-related inputs:', dateNames.join(', '));
+    console.log('[mf-scraper] crm.new.php — page snippet (500):', html.slice(0, 500).replace(/\s+/g, ' '));
   } catch (e) {
-    console.warn('[mf-scraper] setTrackerDateRange GET failed (non-fatal):', e);
+    console.warn('[mf-scraper] crm GET failed:', e);
   }
 
-  return updatedCookie;
+  // Step 2: Determine field names — use detected names or fall back to common guesses
+  function findField(patterns: RegExp[]): string | null {
+    const allNames = [...html.matchAll(/\bname=["']([^"']+)["']/gi)].map(m => m[1]!);
+    for (const pat of patterns) {
+      const found = allNames.find(n => pat.test(n));
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const fromField = findField([/^date_from$/i, /from/i, /start/i, /date1/i]) ?? 'date_from';
+  const toField   = findField([/^date_to$/i,   /\bto\b/i, /end/i,  /date2/i]) ?? 'date_to';
+  console.log('[mf-scraper] using date fields:', fromField, '/', toField);
+
+  // Collect hidden form inputs (CSRF tokens, etc.)
+  const hiddenFields: Record<string, string> = {};
+  for (const m of html.matchAll(/<input[^>]*>/gi)) {
+    const tag = m[0];
+    if (!/type=["']hidden["']/i.test(tag)) continue;
+    const nameM = tag.match(/name=["']([^"']+)["']/i);
+    const valM  = tag.match(/value=["']([^"']*)["']/i);
+    if (nameM?.[1]) hiddenFields[nameM[1]] = valM?.[1] ?? '';
+  }
+
+  // Step 3: POST the form with ISO format
+  const tryPost = async (fromVal: string, toVal: string, label: string) => {
+    try {
+      const body = new URLSearchParams({
+        ...hiddenFields,
+        [fromField]: fromVal,
+        [toField]:   toVal,
+        stats_type:  'Campaigns',
+        filter:      '1',
+      });
+      const res = await fetch(`${TRACKER_BASE}/crm.new.php`, {
+        method: 'POST',
+        headers: {
+          ...BROWSER_HEADERS,
+          Cookie:         activeCookie,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept:         'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          Referer:        `${TRACKER_BASE}/crm.new.php`,
+        },
+        body: body.toString(),
+        redirect: 'manual',
+        signal: makeSignal(15_000),
+      });
+      activeCookie = mergeCookies(activeCookie, extractCookies(res.headers));
+      console.log(`[mf-scraper] POST date filter (${label}) → status:`, res.status);
+    } catch (e) {
+      console.warn(`[mf-scraper] POST date filter (${label}) failed:`, e);
+    }
+  };
+
+  await tryPost(dateFrom, dateTo, 'ISO');
+  await tryPost(toUSFmt(dateFrom), toUSFmt(dateTo), 'US-format');
+
+  return activeCookie;
 }
 
 // ── Fetch stats ───────────────────────────────────────────────────────────────
@@ -227,8 +260,16 @@ const STATS_BASE =
 
 function buildStatsPath(dateFrom?: string, dateTo?: string): string {
   let path = STATS_BASE;
-  if (dateFrom) path += `&date_from=${encodeURIComponent(dateFrom)}`;
-  if (dateTo)   path += `&date_to=${encodeURIComponent(dateTo)}`;
+  if (dateFrom && dateTo) {
+    // Send in both ISO and US format; PHP tracker typically parses one or the other
+    const [y1, m1, d1] = dateFrom.split('-');
+    const [y2, m2, d2] = dateTo.split('-');
+    const usFrom = `${m1}/${d1}/${y1}`;
+    const usTo   = `${m2}/${d2}/${y2}`;
+    path += `&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`;
+    path += `&from=${encodeURIComponent(usFrom)}&to=${encodeURIComponent(usTo)}`;
+    path += `&period=custom`;
+  }
   return path;
 }
 
@@ -251,6 +292,7 @@ async function fetchStats(
     console.log('[mf-scraper] stats status:', res.status, 'content-type:', res.headers.get('content-type'));
     if (!res.ok) return { data: null, detail: `HTTP ${res.status}` };
     const text = await res.text();
+    console.log('[mf-scraper] stats response (300):', text.slice(0, 300).replace(/\n/g, ' '));
     if (text.includes('name="password"') || text.trim().startsWith('<!')) {
       return { data: null, detail: 'Session expired after login' };
     }
@@ -262,6 +304,7 @@ async function fetchStats(
     const arr = parsed as unknown[][];
     const hdrs = (arr[0] as string[]).map(String);
     console.log('[mf-scraper] column headers:', hdrs.join(', '));
+    console.log('[mf-scraper] total rows (excl. header):', arr.length - 1);
     return { data: arr, detail: 'ok', headers: hdrs };
   } catch (e) {
     return { data: null, detail: String(e) };
