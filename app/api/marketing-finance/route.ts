@@ -244,6 +244,11 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
     hiddenFields[m[1]!] = valM?.[1] ?? '';
   }
 
+  // Extract CSRF token from meta tag or hidden input
+  const csrfMeta = analysis.html.match(/<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/i);
+  const csrfToken = csrfMeta?.[1] ?? hiddenFields['csrf_token'] ?? '';
+  console.log('[mf-scraper] CSRF token present:', !!csrfToken);
+
   // POST with all date format variations
   const dateVariants: Array<[string, string]> = [
     [dateFrom, dateTo],
@@ -254,9 +259,9 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
     try {
       const postBody = new URLSearchParams({
         ...hiddenFields,
+        ...(csrfToken ? { csrf_token: csrfToken, '_token': csrfToken } : {}),
         [fromField]: from,
         [toField]:   to,
-        // Also send under common alternative names
         date_from: from, date_to: to,
         from: from, to: to,
         start_date: from, end_date: to,
@@ -285,6 +290,37 @@ async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: str
       console.log(`[mf-scraper] POST crm (${from}) → ${res.status}`);
     } catch (e) { console.warn('[mf-scraper] POST crm failed:', from, e); }
   }
+
+  // POST directly to the form action (get_data.php?type=reports) — this is what the browser does
+  try {
+    const formActionUrl = analysis.formAction.startsWith('http')
+      ? analysis.formAction
+      : `${TRACKER_BASE}/${analysis.formAction.replace(/^\//, '')}`;
+    const actionBody = new URLSearchParams({
+      ...hiddenFields,
+      ...(csrfToken ? { csrf_token: csrfToken } : {}),
+      reports_type: 'Campaigns',
+      sec_reports_type: 'Sub Sources',
+      third_reports_type: 'Country',
+      date_from: dateFrom, date_to: dateTo,
+      period: 'custom',
+    });
+    const actionRes = await fetch(formActionUrl, {
+      method: 'POST',
+      headers: {
+        ...BROWSER_HEADERS,
+        Cookie: activeCookie,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'text/html,*/*',
+        Referer: `${TRACKER_BASE}/crm.new.php`,
+      },
+      body: actionBody.toString(),
+      redirect: 'follow',
+      signal: makeSignal(12_000),
+    });
+    activeCookie = mergeCookies(activeCookie, extractCookies(actionRes.headers));
+    console.log(`[mf-scraper] POST to form action (${formActionUrl}) → ${actionRes.status}`);
+  } catch (e) { console.warn('[mf-scraper] POST to form action failed:', e); }
 
   // Also try GET with date params (some trackers read from $_GET into session)
   for (const qs of [
@@ -374,19 +410,38 @@ async function fetchStats(
   }
   strategies.push({ method: 'GET', label: 'GET sin fecha (baseline)', params: {} });
 
+  // Run ALL strategies and collect results to compare FTD totals
+  const allResults: Array<{ label: string; rows: number; ftds: number; detail: string }> = [];
+  let winner: { data: unknown[][]; label: string } | null = null;
+
   for (const s of strategies) {
     const result = await tryStatsCall(cookie, s.method, s.params);
-    const rowCount = result.data ? result.data.length - 1 : 0;
-    const line = `${s.label} → ${result.detail} | rows: ${rowCount}`;
-    debugLines.push(line);
-    console.log(`[mf-scraper] ${line}`);
-
     if (result.data && result.detail === 'ok') {
       const hdrs = (result.data[0] as string[]).map(String);
-      debugLines.push(`headers: ${hdrs.join(', ')}`);
-      console.log('[mf-scraper] headers:', hdrs.join(', '));
-      return { ...result, debugLines };
+      const ftdIdx = hdrs.findIndex(h => /^ftds?$/i.test(h));
+      let ftdTotal = 0;
+      for (const row of result.data.slice(1)) {
+        const v = String((row as unknown[])[ftdIdx] ?? '0').replace(/,/g, '');
+        ftdTotal += parseInt(v, 10) || 0;
+      }
+      allResults.push({ label: s.label, rows: result.data.length - 1, ftds: ftdTotal, detail: result.detail });
+      if (!winner) winner = { data: result.data, label: s.label };
+    } else {
+      allResults.push({ label: s.label, rows: 0, ftds: 0, detail: result.detail });
     }
+  }
+
+  for (const r of allResults) {
+    const line = `${r.label} → ${r.detail} | rows:${r.rows} FTDs:${r.ftds}`;
+    debugLines.push(line);
+    console.log(`[mf-scraper] ${line}`);
+  }
+
+  if (winner) {
+    const hdrs = (winner.data[0] as string[]).map(String);
+    debugLines.push(`USANDO: ${winner.label} | headers: ${hdrs.join(', ')}`);
+    console.log('[mf-scraper] headers:', hdrs.join(', '));
+    return { data: winner.data, detail: 'ok', debugLines };
   }
 
   return { data: null, detail: 'All strategies failed', debugLines };
