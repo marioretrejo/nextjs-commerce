@@ -121,7 +121,7 @@ async function loginTracker(): Promise<string | null> {
   for (let i = 0; i < 3; i++) {
     const loc = cur.headers.get('location');
     if (!loc || cur.status < 300 || cur.status >= 400) break;
-    const url = loc.startsWith('http') ? loc : `${TRACKER_BASE}${loc}`;
+    const url = loc.startsWith('http') ? loc : `${TRACKER_BASE}/${loc.replace(/^\//, '')}`;
     try {
       cur = await fetch(url, {
         headers: { ...BROWSER_HEADERS, Cookie: cookies.join('; '), Accept: 'text/html,*/*' },
