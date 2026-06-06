@@ -37275,8 +37275,7 @@ var worker_core_default = defineAgent({
       }
     }
     const stt = new STT({
-      model: "nova-3",
-      language: "multi",
+      model: "nova-2",
       detectLanguage: true,
       apiKey: process.env["DEEPGRAM_API_KEY"],
       redact: ["pci", "ssn", "numbers"],
