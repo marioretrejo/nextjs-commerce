@@ -438,7 +438,8 @@ export default defineAgent({
     // Masked values appear as [REDACTED] in the transcript, preventing PII from
     // ever reaching logs, Supabase, or LLM context.
     const stt = new STT({
-      model: 'nova-2',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: 'nova-2' as any,
       detectLanguage: true,
       apiKey: process.env['DEEPGRAM_API_KEY'],
       redact: ['pci', 'ssn', 'numbers'],
