@@ -7,7 +7,7 @@
     "build:worker": "node_modules/.pnpm/node_modules/.bin/esbuild agent/worker_core.ts --bundle --platform=node --format=esm --target=node22 --tsconfig=tsconfig.json --external:@livekit/agents --external:@livekit/agents-plugin-deepgram --external:@livekit/agents-plugin-openai --external:@livekit/agents-plugin-cartesia --external:@livekit/rtc-node --external:fsevents \"--banner:js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" --outfile=dist/worker.mjs",
     "start:worker": "tsx agent/worker.ts start",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0",
     "lint": "next lint",
     "prettier": "prettier --write --ignore-unknown .",
     "prettier:check": "prettier --check --ignore-unknown .",
