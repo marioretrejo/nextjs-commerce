@@ -439,7 +439,7 @@ export default defineAgent({
     // ever reaching logs, Supabase, or LLM context.
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: 'nova-2' as any,
+      model: 'nova-3' as any,
       detectLanguage: true,
       apiKey: process.env['DEEPGRAM_API_KEY'],
       redact: ['pci', 'ssn', 'numbers'],

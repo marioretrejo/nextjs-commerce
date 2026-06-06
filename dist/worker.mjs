@@ -37276,7 +37276,7 @@ var worker_core_default = defineAgent({
     }
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: "nova-2",
+      model: "nova-3",
       detectLanguage: true,
       apiKey: process.env["DEEPGRAM_API_KEY"],
       redact: ["pci", "ssn", "numbers"],
