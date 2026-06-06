@@ -37756,6 +37756,7 @@ var worker_core_default = defineAgent({
         },
         { onConflict: "retell_call_id", ignoreDuplicates: false }
       );
+      await supabase.rpc("release_call_slot", { p_workspace_id: workspaceId }).then(() => null, () => null);
     });
     await session.start({ agent, room: ctx.room });
     const greeting = firstMessage?.trim() || "Hello! How can I help you today?";

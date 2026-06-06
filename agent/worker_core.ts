@@ -1009,6 +1009,10 @@ export default defineAgent({
         },
         { onConflict: 'retell_call_id', ignoreDuplicates: false }
       );
+
+      // Release the concurrent call slot so the next call can proceed.
+      // This runs on every session close — success, error, or worker crash recovery.
+      await supabase.rpc('release_call_slot', { p_workspace_id: workspaceId }).then(() => null, () => null);
     });  // end Close handler
 
     await session.start({ agent, room: ctx.room });
