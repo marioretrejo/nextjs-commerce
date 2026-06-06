@@ -440,11 +440,11 @@ export default defineAgent({
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: 'nova-3' as any,
-      detectLanguage: true,
+      language: 'en',
       apiKey: process.env['DEEPGRAM_API_KEY'],
-      redact: ['pci', 'ssn', 'numbers'],
-      keywords: pronunciation.deepgramKeywords,
-      // keyterm is nova-3 only — omit to avoid HTTP 400 on nova-2
+      // keywords: nova-2 only — causes HTTP 400 on nova-3
+      // keyterm:  requires paid tier — causes HTTP 400 on most keys
+      // redact:   tier-gated — add back once API key tier confirmed
     });
 
     // ─── 2. LLM: Groq primary (~200ms TTFT) → OpenAI gpt-4o-mini fallback ────
@@ -1032,7 +1032,7 @@ const _healthServer = createServer((_, res) => { res.writeHead(200); res.end('ok
 _healthServer.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code !== 'EADDRINUSE') throw err;
 });
-_healthServer.listen(healthPort);
+_healthServer.listen(healthPort, '0.0.0.0');
 
 // Keep Render free-plan alive: ping our own public URL every 9 min so the
 // inactivity timer never reaches the 15-min hibernation threshold.

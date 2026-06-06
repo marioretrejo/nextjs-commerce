@@ -82,7 +82,7 @@ export async function POST(
   if (suspend) {
     const apiKey    = process.env['LIVEKIT_API_KEY'];
     const apiSecret = process.env['LIVEKIT_API_SECRET'];
-    const httpUrl   = process.env['LIVEKIT_URL']?.replace('wss://', 'https://');
+    const httpUrl   = process.env['LIVEKIT_URL']?.replace('wss://', 'https://').replace('ws://', 'http://');
 
     if (apiKey && apiSecret && httpUrl) {
       try {

@@ -155,7 +155,7 @@ export async function POST(req: Request) {
         .single();
 
       const wsUrl = process.env['LIVEKIT_URL'] ?? '';
-      const httpUrl = wsUrl.replace('wss://', 'https://');
+      const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
       const lkApiKey = process.env['LIVEKIT_API_KEY'];
       const lkApiSecret = process.env['LIVEKIT_API_SECRET'];
 

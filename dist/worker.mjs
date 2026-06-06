@@ -37277,11 +37277,11 @@ var worker_core_default = defineAgent({
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: "nova-3",
-      detectLanguage: true,
-      apiKey: process.env["DEEPGRAM_API_KEY"],
-      redact: ["pci", "ssn", "numbers"],
-      keywords: pronunciation.deepgramKeywords
-      // keyterm is nova-3 only — omit to avoid HTTP 400 on nova-2
+      language: "en",
+      apiKey: process.env["DEEPGRAM_API_KEY"]
+      // keywords: nova-2 only — causes HTTP 400 on nova-3
+      // keyterm:  requires paid tier — causes HTTP 400 on most keys
+      // redact:   tier-gated — add back once API key tier confirmed
     });
     const groqLLM = new LLM({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
@@ -37771,7 +37771,7 @@ var _healthServer = createServer((_, res) => {
 _healthServer.on("error", (err) => {
   if (err.code !== "EADDRINUSE") throw err;
 });
-_healthServer.listen(healthPort);
+_healthServer.listen(healthPort, "0.0.0.0");
 var _selfUrl = process.env["RENDER_EXTERNAL_URL"];
 if (_selfUrl) {
   setInterval(() => {

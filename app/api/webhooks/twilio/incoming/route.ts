@@ -99,7 +99,7 @@ export async function POST(req: Request) {
 
   // ── Create LiveKit room ────────────────────────────────────────────────────
   const wsUrl     = process.env['LIVEKIT_URL'] ?? '';
-  const httpUrl   = wsUrl.replace('wss://', 'https://');
+  const httpUrl   = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
   const apiKey    = process.env['LIVEKIT_API_KEY'];
   const apiSecret = process.env['LIVEKIT_API_SECRET'];
 

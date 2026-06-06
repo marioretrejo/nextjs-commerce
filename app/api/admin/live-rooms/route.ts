@@ -24,7 +24,7 @@ export async function GET() {
     return NextResponse.json({ rooms: [] });
   }
 
-  const httpUrl = wsUrl.replace('wss://', 'https://');
+  const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
   const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
 
   try {
