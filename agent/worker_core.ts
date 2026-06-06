@@ -443,8 +443,8 @@ export default defineAgent({
       detectLanguage: true,
       apiKey: process.env['DEEPGRAM_API_KEY'],
       redact: ['pci', 'ssn', 'numbers'],
-      keywords:  pronunciation.deepgramKeywords,
-      keyterm:   pronunciation.deepgramKeyterms,
+      keywords: pronunciation.deepgramKeywords,
+      // keyterm is nova-3 only — omit to avoid HTTP 400 on nova-2
     });
 
     // ─── 2. LLM: Groq primary (~200ms TTFT) → OpenAI gpt-4o-mini fallback ────
