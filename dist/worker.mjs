@@ -37772,6 +37772,12 @@ _healthServer.on("error", (err) => {
   if (err.code !== "EADDRINUSE") throw err;
 });
 _healthServer.listen(healthPort);
+var _selfUrl = process.env["RENDER_EXTERNAL_URL"];
+if (_selfUrl) {
+  setInterval(() => {
+    fetch(_selfUrl).catch(() => null);
+  }, 9 * 60 * 1e3);
+}
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(import.meta.url),
   wsURL: process.env["LIVEKIT_URL"] ?? "",

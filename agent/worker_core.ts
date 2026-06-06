@@ -1034,6 +1034,15 @@ _healthServer.on('error', (err: NodeJS.ErrnoException) => {
 });
 _healthServer.listen(healthPort);
 
+// Keep Render free-plan alive: ping our own public URL every 9 min so the
+// inactivity timer never reaches the 15-min hibernation threshold.
+// RENDER_EXTERNAL_URL is set automatically by Render in every deployment;
+// the request goes through the load balancer and resets the timer.
+const _selfUrl = process.env['RENDER_EXTERNAL_URL'];
+if (_selfUrl) {
+  setInterval(() => { fetch(_selfUrl).catch(() => null); }, 9 * 60 * 1000);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(import.meta.url),
