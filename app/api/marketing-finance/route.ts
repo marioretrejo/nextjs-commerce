@@ -2,6 +2,12 @@
  * Marketing Finance — Live Tracker Scraper
  * Logs in to tracker.machukllc.xyz, fetches campaign stats,
  * applies CPA pricing from Supabase, returns a finance report.
+ *
+ * Flow (confirmed by Playwright network spy):
+ *   1. POST /login.php          → obtain session cookie
+ *   2. GET  /crm.new.php        → warm up PHP $_SESSION (required before date filter works)
+ *   3. GET  /get_data.php?type=stats_pb&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&…
+ *                               → returns filtered JSON array
  */
 
 import { createClient } from '@/lib/supabase/server';
@@ -11,10 +17,10 @@ import { NextResponse } from 'next/server';
 export const maxDuration = 60;
 
 const TRACKER_BASE = 'https://tracker.machukllc.xyz';
-const TRACKER_USER = process.env.TRACKER_USER ?? 'conversion@tresenlinea.xyz';
-const TRACKER_PASS = process.env.TRACKER_PASS ?? '24731840Mt.';
+const TRACKER_USER = process.env.TRACKER_USER ?? '';
+const TRACKER_PASS = process.env.TRACKER_PASS ?? '';
 
-// ── CPA lookup using Supabase table ──────────────────────────────────────────
+// ── CPA lookup ────────────────────────────────────────────────────────────────
 type CpaMap = Map<string, number>;
 
 async function loadCpaMap(): Promise<CpaMap> {
@@ -24,7 +30,7 @@ async function loadCpaMap(): Promise<CpaMap> {
     .select('campaign, country, price');
 
   if (error || !data) {
-    console.error('[mf-scraper] Failed to load CPA prices from DB:', error?.message);
+    console.error('[mf] Failed to load CPA prices:', error?.message);
     return new Map();
   }
 
@@ -36,14 +42,10 @@ async function loadCpaMap(): Promise<CpaMap> {
 }
 
 function getCpaPrice(map: CpaMap, campaign: string, country: string): number | null {
-  const exact = map.get(`${campaign}|${country}`);
-  if (exact !== undefined) return exact;
-  const wildcard = map.get(`${campaign}|ALL`);
-  if (wildcard !== undefined) return wildcard;
-  return null;
+  return map.get(`${campaign}|${country}`) ?? map.get(`${campaign}|ALL`) ?? null;
 }
 
-// ── Country code normalisation ────────────────────────────────────────────────
+// ── Country normalisation ─────────────────────────────────────────────────────
 const COUNTRY_MAP: Record<string, string> = {
   AR: 'Argentina', CO: 'Colombia',  MX: 'Mexico',
   UY: 'Uruguay',   EC: 'Ecuador',   PE: 'Peru',
@@ -56,8 +58,7 @@ const COUNTRY_MAP: Record<string, string> = {
 };
 
 function normalizeCountry(raw: string): string {
-  const up = raw.trim().toUpperCase();
-  return COUNTRY_MAP[up] ?? raw.trim();
+  return COUNTRY_MAP[raw.trim().toUpperCase()] ?? raw.trim();
 }
 
 // ── Cookie helpers ────────────────────────────────────────────────────────────
@@ -74,11 +75,7 @@ function extractCookies(headers: Headers): string[] {
 
 function mergeCookies(base: string, additions: string[]): string {
   const map = new Map<string, string>();
-  for (const c of base.split('; ').filter(Boolean)) {
-    const idx = c.indexOf('=');
-    if (idx > 0) map.set(c.slice(0, idx), c);
-  }
-  for (const c of additions) {
+  for (const c of [...base.split('; '), ...additions].filter(Boolean)) {
     const idx = c.indexOf('=');
     if (idx > 0) map.set(c.slice(0, idx), c);
   }
@@ -92,18 +89,11 @@ const BROWSER_HEADERS = {
   'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
 };
 
-// ── ISO → MM/DD/YYYY ─────────────────────────────────────────────────────────
-function toUS(iso: string) {
-  const [y, m, d] = iso.split('-');
-  return `${m}/${d}/${y}`;
-}
-
-// ── Tracker login ─────────────────────────────────────────────────────────────
+// ── Step 1: Login ─────────────────────────────────────────────────────────────
 async function loginTracker(): Promise<string | null> {
   const body = new URLSearchParams({
     email: TRACKER_USER, password: TRACKER_PASS, login: '', theme: '',
   });
-  const cookies: string[] = [];
 
   let res: Response;
   try {
@@ -114,9 +104,11 @@ async function loginTracker(): Promise<string | null> {
       redirect: 'manual',
       signal: makeSignal(20_000),
     });
-  } catch (e) { console.error('[mf-scraper] login POST error:', e); return null; }
+  } catch (e) { console.error('[mf] login POST error:', e); return null; }
 
-  cookies.push(...extractCookies(res.headers));
+  const cookies: string[] = [...extractCookies(res.headers)];
+
+  // Follow up to 3 redirects manually to collect all Set-Cookie headers
   let cur = res;
   for (let i = 0; i < 3; i++) {
     const loc = cur.headers.get('location');
@@ -125,419 +117,85 @@ async function loginTracker(): Promise<string | null> {
     try {
       cur = await fetch(url, {
         headers: { ...BROWSER_HEADERS, Cookie: cookies.join('; '), Accept: 'text/html,*/*' },
-        redirect: 'manual', signal: makeSignal(15_000),
+        redirect: 'manual',
+        signal: makeSignal(15_000),
       });
-    } catch (e) { console.error('[mf-scraper] redirect error:', e); break; }
-    cookies.push(...extractCookies(cur.headers));
+      cookies.push(...extractCookies(cur.headers));
+    } catch { break; }
   }
 
   const joined = cookies.join('; ');
-  console.log('[mf-scraper] login cookies:', cookies.length, joined.slice(0, 120));
+  console.log('[mf] login → cookies:', cookies.length, 'cookie(s)');
   return cookies.length > 0 ? joined : null;
 }
 
-// ── Analyse tracker JS to find date-filter AJAX calls ─────────────────────────
-async function analyseTrackerForDateFilter(cookie: string): Promise<{
-  html: string;
-  ajaxEndpoints: string[];
-  dateParamNames: string[];
-  formAction: string;
-  allInputNames: string[];
-}> {
-  const result = { html: '', ajaxEndpoints: [] as string[], dateParamNames: [] as string[], formAction: '', allInputNames: [] as string[] };
-
+// ── Step 2: Warm-up — visit crm.new.php to initialise PHP $_SESSION ───────────
+// The tracker stores the active date range in the PHP session. Without visiting
+// crm.new.php first, get_data.php ignores date_from/date_to and returns all-time data.
+async function warmUpSession(cookie: string): Promise<string> {
   try {
     const res = await fetch(`${TRACKER_BASE}/crm.new.php`, {
       headers: { ...BROWSER_HEADERS, Cookie: cookie, Accept: 'text/html,*/*' },
-      redirect: 'follow', signal: makeSignal(15_000),
-    });
-    result.html = await res.text();
-
-    // Log first 1000 chars of the page for debugging
-    console.log('[mf-scraper] crm.new.php (1000):', result.html.slice(0, 1000).replace(/\s+/g, ' '));
-
-    // All form input names
-    result.allInputNames = [...result.html.matchAll(/\bname=["']([^"']+)["']/gi)].map(m => m[1]!);
-    console.log('[mf-scraper] form inputs:', result.allInputNames.join(', ').slice(0, 400));
-
-    // Form action
-    const formActionM = result.html.match(/<form[^>]+action=["']([^"']+)["']/i);
-    result.formAction = formActionM?.[1] ?? '';
-    console.log('[mf-scraper] form action:', result.formAction);
-
-    // Look in inline scripts for AJAX patterns and date params
-    const inlineScripts = [...result.html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]!);
-    for (const s of inlineScripts) {
-      // AJAX/fetch URLs
-      for (const m of s.matchAll(/(?:url|href)\s*[:=]\s*['"]([^'"]*(?:php|ajax)[^'"]*)['"]/gi)) {
-        result.ajaxEndpoints.push(m[1]!);
-      }
-      // Date param names in objects/params
-      for (const m of s.matchAll(/['"](\w*(?:date|from|to|start|end|period|range|filter)\w*)['"]:\s*(?:['"]|[a-z])/gi)) {
-        result.dateParamNames.push(m[1]!);
-      }
-    }
-
-    // Fetch external scripts and analyse
-    const extScripts = [...result.html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
-      .map(m => { const s = m[1]!; return s.startsWith('http') ? s : `${TRACKER_BASE}/${s.replace(/^\//, '')}`; })
-      .slice(0, 8);
-
-    await Promise.allSettled(extScripts.map(async (url) => {
-      try {
-        const r = await fetch(url, { signal: makeSignal(8_000) });
-        const js = await r.text();
-        const fname = url.split('/').pop() ?? url;
-
-        // Look for get_data.php references
-        if (/get_data|stats_pb|date_from|dateFrom/i.test(js)) {
-          const relevantLines = js.split('\n')
-            .filter(l => /get_data|date_from|date_to|dateFrom|dateTo|period/i.test(l))
-            .slice(0, 8);
-          console.log(`[mf-scraper] JS ${fname}:`, relevantLines.join(' | ').slice(0, 600));
-
-          for (const m of js.matchAll(/['"](\w*(?:date|from|to|start|end|period)\w*)['"]:\s*(?:['"]|[a-z])/gi)) {
-            result.dateParamNames.push(m[1]!);
-          }
-          for (const m of js.matchAll(/(?:url|href)\s*[:=]\s*['"]([^'"]*php[^'"]*)['"]/gi)) {
-            result.ajaxEndpoints.push(m[1]!);
-          }
-        }
-      } catch { /* skip */ }
-    }));
-
-    result.dateParamNames = [...new Set(result.dateParamNames)];
-    result.ajaxEndpoints  = [...new Set(result.ajaxEndpoints)];
-    console.log('[mf-scraper] date param names found in JS:', result.dateParamNames.join(', ').slice(0, 300));
-    console.log('[mf-scraper] AJAX endpoints found:', result.ajaxEndpoints.join(', ').slice(0, 300));
-  } catch (e) {
-    console.error('[mf-scraper] analyseTrackerForDateFilter error:', e);
-  }
-
-  return result;
-}
-
-// ── Set date range via PHP session ────────────────────────────────────────────
-async function setTrackerDateRange(cookie: string, dateFrom: string, dateTo: string): Promise<string> {
-  let activeCookie = cookie;
-
-  // Discover the tracker's actual form structure
-  const analysis = await analyseTrackerForDateFilter(activeCookie);
-
-  // Determine date field names (detected or fallback)
-  const fromField = analysis.allInputNames.find(n => /date_from|from_date|dateFrom|start/i.test(n)) ?? 'date_from';
-  const toField   = analysis.allInputNames.find(n => /date_to|to_date|dateTo|end/i.test(n))     ?? 'date_to';
-  console.log('[mf-scraper] using form fields:', fromField, '/', toField);
-
-  // Collect hidden fields (CSRF tokens, etc.)
-  const hiddenFields: Record<string, string> = {};
-  for (const m of analysis.html.matchAll(/<input[^>]*type=["']hidden["'][^>]*>/gi)) {
-    const tag = m[0];
-    const nameM = tag.match(/name=["']([^"']+)["']/i);
-    const valM  = tag.match(/value=["']([^"']*)["']/i);
-    if (nameM?.[1]) hiddenFields[nameM[1]] = valM?.[1] ?? '';
-  }
-  // also handle reversed attribute order
-  for (const m of analysis.html.matchAll(/<input[^>]*name=["']([^"']+)["'][^>]*type=["']hidden["'][^>]*>/gi)) {
-    const tag = m[0];
-    const valM = tag.match(/value=["']([^"']*)["']/i);
-    hiddenFields[m[1]!] = valM?.[1] ?? '';
-  }
-
-  // Extract CSRF token from meta tag or hidden input
-  const csrfMeta = analysis.html.match(/<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/i);
-  const csrfToken = csrfMeta?.[1] ?? hiddenFields['csrf_token'] ?? '';
-  console.log('[mf-scraper] CSRF token present:', !!csrfToken);
-
-  // POST with all date format variations
-  const dateVariants: Array<[string, string]> = [
-    [dateFrom, dateTo],
-    [toUS(dateFrom), toUS(dateTo)],
-  ];
-
-  for (const [from, to] of dateVariants) {
-    try {
-      const postBody = new URLSearchParams({
-        ...hiddenFields,
-        ...(csrfToken ? { csrf_token: csrfToken, '_token': csrfToken } : {}),
-        [fromField]: from,
-        [toField]:   to,
-        date_from: from, date_to: to,
-        from: from, to: to,
-        start_date: from, end_date: to,
-        dateFrom: from, dateTo: to,
-        reports_type: 'Campaigns',
-        sec_reports_type: 'Sub Sources',
-        third_reports_type: 'Country',
-        stats_type: 'Campaigns',
-        sec_stats_type: 'Sub Sources',
-        third_stats_type: 'Country',
-        filter: '1',
-        period: 'custom',
-      });
-      const res = await fetch(`${TRACKER_BASE}/crm.new.php`, {
-        method: 'POST',
-        headers: {
-          ...BROWSER_HEADERS,
-          Cookie: activeCookie,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'text/html,*/*',
-          Referer: `${TRACKER_BASE}/crm.new.php`,
-        },
-        body: postBody.toString(),
-        redirect: 'follow',
-        signal: makeSignal(12_000),
-      });
-      activeCookie = mergeCookies(activeCookie, extractCookies(res.headers));
-      console.log(`[mf-scraper] POST crm (${from}) → ${res.status}`);
-    } catch (e) { console.warn('[mf-scraper] POST crm failed:', from, e); }
-  }
-
-  // POST directly to the form action (get_data.php?type=reports) — this is what the browser does
-  try {
-    const formActionUrl = analysis.formAction.startsWith('http')
-      ? analysis.formAction
-      : `${TRACKER_BASE}/${analysis.formAction.replace(/^\//, '')}`;
-    const actionBody = new URLSearchParams({
-      ...hiddenFields,
-      ...(csrfToken ? { csrf_token: csrfToken } : {}),
-      reports_type: 'Campaigns',
-      sec_reports_type: 'Sub Sources',
-      third_reports_type: 'Country',
-      stats_type: 'Campaigns',
-      sec_stats_type: 'Sub Sources',
-      third_stats_type: 'Country',
-      date_from: dateFrom, date_to: dateTo,
-      period: 'custom',
-    });
-    const actionRes = await fetch(formActionUrl, {
-      method: 'POST',
-      headers: {
-        ...BROWSER_HEADERS,
-        Cookie: activeCookie,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'text/html,*/*',
-        Referer: `${TRACKER_BASE}/crm.new.php`,
-      },
-      body: actionBody.toString(),
       redirect: 'follow',
-      signal: makeSignal(12_000),
+      signal: makeSignal(15_000),
     });
-    activeCookie = mergeCookies(activeCookie, extractCookies(actionRes.headers));
-    console.log(`[mf-scraper] POST to form action (${formActionUrl}) → ${actionRes.status}`);
-  } catch (e) { console.warn('[mf-scraper] POST to form action failed:', e); }
-
-  // Also try GET with date params (some trackers read from $_GET into session)
-  for (const qs of [
-    `date_from=${dateFrom}&date_to=${dateTo}&period=custom`,
-    `from=${dateFrom}&to=${dateTo}&period=custom`,
-    `date_from=${toUS(dateFrom)}&date_to=${toUS(dateTo)}&period=custom`,
-  ]) {
-    try {
-      const res = await fetch(`${TRACKER_BASE}/crm.new.php?${qs}&stats_type=Campaigns`, {
-        headers: { ...BROWSER_HEADERS, Cookie: activeCookie, Accept: 'text/html,*/*', Referer: `${TRACKER_BASE}/crm.new.php` },
-        redirect: 'follow', signal: makeSignal(8_000),
-      });
-      activeCookie = mergeCookies(activeCookie, extractCookies(res.headers));
-      console.log(`[mf-scraper] GET crm (?${qs.slice(0,40)}) → ${res.status}`);
-    } catch { /* skip */ }
-  }
-
-  return activeCookie;
-}
-
-// ── Scan tracker JS to discover exact stats_pb call parameters ───────────────
-async function scanForStatsPbContext(cookie: string): Promise<string[]> {
-  const lines: string[] = [];
-  try {
-    const res = await fetch(`${TRACKER_BASE}/crm.new.php`, {
-      headers: { ...BROWSER_HEADERS, Cookie: cookie, Accept: 'text/html,*/*' },
-      redirect: 'follow', signal: makeSignal(15_000),
-    });
-    const html = await res.text();
-
-    const allScripts: Array<{ name: string; content: string }> = [];
-    for (const m of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)) {
-      allScripts.push({ name: 'inline', content: m[1]! });
-    }
-
-    const extUrls = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
-      .map(m => m[1]!.startsWith('http') ? m[1]! : `${TRACKER_BASE}/${m[1]!.replace(/^\//, '')}`)
-      .slice(0, 12);
-
-    lines.push(`[scan] ${extUrls.length} external scripts`);
-
-    await Promise.allSettled(extUrls.map(async (url) => {
-      try {
-        const r = await fetch(url, { signal: makeSignal(8_000) });
-        const js = await r.text();
-        allScripts.push({ name: url.split('/').pop()?.split('?')[0] ?? url, content: js });
-      } catch { /* skip */ }
-    }));
-
-    let found = 0;
-    for (const { name, content } of allScripts) {
-      // Find stats_pb occurrences
-      let si = 0;
-      while (true) {
-        const idx = content.indexOf('stats_pb', si);
-        if (idx === -1) break;
-        const ctx = content.slice(Math.max(0, idx - 250), Math.min(content.length, idx + 450)).replace(/\s+/g, ' ');
-        lines.push(`[JS:${name}:stats_pb] ${ctx.slice(0, 600)}`);
-        found++;
-        si = idx + 8;
-      }
-      // Find get_data.php call patterns
-      for (const m of content.matchAll(/['"]get_data\.php['"][^;]{0,500}/g)) {
-        lines.push(`[JS:${name}:get_data] ${m[0].replace(/\s+/g, ' ').slice(0, 400)}`);
-      }
-    }
-    if (found === 0) lines.push('[scan] stats_pb NOT found in any script — endpoint may be different');
-  } catch (e) { lines.push(`[scan:error] ${e}`); }
-  return lines;
-}
-
-// ── Try GET and POST stats calls with multiple date formats ───────────────────
-// stats_pb returns [[headers, ...], [row1, ...], ...] — keeps header row needed by parser
-const STATS_BASE = 'type=stats_pb&export=1&stats_type=Campaigns&sec_stats_type=Sub+Sources&third_stats_type=Country&id=0';
-
-async function tryStatsCall(
-  cookie: string,
-  method: 'GET' | 'POST',
-  extraParams: Record<string, string>,
-): Promise<{ data: unknown[][] | null; detail: string }> {
-  const paramStr = Object.entries(extraParams).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-  const fullParams = STATS_BASE + (paramStr ? `&${paramStr}` : '');
-
-  try {
-    const opts: RequestInit = {
-      headers: {
-        ...BROWSER_HEADERS,
-        Cookie: cookie,
-        Accept: 'application/json, text/plain, */*',
-        Referer: `${TRACKER_BASE}/crm.new.php`,
-        ...(method === 'POST' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
-      },
-      signal: makeSignal(20_000),
-      ...(method === 'GET'
-        ? { method: 'GET' }
-        : { method: 'POST', body: fullParams }),
-    };
-
-    const url = method === 'GET'
-      ? `${TRACKER_BASE}/get_data.php?${fullParams}`
-      : `${TRACKER_BASE}/get_data.php`;
-
-    const res = await fetch(url, opts);
-    if (!res.ok) return { data: null, detail: `HTTP ${res.status}` };
-    const text = await res.text();
-    if (text.includes('name="password"') || text.trim().startsWith('<!')) {
-      return { data: null, detail: 'session_expired' };
-    }
-    let parsed: unknown;
-    try { parsed = JSON.parse(text); } catch { return { data: null, detail: `not_json:${text.slice(0,60)}` }; }
-    if (!Array.isArray(parsed) || parsed.length < 2) {
-      return { data: null, detail: `bad_format:${text.slice(0,60)}` };
-    }
-    return { data: parsed as unknown[][], detail: 'ok' };
+    const updated = mergeCookies(cookie, extractCookies(res.headers));
+    console.log('[mf] warm-up crm.new.php →', res.status);
+    return updated;
   } catch (e) {
-    return { data: null, detail: String(e) };
+    console.warn('[mf] warm-up failed (continuing):', e);
+    return cookie;
   }
 }
 
-function countFtds(data: unknown[][]): number {
-  const hdrs = (data[0] as string[]).map(String);
-  const ftdIdx = hdrs.findIndex(h => /^ftds?$/i.test(h));
-  if (ftdIdx === -1) return 0;
-  let total = 0;
-  for (const row of data.slice(1)) {
-    const v = String((row as unknown[])[ftdIdx] ?? '0').replace(/,/g, '');
-    total += parseInt(v, 10) || 0;
-  }
-  return total;
-}
+// ── Step 3: Fetch stats ───────────────────────────────────────────────────────
+// Confirmed URL format from Playwright network spy:
+//   GET /get_data.php?type=stats_pb&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&export=1&…
+const STATS_PARAMS =
+  'type=stats_pb&export=1&stats_type=Campaigns&sec_stats_type=Sub+Sources&third_stats_type=Country&id=0';
 
 async function fetchStats(
   cookie: string,
   dateFrom?: string,
   dateTo?: string,
-): Promise<{ data: unknown[][] | null; detail: string; debugLines: string[] }> {
-  const debugLines: string[] = [];
+): Promise<{ data: unknown[][] | null; detail: string }> {
+  const dateQs = dateFrom && dateTo
+    ? `&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`
+    : '';
 
-  // ── 1. Baseline (no dates) ────────────────────────────────────────────────
-  const baseline = await tryStatsCall(cookie, 'GET', {});
-  const baselineRows = baseline.data ? baseline.data.length - 1 : 0;
-  const baselineFtds = baseline.data ? countFtds(baseline.data) : 0;
-  debugLines.push(`baseline → ${baseline.detail} | rows:${baselineRows} FTDs:${baselineFtds}`);
-  console.log(`[mf-scraper] baseline → ${baseline.detail} | rows:${baselineRows} FTDs:${baselineFtds}`);
+  const url = `${TRACKER_BASE}/get_data.php?${STATS_PARAMS}${dateQs}`;
+  console.log('[mf] fetching:', url);
 
-  if (!dateFrom || !dateTo) {
-    if (baseline.data) {
-      const hdrs = (baseline.data[0] as string[]).map(String);
-      debugLines.push(`USANDO: baseline | headers: ${hdrs.join(', ')}`);
-      return { data: baseline.data, detail: 'ok', debugLines };
+  try {
+    const res = await fetch(url, {
+      headers: {
+        ...BROWSER_HEADERS,
+        Cookie: cookie,
+        Accept: 'application/json, text/plain, */*',
+        Referer: `${TRACKER_BASE}/crm.new.php`,
+      },
+      signal: makeSignal(20_000),
+    });
+
+    if (!res.ok) return { data: null, detail: `HTTP ${res.status}` };
+    const text = await res.text();
+    if (text.includes('name="password"')) return { data: null, detail: 'session_expired' };
+
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); }
+    catch { return { data: null, detail: `not_json: ${text.slice(0, 80)}` }; }
+
+    if (!Array.isArray(parsed) || parsed.length < 2) {
+      return { data: null, detail: `bad_format: ${text.slice(0, 80)}` };
     }
-    return { data: null, detail: 'No data', debugLines };
+
+    const hdrs = (parsed[0] as string[]).map(String);
+    const rows = (parsed as unknown[][]).length - 1;
+    console.log('[mf] got', rows, 'rows | headers:', hdrs.join(', '));
+    return { data: parsed as unknown[][], detail: 'ok' };
+  } catch (e) {
+    return { data: null, detail: String(e) };
   }
-
-  // ── 2. Date strategies — try many param name variants ─────────────────────
-  const usFrom = toUS(dateFrom), usTo = toUS(dateTo);
-  const strategies: Array<{ method: 'GET' | 'POST'; params: Record<string, string>; label: string }> = [
-    // Standard param names
-    { method: 'GET',  label: 'GET date_from/to ISO',    params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
-    { method: 'GET',  label: 'GET date_from/to US',     params: { date_from: usFrom, date_to: usTo, period: 'custom' } },
-    { method: 'GET',  label: 'GET start_date/end_date', params: { start_date: dateFrom, end_date: dateTo, period: 'custom' } },
-    { method: 'GET',  label: 'GET from/to',             params: { from: dateFrom, to: dateTo } },
-    { method: 'GET',  label: 'GET from_date/to_date',   params: { from_date: dateFrom, to_date: dateTo } },
-    { method: 'GET',  label: 'GET filter[date_from]',   params: { 'filter[date_from]': dateFrom, 'filter[date_to]': dateTo } },
-    // POST variants
-    { method: 'POST', label: 'POST date_from/to ISO',   params: { date_from: dateFrom, date_to: dateTo, period: 'custom' } },
-    { method: 'POST', label: 'POST start_date/end_date',params: { start_date: dateFrom, end_date: dateTo, period: 'custom' } },
-    // No period param (some trackers ignore period=custom)
-    { method: 'GET',  label: 'GET date_from/to noPeriod', params: { date_from: dateFrom, date_to: dateTo } },
-  ];
-
-  const allResults: Array<{ label: string; rows: number; ftds: number; detail: string; diffFromBase: boolean }> = [];
-  let winner: { data: unknown[][]; label: string } | null = null;
-
-  for (const s of strategies) {
-    const result = await tryStatsCall(cookie, s.method, s.params);
-    if (result.data && result.detail === 'ok') {
-      const rows = result.data.length - 1;
-      const ftds = countFtds(result.data);
-      // If rows or FTDs differ from baseline, this strategy is actually filtering
-      const diffFromBase = rows !== baselineRows || ftds !== baselineFtds;
-      allResults.push({ label: s.label, rows, ftds, detail: result.detail, diffFromBase });
-      // Prefer strategies that differ from baseline (i.e., actually filter)
-      if (!winner || (diffFromBase && !allResults.find(r => r.label === winner?.label)?.diffFromBase)) {
-        winner = { data: result.data, label: s.label };
-      }
-    } else {
-      allResults.push({ label: s.label, rows: 0, ftds: 0, detail: result.detail, diffFromBase: false });
-    }
-  }
-
-  for (const r of allResults) {
-    const diff = r.diffFromBase ? ' ← FILTRA' : '';
-    const line = `${r.label} → ${r.detail} | rows:${r.rows} FTDs:${r.ftds}${diff}`;
-    debugLines.push(line);
-    console.log(`[mf-scraper] ${line}`);
-  }
-
-  if (winner) {
-    const hdrs = (winner.data[0] as string[]).map(String);
-    debugLines.push(`USANDO: ${winner.label} | headers: ${hdrs.join(', ')}`);
-    console.log('[mf-scraper] headers:', hdrs.join(', '));
-    return { data: winner.data, detail: 'ok', debugLines };
-  }
-
-  // Fallback to baseline if all date strategies fail
-  if (baseline.data) {
-    debugLines.push('FALLBACK: ninguna estrategia con fecha funcionó, usando baseline');
-    return { data: baseline.data, detail: 'fallback_baseline', debugLines };
-  }
-
-  return { data: null, detail: 'All strategies failed', debugLines };
 }
 
 // ── Build finance report ──────────────────────────────────────────────────────
@@ -566,17 +224,17 @@ export interface FinanceReport {
 }
 
 function buildReport(rawData: unknown[][], cpaMap: CpaMap): FinanceReport {
-  const headers = (rawData[0] as string[]).map(String);
-  const rows    = rawData.slice(1);
-  const subsourceKey = headers.find(h => /sub.?source/i.test(h)) ?? '';
+  const headers    = (rawData[0] as string[]).map(String);
+  const rows       = rawData.slice(1);
+  const subsrcKey  = headers.find(h => /sub.?source/i.test(h)) ?? '';
 
   let totalLeads = 0, totalFtds = 0, totalCpa = 0, dupFtds = 0;
   const detail: FinanceRow[] = [];
 
   for (const row of rows) {
-    const rec      = Object.fromEntries(headers.map((h, i) => [h, String((row as unknown[])[i] ?? '')]));
+    const rec       = Object.fromEntries(headers.map((h, i) => [h, String((row as unknown[])[i] ?? '')]));
     const campaign  = (rec['Campaigns'] ?? rec['Campaign'] ?? '').trim();
-    const subsource = (subsourceKey ? rec[subsourceKey] ?? '' : '').trim();
+    const subsource = (subsrcKey ? rec[subsrcKey] ?? '' : '').trim();
     const country   = normalizeCountry(rec['Country'] ?? '');
     const leads     = parseInt((rec['Leads'] ?? '0').replace(/,/g, ''), 10) || 0;
     const ftds      = parseInt((rec['FTDs']  ?? '0').replace(/,/g, ''), 10) || 0;
@@ -589,9 +247,11 @@ function buildReport(rawData: unknown[][], cpaMap: CpaMap): FinanceReport {
     totalFtds  += ftds;
     totalCpa   += rowCpa;
 
-    detail.push({ campaign, subsource, country, leads, ftds,
-      cr_pct: leads > 0 ? Math.round((ftds / leads) * 1000) / 10 : 0,
-      unit_price: price, cpa_total: rowCpa,
+    detail.push({
+      campaign, subsource, country, leads, ftds,
+      cr_pct:    leads > 0 ? Math.round((ftds / leads) * 1000) / 10 : 0,
+      unit_price: price,
+      cpa_total:  rowCpa,
     });
   }
 
@@ -627,37 +287,23 @@ export async function GET(req: Request) {
   const dateFrom = url.searchParams.get('from') ?? undefined;
   const dateTo   = url.searchParams.get('to')   ?? undefined;
 
-  const [cpaMap, cookie] = await Promise.all([loadCpaMap(), loginTracker()]);
+  // Steps 1 + CPA load in parallel
+  const [cpaMap, loginCookie] = await Promise.all([loadCpaMap(), loginTracker()]);
 
-  if (!cookie) {
+  if (!loginCookie) {
     return NextResponse.json({
-      error: 'Could not log in to tracker',
+      error: 'No se pudo autenticar en el tracker',
       total_leads: 0, total_ftds: 0, original_ftds: 0,
       duplicate_ftds: 0, total_cpa: 0, ecpa: 0, detail: [],
       scraped_at: new Date().toISOString(),
     } satisfies FinanceReport, { status: 502 });
   }
 
-  let activeCookie = cookie;
-  const sessionDebug: string[] = [];
+  // Step 2: warm up session so PHP initialises $_SESSION date vars
+  const cookie = await warmUpSession(loginCookie);
 
-  // Run JS scan and session setup in parallel
-  const [scanLines, analysis] = await Promise.all([
-    scanForStatsPbContext(cookie),
-    dateFrom && dateTo ? analyseTrackerForDateFilter(cookie) : Promise.resolve(null),
-  ]);
-  sessionDebug.push(...scanLines);
-
-  if (dateFrom && dateTo && analysis) {
-    sessionDebug.push(`crm inputs: ${analysis.allInputNames.join(', ').slice(0, 200)}`);
-    sessionDebug.push(`form action: ${analysis.formAction}`);
-    sessionDebug.push(`ajax endpoints: ${analysis.ajaxEndpoints.join(', ').slice(0, 200)}`);
-    sessionDebug.push(`date params in JS: ${analysis.dateParamNames.join(', ').slice(0, 200)}`);
-    activeCookie = await setTrackerDateRange(cookie, dateFrom, dateTo);
-  }
-
-  const { data: raw, detail, debugLines } = await fetchStats(activeCookie, dateFrom, dateTo);
-  const allDebug = [...sessionDebug, ...debugLines];
+  // Step 3: fetch stats (with or without date filter)
+  const { data: raw, detail } = await fetchStats(cookie, dateFrom, dateTo);
 
   if (!raw) {
     return NextResponse.json({
@@ -665,11 +311,8 @@ export async function GET(req: Request) {
       total_leads: 0, total_ftds: 0, original_ftds: 0,
       duplicate_ftds: 0, total_cpa: 0, ecpa: 0, detail: [],
       scraped_at: new Date().toISOString(),
-      _debug: allDebug,
     } satisfies FinanceReport, { status: 502 });
   }
 
-  const report = buildReport(raw, cpaMap);
-  report._debug = allDebug;
-  return NextResponse.json(report);
+  return NextResponse.json(buildReport(raw, cpaMap));
 }
