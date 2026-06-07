@@ -32,6 +32,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Wand2,
+  Search,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -54,11 +56,29 @@ interface BuiltInVoice {
   name:        string;
   provider:    string;
   preview_url: string;
+  description?: string;
+  language?:   string;
   labels: {
     gender: string;
     accent: string;
     age:    string;
   };
+}
+
+// ── Voice filter taxonomy ─────────────────────────────────────────────────────
+const VOICE_FILTERS = [
+  { id: 'female',         label: 'Femenino',       icon: '👩',  re: /\b(female|woman|mujer|femenin)/i },
+  { id: 'male',           label: 'Masculino',       icon: '👨',  re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
+  { id: 'latino',         label: 'Latino',          icon: '🌎',  re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
+  { id: 'conversational', label: 'Conversacional',  icon: '💬',  re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
+  { id: 'narrative',      label: 'Narrativa',       icon: '📖',  re: /\b(narrat|storytell|audiobook|story\b)/i },
+  { id: 'professional',   label: 'Profesional',     icon: '🎙️', re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
+] as const;
+type VoiceFilterId = typeof VOICE_FILTERS[number]['id'];
+
+function voiceMatchesFilter(v: BuiltInVoice, filterId: VoiceFilterId): boolean {
+  const text = `${v.name} ${v.description ?? ''} ${v.labels?.gender ?? ''} ${v.labels?.accent ?? ''} ${v.language ?? ''}`;
+  return VOICE_FILTERS.find(f => f.id === filterId)!.re.test(text);
 }
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -74,6 +94,8 @@ export default function VoiceStudioPage() {
   const [cloneOpen,     setCloneOpen]     = useState(false);
   const [deletingId,    setDeletingId]    = useState<string | null>(null);
   const [playingUrl,    setPlayingUrl]    = useState<string | null>(null);
+  const [voiceSearch,   setVoiceSearch]   = useState('');
+  const [activeFilters, setActiveFilters] = useState<VoiceFilterId[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Clone form state
@@ -273,39 +295,124 @@ export default function VoiceStudioPage() {
 
       {/* Built-in voice gallery */}
       <section>
-        <h2 className="text-sm font-semibold text-[#6b6b6b] uppercase tracking-wide mb-3 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-[#6b6b6b] uppercase tracking-wide mb-4 flex items-center gap-2">
           <Zap className="h-3.5 w-3.5" /> AI Voice Library
           <span className="font-normal text-[#a0a0a0]">({builtInVoices.length} voices)</span>
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {builtInVoices.slice(0, 24).map((v) => (
-            <Card key={v.voice_id} className="border-[#e0e0e0] hover:border-[#6b6b6b] transition-colors group">
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-[#0a0a0a] truncate">{v.name}</p>
-                  {v.preview_url && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => togglePreview(v.preview_url)}
-                    >
-                      {playingUrl === v.preview_url
-                        ? <Pause className="h-3 w-3" />
-                        : <Play  className="h-3 w-3" />}
-                    </Button>
+        {/* Search + filter bar */}
+        <div className="space-y-3 mb-5">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6b6b6b]" />
+            <Input
+              className="pl-9 pr-8 h-9 text-sm"
+              placeholder="Buscar voces por nombre o descripción…"
+              value={voiceSearch}
+              onChange={(e) => setVoiceSearch(e.target.value)}
+            />
+            {voiceSearch && (
+              <button className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setVoiceSearch('')}>
+                <X className="h-3.5 w-3.5 text-[#6b6b6b] hover:text-[#0a0a0a]" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter chips */}
+          <div className="flex flex-wrap gap-2">
+            {VOICE_FILTERS.map((f) => {
+              const active = activeFilters.includes(f.id);
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setActiveFilters(prev =>
+                    active ? prev.filter(x => x !== f.id) : [...prev, f.id]
                   )}
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {v.labels.gender && <Badge variant="secondary" className="text-[9px] px-1">{v.labels.gender}</Badge>}
-                  {v.labels.accent && <Badge variant="outline"   className="text-[9px] px-1">{v.labels.accent}</Badge>}
-                  {v.labels.age    && <Badge variant="outline"   className="text-[9px] px-1">{v.labels.age}</Badge>}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-all ${
+                    active
+                      ? 'bg-[#0a0a0a] text-white border-[#0a0a0a]'
+                      : 'bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]'
+                  }`}
+                >
+                  <span>{f.icon}</span>
+                  {f.label}
+                </button>
+              );
+            })}
+            {(activeFilters.length > 0 || voiceSearch) && (
+              <button
+                onClick={() => { setActiveFilters([]); setVoiceSearch(''); }}
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs text-[#6b6b6b] hover:text-red-600 border border-[#e0e0e0] hover:border-red-200 transition-all"
+              >
+                <X className="h-3 w-3" /> Limpiar
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Results */}
+        {(() => {
+          const filtered = builtInVoices.filter(v => {
+            const text = `${v.name} ${v.description ?? ''} ${v.language ?? ''}`.toLowerCase();
+            if (voiceSearch && !text.includes(voiceSearch.toLowerCase())) return false;
+            if (activeFilters.length > 0 && !activeFilters.every(f => voiceMatchesFilter(v, f))) return false;
+            return true;
+          });
+
+          if (filtered.length === 0) {
+            return (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#e0e0e0] py-14 text-center">
+                <Search className="h-8 w-8 text-[#e0e0e0] mb-3" />
+                <p className="text-sm font-medium text-[#0a0a0a]">No se encontraron voces</p>
+                <p className="text-xs text-[#6b6b6b] mt-1">Prueba con otros términos o limpia los filtros</p>
+              </div>
+            );
+          }
+
+          return (
+            <>
+              <p className="text-xs text-[#a0a0a0] mb-3">{filtered.length} {filtered.length === 1 ? 'voz' : 'voces'}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filtered.map((v) => {
+                  const activeTags = VOICE_FILTERS.filter(f => voiceMatchesFilter(v, f.id));
+                  return (
+                    <Card key={v.voice_id} className="border-[#e0e0e0] hover:border-[#6b6b6b] transition-colors group">
+                      <CardContent className="p-3">
+                        <div className="flex items-start justify-between mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-[#0a0a0a] truncate">{v.name}</p>
+                            {v.language && (
+                              <p className="text-[10px] text-[#a0a0a0] uppercase tracking-wide">{v.language}</p>
+                            )}
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                            onClick={() => togglePreview(v.preview_url || '')}
+                          >
+                            {playingUrl === v.preview_url
+                              ? <Pause className="h-3 w-3" />
+                              : <Play  className="h-3 w-3" />}
+                          </Button>
+                        </div>
+                        {v.description && (
+                          <p className="text-[10px] text-[#6b6b6b] line-clamp-2 mb-1.5 leading-relaxed">{v.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {activeTags.map(t => (
+                            <span key={t.id} className="inline-flex items-center gap-0.5 rounded-full bg-[#f5f5f5] px-1.5 py-0.5 text-[9px] font-medium text-[#6b6b6b]">
+                              {t.icon} {t.label}
+                            </span>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </section>
 
       {/* Clone dialog */}

@@ -264,7 +264,17 @@ const TIMEZONES = [
   'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'
 ];
 
-interface Voice { voice_id: string; name: string; provider?: string; preview_url: string; labels: Record<string, string> }
+interface Voice { voice_id: string; name: string; provider?: string; preview_url: string; description?: string; language?: string; labels: Record<string, string> }
+
+const VOICE_FILTERS = [
+  { id: 'female',         label: 'Femenino',      icon: '👩',  re: /\b(female|woman|mujer|femenin)/i },
+  { id: 'male',           label: 'Masculino',      icon: '👨',  re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
+  { id: 'latino',         label: 'Latino',         icon: '🌎',  re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
+  { id: 'conversational', label: 'Conversacional', icon: '💬',  re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
+  { id: 'narrative',      label: 'Narrativa',      icon: '📖',  re: /\b(narrat|storytell|audiobook|story\b)/i },
+  { id: 'professional',   label: 'Profesional',    icon: '🎙️', re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
+] as const;
+type VoiceFilterId = typeof VOICE_FILTERS[number]['id'];
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -278,6 +288,8 @@ export default function NewAgentPage() {
   const [saving, setSaving] = useState(false);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [voiceSearch,   setVoiceSearch]   = useState('');
+  const [voiceFilters,  setVoiceFilters]  = useState<VoiceFilterId[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
   const [dynVars, setDynVars] = useState<{ key: string; value: string }[]>([]);
 
@@ -812,28 +824,93 @@ export default function NewAgentPage() {
           <CardContent className="space-y-5">
             <div className="space-y-2">
               <Label>Voice</Label>
-              <div className="max-h-64 overflow-y-auto rounded-md border border-[#e0e0e0]">
+
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#6b6b6b]" />
+                <Input
+                  className="pl-8 pr-7 h-8 text-xs"
+                  placeholder="Buscar voz…"
+                  value={voiceSearch}
+                  onChange={(e) => setVoiceSearch(e.target.value)}
+                />
+                {voiceSearch && (
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => setVoiceSearch('')}>
+                    <X className="h-3 w-3 text-[#6b6b6b]" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {VOICE_FILTERS.map((f) => {
+                  const active = voiceFilters.includes(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setVoiceFilters(prev =>
+                        active ? prev.filter(x => x !== f.id) : [...prev, f.id]
+                      )}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-all ${
+                        active
+                          ? 'bg-[#0a0a0a] text-white border-[#0a0a0a]'
+                          : 'bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]'
+                      }`}
+                    >
+                      {f.icon} {f.label}
+                    </button>
+                  );
+                })}
+                {(voiceFilters.length > 0 || voiceSearch) && (
+                  <button
+                    type="button"
+                    onClick={() => { setVoiceFilters([]); setVoiceSearch(''); }}
+                    className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-[#6b6b6b] hover:text-red-600 border border-[#e0e0e0] hover:border-red-200 transition-all"
+                  >
+                    <X className="h-2.5 w-2.5" /> Limpiar
+                  </button>
+                )}
+              </div>
+
+              {/* Voice list */}
+              <div className="max-h-56 overflow-y-auto rounded-md border border-[#e0e0e0]">
                 {voices.length === 0 ? (
                   <div className="p-4 text-center text-sm text-[#6b6b6b]">Loading voices…</div>
-                ) : voices.map((v) => (
-                  <div key={v.voice_id} onClick={() => setForm((f) => ({ ...f, voice_id: v.voice_id, voice_name: v.name }))}
-                    className={`flex items-center justify-between p-3 cursor-pointer border-b border-[#e0e0e0] last:border-b-0 transition-colors ${form.voice_id === v.voice_id ? 'bg-[#0a0a0a] text-white' : 'hover:bg-[#f5f5f5]'}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium truncate">{v.name}</p>
-                        {v.provider === 'cartesia' && (
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'}`}>AI Voice</span>
+                ) : (() => {
+                  const filtered = voices.filter(v => {
+                    const text = `${v.name} ${v.description ?? ''} ${v.language ?? ''}`.toLowerCase();
+                    if (voiceSearch && !text.includes(voiceSearch.toLowerCase())) return false;
+                    if (voiceFilters.length > 0 && !voiceFilters.every(f => VOICE_FILTERS.find(fi => fi.id === f)!.re.test(text))) return false;
+                    return true;
+                  });
+                  if (filtered.length === 0) return (
+                    <div className="p-4 text-center text-xs text-[#6b6b6b]">No se encontraron voces</div>
+                  );
+                  return filtered.map((v) => (
+                    <div key={v.voice_id} onClick={() => setForm((f) => ({ ...f, voice_id: v.voice_id, voice_name: v.name }))}
+                      className={`flex items-center justify-between p-3 cursor-pointer border-b border-[#e0e0e0] last:border-b-0 transition-colors ${form.voice_id === v.voice_id ? 'bg-[#0a0a0a] text-white' : 'hover:bg-[#f5f5f5]'}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{v.name}</p>
+                          {v.language && (
+                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0 uppercase ${form.voice_id === v.voice_id ? 'bg-white/20 text-white' : 'bg-[#f5f5f5] text-[#6b6b6b]'}`}>{v.language}</span>
+                          )}
+                        </div>
+                        {v.description ? (
+                          <p className={`text-xs line-clamp-1 ${form.voice_id === v.voice_id ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>{v.description}</p>
+                        ) : (
+                          <p className={`text-xs ${form.voice_id === v.voice_id ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
+                            {v.labels?.['gender'] ?? ''} {v.labels?.['accent'] ? `· ${v.labels['accent']}` : ''}
+                          </p>
                         )}
                       </div>
-                      <p className={`text-xs ${form.voice_id === v.voice_id ? 'text-[#aaa]' : 'text-[#6b6b6b]'}`}>
-                        {v.labels?.['gender'] ?? ''} {v.labels?.['accent'] ? `· ${v.labels['accent']}` : ''}
-                      </p>
+                      <button onClick={(ev) => { ev.stopPropagation(); playPreview(v); }} disabled={playingVoice === v.voice_id} className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-60">
+                        {playingVoice === v.voice_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      </button>
                     </div>
-                    <button onClick={(ev) => { ev.stopPropagation(); playPreview(v); }} disabled={playingVoice === v.voice_id} className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-60">
-                      {playingVoice === v.voice_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                    </button>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             </div>
             <div className="space-y-3">
