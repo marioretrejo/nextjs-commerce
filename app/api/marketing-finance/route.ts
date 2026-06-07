@@ -16,9 +16,13 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
-const TRACKER_BASE = 'https://tracker.machukllc.xyz';
-const TRACKER_USER = process.env.TRACKER_USER ?? '';
-const TRACKER_PASS = process.env.TRACKER_PASS ?? '';
+const TRACKER_BASE    = 'https://tracker.machukllc.xyz';
+const TRACKER_USER    = process.env.TRACKER_USER    ?? '';
+const TRACKER_PASS    = process.env.TRACKER_PASS    ?? '';
+// Pre-captured browser session cookies (from tracker-scraper.js spy).
+// When set, bypasses the HTTP login flow which the tracker often rejects.
+// Format: JSON array — [{"name":"PHPSESSID","value":"...","domain":"...","path":"/"}]
+const TRACKER_COOKIES = process.env.TRACKER_COOKIES ?? '';
 
 // ── CPA lookup ────────────────────────────────────────────────────────────────
 type CpaMap = Map<string, number>;
@@ -287,20 +291,40 @@ export async function GET(req: Request) {
   const dateFrom = url.searchParams.get('from') ?? undefined;
   const dateTo   = url.searchParams.get('to')   ?? undefined;
 
-  // Steps 1 + CPA load in parallel
-  const [cpaMap, loginCookie] = await Promise.all([loadCpaMap(), loginTracker()]);
+  // ── Resolve session cookie ────────────────────────────────────────────────
+  // Priority 1: pre-captured browser session (TRACKER_COOKIES env var)
+  //   Set via: node scraper/tracker-scraper.js <from> <to>  → copy the printed TRACKER_COOKIES line
+  // Priority 2: HTTP login flow (less reliable — tracker may reject headless sessions)
+  let cookie: string;
 
-  if (!loginCookie) {
-    return NextResponse.json({
-      error: 'No se pudo autenticar en el tracker',
-      total_leads: 0, total_ftds: 0, original_ftds: 0,
-      duplicate_ftds: 0, total_cpa: 0, ecpa: 0, detail: [],
-      scraped_at: new Date().toISOString(),
-    } satisfies FinanceReport, { status: 502 });
+  if (TRACKER_COOKIES) {
+    try {
+      const parsed = JSON.parse(TRACKER_COOKIES) as Array<{ name: string; value: string }>;
+      cookie = parsed.map(c => `${c.name}=${c.value}`).join('; ');
+      console.log('[mf] using TRACKER_COOKIES env var →', parsed.length, 'cookie(s)');
+    } catch {
+      console.error('[mf] TRACKER_COOKIES is not valid JSON — falling back to login');
+      cookie = '';
+    }
   }
 
-  // Step 2: warm up session so PHP initialises $_SESSION date vars
-  const cookie = await warmUpSession(loginCookie);
+  const [cpaMap, loginCookie] = await Promise.all([
+    loadCpaMap(),
+    cookie! ? Promise.resolve(null) : loginTracker(),
+  ]);
+
+  if (!cookie!) {
+    if (!loginCookie) {
+      return NextResponse.json({
+        error: 'No se pudo autenticar en el tracker (configura TRACKER_COOKIES en .env)',
+        total_leads: 0, total_ftds: 0, original_ftds: 0,
+        duplicate_ftds: 0, total_cpa: 0, ecpa: 0, detail: [],
+        scraped_at: new Date().toISOString(),
+      } satisfies FinanceReport, { status: 502 });
+    }
+    // Step 2: warm up session so PHP initialises $_SESSION date vars
+    cookie = await warmUpSession(loginCookie);
+  }
 
   // Step 3: fetch stats (with or without date filter)
   const { data: raw, detail } = await fetchStats(cookie, dateFrom, dateTo);

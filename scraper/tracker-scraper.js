@@ -131,8 +131,10 @@ async function run() {
         url,
         method:   req.method(),
         postData: req.postData() ?? null,
+        // Incluir cookies — son clave para replicar la sesión en route.ts
+        cookie:   req.headers()['cookie'] ?? null,
         headers:  Object.fromEntries(
-          Object.entries(req.headers()).filter(([k]) => !['cookie','user-agent'].includes(k))
+          Object.entries(req.headers()).filter(([k]) => !['user-agent'].includes(k))
         ),
         status:        null,
         responseBody:  null,
@@ -300,19 +302,29 @@ async function run() {
   );
   console.error('\n' + '─'.repeat(70));
   if (dataRequests.length > 0) {
-    console.error(`\n✅ CANDIDATOS para el route.ts (${dataRequests.length} request(s) con arrays de datos):`);
+    console.error(`\n✅ CANDIDATOS (${dataRequests.length} request(s) con arrays de datos):`);
     for (const r of dataRequests) {
-      console.error(`\n  Método: ${r.method}`);
-      console.error(`  URL:    ${r.url}`);
-      if (r.postData) console.error(`  Body:   ${r.postData.slice(0, 600)}`);
+      console.error(`\n  Método:  ${r.method}`);
+      console.error(`  URL:     ${r.url}`);
+      if (r.postData) console.error(`  Body:    ${r.postData.slice(0, 600)}`);
       const hdrs = r.responseJson?.[0];
-      if (Array.isArray(hdrs)) console.error(`  Headers del array: ${hdrs.join(', ')}`);
+      if (Array.isArray(hdrs)) console.error(`  Columns: ${hdrs.join(', ')}`);
+      if (r.cookie)   console.error(`  Cookie:  ${r.cookie}`);
     }
-    console.error('\n  → Copia URL + Body al tryStatsCall del route.ts.');
   } else {
-    console.error('\n  ℹ️  No se encontraron requests con arrays de datos.');
-    console.error('  → Revisa la lista completa arriba para identificar el endpoint.');
+    console.error('\n  ℹ️  Sin requests con arrays de datos — revisa la lista arriba.');
   }
+
+  // ── TRACKER_COOKIES export ────────────────────────────────────────────────
+  // Obtener las cookies actuales del contexto (post login + interacción)
+  const allCookies = await context.cookies();
+  const cookieJson = JSON.stringify(allCookies.map(c => ({
+    name: c.name, value: c.value, domain: c.domain, path: c.path,
+  })));
+  console.error('\n' + '─'.repeat(70));
+  console.error('\n📋 TRACKER_COOKIES (pega esto en tu .env o en Vercel → Env Vars):');
+  console.error('\nTRACKER_COOKIES=' + cookieJson);
+  console.error('\nEsta sesión dura mientras el tracker no la expire (normalmente horas/días).');
   console.error('═'.repeat(70) + '\n');
 
   // ── 9. Extraer métricas del DOM (si EXTRACT=1) ────────────────────────────
