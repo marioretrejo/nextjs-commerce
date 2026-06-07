@@ -20,7 +20,6 @@ import { defineAgent, voice, llm as agentLlm, llm, cli, ServerOptions } from '@l
 import { STT } from '@livekit/agents-plugin-deepgram';
 import { LLM } from '@livekit/agents-plugin-openai';
 import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
-import { AudioSource, AudioFrame, LocalAudioTrack, TrackPublishOptions } from '@livekit/rtc-node';
 import type { Room } from '@livekit/rtc-node';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
@@ -489,10 +488,9 @@ export default defineAgent({
     });
 
     // ─── 2. LLM: Groq llama-4-scout (low-latency, ~200ms TTFT) ─────────────────
-    //
-    // Groq is the sole LLM provider — OpenAI is excluded (no active balance).
-    // FallbackAdapter is not used; errors surface immediately so they are visible
-    // in logs rather than silently swallowed by a fallback that also has no key.
+    if (!groqKey) {
+      console.error('[worker.diag] CRITICAL: GROQ_API_KEY not set — every LLM call will return 401 and leave session stuck in Thinking');
+    }
     const lm = new LLM({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       apiKey: groqKey ?? '',
@@ -1218,7 +1216,7 @@ export default defineAgent({
       _ambientAbort = new AbortController();
       const _workerDir = path.dirname(fileURLToPath(import.meta.url));
       void streamAmbientSound(
-        ctx.room as unknown as Room,
+        ctx.room as Room,
         ambientSound,
         ambientSoundVolume,
         _workerDir,
@@ -1279,6 +1277,10 @@ async function streamAmbientSound(
   const bytesPerFrame   = samplesPerFrame * numChannels * 2;
 
   if (!room.localParticipant) { console.error('[ambient_sound] No localParticipant'); return; }
+
+  // Dynamic import: defer native FFI init to avoid conflicts with agents framework startup
+  const { AudioSource, AudioFrame, LocalAudioTrack, TrackPublishOptions } =
+    await import('@livekit/rtc-node');
 
   const source = new AudioSource(sampleRate, numChannels);
   const track  = LocalAudioTrack.createAudioTrack('ambient', source);
