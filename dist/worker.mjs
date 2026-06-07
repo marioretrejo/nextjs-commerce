@@ -27770,9 +27770,9 @@ var require_main4 = __commonJS({
 });
 
 // agent/worker_core.ts
-import { defineAgent, voice, llm as agentLlm, llm as llm2, tts as agentTts, cli, ServerOptions } from "@livekit/agents";
+import { defineAgent, voice, llm as llm2, cli, ServerOptions } from "@livekit/agents";
 import { STT } from "@livekit/agents-plugin-deepgram";
-import { LLM, TTS as OpenAITTS } from "@livekit/agents-plugin-openai";
+import { LLM } from "@livekit/agents-plugin-openai";
 import { TTS as CartesiaTTS } from "@livekit/agents-plugin-cartesia";
 
 // node_modules/.pnpm/@supabase+supabase-js@2.106.1/node_modules/@supabase/supabase-js/dist/index.mjs
@@ -37225,7 +37225,7 @@ var worker_core_default = defineAgent({
       SUPABASE_URL_set: !!process.env["NEXT_PUBLIC_SUPABASE_URL"],
       SUPABASE_SRK_set: !!process.env["SUPABASE_SERVICE_ROLE_KEY"],
       // Deepgram connection URL that will be attempted
-      deepgram_url: `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`
+      deepgram_url: `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`
     }));
     let systemPrompt = "You are a helpful, friendly voice assistant. Keep answers short and conversational \u2014 1-3 sentences. Never use markdown, bullet points, or special characters in your responses.";
     let agentName = "Assistant";
@@ -37295,22 +37295,16 @@ var worker_core_default = defineAgent({
     }
     const dgApiKey = process.env["DEEPGRAM_API_KEY"];
     console.log("[worker.diag] stt.init", JSON.stringify({
-      model: "nova-3",
+      model: "nova-2",
       language: "en",
       api_key_present: !!dgApiKey,
       api_key_length: dgApiKey?.length ?? 0,
-      api_key_prefix: dgApiKey ? dgApiKey.slice(0, 4) : "MISSING",
-      // The exact URL the Deepgram plugin will connect to:
-      connect_url: `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`
+      api_key_prefix: dgApiKey ? dgApiKey.slice(0, 4) : "MISSING"
     }));
     const stt = new STT({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: "nova-3",
+      model: "nova-2",
       language: "en",
       apiKey: dgApiKey
-      // keywords: nova-2 only — causes HTTP 400 on nova-3
-      // keyterm:  requires paid tier — causes HTTP 400 on most keys
-      // redact:   tier-gated — add back once API key tier confirmed
     });
     stt.on("error", (err) => {
       console.error("[worker.diag] stt.error", JSON.stringify({
@@ -37319,21 +37313,11 @@ var worker_core_default = defineAgent({
         stack: err instanceof Error ? err.stack : void 0
       }));
     });
-    const groqLLM = new LLM({
+    const lm = new LLM({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       apiKey: groqKey ?? "",
       baseURL: "https://api.groq.com/openai/v1"
     });
-    const openaiLLM = new LLM({
-      model: "gpt-4o-mini",
-      apiKey: openaiKey ?? ""
-    });
-    const lm = groqKey ? new agentLlm.FallbackAdapter({
-      llms: [groqLLM, ...openaiKey ? [openaiLLM] : []],
-      attemptTimeout: 5,
-      maxRetryPerLLM: 1,
-      retryOnChunkSent: false
-    }) : openaiLLM;
     const EMOTION_MAP = {
       calm: ["positivity:low"],
       sympathetic: ["sadness:low"],
@@ -37352,18 +37336,7 @@ var worker_core_default = defineAgent({
       // Passing the string 'normal' (valid only for sonic-2) causes a Cartesia API error.
       ...voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}
     });
-    const tts = openaiKey ? new agentTts.FallbackAdapter({
-      ttsInstances: [
-        cartesiaTTS,
-        new OpenAITTS({
-          model: "tts-1",
-          voice: "alloy",
-          apiKey: openaiKey
-        })
-      ],
-      maxRetryPerTTS: 2,
-      recoveryDelayMs: 5e3
-    }) : cartesiaTTS;
+    const tts = cartesiaTTS;
     const flowPrompt = isFlowConfig2(flowConfig) ? null : buildFlowPrompt(flowJson);
     const stateMachine = isFlowConfig2(flowConfig) ? buildStateMachine(flowConfig) : null;
     const dynamicTools = {};

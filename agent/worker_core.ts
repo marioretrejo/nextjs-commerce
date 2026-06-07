@@ -16,9 +16,9 @@
  * Start: node --import tsx/esm agent/worker.ts dev
  * Prod:  node --import tsx/esm agent/worker.ts start
  */
-import { defineAgent, voice, llm as agentLlm, llm, tts as agentTts, cli, ServerOptions } from '@livekit/agents';
+import { defineAgent, voice, llm as agentLlm, llm, cli, ServerOptions } from '@livekit/agents';
 import { STT } from '@livekit/agents-plugin-deepgram';
-import { LLM, TTS as OpenAITTS } from '@livekit/agents-plugin-openai';
+import { LLM } from '@livekit/agents-plugin-openai';
 import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
@@ -354,7 +354,7 @@ export default defineAgent({
       SUPABASE_URL_set:    !!process.env['NEXT_PUBLIC_SUPABASE_URL'],
       SUPABASE_SRK_set:    !!process.env['SUPABASE_SERVICE_ROLE_KEY'],
       // Deepgram connection URL that will be attempted
-      deepgram_url:        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
+      deepgram_url:        `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
     }));
 
     // ─── 1. Parse room metadata ───────────────────────────────────────────────
@@ -450,33 +450,24 @@ export default defineAgent({
       } catch { /* non-fatal — proceed without dynamic tools */ }
     }
 
-    // ─── 1. STT: Deepgram nova-3 + PII redaction + custom keywords ───────────
+    // ─── 1. STT: Deepgram nova-2 ──────────────────────────────────────────────
     //
-    // redact: 'pci'     → masks credit/debit card numbers
-    // redact: 'ssn'     → masks US Social Security Numbers
-    // redact: 'numbers' → masks all numeric sequences not otherwise matched
-    //
-    // Masked values appear as [REDACTED] in the transcript, preventing PII from
-    // ever reaching logs, Supabase, or LLM context.
+    // nova-2 is used instead of nova-3 to avoid runner initialization timeouts
+    // seen in production (nova-3 tier-gates some parameters that cause HTTP 400s
+    // and cascade into a 10-second timeout before STT is marked unavailable).
     const dgApiKey = process.env['DEEPGRAM_API_KEY'];
     console.log('[worker.diag] stt.init', JSON.stringify({
-      model: 'nova-3',
+      model: 'nova-2',
       language: 'en',
       api_key_present: !!dgApiKey,
       api_key_length:  dgApiKey?.length ?? 0,
       api_key_prefix:  dgApiKey ? dgApiKey.slice(0, 4) : 'MISSING',
-      // The exact URL the Deepgram plugin will connect to:
-      connect_url: `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
     }));
 
     const stt = new STT({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: 'nova-3' as any,
+      model: 'nova-2',
       language: 'en',
       apiKey: dgApiKey,
-      // keywords: nova-2 only — causes HTTP 400 on nova-3
-      // keyterm:  requires paid tier — causes HTTP 400 on most keys
-      // redact:   tier-gated — add back once API key tier confirmed
     });
 
     // Log Deepgram connection errors with full detail
@@ -488,31 +479,16 @@ export default defineAgent({
       }));
     });
 
-    // ─── 2. LLM: Groq primary (~200ms TTFT) → OpenAI gpt-4o-mini fallback ────
+    // ─── 2. LLM: Groq llama-4-scout (low-latency, ~200ms TTFT) ─────────────────
     //
-    // FallbackAdapter automatically retries on 429 / 5xx / timeout.
-    // attemptTimeout: 5s per attempt — switches to OpenAI if Groq doesn't respond
-    // maxRetryPerLLM: 1 internal retry before marking the LLM unavailable
-    // retryOnChunkSent: false — don't retry if the user already heard partial audio
-    const groqLLM = new LLM({
+    // Groq is the sole LLM provider — OpenAI is excluded (no active balance).
+    // FallbackAdapter is not used; errors surface immediately so they are visible
+    // in logs rather than silently swallowed by a fallback that also has no key.
+    const lm = new LLM({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       apiKey: groqKey ?? '',
       baseURL: 'https://api.groq.com/openai/v1',
     });
-
-    const openaiLLM = new LLM({
-      model: 'gpt-4o-mini',
-      apiKey: openaiKey ?? '',
-    });
-
-    const lm = groqKey
-      ? new agentLlm.FallbackAdapter({
-          llms: [groqLLM, ...(openaiKey ? [openaiLLM] : [])],
-          attemptTimeout: 5,
-          maxRetryPerLLM: 1,
-          retryOnChunkSent: false,
-        })
-      : openaiLLM;
 
     // ─── 2. TTS: Cartesia sonic-3 primary → OpenAI TTS fallback ──────────────
     //
@@ -540,20 +516,11 @@ export default defineAgent({
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
     });
 
-    const tts = openaiKey
-      ? new agentTts.FallbackAdapter({
-          ttsInstances: [
-            cartesiaTTS,
-            new OpenAITTS({
-              model: 'tts-1',
-              voice: 'alloy',
-              apiKey: openaiKey,
-            }),
-          ],
-          maxRetryPerTTS: 2,
-          recoveryDelayMs: 5000,
-        })
-      : cartesiaTTS;
+    // Cartesia is the sole TTS provider — OpenAI TTS excluded (no active balance).
+    // Using Cartesia directly avoids the FallbackAdapter overhead and ensures any
+    // Cartesia error surfaces immediately in logs rather than triggering a fallback
+    // that would also fail, producing the "all TTS instances failed" fatal error.
+    const tts = cartesiaTTS;
 
     // ─── 3 + 4. Agent: tools (incl. transfer) + TTS pronunciation map ────────
     //
