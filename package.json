@@ -11,7 +11,9 @@
     "lint": "next lint",
     "prettier": "prettier --write --ignore-unknown .",
     "prettier:check": "prettier --check --ignore-unknown .",
-    "test": "pnpm prettier:check"
+    "test": "pnpm prettier:check",
+    "scraper:install": "pnpm add -D playwright && npx playwright install chromium",
+    "scraper": "node scraper/tracker-scraper.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.0",
