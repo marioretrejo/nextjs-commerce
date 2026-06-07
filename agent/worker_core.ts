@@ -514,7 +514,7 @@ export default defineAgent({
       surprised:   ['surprise:positive:high'],
     };
     const cartesiaTTS = new CartesiaTTS({
-      model: 'sonic-3',
+      model: 'sonic-multilingual',
       voice: voiceId,
       apiKey: process.env['CARTESIA_API_KEY'],
       language: 'es',

@@ -99,7 +99,7 @@ export async function createCartesiaTTSStream({
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model_id: 'sonic-3',
+      model_id: 'sonic-multilingual',
       transcript: text,
       voice: { mode: 'id', id: voiceId },
       output_format: { container: 'raw', encoding: 'pcm_f32le', sample_rate: 44100 },
@@ -110,7 +110,7 @@ export async function createCartesiaTTSStream({
 }
 
 export const VOICE_ENGINE_MAP: Record<string, string> = {
-  standard:   'sonic-3',
-  ultra_fast: 'sonic-3',
-  premium:    'sonic-3',
+  standard:   'sonic-multilingual',
+  ultra_fast: 'sonic-multilingual',
+  premium:    'sonic-multilingual',
 };

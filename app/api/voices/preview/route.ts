@@ -59,7 +59,7 @@ async function generateWav(
       'Content-Type':     'application/json',
     },
     body: JSON.stringify({
-      model_id:      'sonic-3',
+      model_id:      'sonic-multilingual',
       transcript,
       voice:         voiceSpec,
       output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: SAMPLE_RATE },
