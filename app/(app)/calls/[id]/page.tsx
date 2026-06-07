@@ -53,6 +53,21 @@ const DISPOSITION_CONFIG: Record<CallDisposition, { label: string; className: st
   other:             { label: 'Other',              className: 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e0e0e0]' },
 };
 
+/** Extract the file path within the `call_recordings` bucket from various URL formats. */
+function extractStoragePath(rawUrl: string): string | null {
+  if (!rawUrl) return null;
+  // s3://call_recordings/path/file.mp3
+  if (rawUrl.startsWith('s3://')) return rawUrl.replace(/^s3:\/\/[^/]+\//, '');
+  // https://xxx.supabase.co/storage/v1/s3/call_recordings/path/file.mp3
+  // https://xxx.supabase.co/storage/v1/object/.../call_recordings/path/file.mp3
+  if (rawUrl.includes('call_recordings/')) {
+    return rawUrl.split('call_recordings/')[1] ?? null;
+  }
+  // Bare path already (no scheme)
+  if (!rawUrl.startsWith('http')) return rawUrl;
+  return null;
+}
+
 export default async function CallDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -67,6 +82,19 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
 
   if (error || !data) notFound();
   const call = data as unknown as CallDetail;
+
+  // Generate a fresh signed URL (1 h) so the recording is always playable/downloadable.
+  // The raw recording_url is an S3 path — not directly accessible by the browser.
+  let playbackUrl: string | null = call.recording_url;
+  if (call.recording_url) {
+    const storagePath = extractStoragePath(call.recording_url);
+    if (storagePath) {
+      const { data: signed } = await supabase.storage
+        .from('call_recordings')
+        .createSignedUrl(storagePath, 3600);
+      if (signed?.signedUrl) playbackUrl = signed.signedUrl;
+    }
+  }
 
   return (
     <div className="p-6 mx-auto max-w-4xl space-y-6">
@@ -109,14 +137,14 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
         ))}
       </div>
 
-      {/* Waveform player + synced transcript (replaces plain <audio> + separate transcript card) */}
-      {call.recording_url ? (
+      {/* Waveform player + synced transcript */}
+      {playbackUrl ? (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Recording &amp; Transcript</CardTitle>
               <a
-                href={call.recording_url}
+                href={playbackUrl}
                 download={`call-${call.id}.mp3`}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] bg-white px-3 py-1.5 text-xs font-medium text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
               >
@@ -128,7 +156,7 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
           <CardContent className="p-0 pb-0">
             <div className="px-5 pb-5">
               <WaveformPlayer
-                url={call.recording_url}
+                url={playbackUrl}
                 transcript={call.transcript}
                 duration={call.duration_seconds}
               />

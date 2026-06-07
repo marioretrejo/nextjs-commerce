@@ -9,6 +9,7 @@ import {
   useLocalParticipant,
   useRemoteParticipants,
   useVoiceAssistant,
+  useTranscriptions,
   BarVisualizer,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
@@ -31,6 +32,11 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
   const agentJoined = remoteParticipants.length > 0;
   const isMuted = localParticipant.isMicrophoneEnabled === false;
 
+  // Live transcription — all text streams (user STT + agent TTS)
+  const transcriptions = useTranscriptions();
+  // Agent TTS segments from voice assistant
+  const { agentTranscriptions } = useVoiceAssistant();
+
   // Timeout: if not connected after 20s, notify parent
   useEffect(() => {
     if (isConnected) return;
@@ -52,6 +58,28 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
     idle: 'Ready',
     failed: 'Failed',
   };
+
+  // Merge agent TTS segments + all text stream segments into a unified timeline
+  type TranscriptLine = { id: string; speaker: 'agent' | 'user'; text: string; final: boolean; ts: number };
+  const agentLines: TranscriptLine[] = agentTranscriptions.map(s => ({
+    id: `agent-${s.id}`,
+    speaker: 'agent',
+    text: s.text,
+    final: s.final ?? true,
+    ts: s.firstReceivedTime ?? 0,
+  }));
+  // Text streams that are NOT from the agent cover user STT
+  const agentIdentity = agentJoined ? remoteParticipants[0]?.identity ?? '' : '';
+  const userLines: TranscriptLine[] = transcriptions
+    .filter(s => s.participantInfo.identity !== agentIdentity)
+    .map((s, i) => ({
+      id: `user-${i}-${s.streamInfo?.id ?? i}`,
+      speaker: 'user',
+      text: s.text,
+      final: true,
+      ts: s.streamInfo?.timestamp ?? 0,
+    }));
+  const allLines = [...agentLines, ...userLines].sort((a, b) => a.ts - b.ts);
 
   return (
     <div className="space-y-4">
@@ -95,6 +123,44 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
           {isMuted ? 'Unmute' : 'Mute'}
         </Button>
       </div>
+
+      {/* Live transcript panel */}
+      {isConnected && (
+        <div className="rounded-lg border border-[#e0e0e0] overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[#e0e0e0] bg-[#fafafa]">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6b6b6b]">Live Transcript</span>
+            {agentJoined && (
+              <span className="flex items-center gap-1 text-[10px] text-green-600">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                </span>
+                Live
+              </span>
+            )}
+          </div>
+          <div className="max-h-48 overflow-y-auto divide-y divide-[#f5f5f5] bg-white">
+            {allLines.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-[#b0b0b0] italic">Esperando transcripción…</p>
+            ) : (
+              allLines.map(line => (
+                <div
+                  key={line.id}
+                  className={`flex gap-2.5 px-3 py-2.5 ${line.speaker === 'agent' ? '' : 'flex-row-reverse'}`}
+                >
+                  <div className={`h-5 w-5 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold mt-0.5
+                    ${line.speaker === 'agent' ? 'bg-[#0a0a0a] text-white' : 'bg-[#e0e0e0] text-[#6b6b6b]'}`}>
+                    {line.speaker === 'agent' ? 'A' : 'U'}
+                  </div>
+                  <p className={`text-xs leading-relaxed max-w-[85%] ${!line.final ? 'text-[#a0a0a0] italic' : 'text-[#1a1a1a]'} ${line.speaker === 'user' ? 'text-right' : ''}`}>
+                    {line.text}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
