@@ -535,7 +535,8 @@ export default defineAgent({
       voice: voiceId,
       apiKey: process.env['CARTESIA_API_KEY'],
       language: 'en',
-      speed: 'normal',
+      // sonic-3 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
+      // Passing the string 'normal' (valid only for sonic-2) causes a Cartesia API error.
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
     });
 
@@ -1079,17 +1080,28 @@ export default defineAgent({
   },
 });
 
-// Minimal HTTP health-check server so Render web services stay healthy.
-// LiveKit's supervised_proc spawns child copies of this file — each child
-// will also attempt to listen, so we silently ignore EADDRINUSE (port already
-// held by the parent). Any other listen error is rethrown.
-import { createServer } from 'node:http';
+// HTTP health-check server — required so Render detects an open port and
+// doesn't block or restart the container. LiveKit's supervised_proc spawns
+// child copies of this file; children silently ignore EADDRINUSE because the
+// parent process already holds the port. Any other bind error is rethrown.
+import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 const healthPort = Number(process.env['PORT'] ?? 10000);
-const _healthServer = createServer((_, res) => { res.writeHead(200); res.end('ok'); });
+const _healthServer = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const url = req.url ?? '/';
+  if (url === '/' || url === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Worker Alive');
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+});
 _healthServer.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code !== 'EADDRINUSE') throw err;
 });
-_healthServer.listen(healthPort, '0.0.0.0');
+_healthServer.listen(healthPort, '0.0.0.0', () => {
+  console.log(`[worker.health] HTTP health server listening on 0.0.0.0:${healthPort}`);
+});
 
 // Keep Render free-plan alive: ping our own public URL every 9 min so the
 // inactivity timer never reaches the 15-min hibernation threshold.

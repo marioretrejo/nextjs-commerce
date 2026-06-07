@@ -37348,7 +37348,8 @@ var worker_core_default = defineAgent({
       voice: voiceId,
       apiKey: process.env["CARTESIA_API_KEY"],
       language: "en",
-      speed: "normal",
+      // sonic-3 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
+      // Passing the string 'normal' (valid only for sonic-2) causes a Cartesia API error.
       ...voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}
     });
     const tts = openaiKey ? new agentTts.FallbackAdapter({
@@ -37815,14 +37816,22 @@ var worker_core_default = defineAgent({
   }
 });
 var healthPort = Number(process.env["PORT"] ?? 1e4);
-var _healthServer = createServer((_, res) => {
-  res.writeHead(200);
-  res.end("ok");
+var _healthServer = createServer((req, res) => {
+  const url = req.url ?? "/";
+  if (url === "/" || url === "/healthz") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Worker Alive");
+  } else {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not Found");
+  }
 });
 _healthServer.on("error", (err) => {
   if (err.code !== "EADDRINUSE") throw err;
 });
-_healthServer.listen(healthPort, "0.0.0.0");
+_healthServer.listen(healthPort, "0.0.0.0", () => {
+  console.log(`[worker.health] HTTP health server listening on 0.0.0.0:${healthPort}`);
+});
 var _selfUrl = process.env["RENDER_EXTERNAL_URL"];
 if (_selfUrl) {
   setInterval(() => {
