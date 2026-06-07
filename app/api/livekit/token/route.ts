@@ -181,6 +181,8 @@ export async function POST(req: Request) {
         transfer_number: (agent as unknown as Record<string, unknown>)?.['transfer_number'] ?? null,
         flow_json:     (agent as unknown as Record<string, unknown>)?.['flow_json'] ?? null,
         flow_config:   (agent as unknown as Record<string, unknown>)?.['flow_config'] ?? null,
+        ambient_sound:        (agent as unknown as Record<string, unknown>)?.['ambient_sound'] ?? null,
+        ambient_sound_volume: (agent as unknown as Record<string, unknown>)?.['ambient_sound_volume'] ?? 1.0,
         has_rag:       ragContext !== null,
         region,
       }),

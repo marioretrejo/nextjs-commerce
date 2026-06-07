@@ -406,12 +406,12 @@ export function AgentEditForm({ agent, phoneNumbers }: { agent: Agent; phoneNumb
                     <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None (silent)</SelectItem>
-                      <SelectItem value="coffee-shop">☕ Coffee Shop</SelectItem>
-                      <SelectItem value="convention-hall">🏛️ Convention Hall</SelectItem>
-                      <SelectItem value="summer-outdoor">🌿 Summer Outdoor</SelectItem>
-                      <SelectItem value="mountain-outdoor">⛰️ Mountain Outdoor</SelectItem>
-                      <SelectItem value="static-noise">📻 Static Noise</SelectItem>
-                      <SelectItem value="call-center">🎧 Call Center</SelectItem>
+                      <SelectItem value="coffee-shop">Coffee Shop</SelectItem>
+                      <SelectItem value="convention-hall">Convention Hall</SelectItem>
+                      <SelectItem value="summer-outdoor">Summer Outdoor</SelectItem>
+                      <SelectItem value="mountain-outdoor">Mountain Outdoor</SelectItem>
+                      <SelectItem value="static-noise">Static Noise</SelectItem>
+                      <SelectItem value="call-center">Call Center</SelectItem>
                     </SelectContent>
                   </Select>
                   {form.ambient_sound && (

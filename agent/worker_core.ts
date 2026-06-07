@@ -20,6 +20,8 @@ import { defineAgent, voice, llm as agentLlm, llm, cli, ServerOptions } from '@l
 import { STT } from '@livekit/agents-plugin-deepgram';
 import { LLM } from '@livekit/agents-plugin-openai';
 import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
+import { AudioSource, AudioFrame, LocalAudioTrack, TrackPublishOptions } from '@livekit/rtc-node';
+import type { Room } from '@livekit/rtc-node';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
 import { loadPronunciationConfig } from './pronunciation.js';
@@ -371,6 +373,8 @@ export default defineAgent({
 
     let flowJson: unknown = null;
     let flowConfig: unknown = null;
+    let ambientSound: string | null = null;
+    let ambientSoundVolume = 1.0;
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
@@ -386,6 +390,8 @@ export default defineAgent({
         flow_json?: unknown;
         flow_config?: unknown;
         dynamic_variables?: Record<string, string>;
+        ambient_sound?: string | null;
+        ambient_sound_volume?: number | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -398,6 +404,8 @@ export default defineAgent({
       if (meta.agent_id) agentId = meta.agent_id;
       if (meta.flow_json) flowJson = meta.flow_json;
       if (meta.flow_config) flowConfig = meta.flow_config;
+      if (meta.ambient_sound) ambientSound = String(meta.ambient_sound);
+      if (meta.ambient_sound_volume != null) ambientSoundVolume = Number(meta.ambient_sound_volume);
 
       // Pilar D: inject contact/campaign variables into prompt and greeting
       if (meta.dynamic_variables && Object.keys(meta.dynamic_variables).length > 0) {
@@ -508,11 +516,10 @@ export default defineAgent({
       surprised:   ['surprise:positive:high'],
     };
     const cartesiaTTS = new CartesiaTTS({
-      model: 'sonic-3-5',
+      model: 'sonic-3',
       voice: voiceId,
       apiKey: process.env['CARTESIA_API_KEY'],
       language: 'es',
-      // sonic-3.5 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
     });
 
@@ -896,6 +903,7 @@ export default defineAgent({
     let _silenceTimer:  ReturnType<typeof setTimeout> | null = null;
     let _hangupTimer:   ReturnType<typeof setTimeout> | null = null;
     let _silenceArmed   = false; // armed only after the greeting is spoken
+    let _ambientAbort:  AbortController | null = null;
 
     // ── Barge-in state shared across event handlers ──────────────────────
     let _wasInterrupted      = false; // signals onUserTurnCompleted to inject prefix hint
@@ -1152,6 +1160,7 @@ export default defineAgent({
       backchannel.destroy();
       _silenceArmed = false;
       _clearSilenceTimers();
+      _ambientAbort?.abort();
       if (balanceCheckInterval) { clearInterval(balanceCheckInterval); balanceCheckInterval = null; }
       log('info', {
         message: 'call.ended',
@@ -1204,6 +1213,21 @@ export default defineAgent({
 
     await session.start({ agent, room: ctx.room });
 
+    // Start ambient background sound if configured for this agent
+    if (ambientSound) {
+      _ambientAbort = new AbortController();
+      const _workerDir = path.dirname(fileURLToPath(import.meta.url));
+      void streamAmbientSound(
+        ctx.room as unknown as Room,
+        ambientSound,
+        ambientSoundVolume,
+        _workerDir,
+        _ambientAbort.signal,
+      ).catch((err: unknown) => {
+        console.error('[ambient_sound] Unexpected error:', String(err));
+      });
+    }
+
     const greeting = firstMessage?.trim() || 'Hello! How can I help you today?';
     console.log('[worker.diag] session.say.greeting', JSON.stringify({
       ts: new Date().toISOString(),
@@ -1215,6 +1239,72 @@ export default defineAgent({
     _silenceArmed = true;
   },
 });
+
+// ── Ambient sound streaming ──────────────────────────────────────────────────
+// Reads a WAV file from public/soundscapes/, publishes it as a separate audio
+// track in the LiveKit room (heard only by the user, not by STT), and loops
+// until the call ends (signal aborted).
+const AMBIENT_ALLOWLIST = new Set([
+  'coffee-shop', 'convention-hall', 'summer-outdoor',
+  'mountain-outdoor', 'static-noise', 'call-center',
+]);
+async function streamAmbientSound(
+  room: Room,
+  soundName: string,
+  volume: number,
+  workerDir: string,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!AMBIENT_ALLOWLIST.has(soundName)) {
+    console.error('[ambient_sound] Unknown soundscape:', soundName);
+    return;
+  }
+  const wavPath = path.resolve(workerDir, '..', 'public', 'soundscapes', `${soundName}.wav`);
+  let wavBytes: Buffer;
+  try {
+    wavBytes = await fs.promises.readFile(wavPath);
+  } catch {
+    console.error('[ambient_sound] File not found:', wavPath);
+    return;
+  }
+  if (wavBytes.length < 44) return;
+
+  const numChannels   = wavBytes.readUInt16LE(22);
+  const sampleRate    = wavBytes.readUInt32LE(24);
+  const bitsPerSample = wavBytes.readUInt16LE(34);
+  if (bitsPerSample !== 16) { console.error('[ambient_sound] Unsupported bit depth:', bitsPerSample); return; }
+
+  const pcmData       = wavBytes.subarray(44);
+  const samplesPerFrame = Math.floor(sampleRate * 0.1); // 100 ms
+  const bytesPerFrame   = samplesPerFrame * numChannels * 2;
+
+  if (!room.localParticipant) { console.error('[ambient_sound] No localParticipant'); return; }
+
+  const source = new AudioSource(sampleRate, numChannels);
+  const track  = LocalAudioTrack.createAudioTrack('ambient', source);
+  await room.localParticipant.publishTrack(track, new TrackPublishOptions());
+
+  console.log('[ambient_sound] streaming', JSON.stringify({ soundName, sampleRate, numChannels, volume }));
+
+  let offset = 0;
+  while (!signal.aborted) {
+    if (offset + bytesPerFrame > pcmData.length) offset = 0;
+
+    const int16 = new Int16Array(samplesPerFrame * numChannels);
+    for (let i = 0; i < int16.length; i++) {
+      const s = pcmData.readInt16LE(offset + i * 2);
+      int16[i] = volume === 1.0 ? s : Math.max(-32768, Math.min(32767, Math.round(s * volume)));
+    }
+    offset += bytesPerFrame;
+
+    await source.captureFrame(new AudioFrame(int16, sampleRate, numChannels, samplesPerFrame));
+    // Pace at 100 ms per frame; check abort between frames
+    if (!signal.aborted) await new Promise<void>(r => setTimeout(r, 100));
+  }
+
+  await source.close().catch(() => null);
+  console.log('[ambient_sound] stopped:', soundName);
+}
 
 // HTTP health-check server — required so Render detects an open port and
 // doesn't block or restart the container. LiveKit's supervised_proc spawns

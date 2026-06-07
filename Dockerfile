@@ -61,6 +61,9 @@ COPY --from=deps /app/package.json  ./package.json
 # Pre-compiled bundle — no tsx or TypeScript source needed at runtime
 COPY --from=builder /app/dist/worker.mjs ./dist/worker.mjs
 
+# Soundscape WAV files for ambient background audio during calls
+COPY public/soundscapes/ ./public/soundscapes/
+
 # ─── Runtime config ────────────────────────────────────────────────────────────
 ENV NODE_ENV=production
 
