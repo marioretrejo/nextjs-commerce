@@ -465,7 +465,8 @@ export default defineAgent({
     }));
 
     const stt = new STT({
-      model: 'nova-2',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: 'nova-2' as any,
       language: 'en',
       apiKey: dgApiKey,
     });
@@ -849,6 +850,55 @@ export default defineAgent({
 
     const session = new voice.AgentSession({ stt, llm: lm, tts });
 
+    // ─── Shared helper: delete the LiveKit room (triggers Close + SIP hangup) ───
+    // Extracted as a module-level function so it can be called from timers and
+    // event handlers without repeating the env-var boilerplate.
+    const _doDeleteRoom = () => {
+      const wsUrl    = process.env['LIVEKIT_URL'] ?? '';
+      const httpUrl  = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+      const lkKey    = process.env['LIVEKIT_API_KEY'];
+      const lkSecret = process.env['LIVEKIT_API_SECRET'];
+      if (httpUrl && lkKey && lkSecret) {
+        import('livekit-server-sdk').then(({ RoomServiceClient }) => {
+          new RoomServiceClient(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+        }).catch(() => null);
+      }
+    };
+
+    // ─── Silence reprompt & auto-hangup system ───────────────────────────────
+    // Lifecycle:
+    //   1. After the greeting finishes speaking (AgentStateChanged → 'listening'),
+    //      a 4.5-second silence timer starts.
+    //   2. Any user speech (partial transcript) resets the timer immediately.
+    //   3. If 4.5 s elapse without user speech → agent says a check-in phrase.
+    //   4. If 3.5 s more elapse with no user speech → goodbye + room delete.
+    // All timer I/O is non-blocking — it never delays the audio pipeline.
+    let _silenceTimer:  ReturnType<typeof setTimeout> | null = null;
+    let _hangupTimer:   ReturnType<typeof setTimeout> | null = null;
+    let _silenceArmed   = false; // armed only after the greeting is spoken
+
+    const _clearSilenceTimers = () => {
+      if (_silenceTimer)  { clearTimeout(_silenceTimer);  _silenceTimer  = null; }
+      if (_hangupTimer)   { clearTimeout(_hangupTimer);   _hangupTimer   = null; }
+    };
+
+    const _armSilenceTimer = () => {
+      _clearSilenceTimers();
+      if (!_silenceArmed) return;
+      _silenceTimer = setTimeout(() => {
+        _silenceTimer = null;
+        void session.say('¿Hola? ¿Sigues ahí?').then(null, () => null);
+        _hangupTimer = setTimeout(() => {
+          _hangupTimer = null;
+          _silenceArmed = false;
+          void session.say(
+            'Parece que hay problemas de audio. Hasta luego.',
+            { allowInterruptions: false },
+          ).then(_doDeleteRoom, _doDeleteRoom);
+        }, 3500);
+      }, 4500);
+    };
+
     // ─── Kill switch: handle graceful disconnect if room is deleted mid-call ──
     // When the webhook detects zero credits, it calls RoomServiceClient.deleteRoom().
     // The worker gets a disconnect signal — say goodbye before the line drops.
@@ -875,30 +925,60 @@ export default defineAgent({
     let llmSpan = startSpan('llm.first_token');
     let ttsSpan = startSpan('tts.first_chunk');
 
+    // Regex for strong negative / DNC signals — triggers immediate fast hangup
+    // before the LLM round-trip to save API costs and latency.
+    const NEGATIVE_INTENT_RE =
+      /no\s+me\s+interesa|no\s+(vuelva?s?\s+a\s+)?llam|deja\s+de\s+llamar|no\s+quiero\s+(que\s+me\s+llam|m[aá]s\s+llamadas)|quit\s+calling|stop\s+calling|remove\s+(me\s+)?from\s+(your\s+)?list|not\s+interested|do\s+not\s+call|don'?t\s+(ever\s+)?call\s+(me|again)|fuck\s+off|piss\s+off|no\s+llames\s+m[aá]s|no\s+molest/i;
+
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       const typed = ev as { isFinal?: boolean; transcript?: string };
       const text = typed.transcript ?? '';
 
       if (!typed.isFinal) {
-        // Non-final (partial) transcript — user is still speaking
+        // ── Barge-in: user started speaking → immediately clear agent audio ──
+        // Explicitly calling interrupt() on every partial ensures the TTS buffer
+        // is flushed the moment Deepgram VAD fires, regardless of the internal
+        // interruption timer (minDuration: 250ms). This gives sub-50ms barge-in
+        // response on the audio channel.
+        if (session.agentState === 'speaking') {
+          void session.interrupt({ force: true }).await.catch(() => null);
+        }
+        // Any partial transcript resets the silence timer (user is active)
+        _clearSilenceTimers();
         backchannel.onPartial();
         return;
       }
 
       // Final transcript — user finished a thought
       backchannel.onFinal();
+      _clearSilenceTimers(); // user spoke — reset silence countdown
 
-      // Suppress filler-only utterances: don't advance spans or log them as
-      // real turns — "uh", "hmm", "ok" alone should never trigger a full LLM response.
-      if (isFillerOnly(text)) {
-        log('info', { message: 'stt.filler_suppressed', text, agent_id: agentId });
+      // ── STT Noise Filter: suppress very short or filler-only transcripts ──
+      // Transcripts shorter than 3 chars are ambient noise or clipped phonemes.
+      // Filler-only transcripts ("uh", "hmm", "ok") should never trigger LLM.
+      const trimmed = text.trim();
+      if (trimmed.length < 3 || isFillerOnly(trimmed)) {
+        log('info', { message: 'stt.noise_suppressed', text: trimmed, len: trimmed.length, agent_id: agentId });
+        _armSilenceTimer(); // user "spoke" but it was noise — restart silence window
+        return;
+      }
+
+      // ── Fast hangup on strong negative / DNC intent ───────────────────────
+      // Bypasses LLM to save one full round-trip (~300ms Groq + ~300ms TTS).
+      if (NEGATIVE_INTENT_RE.test(trimmed)) {
+        log('info', { message: 'negative_intent.fast_hangup', text: trimmed, agent_id: agentId });
+        _silenceArmed = false;
+        _clearSilenceTimers();
+        void session.interrupt({ force: true }).await.catch(() => null);
+        void session.say('Entendido, adiós.', { allowInterruptions: false })
+          .then(_doDeleteRoom, _doDeleteRoom);
         return;
       }
 
       const result = endSpan(sttSpan, {
         agent_id: agentId,
         workspace_id: workspaceId,
-        transcript_chars: text.length,
+        transcript_chars: trimmed.length,
       });
       checkLatencyThreshold(result);
       sttSpan = startSpan('stt'); // reset for next utterance
@@ -913,10 +993,17 @@ export default defineAgent({
     });
 
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
-      if ((ev as { state?: string }).state === 'speaking') {
+      const { oldState, newState } = ev as { oldState?: string; newState?: string };
+      if (newState === 'speaking') {
+        // TTS latency: first audio chunk arrived — record elapsed time
         const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
         checkLatencyThreshold(ttsResult);
-        ttsSpan = startSpan('tts.first_chunk'); // reset
+        ttsSpan = startSpan('tts.first_chunk'); // reset for next turn
+        _clearSilenceTimers(); // agent is speaking — pause silence countdown
+      }
+      if (newState === 'listening' && oldState === 'speaking') {
+        // Agent finished speaking — start silence watchdog
+        _armSilenceTimer();
       }
     });
 
@@ -986,6 +1073,8 @@ export default defineAgent({
     // ─── Session close — write transcript + duration to Supabase ─────────────
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
       backchannel.destroy();
+      _silenceArmed = false;
+      _clearSilenceTimers();
       if (balanceCheckInterval) { clearInterval(balanceCheckInterval); balanceCheckInterval = null; }
       log('info', {
         message: 'call.ended',
@@ -1044,6 +1133,9 @@ export default defineAgent({
       greeting_preview: greeting.slice(0, 80),
     }));
     await session.say(greeting);
+    // Arm silence watchdog after greeting — silence timer starts when the
+    // AgentStateChanged 'speaking'→'listening' transition fires (greeting ends).
+    _silenceArmed = true;
   },
 });
 

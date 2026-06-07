@@ -37302,6 +37302,7 @@ var worker_core_default = defineAgent({
       api_key_prefix: dgApiKey ? dgApiKey.slice(0, 4) : "MISSING"
     }));
     const stt = new STT({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: "nova-2",
       language: "en",
       apiKey: dgApiKey
@@ -37631,6 +37632,46 @@ var worker_core_default = defineAgent({
     });
     agentRef.current = agent;
     const session = new voice.AgentSession({ stt, llm: lm, tts });
+    const _doDeleteRoom = () => {
+      const wsUrl = process.env["LIVEKIT_URL"] ?? "";
+      const httpUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://");
+      const lkKey = process.env["LIVEKIT_API_KEY"];
+      const lkSecret = process.env["LIVEKIT_API_SECRET"];
+      if (httpUrl && lkKey && lkSecret) {
+        Promise.resolve().then(() => (init_dist2(), dist_exports2)).then(({ RoomServiceClient: RoomServiceClient2 }) => {
+          new RoomServiceClient2(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+        }).catch(() => null);
+      }
+    };
+    let _silenceTimer = null;
+    let _hangupTimer = null;
+    let _silenceArmed = false;
+    const _clearSilenceTimers = () => {
+      if (_silenceTimer) {
+        clearTimeout(_silenceTimer);
+        _silenceTimer = null;
+      }
+      if (_hangupTimer) {
+        clearTimeout(_hangupTimer);
+        _hangupTimer = null;
+      }
+    };
+    const _armSilenceTimer = () => {
+      _clearSilenceTimers();
+      if (!_silenceArmed) return;
+      _silenceTimer = setTimeout(() => {
+        _silenceTimer = null;
+        void session.say("\xBFHola? \xBFSigues ah\xED?").then(null, () => null);
+        _hangupTimer = setTimeout(() => {
+          _hangupTimer = null;
+          _silenceArmed = false;
+          void session.say(
+            "Parece que hay problemas de audio. Hasta luego.",
+            { allowInterruptions: false }
+          ).then(_doDeleteRoom, _doDeleteRoom);
+        }, 3500);
+      }, 4500);
+    };
     ctx.room.on("disconnected", async () => {
       const reason = ctx.room.disconnectReason;
       if (reason === "ROOM_DELETED" || reason === "SERVER_SHUTDOWN") {
@@ -37646,22 +37687,38 @@ var worker_core_default = defineAgent({
     let sttSpan = startSpan("stt");
     let llmSpan = startSpan("llm.first_token");
     let ttsSpan = startSpan("tts.first_chunk");
+    const NEGATIVE_INTENT_RE = /no\s+me\s+interesa|no\s+(vuelva?s?\s+a\s+)?llam|deja\s+de\s+llamar|no\s+quiero\s+(que\s+me\s+llam|m[aá]s\s+llamadas)|quit\s+calling|stop\s+calling|remove\s+(me\s+)?from\s+(your\s+)?list|not\s+interested|do\s+not\s+call|don'?t\s+(ever\s+)?call\s+(me|again)|fuck\s+off|piss\s+off|no\s+llames\s+m[aá]s|no\s+molest/i;
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       const typed = ev;
       const text = typed.transcript ?? "";
       if (!typed.isFinal) {
+        if (session.agentState === "speaking") {
+          void session.interrupt({ force: true }).await.catch(() => null);
+        }
+        _clearSilenceTimers();
         backchannel.onPartial();
         return;
       }
       backchannel.onFinal();
-      if (isFillerOnly(text)) {
-        log("info", { message: "stt.filler_suppressed", text, agent_id: agentId });
+      _clearSilenceTimers();
+      const trimmed = text.trim();
+      if (trimmed.length < 3 || isFillerOnly(trimmed)) {
+        log("info", { message: "stt.noise_suppressed", text: trimmed, len: trimmed.length, agent_id: agentId });
+        _armSilenceTimer();
+        return;
+      }
+      if (NEGATIVE_INTENT_RE.test(trimmed)) {
+        log("info", { message: "negative_intent.fast_hangup", text: trimmed, agent_id: agentId });
+        _silenceArmed = false;
+        _clearSilenceTimers();
+        void session.interrupt({ force: true }).await.catch(() => null);
+        void session.say("Entendido, adi\xF3s.", { allowInterruptions: false }).then(_doDeleteRoom, _doDeleteRoom);
         return;
       }
       const result = endSpan(sttSpan, {
         agent_id: agentId,
         workspace_id: workspaceId,
-        transcript_chars: text.length
+        transcript_chars: trimmed.length
       });
       checkLatencyThreshold(result);
       sttSpan = startSpan("stt");
@@ -37674,10 +37731,15 @@ var worker_core_default = defineAgent({
       ttsSpan = startSpan("tts.first_chunk");
     });
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
-      if (ev.state === "speaking") {
+      const { oldState, newState } = ev;
+      if (newState === "speaking") {
         const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
         checkLatencyThreshold(ttsResult);
         ttsSpan = startSpan("tts.first_chunk");
+        _clearSilenceTimers();
+      }
+      if (newState === "listening" && oldState === "speaking") {
+        _armSilenceTimer();
       }
     });
     const transcriptLines = [];
@@ -37733,6 +37795,8 @@ var worker_core_default = defineAgent({
     });
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
       backchannel.destroy();
+      _silenceArmed = false;
+      _clearSilenceTimers();
       if (balanceCheckInterval) {
         clearInterval(balanceCheckInterval);
         balanceCheckInterval = null;
@@ -37786,6 +37850,7 @@ var worker_core_default = defineAgent({
       greeting_preview: greeting.slice(0, 80)
     }));
     await session.say(greeting);
+    _silenceArmed = true;
   }
 });
 var healthPort = Number(process.env["PORT"] ?? 1e4);
