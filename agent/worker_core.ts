@@ -361,7 +361,7 @@ export default defineAgent({
     let systemPrompt =
       'You are a helpful, friendly voice assistant. Keep answers short and conversational — 1-3 sentences. Never use markdown, bullet points, or special characters in your responses.';
     let agentName = 'Assistant';
-    let voiceId = 'a0e99841-438c-4a64-b679-ae501e7d6091'; // Cartesia "Helpful Woman"
+    let voiceId = '02aeee94-c02b-456e-be7a-659672acf82d'; // Cartesia LatAm Spanish neutral
     let voiceEmotion: string | null = null;
     let firstMessage: string | null = null;
     let workspaceId: string | null = null;
@@ -467,7 +467,7 @@ export default defineAgent({
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: 'nova-2' as any,
-      language: 'en',
+      language: 'es',
       apiKey: dgApiKey,
     });
 
@@ -511,7 +511,7 @@ export default defineAgent({
       model: 'sonic-3',
       voice: voiceId,
       apiKey: process.env['CARTESIA_API_KEY'],
-      language: 'en',
+      language: 'es',
       // sonic-3 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
       // Passing the string 'normal' (valid only for sonic-2) causes a Cartesia API error.
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
@@ -836,7 +836,7 @@ export default defineAgent({
           minDuration: 250,  // ignore sub-250ms noises (clicks, breath) as interruptions
           minWords: 1,       // at least one word required — suppresses single-phoneme false triggers
           falseInterruptionTimeout: 1500,
-          resumeFalseInterruption: true,
+          resumeFalseInterruption: false,
           // backchannelBoundary: agent may emit a listening sound when user speech
           // falls within this ms range (600–3000ms of agent speaking before user interjects)
           backchannelBoundary: [600, 3000],
@@ -975,6 +975,7 @@ export default defineAgent({
         const partialText = text.trim();
         if (
           session.agentState === 'speaking' &&
+          !_wasInterrupted &&
           Date.now() > _speakLockoutUntil &&
           partialText.length >= 4 &&
           !isFillerOnly(partialText)

@@ -37229,7 +37229,7 @@ var worker_core_default = defineAgent({
     }));
     let systemPrompt = "You are a helpful, friendly voice assistant. Keep answers short and conversational \u2014 1-3 sentences. Never use markdown, bullet points, or special characters in your responses.";
     let agentName = "Assistant";
-    let voiceId = "a0e99841-438c-4a64-b679-ae501e7d6091";
+    let voiceId = "02aeee94-c02b-456e-be7a-659672acf82d";
     let voiceEmotion = null;
     let firstMessage = null;
     let workspaceId = null;
@@ -37304,7 +37304,7 @@ var worker_core_default = defineAgent({
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: "nova-2",
-      language: "en",
+      language: "es",
       apiKey: dgApiKey
     });
     stt.on("error", (err) => {
@@ -37332,7 +37332,7 @@ var worker_core_default = defineAgent({
       model: "sonic-3",
       voice: voiceId,
       apiKey: process.env["CARTESIA_API_KEY"],
-      language: "en",
+      language: "es",
       // sonic-3 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
       // Passing the string 'normal' (valid only for sonic-2) causes a Cartesia API error.
       ...voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}
@@ -37622,12 +37622,11 @@ var worker_core_default = defineAgent({
           minWords: 1,
           // at least one word required — suppresses single-phoneme false triggers
           falseInterruptionTimeout: 1500,
-          resumeFalseInterruption: true,
+          resumeFalseInterruption: false,
           // backchannelBoundary: agent may emit a listening sound when user speech
           // falls within this ms range (600–3000ms of agent speaking before user interjects)
           backchannelBoundary: [600, 3e3]
-        },
-        preemptiveGeneration: {}
+        }
       }
     });
     agentRef.current = agent;
@@ -37706,7 +37705,7 @@ var worker_core_default = defineAgent({
       const text = typed.transcript ?? "";
       if (!typed.isFinal) {
         const partialText = text.trim();
-        if (session.agentState === "speaking" && Date.now() > _speakLockoutUntil && partialText.length >= 4 && !isFillerOnly(partialText)) {
+        if (session.agentState === "speaking" && !_wasInterrupted && Date.now() > _speakLockoutUntil && partialText.length >= 4 && !isFillerOnly(partialText)) {
           void session.interrupt({ force: true }).await.catch(() => null);
           _wasInterrupted = true;
           _bargeInAt = Date.now();
