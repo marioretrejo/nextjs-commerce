@@ -20,7 +20,6 @@ import { defineAgent, voice, llm as agentLlm, llm, cli, ServerOptions } from '@l
 import { STT } from '@livekit/agents-plugin-deepgram';
 import { LLM } from '@livekit/agents-plugin-openai';
 import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
-import type { Room } from '@livekit/rtc-node';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
 import { loadPronunciationConfig } from './pronunciation.js';
@@ -497,11 +496,9 @@ export default defineAgent({
       baseURL: 'https://api.groq.com/openai/v1',
     });
 
-    // ─── 2. TTS: Cartesia sonic-3 primary → OpenAI TTS fallback ──────────────
-    //
-    // FallbackAdapter switches to OpenAI TTS if Cartesia returns a network error
-    // or times out. maxRetryPerTTS: 2 gives Cartesia two chances before switching.
-    // recoveryDelayMs: 5000 re-checks Cartesia every 5s to restore it.
+    // ─── 2. TTS: Cartesia sonic-multilingual ──────────────────────────────────
+    // sonic-multilingual is required for any non-English language (e.g. 'es').
+    // sonic-3/sonic-english would return "Model not found" for Spanish requests.
     // Maps our emotion names → Cartesia experimental_controls emotion tags
     // (must match the same map used in /api/voices/preview for consistency)
     const EMOTION_MAP: Record<string, string[]> = {
@@ -1216,7 +1213,7 @@ export default defineAgent({
       _ambientAbort = new AbortController();
       const _workerDir = path.dirname(fileURLToPath(import.meta.url));
       void streamAmbientSound(
-        ctx.room as Room,
+        ctx.room as LKRoom,
         ambientSound,
         ambientSoundVolume,
         _workerDir,
@@ -1246,8 +1243,10 @@ const AMBIENT_ALLOWLIST = new Set([
   'coffee-shop', 'convention-hall', 'summer-outdoor',
   'mountain-outdoor', 'static-noise', 'call-center',
 ]);
+// Minimal local type — avoids importing @livekit/rtc-node at module level
+interface LKRoom { localParticipant?: { publishTrack: (t: unknown, o: unknown) => Promise<unknown> } }
 async function streamAmbientSound(
-  room: Room,
+  room: LKRoom,
   soundName: string,
   volume: number,
   workerDir: string,
