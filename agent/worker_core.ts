@@ -336,6 +336,27 @@ export default defineAgent({
   entry: async (ctx) => {
     await ctx.connect();
 
+    // ── DIAGNOSTIC: log full env snapshot at call start ──────────────────────
+    const dgKey = process.env['DEEPGRAM_API_KEY'] ?? '';
+    const cartKey = process.env['CARTESIA_API_KEY'] ?? '';
+    const groqKey2 = process.env['GROQ_API_KEY'] ?? '';
+    const openaiKey2 = process.env['OPENAI_API_KEY'] ?? '';
+    console.log('[worker.diag] call.init', JSON.stringify({
+      ts: new Date().toISOString(),
+      room: ctx.room.name,
+      metadata_raw: ctx.room.metadata,
+      // Env var presence + first 4 chars (never log full keys)
+      DEEPGRAM_API_KEY:    dgKey    ? `set(len=${dgKey.length},prefix=${dgKey.slice(0,4)})` : 'MISSING',
+      CARTESIA_API_KEY:    cartKey  ? `set(len=${cartKey.length},prefix=${cartKey.slice(0,4)})` : 'MISSING',
+      GROQ_API_KEY:        groqKey2 ? `set(len=${groqKey2.length},prefix=${groqKey2.slice(0,4)})` : 'MISSING',
+      OPENAI_API_KEY:      openaiKey2 ? `set(len=${openaiKey2.length},prefix=${openaiKey2.slice(0,4)})` : 'MISSING',
+      LIVEKIT_URL:         process.env['LIVEKIT_URL'] ?? 'MISSING',
+      SUPABASE_URL_set:    !!process.env['NEXT_PUBLIC_SUPABASE_URL'],
+      SUPABASE_SRK_set:    !!process.env['SUPABASE_SERVICE_ROLE_KEY'],
+      // Deepgram connection URL that will be attempted
+      deepgram_url:        `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
+    }));
+
     // ─── 1. Parse room metadata ───────────────────────────────────────────────
     let systemPrompt =
       'You are a helpful, friendly voice assistant. Keep answers short and conversational — 1-3 sentences. Never use markdown, bullet points, or special characters in your responses.';
@@ -437,14 +458,34 @@ export default defineAgent({
     //
     // Masked values appear as [REDACTED] in the transcript, preventing PII from
     // ever reaching logs, Supabase, or LLM context.
+    const dgApiKey = process.env['DEEPGRAM_API_KEY'];
+    console.log('[worker.diag] stt.init', JSON.stringify({
+      model: 'nova-3',
+      language: 'en',
+      api_key_present: !!dgApiKey,
+      api_key_length:  dgApiKey?.length ?? 0,
+      api_key_prefix:  dgApiKey ? dgApiKey.slice(0, 4) : 'MISSING',
+      // The exact URL the Deepgram plugin will connect to:
+      connect_url: `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
+    }));
+
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: 'nova-3' as any,
       language: 'en',
-      apiKey: process.env['DEEPGRAM_API_KEY'],
+      apiKey: dgApiKey,
       // keywords: nova-2 only — causes HTTP 400 on nova-3
       // keyterm:  requires paid tier — causes HTTP 400 on most keys
       // redact:   tier-gated — add back once API key tier confirmed
+    });
+
+    // Log Deepgram connection errors with full detail
+    stt.on('error', (err: unknown) => {
+      console.error('[worker.diag] stt.error', JSON.stringify({
+        ts: new Date().toISOString(),
+        error: String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      }));
     });
 
     // ─── 2. LLM: Groq primary (~200ms TTFT) → OpenAI gpt-4o-mini fallback ────
@@ -1015,9 +1056,25 @@ export default defineAgent({
       await supabase.rpc('release_call_slot', { p_workspace_id: workspaceId }).then(() => null, () => null);
     });  // end Close handler
 
+    console.log('[worker.diag] session.starting', JSON.stringify({
+      ts: new Date().toISOString(),
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      room: ctx.room.name,
+      first_message_set: !!firstMessage,
+      voice_id: voiceId,
+      cartesia_key_present: !!process.env['CARTESIA_API_KEY'],
+      groq_key_present: !!groqKey,
+      openai_key_present: !!openaiKey,
+    }));
+
     await session.start({ agent, room: ctx.room });
 
     const greeting = firstMessage?.trim() || 'Hello! How can I help you today?';
+    console.log('[worker.diag] session.say.greeting', JSON.stringify({
+      ts: new Date().toISOString(),
+      greeting_preview: greeting.slice(0, 80),
+    }));
     await session.say(greeting);
   },
 });
