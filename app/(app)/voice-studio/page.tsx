@@ -58,6 +58,7 @@ interface BuiltInVoice {
   preview_url: string;
   description?: string;
   language?:   string;
+  tags?:       string[];
   labels: {
     gender: string;
     accent: string;
@@ -67,18 +68,18 @@ interface BuiltInVoice {
 
 // ── Voice filter taxonomy ─────────────────────────────────────────────────────
 const VOICE_FILTERS = [
-  { id: 'female',         label: 'Femenino',       icon: '👩',  re: /\b(female|woman|mujer|femenin)/i },
-  { id: 'male',           label: 'Masculino',       icon: '👨',  re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
-  { id: 'latino',         label: 'Latino',          icon: '🌎',  re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
-  { id: 'conversational', label: 'Conversacional',  icon: '💬',  re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
-  { id: 'narrative',      label: 'Narrativa',       icon: '📖',  re: /\b(narrat|storytell|audiobook|story\b)/i },
-  { id: 'professional',   label: 'Profesional',     icon: '🎙️', re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
+  { id: 'female',         label: 'Femenino',      re: /\b(female|woman|mujer|femenin)/i },
+  { id: 'male',           label: 'Masculino',     re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
+  { id: 'latino',         label: 'Latino',        re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
+  { id: 'conversational', label: 'Conversacional',re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
+  { id: 'narrative',      label: 'Narrativa',     re: /\b(narrat|storytell|audiobook|story\b)/i },
+  { id: 'professional',   label: 'Profesional',   re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
 ] as const;
 type VoiceFilterId = typeof VOICE_FILTERS[number]['id'];
 
 function voiceMatchesFilter(v: BuiltInVoice, filterId: VoiceFilterId): boolean {
-  const text = `${v.name} ${v.description ?? ''} ${v.labels?.gender ?? ''} ${v.labels?.accent ?? ''} ${v.language ?? ''}`;
-  return VOICE_FILTERS.find(f => f.id === filterId)!.re.test(text);
+  const haystack = [v.name, v.description ?? '', ...(v.tags ?? []), v.labels?.gender ?? '', v.labels?.accent ?? '', v.language ?? ''].join(' ');
+  return VOICE_FILTERS.find(f => f.id === filterId)!.re.test(haystack);
 }
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -327,13 +328,12 @@ export default function VoiceStudioPage() {
                   onClick={() => setActiveFilters(prev =>
                     active ? prev.filter(x => x !== f.id) : [...prev, f.id]
                   )}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-all ${
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border transition-all ${
                     active
                       ? 'bg-[#0a0a0a] text-white border-[#0a0a0a]'
                       : 'bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]'
                   }`}
                 >
-                  <span>{f.icon}</span>
                   {f.label}
                 </button>
               );
@@ -400,8 +400,8 @@ export default function VoiceStudioPage() {
                         )}
                         <div className="flex flex-wrap gap-1">
                           {activeTags.map(t => (
-                            <span key={t.id} className="inline-flex items-center gap-0.5 rounded-full bg-[#f5f5f5] px-1.5 py-0.5 text-[9px] font-medium text-[#6b6b6b]">
-                              {t.icon} {t.label}
+                            <span key={t.id} className="rounded-full bg-[#f5f5f5] px-1.5 py-0.5 text-[9px] font-medium text-[#6b6b6b]">
+                              {t.label}
                             </span>
                           ))}
                         </div>

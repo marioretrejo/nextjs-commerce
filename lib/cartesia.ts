@@ -15,6 +15,7 @@ export interface CartesiaVoice {
   language:    string;
   is_public:   boolean;
   description: string | null;
+  tags?:       string[];
   embedding?:  number[];
 }
 
@@ -98,7 +99,7 @@ export async function createCartesiaTTSStream({
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model_id: 'sonic-3',
+      model_id: 'sonic-3-5',
       transcript: text,
       voice: { mode: 'id', id: voiceId },
       output_format: { container: 'raw', encoding: 'pcm_f32le', sample_rate: 44100 },
@@ -109,7 +110,7 @@ export async function createCartesiaTTSStream({
 }
 
 export const VOICE_ENGINE_MAP: Record<string, string> = {
-  standard:   'sonic-2',
-  ultra_fast: 'sonic-2',
-  premium:    'sonic-3',
+  standard:   'sonic-3-5',
+  ultra_fast: 'sonic-3-5',
+  premium:    'sonic-3-5',
 };

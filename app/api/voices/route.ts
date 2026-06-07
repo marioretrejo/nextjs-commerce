@@ -38,6 +38,7 @@ export async function GET() {
         preview_url: '',
         description: v.description ?? '',
         language:    v.language   ?? '',
+        tags:        v.tags       ?? [],
         labels: {
           gender: '',
           accent: '',

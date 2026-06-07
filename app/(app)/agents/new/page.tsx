@@ -264,15 +264,15 @@ const TIMEZONES = [
   'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'
 ];
 
-interface Voice { voice_id: string; name: string; provider?: string; preview_url: string; description?: string; language?: string; labels: Record<string, string> }
+interface Voice { voice_id: string; name: string; provider?: string; preview_url: string; description?: string; language?: string; tags?: string[]; labels: Record<string, string> }
 
 const VOICE_FILTERS = [
-  { id: 'female',         label: 'Femenino',      icon: '👩',  re: /\b(female|woman|mujer|femenin)/i },
-  { id: 'male',           label: 'Masculino',      icon: '👨',  re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
-  { id: 'latino',         label: 'Latino',         icon: '🌎',  re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
-  { id: 'conversational', label: 'Conversacional', icon: '💬',  re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
-  { id: 'narrative',      label: 'Narrativa',      icon: '📖',  re: /\b(narrat|storytell|audiobook|story\b)/i },
-  { id: 'professional',   label: 'Profesional',    icon: '🎙️', re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
+  { id: 'female',         label: 'Femenino',      re: /\b(female|woman|mujer|femenin)/i },
+  { id: 'male',           label: 'Masculino',     re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
+  { id: 'latino',         label: 'Latino',        re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
+  { id: 'conversational', label: 'Conversacional',re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
+  { id: 'narrative',      label: 'Narrativa',     re: /\b(narrat|storytell|audiobook|story\b)/i },
+  { id: 'professional',   label: 'Profesional',   re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
 ] as const;
 type VoiceFilterId = typeof VOICE_FILTERS[number]['id'];
 
@@ -852,13 +852,13 @@ export default function NewAgentPage() {
                       onClick={() => setVoiceFilters(prev =>
                         active ? prev.filter(x => x !== f.id) : [...prev, f.id]
                       )}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-all ${
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-all ${
                         active
                           ? 'bg-[#0a0a0a] text-white border-[#0a0a0a]'
                           : 'bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]'
                       }`}
                     >
-                      {f.icon} {f.label}
+                      {f.label}
                     </button>
                   );
                 })}
@@ -881,7 +881,8 @@ export default function NewAgentPage() {
                   const filtered = voices.filter(v => {
                     const text = `${v.name} ${v.description ?? ''} ${v.language ?? ''}`.toLowerCase();
                     if (voiceSearch && !text.includes(voiceSearch.toLowerCase())) return false;
-                    if (voiceFilters.length > 0 && !voiceFilters.every(f => VOICE_FILTERS.find(fi => fi.id === f)!.re.test(text))) return false;
+                    const haystack = `${v.name} ${v.description ?? ''} ${(v.tags ?? []).join(' ')} ${v.language ?? ''}`.toLowerCase();
+                    if (voiceFilters.length > 0 && !voiceFilters.every(f => VOICE_FILTERS.find(fi => fi.id === f)!.re.test(haystack))) return false;
                     return true;
                   });
                   if (filtered.length === 0) return (

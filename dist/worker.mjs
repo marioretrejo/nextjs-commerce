@@ -37329,12 +37329,11 @@ var worker_core_default = defineAgent({
       surprised: ["surprise:positive:high"]
     };
     const cartesiaTTS = new CartesiaTTS({
-      model: "sonic-3",
+      model: "sonic-3-5",
       voice: voiceId,
       apiKey: process.env["CARTESIA_API_KEY"],
       language: "es",
-      // sonic-3 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
-      // Passing the string 'normal' (valid only for sonic-2) causes a Cartesia API error.
+      // sonic-3.5 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
       ...voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}
     });
     const tts = cartesiaTTS;
@@ -37626,7 +37625,8 @@ var worker_core_default = defineAgent({
           // backchannelBoundary: agent may emit a listening sound when user speech
           // falls within this ms range (600–3000ms of agent speaking before user interjects)
           backchannelBoundary: [600, 3e3]
-        }
+        },
+        preemptiveGeneration: {}
       }
     });
     agentRef.current = agent;
