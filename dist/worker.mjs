@@ -27770,7 +27770,7 @@ var require_main4 = __commonJS({
 });
 
 // agent/worker_core.ts
-import { defineAgent, voice, llm as llm2, cli, ServerOptions } from "@livekit/agents";
+import { defineAgent, voice, llm as agentLlm, llm as llm2, cli, ServerOptions } from "@livekit/agents";
 import { STT } from "@livekit/agents-plugin-deepgram";
 import { LLM } from "@livekit/agents-plugin-openai";
 import { TTS as CartesiaTTS } from "@livekit/agents-plugin-cartesia";
@@ -37631,6 +37631,15 @@ var worker_core_default = defineAgent({
       }
     });
     agentRef.current = agent;
+    const BARGE_IN_TRANSITION_HINT = '[INSTRUCCI\xD3N INTERNA \u2014 NO MENCIONAR] El usuario te acaba de interrumpir. Empieza tu respuesta OBLIGATORIAMENTE con UNA sola palabra de transici\xF3n (ejemplos: "Claro,", "S\xED,", "Mire,", "Entendido,"). Este prefijo reduce el silencio digital percibido por el usuario.';
+    agent.onUserTurnCompleted = async (chatCtx, _msg) => {
+      if (_wasInterrupted) {
+        _wasInterrupted = false;
+        chatCtx.insert(
+          agentLlm.ChatMessage.create({ role: "system", content: BARGE_IN_TRANSITION_HINT })
+        );
+      }
+    };
     const session = new voice.AgentSession({ stt, llm: lm, tts });
     const _doDeleteRoom = () => {
       const wsUrl = process.env["LIVEKIT_URL"] ?? "";
@@ -37646,6 +37655,10 @@ var worker_core_default = defineAgent({
     let _silenceTimer = null;
     let _hangupTimer = null;
     let _silenceArmed = false;
+    let _wasInterrupted = false;
+    let _bargeInAt = null;
+    let _endpointingReduced = false;
+    let _speakLockoutUntil = 0;
     const _clearSilenceTimers = () => {
       if (_silenceTimer) {
         clearTimeout(_silenceTimer);
@@ -37692,8 +37705,16 @@ var worker_core_default = defineAgent({
       const typed = ev;
       const text = typed.transcript ?? "";
       if (!typed.isFinal) {
-        if (session.agentState === "speaking") {
+        const partialText = text.trim();
+        if (session.agentState === "speaking" && Date.now() > _speakLockoutUntil && partialText.length >= 4 && !isFillerOnly(partialText)) {
           void session.interrupt({ force: true }).await.catch(() => null);
+          _wasInterrupted = true;
+          _bargeInAt = Date.now();
+          const _audioRec = session["activity"]?.audioRecognition;
+          if (_audioRec?.endpointing && !_endpointingReduced) {
+            _audioRec.endpointing.updateOptions({ minDelay: 400, maxDelay: 1500 });
+            _endpointingReduced = true;
+          }
         }
         _clearSilenceTimers();
         backchannel.onPartial();
@@ -37737,8 +37758,33 @@ var worker_core_default = defineAgent({
         checkLatencyThreshold(ttsResult);
         ttsSpan = startSpan("tts.first_chunk");
         _clearSilenceTimers();
+        _speakLockoutUntil = Date.now() + 450;
+        if (_bargeInAt !== null) {
+          const gapMs = Date.now() - _bargeInAt;
+          _bargeInAt = null;
+          console.log("[worker.barge_in.flow]", JSON.stringify({
+            ts: (/* @__PURE__ */ new Date()).toISOString(),
+            gap_ms: gapMs,
+            agent_id: agentId,
+            room: roomName
+          }));
+        }
+        if (_endpointingReduced) {
+          _endpointingReduced = false;
+          const _audioRec = session["activity"]?.audioRecognition;
+          if (_audioRec?.endpointing) {
+            _audioRec.endpointing.updateOptions({ minDelay: 450, maxDelay: 3e3 });
+          }
+        }
       }
       if (newState === "listening" && oldState === "speaking") {
+        _speakLockoutUntil = 0;
+        if (_wasInterrupted) {
+          _wasInterrupted = false;
+        }
+        if (_bargeInAt !== null) {
+          _bargeInAt = null;
+        }
         _armSilenceTimer();
       }
     });

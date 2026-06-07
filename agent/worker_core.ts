@@ -848,6 +848,27 @@ export default defineAgent({
     // Wire mutable ref so transition_state tool can update agent.instructions
     agentRef.current = agent;
 
+    // ── Barge-in prefix injection via onUserTurnCompleted hook ─────────────
+    // LiveKit calls this hook with the chatCtx COPY that will be sent to the
+    // LLM. We insert a one-shot system message that instructs Groq to start
+    // its response with a short transition word (e.g. "Claro,", "Sí,").
+    // The message lives only in the copy — it's never persisted to history.
+    // _wasInterrupted is set in the partial-transcript handler below.
+    const BARGE_IN_TRANSITION_HINT =
+      '[INSTRUCCIÓN INTERNA — NO MENCIONAR] El usuario te acaba de interrumpir. ' +
+      'Empieza tu respuesta OBLIGATORIAMENTE con UNA sola palabra de transición ' +
+      '(ejemplos: "Claro,", "Sí,", "Mire,", "Entendido,"). ' +
+      'Este prefijo reduce el silencio digital percibido por el usuario.';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (agent as any).onUserTurnCompleted = async (chatCtx: any, _msg: any) => {
+      if (_wasInterrupted) {
+        _wasInterrupted = false;
+        chatCtx.insert(
+          agentLlm.ChatMessage.create({ role: 'system', content: BARGE_IN_TRANSITION_HINT })
+        );
+      }
+    };
+
     const session = new voice.AgentSession({ stt, llm: lm, tts });
 
     // ─── Shared helper: delete the LiveKit room (triggers Close + SIP hangup) ───
@@ -876,6 +897,15 @@ export default defineAgent({
     let _silenceTimer:  ReturnType<typeof setTimeout> | null = null;
     let _hangupTimer:   ReturnType<typeof setTimeout> | null = null;
     let _silenceArmed   = false; // armed only after the greeting is spoken
+
+    // ── Barge-in state shared across event handlers ──────────────────────
+    let _wasInterrupted      = false; // signals onUserTurnCompleted to inject prefix hint
+    let _bargeInAt: number | null = null; // timestamp when interrupt fired (for gap log)
+    let _endpointingReduced  = false; // true while endpointing minDelay is lowered
+    // Speak lockout: ignore partial transcripts for the first 450ms after the agent
+    // starts speaking. This prevents the bot from interrupting its own audio due to
+    // echo / acoustic feedback reaching Deepgram before AEC stabilises.
+    let _speakLockoutUntil   = 0;
 
     const _clearSilenceTimers = () => {
       if (_silenceTimer)  { clearTimeout(_silenceTimer);  _silenceTimer  = null; }
@@ -935,13 +965,30 @@ export default defineAgent({
       const text = typed.transcript ?? '';
 
       if (!typed.isFinal) {
-        // ── Barge-in: user started speaking → immediately clear agent audio ──
-        // Explicitly calling interrupt() on every partial ensures the TTS buffer
-        // is flushed the moment Deepgram VAD fires, regardless of the internal
-        // interruption timer (minDuration: 250ms). This gives sub-50ms barge-in
-        // response on the audio channel.
-        if (session.agentState === 'speaking') {
+        // ── Barge-in guard: only interrupt if lockout window has expired ───
+        // _speakLockoutUntil is set to Date.now()+450 when agent starts speaking.
+        // During that window, Deepgram may pick up agent echo before AEC kicks in
+        // and send short partial transcripts — we silently skip those to prevent
+        // the bot stuttering ("Me alec... / Me da... / Me pone...").
+        // We also require the partial to have at least 4 chars so single phonemes
+        // and punctuation blips don't trigger an interrupt.
+        const partialText = text.trim();
+        if (
+          session.agentState === 'speaking' &&
+          Date.now() > _speakLockoutUntil &&
+          partialText.length >= 4 &&
+          !isFillerOnly(partialText)
+        ) {
+          // ── Real barge-in confirmed — clear audio and inject transition ──
           void session.interrupt({ force: true }).await.catch(() => null);
+          _wasInterrupted = true; // onUserTurnCompleted will inject a transition prefix
+          _bargeInAt      = Date.now(); // start gap timer for [worker.barge_in.flow] log
+          // Reduce endpointing for faster turn detection on this one turn
+          const _audioRec = (session as unknown as Record<string, any>)['activity']?.audioRecognition;
+          if (_audioRec?.endpointing && !_endpointingReduced) {
+            _audioRec.endpointing.updateOptions({ minDelay: 400, maxDelay: 1500 });
+            _endpointingReduced = true;
+          }
         }
         // Any partial transcript resets the silence timer (user is active)
         _clearSilenceTimers();
@@ -1000,9 +1047,39 @@ export default defineAgent({
         checkLatencyThreshold(ttsResult);
         ttsSpan = startSpan('tts.first_chunk'); // reset for next turn
         _clearSilenceTimers(); // agent is speaking — pause silence countdown
+        // Speak lockout: block partial-transcript interrupts for the first 450ms
+        // after agent speech starts. This prevents self-interruption from echo/AEC.
+        _speakLockoutUntil = Date.now() + 450;
+
+        // ── Barge-in gap log ──────────────────────────────────────────────
+        // Measures ms from user interrupt → Cartesia first frame.
+        // Target: < 600ms (STT ≈ 100ms + Groq ≈ 300ms + Cartesia ≈ 150ms).
+        if (_bargeInAt !== null) {
+          const gapMs = Date.now() - _bargeInAt;
+          _bargeInAt = null;
+          console.log('[worker.barge_in.flow]', JSON.stringify({
+            ts:       new Date().toISOString(),
+            gap_ms:   gapMs,
+            agent_id: agentId,
+            room:     roomName,
+          }));
+        }
+        // Restore normal endpointing now that agent is speaking again
+        if (_endpointingReduced) {
+          _endpointingReduced = false;
+          const _audioRec = (session as unknown as Record<string, any>)['activity']?.audioRecognition;
+          if (_audioRec?.endpointing) {
+            _audioRec.endpointing.updateOptions({ minDelay: 450, maxDelay: 3000 });
+          }
+        }
       }
       if (newState === 'listening' && oldState === 'speaking') {
-        // Agent finished speaking — start silence watchdog
+        // Agent finished speaking — start silence watchdog and clear lockout
+        _speakLockoutUntil = 0;  // user is now free to interrupt immediately
+        // Queue cleanup: if the agent finished speaking without being interrupted,
+        // clear any stale barge-in state so it doesn't pollute the next turn.
+        if (_wasInterrupted) { _wasInterrupted = false; }
+        if (_bargeInAt !== null) { _bargeInAt = null; }
         _armSilenceTimer();
       }
     });
