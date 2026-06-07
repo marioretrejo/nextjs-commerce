@@ -169,8 +169,10 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
           <CardContent>
             <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
               {call.transcript.split('\n').filter(Boolean).map((line, i) => {
-                const isAgent = /^(agent|ai|assistant)\s*:/i.test(line);
-                const text = line.replace(/^(agent|ai|assistant|user|caller|contact)\s*:/i, '').trim();
+                // A line is from the agent if it has ANY word prefix followed by ":"
+                // UNLESS that prefix is a known user keyword (user/caller/contact/cliente).
+                const isAgent = /^\S+\s*:/.test(line) && !/^(user|caller|contact|cliente)\s*:/i.test(line);
+                const text = line.replace(/^\S+\s*:\s*/, '').trim();
                 return (
                   <div key={i} className={`flex gap-3 ${isAgent ? 'flex-row' : 'flex-row-reverse'}`}>
                     <div className={`max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm ${isAgent ? 'bg-[#0a0a0a] text-white' : 'bg-[#f5f5f5] text-[#0a0a0a]'}`}>

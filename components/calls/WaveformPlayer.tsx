@@ -203,9 +203,9 @@ export function WaveformPlayer({ url, transcript, duration: dbDuration }: Props)
             className="max-h-[480px] overflow-y-auto divide-y divide-[#f5f5f5]"
           >
             {lines.map((line, i) => {
-              const isAgent  = /^(agent|ai|assistant)\s*:/i.test(line);
+              const isAgent  = /^\S+\s*:/.test(line) && !/^(user|caller|contact|cliente)\s*:/i.test(line);
               const isActive = i === activeLine;
-              const text     = line.replace(/^(agent|ai|assistant|user|caller|contact)\s*:/i, '').trim();
+              const text     = line.replace(/^\S+\s*:\s*/, '').trim();
               const speaker  = isAgent ? 'Agent' : 'Contact';
 
               return (
