@@ -510,7 +510,7 @@ export default defineAgent({
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ttsInitOpts: any = {
-      model:    'sonic-multilingual',
+      model:    'sonic-3',
       voice:    voiceId,
       apiKey:   process.env['CARTESIA_API_KEY'],
       language: 'es',
