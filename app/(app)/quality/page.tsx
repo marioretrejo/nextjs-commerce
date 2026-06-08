@@ -27,7 +27,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { Agent, Call, QACriteria } from '@/lib/supabase/types';
-import { Shield, TrendingUp, AlertTriangle, Star, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Shield, TrendingUp, AlertTriangle, Star, Plus, Pencil, Trash2, Zap, Loader2 } from 'lucide-react';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { format, subDays, eachWeekOfInterval, endOfWeek, startOfDay } from 'date-fns';
 import Link from 'next/link';
@@ -66,7 +66,8 @@ export default function QualityPage() {
   const [criteriaForm, setCriteriaForm] = useState<CriteriaForm>({ name: '', description: '', weight: 50 });
   const [savingCriteria, setSavingCriteria] = useState(false);
 
-  const [workspaceId, setWorkspaceId] = useState('');
+  const [workspaceId,     setWorkspaceId]     = useState('');
+  const [reanalyzing,     setReanalyzing]     = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/workspace-id')
@@ -199,6 +200,21 @@ export default function QualityPage() {
     await fetchData();
   }
 
+  async function reanalyzeCalls() {
+    setReanalyzing(true);
+    try {
+      const res = await fetch('/api/jobs/reanalyze-calls', { method: 'POST' });
+      const d = await res.json() as { queued?: number; message?: string; error?: string };
+      if (!res.ok) throw new Error(d.error ?? 'Failed');
+      toast.success(d.message ?? `Re-analysis triggered for ${d.queued} call(s). Results appear in ~30s.`);
+      setTimeout(() => fetchData(), 35000); // auto-refresh after ~35s
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setReanalyzing(false);
+    }
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -207,16 +223,29 @@ export default function QualityPage() {
           <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Quality Assurance</h1>
           <p className="mt-1 text-sm text-[#6b6b6b]">Monitor agent performance and manage QA scoring criteria.</p>
         </div>
-        <select
-          value={selectedAgent}
-          onChange={(e) => setSelectedAgent(e.target.value)}
-          className="h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
-        >
-          <option value="all">All Agents</option>
-          {agents.map(a => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={reanalyzeCalls}
+            disabled={reanalyzing || loading}
+            title="Re-score existing calls using current QA criteria"
+          >
+            {reanalyzing
+              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analizando…</>
+              : <><Zap className="w-3.5 h-3.5 mr-1.5" /> Re-analizar llamadas</>}
+          </Button>
+          <select
+            value={selectedAgent}
+            onChange={(e) => setSelectedAgent(e.target.value)}
+            className="h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
+          >
+            <option value="all">All Agents</option>
+            {agents.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Summary cards */}

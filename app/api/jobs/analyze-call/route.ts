@@ -76,21 +76,39 @@ TRANSCRIPT:
 
 type AnalysisResponse = AnalysisResult & { _tokensUsed: number | null };
 
-async function runQAScoring(transcript: string, systemPrompt: string): Promise<QAResult | null> {
+interface QACriterion { name: string; description: string | null; weight: number }
+
+async function runQAScoring(
+  transcript: string,
+  systemPrompt: string | null,
+  criteria: QACriterion[],
+): Promise<QAResult | null> {
   const groqKey = process.env['GROQ_API_KEY'];
   if (!groqKey) return null;
 
-  const prompt = `You are a QA evaluator for AI voice agents. Score how well the AI agent followed its instructions.
+  // Build the scoring section: prefer explicit criteria over raw system prompt
+  let scoringSection: string;
+  if (criteria.length > 0) {
+    const totalWeight = criteria.reduce((s, c) => s + c.weight, 0) || 1;
+    scoringSection = `SCORING CRITERIA (weighted — score each criterion proportionally to its weight):
+${criteria.map(c => `- ${c.name} (${Math.round((c.weight / totalWeight) * 100)}% of score): ${c.description ?? ''}`).join('\n')}`;
+  } else if (systemPrompt) {
+    scoringSection = `AGENT INSTRUCTIONS (score how closely the agent followed these):
+${systemPrompt.slice(0, 1500)}`;
+  } else {
+    scoringSection = 'SCORING: Evaluate overall call quality, professionalism, and helpfulness.';
+  }
 
-AGENT INSTRUCTIONS (system prompt):
-${systemPrompt.slice(0, 1500)}
+  const prompt = `You are a QA evaluator for AI voice agents.
+
+${scoringSection}
 
 CALL TRANSCRIPT:
 ${transcript.slice(0, 3000)}
 
 Return ONLY a JSON object with:
-- "score": integer 0-100 (100 = perfectly followed instructions)
-- "feedback": one sentence explaining the score, noting what was done well or what could improve
+- "score": integer 0-100 reflecting the weighted criteria above
+- "feedback": one sentence noting what was done well and the main area for improvement
 
 Respond with ONLY the raw JSON.`;
 
@@ -204,12 +222,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ skipped: true, reason: 'Transcript too short for analysis' });
   }
 
-  const [analysis, agentData] = await Promise.all([
+  const [analysis, agentData, criteriaRows] = await Promise.all([
     runGroqAnalysis(callRecord.transcript),
     callRecord.agent_id
       ? admin.from('agents').select('system_prompt').eq('id', callRecord.agent_id).single()
           .then(r => (r.data as unknown as AgentRow | null))
       : Promise.resolve(null),
+    callRecord.agent_id
+      ? admin.from('qa_criteria').select('name, description, weight').eq('agent_id', callRecord.agent_id)
+          .order('created_at').then(r => (r.data as QACriterion[] | null) ?? [])
+      : Promise.resolve([]),
   ]);
 
   if (!analysis) {
@@ -249,10 +271,11 @@ export async function POST(req: Request) {
       if (e) console.warn('[analyze-call] extended update failed:', e.message);
     });
 
-  // Step 3: Auto-QA — score transcript vs agent system prompt
-  const systemPrompt = agentData?.system_prompt;
-  if (systemPrompt && systemPrompt.length > 20) {
-    const qa = await runQAScoring(callRecord.transcript, systemPrompt);
+  // Step 3: Auto-QA — score transcript using explicit criteria (preferred) or system prompt
+  const systemPrompt = agentData?.system_prompt ?? null;
+  const hasScoringBasis = (criteriaRows as QACriterion[]).length > 0 || (systemPrompt && systemPrompt.length > 20);
+  if (hasScoringBasis) {
+    const qa = await runQAScoring(callRecord.transcript, systemPrompt, criteriaRows as QACriterion[]);
     if (qa) {
       await admin
         .from('calls')
