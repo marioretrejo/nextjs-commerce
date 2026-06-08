@@ -111,6 +111,23 @@ export function OutboundDialer({ agents, phoneNumbers = [], hasSipTrunk = false 
     });
   }, []);
 
+  // ── Poll actual call outcome (no-answer / voicemail / completed) ─────────
+  async function pollCallOutcome(roomName: string, timeoutMs: number): Promise<string> {
+    const TERMINAL = new Set(['completed', 'no_answer', 'failed', 'voicemail', 'cancelled']);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        const r = await fetch(`/api/calls/dial/status?room=${encodeURIComponent(roomName)}`);
+        if (r.ok) {
+          const j = await r.json() as { status: string };
+          if (TERMINAL.has(j.status)) return j.status;
+        }
+      } catch { /* network hiccup — keep polling */ }
+    }
+    return 'no_answer'; // timed out waiting for result
+  }
+
   // ── Dial a single number ──────────────────────────────────────────────────
   async function dialOne(row: DialRow, index: number): Promise<void> {
     if (abortRef.current) { updateRow(index, { status: 'skipped' }); return; }
@@ -132,8 +149,22 @@ export function OutboundDialer({ agents, phoneNumbers = [], hasSipTrunk = false 
       const data = await res.json() as { call_id?: string; error?: string };
       if (!res.ok) {
         updateRow(index, { status: 'failed', error: data.error ?? `HTTP ${res.status}`, attempts: row.attempts + 1 });
+        return;
+      }
+
+      const roomName = data.call_id ?? '';
+      updateRow(index, { status: 'dialing', callId: roomName, attempts: row.attempts + 1 });
+
+      // Wait for the actual call outcome: ring + answer + up to 30s buffer.
+      // This turns 'no_answer'/'voicemail'/'failed' into a retry-eligible 'failed' row.
+      const pollTimeout = (ringingTimeout + 30) * 1000;
+      const finalStatus = roomName ? await pollCallOutcome(roomName, pollTimeout) : 'no_answer';
+
+      if (finalStatus === 'completed') {
+        updateRow(index, { status: 'success' });
       } else {
-        updateRow(index, { status: 'success', callId: data.call_id, attempts: row.attempts + 1 });
+        // no_answer, voicemail, failed, cancelled → eligible for retry
+        updateRow(index, { status: 'failed', error: finalStatus });
       }
     } catch (err) {
       updateRow(index, { status: 'failed', error: String(err), attempts: row.attempts + 1 });
