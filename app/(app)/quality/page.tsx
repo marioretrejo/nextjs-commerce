@@ -205,11 +205,18 @@ export default function QualityPage() {
     try {
       const res = await fetch('/api/jobs/reanalyze-calls', { method: 'POST' });
       const d = await res.json() as { queued?: number; message?: string; error?: string };
-      if (!res.ok) throw new Error(d.error ?? 'Failed');
-      toast.success(d.message ?? `Re-analysis triggered for ${d.queued} call(s). Results appear in ~30s.`);
-      setTimeout(() => fetchData(), 35000); // auto-refresh after ~35s
-    } catch (e) {
-      toast.error(String(e));
+      if (!res.ok) {
+        toast.error(d.error ?? 'Re-análisis fallido.');
+        return;
+      }
+      if ((d.queued ?? 0) === 0) {
+        toast.info(d.message ?? 'No hay llamadas elegibles para re-análisis.');
+        return;
+      }
+      toast.success(d.message ?? `Re-análisis iniciado para ${d.queued} llamada(s). Resultados en ~30s.`);
+      setTimeout(() => fetchData(), 35000);
+    } catch {
+      toast.error('Error de red al iniciar el re-análisis.');
     } finally {
       setReanalyzing(false);
     }
