@@ -332,6 +332,84 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+// ── CRM Analysis Data ────────────────────────────────────────────────────────
+interface CrmAnalysisData {
+  Age: string | null;
+  Name: string | null;
+  Motivation: string | null;
+  interested: boolean | null;
+  occupation: string | null;
+  Financial_goal: string | null;
+  Call_transferred: boolean | null;
+  monthly_expenses: string | null;
+  time_in_occupation: string | null;
+  'In Voicemail': boolean;
+  'Call Success': boolean;
+}
+
+async function extractCrmAnalysis(
+  transcript: string,
+  groqApiKey: string,
+  crmFunnel: string | null,
+  crmLeadId: string | null,
+  crmCountry: string | null,
+  crmCampaign: string | null,
+  voicemailDetected: boolean,
+): Promise<CrmAnalysisData> {
+  const blank: CrmAnalysisData = {
+    Age: null, Name: null, Motivation: null, interested: null,
+    occupation: null, Financial_goal: null, Call_transferred: null,
+    monthly_expenses: null, time_in_occupation: null,
+    'In Voicemail': voicemailDetected,
+    'Call Success': !voicemailDetected,
+  };
+  if (!transcript.trim() || !groqApiKey) return blank;
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        temperature: 0,
+        max_tokens: 512,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a CRM data extractor. Extract the following fields from the call transcript and return ONLY a valid JSON object with exactly these keys. Use null for unknown fields.
+Keys: Age, Name, Motivation, interested (boolean), occupation, Financial_goal, Call_transferred (boolean), monthly_expenses, time_in_occupation, "In Voicemail" (boolean, value: ${voicemailDetected}), "Call Success" (boolean)
+CRM Context: Funnel=${crmFunnel ?? 'N/A'}, LeadId=${crmLeadId ?? 'N/A'}, Country=${crmCountry ?? 'N/A'}, Campaign=${crmCampaign ?? 'N/A'}`,
+          },
+          {
+            role: 'user',
+            content: `Transcript:\n${transcript.slice(0, 4000)}`,
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return blank;
+    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const raw = json.choices?.[0]?.message?.content?.trim() ?? '';
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return blank;
+    const parsed = JSON.parse(jsonMatch[0]) as Partial<CrmAnalysisData>;
+    return {
+      Age: parsed.Age ?? null,
+      Name: parsed.Name ?? null,
+      Motivation: parsed.Motivation ?? null,
+      interested: parsed.interested ?? null,
+      occupation: parsed.occupation ?? null,
+      Financial_goal: parsed.Financial_goal ?? null,
+      Call_transferred: parsed.Call_transferred ?? null,
+      monthly_expenses: parsed.monthly_expenses ?? null,
+      time_in_occupation: parsed.time_in_occupation ?? null,
+      'In Voicemail': voicemailDetected,
+      'Call Success': parsed['Call Success'] ?? !voicemailDetected,
+    };
+  } catch {
+    return blank;
+  }
+}
+
 export default defineAgent({
   entry: async (ctx) => {
     await ctx.connect();
@@ -374,6 +452,13 @@ export default defineAgent({
     let ambientSound: string | null = null;
     let ambientSoundVolume = 1.0;
 
+    // CRM fields extracted from room metadata
+    let crmFunnel: string | null = null;
+    let crmLeadId: string | null = null;
+    let crmCountry: string | null = null;
+    let crmCampaign: string | null = null;
+    let callEndedWebhookUrl: string | null = null;
+
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
         system_prompt?: string;
@@ -390,6 +475,11 @@ export default defineAgent({
         dynamic_variables?: Record<string, string>;
         ambient_sound?: string | null;
         ambient_sound_volume?: number | null;
+        Funnel?: string | null;
+        LeadId?: string | null;
+        Country?: string | null;
+        Campaign?: string | null;
+        webhook_url?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -410,8 +500,33 @@ export default defineAgent({
         const vars = meta.dynamic_variables;
         systemPrompt = injectVariables(systemPrompt, vars);
         if (firstMessage) firstMessage = injectVariables(firstMessage, vars);
+
+        // CRM fields may also live inside dynamic_variables
+        crmFunnel    = crmFunnel    ?? vars['Funnel']   ?? null;
+        crmLeadId    = crmLeadId    ?? vars['LeadId']   ?? null;
+        crmCountry   = crmCountry   ?? vars['Country']  ?? null;
+        crmCampaign  = crmCampaign  ?? vars['Campaign'] ?? null;
       }
+
+      // CRM fields at top level take priority
+      if (meta.Funnel)      crmFunnel   = meta.Funnel;
+      if (meta.LeadId)      crmLeadId   = meta.LeadId;
+      if (meta.Country)     crmCountry  = meta.Country;
+      if (meta.Campaign)    crmCampaign = meta.Campaign;
+      if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
     } catch { /* use defaults */ }
+
+    // Inject CRM context section into system prompt when CRM fields are present
+    if (crmFunnel || crmLeadId || crmCountry || crmCampaign) {
+      systemPrompt += [
+        '\n\n## CRM Context',
+        `Funnel: ${crmFunnel ?? 'N/A'}`,
+        `LeadId: ${crmLeadId ?? 'N/A'}`,
+        `Country: ${crmCountry ?? 'N/A'}`,
+        `Campaign: ${crmCampaign ?? 'N/A'}`,
+        'Use this context to personalize your responses. Never reveal the LeadId to the caller.',
+      ].join('\n');
+    }
 
     const roomName = ctx.room.name ?? '';
     const roomMatch = roomName.match(/^(?:agent|sip-agent)-([0-9a-f-]+)/i);
@@ -510,7 +625,7 @@ export default defineAgent({
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ttsInitOpts: any = {
-      model:    'sonic-3',
+      model:    'sonic-multilingual',
       voice:    voiceId,
       apiKey:   process.env['CARTESIA_API_KEY'],
       language: 'es',
@@ -913,6 +1028,7 @@ export default defineAgent({
     let _hangupTimer:   ReturnType<typeof setTimeout> | null = null;
     let _silenceArmed   = false; // armed only after the greeting is spoken
     let _ambientAbort:  AbortController | null = null;
+    let _voicemailDetected = false; // set when voicemail greeting detected within first 30s
 
     // ── Barge-in state shared across event handlers ──────────────────────
     let _wasInterrupted      = false; // signals onUserTurnCompleted to inject prefix hint
@@ -976,6 +1092,10 @@ export default defineAgent({
     const NEGATIVE_INTENT_RE =
       /no\s+me\s+interesa|no\s+(vuelva?s?\s+a\s+)?llam|deja\s+de\s+llamar|no\s+quiero\s+(que\s+me\s+llam|m[aá]s\s+llamadas)|quit\s+calling|stop\s+calling|remove\s+(me\s+)?from\s+(your\s+)?list|not\s+interested|do\s+not\s+call|don'?t\s+(ever\s+)?call\s+(me|again)|fuck\s+off|piss\s+off|no\s+llames\s+m[aá]s|no\s+molest/i;
 
+    // Regex for voicemail detection — triggers immediate hangup within first 30s
+    const VOICEMAIL_RE =
+      /deja\s+(tu\s+)?mensaje|leave\s+(a\s+)?message|buzz?[oó]n\s+de\s+voz|voice\s*mail|at\s+the\s+tone|después\s+del\s+(tono|pitido)|press\s+\d+\s+to|marca\s+\d+\s+para|no\s+(est[aá]\s+)?disponible\s+en\s+este\s+momento|not\s+available\s+right\s+now|can'?t\s+(come\s+to\s+the\s+)?phone\s+right\s+now|please\s+leave\s+(a\s+)?message|deje\s+(su\s+)?mensaje/i;
+
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       const typed = ev as { isFinal?: boolean; transcript?: string };
       const text = typed.transcript ?? '';
@@ -1036,6 +1156,16 @@ export default defineAgent({
         void session.interrupt({ force: true }).await.catch(() => null);
         void session.say('Entendido, adiós.', { allowInterruptions: false })
           .then(_doDeleteRoom, _doDeleteRoom);
+        return;
+      }
+
+      // ── Voicemail detection: hang up immediately within first 30s ─────────
+      if (!_voicemailDetected && (Date.now() - callStartedAt) < 30_000 && VOICEMAIL_RE.test(trimmed)) {
+        _voicemailDetected = true;
+        log('info', { message: 'voicemail.detected', text: trimmed, agent_id: agentId });
+        _silenceArmed = false;
+        _clearSilenceTimers();
+        void _doDeleteRoom();
         return;
       }
 
@@ -1203,9 +1333,64 @@ export default defineAgent({
         { onConflict: 'retell_call_id', ignoreDuplicates: false }
       );
 
+      // CRM analysis extraction — run Groq on transcript to extract structured data
+      const groqKeyForAnalysis = process.env['GROQ_API_KEY'] ?? '';
+      const crmAnalysis = await extractCrmAnalysis(
+        transcript, groqKeyForAnalysis,
+        crmFunnel, crmLeadId, crmCountry, crmCampaign,
+        _voicemailDetected,
+      );
+
+      // Persist extracted_data to the calls row
+      const { data: callRow } = await supabase
+        .from('calls')
+        .select('id')
+        .eq('retell_call_id', roomName)
+        .single();
+      if (callRow?.id) {
+        await supabase.from('calls')
+          .update({ extracted_data: crmAnalysis })
+          .eq('id', callRow.id);
+      }
+
       // Release the concurrent call slot so the next call can proceed.
       // This runs on every session close — success, error, or worker crash recovery.
       await supabase.rpc('release_call_slot', { p_workspace_id: workspaceId }).then(() => null, () => null);
+
+      // Outbound webhook: deliver call result + CRM analysis to external platform
+      if (callEndedWebhookUrl) {
+        try {
+          await Promise.race([
+            fetch(callEndedWebhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'call.completed',
+                timestamp: new Date().toISOString(),
+                call: {
+                  room: roomName,
+                  agent_id: agentId,
+                  workspace_id: workspaceId,
+                  direction: callDirection,
+                  duration_seconds: durationSeconds,
+                  voicemail: _voicemailDetected,
+                },
+                crm_fields: {
+                  Funnel: crmFunnel,
+                  LeadId: crmLeadId,
+                  Country: crmCountry,
+                  Campaign: crmCampaign,
+                },
+                analysis: crmAnalysis,
+              }),
+            }),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('webhook timeout')), 8000)),
+          ]);
+          log('info', { message: 'call.webhook.sent', room: roomName });
+        } catch (err) {
+          log('error', { message: 'call.webhook.failed', error: String(err) });
+        }
+      }
     });  // end Close handler
 
     console.log('[worker.diag] session.starting', JSON.stringify({
