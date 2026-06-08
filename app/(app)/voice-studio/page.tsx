@@ -94,10 +94,12 @@ export default function VoiceStudioPage() {
   const [loading,       setLoading]       = useState(true);
   const [cloneOpen,     setCloneOpen]     = useState(false);
   const [deletingId,    setDeletingId]    = useState<string | null>(null);
-  const [playingUrl,    setPlayingUrl]    = useState<string | null>(null);
-  const [voiceSearch,   setVoiceSearch]   = useState('');
-  const [activeFilters, setActiveFilters] = useState<VoiceFilterId[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingUrl,      setPlayingUrl]      = useState<string | null>(null);
+  const [loadingPreview,  setLoadingPreview]  = useState<string | null>(null);
+  const [voiceSearch,     setVoiceSearch]     = useState('');
+  const [activeFilters,   setActiveFilters]   = useState<VoiceFilterId[]>([]);
+  const audioRef    = useRef<HTMLAudioElement | null>(null);
+  const blobUrlsRef = useRef<string[]>([]);
 
   // Clone form state
   const [cloneName,    setCloneName]    = useState('');
@@ -139,19 +141,58 @@ export default function VoiceStudioPage() {
     return () => clearInterval(id);
   }, [customVoices]);
 
+  function stopAudio() {
+    audioRef.current?.pause();
+    if (audioRef.current) audioRef.current.src = '';
+    setPlayingUrl(null);
+  }
+
   function togglePreview(url: string | null) {
     if (!url) return;
-    if (playingUrl === url) {
-      audioRef.current?.pause();
-      setPlayingUrl(null);
-      return;
-    }
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+    if (playingUrl === url) { stopAudio(); return; }
+    stopAudio();
     const audio = new Audio(url);
     audioRef.current = audio;
-    audio.play().catch(() => null);
-    setPlayingUrl(url);
     audio.onended = () => setPlayingUrl(null);
+    setPlayingUrl(url);
+    audio.play().catch(() => {
+      toast.error('No se pudo reproducir el audio.');
+      setPlayingUrl(null);
+    });
+  }
+
+  async function playBuiltInVoice(voice: BuiltInVoice) {
+    const key = `builtin:${voice.voice_id}`;
+    if (playingUrl === key) { stopAudio(); return; }
+    stopAudio();
+    setLoadingPreview(voice.voice_id);
+    try {
+      const res = await fetch('/api/voices/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice_id: voice.voice_id, language: voice.language || 'en' }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error al generar preview' })) as { error?: string };
+        toast.error(err.error ?? 'No se pudo generar el preview');
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlsRef.current.push(blobUrl);
+      const audio = new Audio(blobUrl);
+      audioRef.current = audio;
+      audio.onended = () => { setPlayingUrl(null); URL.revokeObjectURL(blobUrl); };
+      setPlayingUrl(key);
+      audio.play().catch(() => {
+        toast.error('No se pudo reproducir el audio.');
+        setPlayingUrl(null);
+      });
+    } catch {
+      toast.error('Fallo al generar preview. Verifica la API key de Cartesia.');
+    } finally {
+      setLoadingPreview(null);
+    }
   }
 
   async function submitClone() {
@@ -387,12 +428,16 @@ export default function VoiceStudioPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
-                            onClick={() => togglePreview(v.preview_url || '')}
+                            className="h-7 w-7 shrink-0 ml-1 text-[#6b6b6b] hover:text-[#0a0a0a]"
+                            onClick={() => playBuiltInVoice(v)}
+                            disabled={loadingPreview === v.voice_id}
+                            title="Preview voice"
                           >
-                            {playingUrl === v.preview_url
-                              ? <Pause className="h-3 w-3" />
-                              : <Play  className="h-3 w-3" />}
+                            {loadingPreview === v.voice_id
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : playingUrl === `builtin:${v.voice_id}`
+                                ? <Pause className="h-3 w-3" />
+                                : <Play  className="h-3 w-3" />}
                           </Button>
                         </div>
                         {v.description && (
