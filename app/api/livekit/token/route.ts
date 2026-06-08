@@ -107,6 +107,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // Auto-heal zombie slots before claiming
+  const staleAt = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  try {
+    await admin.from('workspaces').update({ active_calls: 0 })
+      .eq('id', workspace.id).gt('active_calls', 0)
+      .or(`active_calls_last_claimed_at.is.null,active_calls_last_claimed_at.lt.${staleAt}`);
+  } catch { /* non-fatal */ }
+
   // ── Rate limiter: atomic claim of a concurrent call slot ─────────────────
   // try_claim_call_slot also re-checks minutes inside a transaction to prevent
   // the TOCTOU race between the check above and the slot claim.

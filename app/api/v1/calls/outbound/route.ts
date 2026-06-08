@@ -113,6 +113,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Minute limit reached. Upgrade your plan.' }, { status: 403 });
   }
 
+  // Auto-heal zombie slots before claiming
+  const staleAt = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  try {
+    await admin.from('workspaces').update({ active_calls: 0 })
+      .eq('id', workspaceId).gt('active_calls', 0)
+      .or(`active_calls_last_claimed_at.is.null,active_calls_last_claimed_at.lt.${staleAt}`);
+  } catch { /* non-fatal */ }
+
   // ── Atomic claim of concurrent call slot ──────────────────────────────────
   const { data: claimed } = await admin.rpc('try_claim_call_slot', { p_workspace_id: workspaceId });
   if (!claimed) {

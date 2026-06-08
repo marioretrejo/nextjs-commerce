@@ -162,6 +162,16 @@ export async function POST(req: Request) {
     }, { status: 503 });
   }
 
+  // Auto-heal: reset stale slots for this workspace before trying to claim one.
+  // If active_calls > 0 but the last claim was >15 min ago, those are zombie
+  // slots from crashed/timed-out agent sessions — safe to release.
+  const staleThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  try {
+    await admin.from('workspaces').update({ active_calls: 0 })
+      .eq('id', workspace.id).gt('active_calls', 0)
+      .or(`active_calls_last_claimed_at.is.null,active_calls_last_claimed_at.lt.${staleThreshold}`);
+  } catch { /* non-fatal */ }
+
   const { data: claimed } = await admin.rpc('try_claim_call_slot', { p_workspace_id: workspace.id });
   if (!claimed) return NextResponse.json({ error: 'Concurrent call limit reached.', code: 'CONCURRENT_LIMIT' }, { status: 429 });
 
