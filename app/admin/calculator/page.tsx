@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Calculator, Save, RefreshCw, DollarSign, TrendingUp } from 'lucide-react';
+import { Calculator, Save, RefreshCw, DollarSign, TrendingUp, HelpCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ProviderCosts {
   twilio_outbound_per_min: number;
@@ -32,13 +33,37 @@ const DEFAULTS: ProviderCosts = {
   tts_per_1k_chars:        0.0500,
 };
 
-const COST_FIELDS: { key: keyof ProviderCosts; label: string; unit: string; hint: string }[] = [
-  { key: 'twilio_outbound_per_min', label: 'Twilio Saliente',  unit: '$/min',           hint: 'twilio.com/en-us/voice/pricing/us' },
-  { key: 'twilio_inbound_per_min',  label: 'Twilio Entrante',  unit: '$/min',           hint: 'twilio.com/en-us/voice/pricing/us' },
-  { key: 'livekit_per_min',         label: 'LiveKit WebRTC',   unit: '$/min',           hint: 'livekit.io/pricing — por participante/min' },
-  { key: 'stt_per_min',             label: 'Deepgram Nova-3',  unit: '$/min',           hint: 'deepgram.com/pricing — STT streaming' },
-  { key: 'llm_per_1k_tokens',       label: 'Groq Llama 4 Scout', unit: '$/1k tokens',  hint: 'groq.com/pricing — promedio input+output' },
-  { key: 'tts_per_1k_chars',        label: 'Cartesia Sonic-3', unit: '$/1k chars',      hint: 'cartesia.ai/pricing — $50/1M chars' },
+const COST_FIELDS: { key: keyof ProviderCosts; label: string; unit: string; hint: string; how: string }[] = [
+  {
+    key: 'twilio_outbound_per_min', label: 'Twilio Saliente', unit: '$/min',
+    hint: 'twilio.com/en-us/voice/pricing/us',
+    how: 'Cobra por minuto conectado desde que el destinatario contesta hasta que cuelga. Precio oficial para llamadas salientes a EE.UU.: $0.014/min. Se factura en fracciones de segundo.',
+  },
+  {
+    key: 'twilio_inbound_per_min', label: 'Twilio Entrante', unit: '$/min',
+    hint: 'twilio.com/en-us/voice/pricing/us',
+    how: 'Mismo modelo que saliente pero para llamadas que recibe tu número. $0.014/min para números de EE.UU. Se suma al costo de renta del número (~$1.15/mes).',
+  },
+  {
+    key: 'livekit_per_min', label: 'LiveKit WebRTC', unit: '$/min',
+    hint: 'livekit.io/pricing — por participante/min',
+    how: 'Cobra por participante × minuto de media (audio/video) procesada. $0.0005/participante/min en plan pagado. Solo aplica en llamadas desde navegador; las llamadas telefónicas SIP tienen tarifa separada.',
+  },
+  {
+    key: 'stt_per_min', label: 'Deepgram Nova-3', unit: '$/min',
+    hint: 'deepgram.com/pricing — STT streaming',
+    how: 'Cobra por minuto de audio enviado al modelo de transcripción, se factura aunque haya silencio. Nova-3 Streaming (tiempo real): $0.0077/min en PAYG. Plan Growth baja a $0.0065/min.',
+  },
+  {
+    key: 'llm_per_1k_tokens', label: 'Groq · Llama 4 Scout', unit: '$/1k tokens',
+    hint: 'groq.com/pricing — promedio input+output',
+    how: 'Cobra por tokens procesados: $0.11/1M tokens de entrada + $0.34/1M tokens de salida. El valor configurado ($0.000225/1k) es un promedio blended asumiendo ~50% input / 50% output. Es el proveedor más barato del stack.',
+  },
+  {
+    key: 'tts_per_1k_chars', label: 'Cartesia Sonic-3', unit: '$/1k chars',
+    hint: 'cartesia.ai/pricing — $50/1M chars',
+    how: 'Cobra por cada carácter de texto que el agente convierte a voz. Precio oficial: $50 por 1,000,000 caracteres = $0.05 por cada 1,000 chars. A 800 chars/min en una llamada de 3 min = $0.12. Es el componente más costoso del stack.',
+  },
 ];
 
 // Promedios fijos de consumo por minuto
@@ -148,25 +173,41 @@ export default function CalculatorPage() {
             <CardDescription>Valores en USD — precios oficiales de cada proveedor.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {COST_FIELDS.map(({ key, label, unit, hint }) => (
-              <div key={key} className="space-y-1">
-                <Label className="text-xs font-medium text-[#0a0a0a]">
-                  {label}
-                  <span className="ml-1.5 text-[#6b6b6b] font-normal">({unit})</span>
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    step="0.0001"
-                    min="0"
-                    value={costs[key]}
-                    onChange={e => setCostField(key, e.target.value)}
-                    className="h-8 text-sm w-32 font-mono"
-                  />
-                  <span className="text-xs text-[#6b6b6b]">{hint}</span>
+            <TooltipProvider delayDuration={0}>
+              {COST_FIELDS.map(({ key, label, unit, hint, how }) => (
+                <div key={key} className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs font-medium text-[#0a0a0a]">
+                      {label}
+                      <span className="ml-1.5 text-[#6b6b6b] font-normal">({unit})</span>
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-[#a0a0a0] hover:text-[#0a0a0a] transition-colors">
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs leading-relaxed">
+                        <p className="font-medium mb-1">{label}</p>
+                        <p className="text-[#6b6b6b]">{how}</p>
+                        <p className="mt-1.5 text-[#a0a0a0] italic">{hint}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      value={costs[key]}
+                      onChange={e => setCostField(key, e.target.value)}
+                      className="h-8 text-sm w-32 font-mono"
+                    />
+                    <span className="text-xs text-[#6b6b6b]">{hint}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </TooltipProvider>
           </CardContent>
         </Card>
 
