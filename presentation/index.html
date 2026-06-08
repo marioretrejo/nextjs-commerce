@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceOS — La IA que cierra tratos mientras duermes</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4338ca;
+      --accent: #06b6d4;
+      --accent2: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --dark: #0a0a0f;
+      --dark2: #111118;
+      --card: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--dark);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ── NAVIGATION ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; }
+    .nav-logo span { color: var(--primary); }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      padding: 0.55rem 1.4rem; background: var(--primary);
+      color: #fff; border: none; border-radius: 8px;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      text-decoration: none; transition: all 0.2s;
+    }
+    .nav-cta:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 8rem 2rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99,102,241,0.35) 0%, transparent 65%),
+                  radial-gradient(ellipse 60% 40% at 80% 80%, rgba(6,182,212,0.2) 0%, transparent 60%),
+                  radial-gradient(ellipse 50% 40% at 10% 90%, rgba(16,185,129,0.15) 0%, transparent 50%);
+    }
+
+    .grid-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.4rem 1rem; border-radius: 99px;
+      background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.35);
+      font-size: 0.8rem; font-weight: 600; color: #a5b4fc;
+      margin-bottom: 1.8rem; position: relative; z-index: 1;
+      animation: fadeInDown 0.6s ease both;
+    }
+    .hero-badge .dot {
+      width: 8px; height: 8px; background: var(--accent2);
+      border-radius: 50%; animation: pulse 2s infinite;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.8rem, 7vw, 5.5rem);
+      font-weight: 900; line-height: 1.05;
+      letter-spacing: -2px;
+      position: relative; z-index: 1;
+      animation: fadeInUp 0.7s ease 0.1s both;
+    }
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, #a5b4fc 0%, #67e8f9 50%, #6ee7b7 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      font-size: clamp(1.1rem, 2.5vw, 1.35rem);
+      color: var(--muted); max-width: 680px; margin: 1.5rem auto 2.5rem;
+      line-height: 1.65; position: relative; z-index: 1;
+      animation: fadeInUp 0.7s ease 0.2s both;
+    }
+
+    .hero-actions {
+      display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+      position: relative; z-index: 1;
+      animation: fadeInUp 0.7s ease 0.3s both;
+    }
+    .btn-primary {
+      padding: 0.9rem 2.2rem; background: var(--primary);
+      color: #fff; border: none; border-radius: 10px;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      text-decoration: none; transition: all 0.25s;
+      box-shadow: 0 0 30px rgba(99,102,241,0.5);
+    }
+    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 0 50px rgba(99,102,241,0.7); }
+    .btn-secondary {
+      padding: 0.9rem 2.2rem;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+      text-decoration: none; transition: all 0.25s;
+    }
+    .btn-secondary:hover { border-color: var(--primary); color: #a5b4fc; }
+
+    .hero-stats {
+      display: flex; gap: 3rem; margin-top: 4rem; flex-wrap: wrap; justify-content: center;
+      position: relative; z-index: 1;
+      animation: fadeInUp 0.7s ease 0.4s both;
+    }
+    .stat { text-align: center; }
+    .stat-num {
+      font-size: 2.2rem; font-weight: 900; letter-spacing: -1px;
+      background: linear-gradient(135deg, #a5b4fc, #67e8f9);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-label { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
+
+    /* ── SECTION ── */
+    section { padding: 6rem 2rem; }
+    .section-inner { max-width: 1200px; margin: 0 auto; }
+    .section-tag {
+      display: inline-block; padding: 0.35rem 0.9rem;
+      border-radius: 6px; background: rgba(99,102,241,0.12);
+      color: #a5b4fc; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem;
+    }
+    .section-title {
+      font-size: clamp(2rem, 4vw, 3rem); font-weight: 900;
+      letter-spacing: -1px; line-height: 1.1; margin-bottom: 1rem;
+    }
+    .section-sub {
+      font-size: 1.1rem; color: var(--muted); max-width: 600px; line-height: 1.65;
+    }
+    .section-header { margin-bottom: 3.5rem; }
+
+    /* ── PROBLEM / PAIN ── */
+    .pain-section { background: linear-gradient(to bottom, var(--dark), var(--dark2)); }
+    .pain-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem; margin-top: 3rem;
+    }
+    .pain-card {
+      background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 14px; padding: 1.8rem;
+      transition: transform 0.2s;
+    }
+    .pain-card:hover { transform: translateY(-4px); }
+    .pain-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .pain-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #fca5a5; }
+    .pain-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+
+    /* ── FEATURES ── */
+    .features-section { background: var(--dark2); }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem;
+      transition: all 0.3s; position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--primary-glow,rgba(99,102,241,0.07)), transparent);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-card:hover { border-color: rgba(99,102,241,0.4); transform: translateY(-4px); }
+    .feature-icon {
+      width: 52px; height: 52px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; margin-bottom: 1.2rem;
+    }
+    .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .feature-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+
+    /* ── HOW IT WORKS ── */
+    .steps-section { background: var(--dark); }
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: grid; grid-template-columns: 80px 1fr;
+      gap: 2rem; align-items: start; padding: 2.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; font-weight: 900; flex-shrink: 0;
+    }
+    .step-content h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .step-content p { color: var(--muted); line-height: 1.65; }
+
+    /* ── TECH STACK ── */
+    .tech-section { background: var(--dark2); }
+    .tech-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .tech-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.4rem 1.6rem;
+      display: flex; align-items: center; gap: 0.9rem;
+      transition: all 0.2s;
+    }
+    .tech-card:hover { border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.07); }
+    .tech-emoji { font-size: 1.5rem; }
+    .tech-info h4 { font-size: 0.9rem; font-weight: 700; }
+    .tech-info p { font-size: 0.75rem; color: var(--muted); }
+
+    /* ── METRICS ── */
+    .metrics-section {
+      background: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(6,182,212,0.1) 100%);
+      border-top: 1px solid rgba(99,102,241,0.2);
+      border-bottom: 1px solid rgba(99,102,241,0.2);
+    }
+    .metrics-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 2rem;
+    }
+    .metric-card { text-align: center; padding: 2rem; }
+    .metric-num {
+      font-size: 3.5rem; font-weight: 900; letter-spacing: -2px;
+      background: linear-gradient(135deg, #a5b4fc, #67e8f9);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      display: block;
+    }
+    .metric-label { font-size: 1rem; color: var(--muted); margin-top: 0.4rem; }
+    .metric-desc { font-size: 0.82rem; color: rgba(148,163,184,0.6); margin-top: 0.2rem; }
+
+    /* ── INTEGRATIONS ── */
+    .integrations-section { background: var(--dark); }
+    .integrations-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 1rem; margin-top: 2.5rem;
+    }
+    .integration-pill {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 0.9rem 1rem;
+      display: flex; align-items: center; gap: 0.7rem;
+      font-size: 0.88rem; font-weight: 600;
+      transition: all 0.2s;
+    }
+    .integration-pill:hover { border-color: rgba(99,102,241,0.4); transform: scale(1.02); }
+
+    /* ── PRICING ── */
+    .pricing-section { background: var(--dark2); }
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem; align-items: start;
+    }
+    .pricing-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2.5rem; position: relative;
+      transition: all 0.3s;
+    }
+    .pricing-card:hover { transform: translateY(-6px); }
+    .pricing-card.featured {
+      border-color: var(--primary);
+      background: rgba(99,102,241,0.1);
+      box-shadow: 0 0 60px rgba(99,102,241,0.25);
+    }
+    .featured-badge {
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #fff; padding: 0.3rem 1.2rem; border-radius: 99px;
+      font-size: 0.78rem; font-weight: 700; white-space: nowrap;
+    }
+    .plan-name { font-size: 1rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .plan-price { font-size: 3rem; font-weight: 900; letter-spacing: -2px; margin: 0.75rem 0; }
+    .plan-price span { font-size: 1rem; font-weight: 500; color: var(--muted); }
+    .plan-desc { font-size: 0.9rem; color: var(--muted); margin-bottom: 1.8rem; line-height: 1.5; }
+    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+    .plan-features li {
+      display: flex; align-items: center; gap: 0.7rem;
+      font-size: 0.9rem;
+    }
+    .plan-features li::before { content: '✓'; color: var(--accent2); font-weight: 700; }
+    .plan-cta {
+      display: block; width: 100%; margin-top: 2rem;
+      padding: 0.85rem; border-radius: 10px;
+      text-align: center; font-weight: 700; font-size: 0.95rem;
+      cursor: pointer; text-decoration: none; transition: all 0.2s;
+    }
+    .plan-cta-outline {
+      border: 1px solid var(--border); color: var(--text);
+      background: transparent;
+    }
+    .plan-cta-outline:hover { border-color: var(--primary); color: #a5b4fc; }
+    .plan-cta-filled {
+      background: var(--primary); color: #fff; border: none;
+      box-shadow: 0 0 25px rgba(99,102,241,0.4);
+    }
+    .plan-cta-filled:hover { background: var(--primary-dark); box-shadow: 0 0 40px rgba(99,102,241,0.6); }
+
+    /* ── USE CASES ── */
+    .usecases-section { background: var(--dark); }
+    .usecase-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .usecase-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem;
+      transition: all 0.3s;
+    }
+    .usecase-card:hover { border-color: rgba(6,182,212,0.4); transform: translateY(-4px); }
+    .usecase-industry {
+      font-size: 0.75rem; font-weight: 700; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.6rem;
+    }
+    .usecase-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .usecase-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+    .usecase-result {
+      margin-top: 1.2rem; padding: 0.8rem 1rem;
+      background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 8px; font-size: 0.85rem; color: #6ee7b7; font-weight: 600;
+    }
+
+    /* ── TESTIMONIALS ── */
+    .testimonials-section { background: var(--dark2); }
+    .testimonials-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+    .testimonial-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem;
+    }
+    .stars { color: var(--warning); font-size: 1rem; margin-bottom: 1rem; }
+    .testimonial-text { font-size: 0.95rem; line-height: 1.7; color: var(--text); font-style: italic; }
+    .testimonial-author { display: flex; align-items: center; gap: 0.9rem; margin-top: 1.5rem; }
+    .author-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem;
+    }
+    .author-name { font-weight: 700; font-size: 0.9rem; }
+    .author-title { font-size: 0.8rem; color: var(--muted); }
+
+    /* ── SECURITY ── */
+    .security-section { background: var(--dark); }
+    .security-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+    }
+    .security-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.8rem;
+      display: flex; gap: 1.2rem; align-items: start;
+    }
+    .security-icon { font-size: 1.8rem; flex-shrink: 0; }
+    .security-card h4 { font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .security-card p { font-size: 0.87rem; color: var(--muted); line-height: 1.55; }
+
+    /* ── CTA FINAL ── */
+    .cta-section {
+      background: var(--dark2);
+      text-align: center; padding: 8rem 2rem;
+      position: relative; overflow: hidden;
+    }
+    .cta-bg {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(99,102,241,0.25) 0%, transparent 70%);
+    }
+    .cta-section h2 {
+      font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900;
+      letter-spacing: -1.5px; position: relative; z-index: 1; margin-bottom: 1rem;
+    }
+    .cta-section p {
+      font-size: 1.2rem; color: var(--muted); position: relative; z-index: 1; margin-bottom: 2.5rem;
+    }
+    .cta-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
+    .cta-note { font-size: 0.82rem; color: rgba(148,163,184,0.5); margin-top: 1.2rem; position: relative; z-index: 1; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--dark); border-top: 1px solid var(--border);
+      padding: 3rem 2rem; text-align: center;
+    }
+    footer .footer-logo { font-size: 1.3rem; font-weight: 900; margin-bottom: 0.5rem; }
+    footer .footer-logo span { color: var(--primary); }
+    footer p { font-size: 0.85rem; color: var(--muted); }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.3); }
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes glow {
+      0%,100% { box-shadow: 0 0 20px rgba(99,102,241,0.3); }
+      50% { box-shadow: 0 0 50px rgba(99,102,241,0.7); }
+    }
+
+    .float { animation: float 4s ease-in-out infinite; }
+    .glow { animation: glow 3s ease-in-out infinite; }
+
+    /* Scroll reveal */
+    .reveal { opacity: 0; transform: translateY(40px); transition: all 0.7s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── DEMO WIDGET ── */
+    .demo-widget {
+      max-width: 900px; margin: 4rem auto 0;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; overflow: hidden;
+    }
+    .demo-topbar {
+      background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border);
+      padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .dot-red { width: 12px; height: 12px; border-radius: 50%; background: #ef4444; }
+    .dot-yellow { width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; }
+    .dot-green { width: 12px; height: 12px; border-radius: 50%; background: #10b981; }
+    .demo-url { flex: 1; text-align: center; font-size: 0.82rem; color: var(--muted); }
+    .demo-body { padding: 2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .demo-panel { background: rgba(0,0,0,0.3); border-radius: 12px; padding: 1.5rem; }
+    .demo-panel h4 { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 1rem; }
+    .demo-metric { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .demo-metric:last-child { border-bottom: none; }
+    .demo-metric-label { font-size: 0.85rem; color: var(--muted); }
+    .demo-metric-value { font-size: 0.9rem; font-weight: 700; }
+    .demo-metric-value.green { color: var(--accent2); }
+    .demo-metric-value.blue { color: var(--accent); }
+    .demo-metric-value.purple { color: #a5b4fc; }
+    .call-active {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.7rem; background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.3); border-radius: 8px;
+      margin-bottom: 0.7rem; font-size: 0.82rem;
+    }
+    .call-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); animation: pulse 1.5s infinite; }
+    .waveform { display: flex; align-items: center; gap: 3px; height: 24px; }
+    .wave-bar {
+      width: 3px; background: var(--accent2); border-radius: 2px;
+      animation: waveAnim 1.2s ease-in-out infinite;
+    }
+    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+    .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+    .wave-bar:nth-child(6) { animation-delay: 0.15s; }
+    .wave-bar:nth-child(7) { animation-delay: 0.25s; }
+    @keyframes waveAnim {
+      0%,100% { height: 4px; }
+      50% { height: 20px; }
+    }
+
+    @media (max-width: 768px) {
+      .demo-body { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+      .hero-stats { gap: 1.5rem; }
+    }
+
+    /* ── COMPARISON TABLE ── */
+    .comparison-section { background: var(--dark2); }
+    .comparison-table {
+      width: 100%; border-collapse: collapse; margin-top: 2.5rem;
+      border-radius: 16px; overflow: hidden;
+    }
+    .comparison-table th {
+      padding: 1rem 1.5rem; text-align: left; font-size: 0.85rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .comparison-table th:nth-child(2) { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+    .comparison-table td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .comparison-table td:nth-child(2) { background: rgba(99,102,241,0.07); font-weight: 600; }
+    .comparison-table tr:last-child td { border-bottom: none; }
+    .tick { color: var(--accent2); font-weight: 700; }
+    .cross { color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<!-- NAVIGATION -->
+<nav>
+  <div class="nav-logo">Voice<span>OS</span></div>
+  <ul class="nav-links">
+    <li><a href="#problema">Problema</a></li>
+    <li><a href="#caracteristicas">Características</a></li>
+    <li><a href="#como-funciona">Cómo funciona</a></li>
+    <li><a href="#precios">Precios</a></li>
+    <li><a href="#integraciones">Integraciones</a></li>
+  </ul>
+  <a href="#contacto" class="nav-cta">Solicitar Demo</a>
+</nav>
+
+<!-- ════════════════════ HERO ════════════════════ -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="grid-bg"></div>
+
+  <div class="hero-badge">
+    <div class="dot"></div>
+    Plataforma #1 de Agentes de Voz IA para Equipos de Ventas
+  </div>
+
+  <h1>
+    La IA que cierra tratos<br/>
+    <span class="gradient-text">mientras duermes</span>
+  </h1>
+
+  <p class="hero-sub">
+    VoiceOS despliega agentes de voz con inteligencia artificial que llaman a tus leads,
+    manejan objeciones, agendan citas y cierran ventas — 24/7, en más de 70 idiomas,
+    sin necesidad de código.
+  </p>
+
+  <div class="hero-actions">
+    <a href="#contacto" class="btn-primary glow">🚀 Ver Demo en Vivo</a>
+    <a href="#como-funciona" class="btn-secondary">Ver cómo funciona →</a>
+  </div>
+
+  <div class="hero-stats">
+    <div class="stat">
+      <div class="stat-num">70+</div>
+      <div class="stat-label">Idiomas soportados</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">24/7</div>
+      <div class="stat-label">Sin descanso</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">10×</div>
+      <div class="stat-label">Más llamadas que un humano</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">{'<'}1s</div>
+      <div class="stat-label">Latencia de respuesta</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-label">Líneas de código necesarias</div>
+    </div>
+  </div>
+
+  <!-- Dashboard Mock -->
+  <div class="demo-widget float reveal" style="width:100%">
+    <div class="demo-topbar">
+      <div class="dot-red"></div><div class="dot-yellow"></div><div class="dot-green"></div>
+      <div class="demo-url">app.voiceos.ai — Dashboard en Tiempo Real</div>
+    </div>
+    <div class="demo-body">
+      <div class="demo-panel">
+        <h4>📞 Llamadas activas ahora</h4>
+        <div class="call-active">
+          <div class="call-dot"></div>
+          <span>Agente "Carlos" → María López</span>
+          <div class="waveform" style="margin-left:auto">
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+        </div>
+        <div class="call-active">
+          <div class="call-dot"></div>
+          <span>Agente "Ana" → Juan Pérez</span>
+          <div class="waveform" style="margin-left:auto">
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+        </div>
+        <div class="call-active">
+          <div class="call-dot"></div>
+          <span>Agente "Luis" → Empresa XYZ</span>
+          <div class="waveform" style="margin-left:auto">
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div>
+          </div>
+        </div>
+        <div style="margin-top:1rem; font-size:0.8rem; color:var(--muted)">
+          ✅ 3 reuniones agendadas hoy
+        </div>
+      </div>
+      <div class="demo-panel">
+        <h4>📊 Métricas del día</h4>
+        <div class="demo-metric">
+          <span class="demo-metric-label">Llamadas realizadas</span>
+          <span class="demo-metric-value purple">247</span>
+        </div>
+        <div class="demo-metric">
+          <span class="demo-metric-label">Tasa de contacto</span>
+          <span class="demo-metric-value green">68%</span>
+        </div>
+        <div class="demo-metric">
+          <span class="demo-metric-label">Reuniones agendadas</span>
+          <span class="demo-metric-value green">31</span>
+        </div>
+        <div class="demo-metric">
+          <span class="demo-metric-label">Tasa de conversión</span>
+          <span class="demo-metric-value blue">12.5%</span>
+        </div>
+        <div class="demo-metric">
+          <span class="demo-metric-label">Minutos utilizados</span>
+          <span class="demo-metric-value purple">1,840 / 5,000</span>
+        </div>
+        <div class="demo-metric">
+          <span class="demo-metric-label">Sentimiento promedio</span>
+          <span class="demo-metric-value green">Positivo 72%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ PROBLEMA ════════════════════ -->
+<section class="pain-section" id="problema">
+  <div class="section-inner">
+    <div class="section-header reveal">
+      <div class="section-tag">El Problema</div>
+      <h2 class="section-title">Tu equipo de ventas<br/>está perdiendo tiempo valioso</h2>
+      <p class="section-sub">Cada día, tu equipo desperdicia horas en llamadas frías que podrían ser automatizadas, mientras los leads se enfrían y la competencia avanza.</p>
+    </div>
+    <div class="pain-grid">
+      <div class="pain-card reveal">
+        <div class="pain-icon">🕐</div>
+        <h3>Tiempo desperdiciado en marcado manual</h3>
+        <p>Un SDR promedio hace 50–80 llamadas al día. VoiceOS puede hacer 500+ simultáneamente — sin fatiga, sin días malos, sin excusas.</p>
+      </div>
+      <div class="pain-card reveal">
+        <div class="pain-icon">💸</div>
+        <h3>Costo de SDRs humanos fuera de control</h3>
+        <p>Un representante de ventas cuesta $3,000–$6,000/mes. VoiceOS hace el trabajo de 10 representantes por una fracción del precio.</p>
+      </div>
+      <div class="pain-card reveal">
+        <div class="pain-icon">🌙</div>
+        <h3>Los leads no esperan horario laboral</h3>
+        <p>El 80% de los leads nunca son contactados después de las 5pm. VoiceOS trabaja las 24 horas, los 7 días, los 365 días del año.</p>
+      </div>
+      <div class="pain-card reveal">
+        <div class="pain-icon">📉</div>
+        <h3>Inconsistencia en el discurso de ventas</h3>
+        <p>Cada vendedor tiene un día bueno y un día malo. VoiceOS siempre entrega el pitch perfecto, con el tono correcto, sin variaciones.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ CARACTERÍSTICAS ════════════════════ -->
+<section class="features-section" id="caracteristicas">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Características</div>
+      <h2 class="section-title">Todo lo que necesitas para<br/><span style="color:#a5b4fc">escalar tus ventas con IA</span></h2>
+      <p class="section-sub" style="margin:0 auto">Una plataforma completa. Sin integraciones complicadas. Sin compromisos.</p>
+    </div>
+    <div class="features-grid">
+
+      <div class="feature-card reveal" style="--primary-glow:rgba(99,102,241,0.1)">
+        <div class="feature-icon" style="background:rgba(99,102,241,0.15)">🧠</div>
+        <h3>Inteligencia Conversacional Avanzada</h3>
+        <p>Potenciado por Groq llama-4-scout con fallback a GPT-4o. Respuestas naturales con latencia inferior a 1 segundo. Manejo inteligente de objeciones en tiempo real.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(6,182,212,0.15)">🎙️</div>
+        <h3>Voz Ultra-Realista</h3>
+        <p>Síntesis de voz con Cartesia Sonic-3 y ElevenLabs con clonación de voz. Mapeo de emociones dinámico. Tus clientes no sabrán que hablan con una IA.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(16,185,129,0.15)">🗺️</div>
+        <h3>Constructor Visual de Flujos</h3>
+        <p>Diseña conversaciones complejas con nuestro editor drag-and-drop. Sin código. 6 tipos de nodos incluyendo enrutamiento semántico y transferencia a humano.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(245,158,11,0.15)">📊</div>
+        <h3>Inteligencia Post-Llamada con IA</h3>
+        <p>Cada llamada genera automáticamente: resumen ejecutivo, disposición (reunión agendada, no interesado, etc.), análisis de sentimiento y datos extraídos (presupuesto, fecha, empresa).</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(239,68,68,0.15)">📋</div>
+        <h3>Gestión de Campañas Masivas</h3>
+        <p>Importa listas de contactos en CSV. Control de concurrencia configurable. Reintentos automáticos. Seguimiento en tiempo real del progreso de cada contacto.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(99,102,241,0.15)">📚</div>
+        <h3>Base de Conocimiento con RAG</h3>
+        <p>Sube PDFs, URLs y documentos. VoiceOS los convierte en embeddings vectoriales para responder preguntas precisas sobre tu producto durante la llamada.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(6,182,212,0.15)">🔒</div>
+        <h3>Cumplimiento GDPR, TCPA y DNC</h3>
+        <p>Listas de Do-Not-Call integradas. Horarios de llamada configurables por zona horaria. Redacción automática de PII antes del almacenamiento. Retención de datos configurable.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(16,185,129,0.15)">📈</div>
+        <h3>Analytics y QA Automático</h3>
+        <p>Dashboards en tiempo real: llamadas por día, tasa de conversión, tendencias de sentimiento. Scorecards de calidad automáticos con alertas configurables.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon" style="background:rgba(245,158,11,0.15)">🏢</div>
+        <h3>Multi-Workspace y White Label</h3>
+        <p>Crea múltiples workspaces para diferentes equipos o clientes. Personalización completa de marca: logo, dominio, colores. Ideal para agencias y revendedores.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ MÉTRICAS ════════════════════ -->
+<section class="metrics-section">
+  <div class="section-inner">
+    <div class="metrics-grid">
+      <div class="metric-card reveal">
+        <span class="metric-num">500+</span>
+        <div class="metric-label">Llamadas simultáneas</div>
+        <div class="metric-desc">por workspace</div>
+      </div>
+      <div class="metric-card reveal">
+        <span class="metric-num">{'<'}800ms</span>
+        <div class="metric-label">Latencia de respuesta</div>
+        <div class="metric-desc">STT → LLM → TTS</div>
+      </div>
+      <div class="metric-card reveal">
+        <span class="metric-num">70+</span>
+        <div class="metric-label">Idiomas</div>
+        <div class="metric-desc">Deepgram Nova-3</div>
+      </div>
+      <div class="metric-card reveal">
+        <span class="metric-num">99.9%</span>
+        <div class="metric-label">Uptime garantizado</div>
+        <div class="metric-desc">SLA empresarial</div>
+      </div>
+      <div class="metric-card reveal">
+        <span class="metric-num">40+</span>
+        <div class="metric-label">Endpoints de API</div>
+        <div class="metric-desc">Integración total</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ CÓMO FUNCIONA ════════════════════ -->
+<section class="steps-section" id="como-funciona">
+  <div class="section-inner">
+    <div class="section-header reveal">
+      <div class="section-tag">Cómo Funciona</div>
+      <h2 class="section-title">De cero a llamadas en<br/><span style="color:#a5b4fc">menos de 30 minutos</span></h2>
+      <p class="section-sub">Sin equipos de IT. Sin meses de implementación. Empieza hoy.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>Crea tu Agente de Voz</h3>
+          <p>Define el nombre, personalidad y objetivo de tu agente. Escribe el prompt del sistema o usa nuestras plantillas probadas para diferentes industrias (SaaS, inmobiliaria, seguros, fintech). Sube tu base de conocimiento en PDF o URL para que el agente conozca tu producto a fondo.</p>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>Diseña el Flujo de Conversación</h3>
+          <p>Usa el constructor visual drag-and-drop para mapear cada escenario posible: calificación de leads, manejo de objeciones, transferencia a humano, agendamiento de reuniones. No se requiere código — solo lógica de ventas.</p>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3>Sube tu Lista de Contactos</h3>
+          <p>Importa tu CSV con nombres, teléfonos y variables personalizadas ({{empresa}}, {{cargo}}, {{interés}}). El agente usará estos datos para personalizar cada llamada automáticamente.</p>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h3>Lanza tu Campaña</h3>
+          <p>Configura el horario, la tasa de marcado y los intentos máximos. VoiceOS empieza a llamar — simultáneamente, en el orden correcto, respetando las horas locales y las reglas de cumplimiento.</p>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <h3>Analiza y Optimiza en Tiempo Real</h3>
+          <p>Cada llamada genera automáticamente transcripción completa, análisis de sentimiento, disposición categorizada y datos extraídos. Las métricas de conversión se actualizan en vivo. Las reuniones agendadas se sincronizan con Google Calendar al instante.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ CASOS DE USO ════════════════════ -->
+<section class="usecases-section">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Casos de Uso</div>
+      <h2 class="section-title">Funciona en cualquier industria<br/><span style="color:#67e8f9">que necesite escalar ventas</span></h2>
+    </div>
+    <div class="usecase-grid">
+
+      <div class="usecase-card reveal">
+        <div class="usecase-industry">SaaS / Tecnología</div>
+        <h3>Calificación masiva de trials</h3>
+        <p>Llama automáticamente a usuarios que se registraron en tu plataforma, califica su interés, identifica su caso de uso y agenda demos con los más calificados.</p>
+        <div class="usecase-result">📈 Resultado: +40% demos agendados, -70% costo por lead calificado</div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-industry">Inmobiliaria</div>
+        <h3>Seguimiento instantáneo de portales</h3>
+        <p>Llama en menos de 60 segundos a cada lead que consulta una propiedad. Califica: presupuesto, zona, financiamiento. Agenda visitas directamente en el calendario del asesor.</p>
+        <div class="usecase-result">📈 Resultado: Contacto en {'<'}1 min vs 24-48h de competidores</div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-industry">Seguros / Finanzas</div>
+        <h3>Prospección outbound a escala</h3>
+        <p>Lanza campañas de miles de llamadas diarias para renovaciones, cross-selling y nuevos leads. El agente identifica necesidades y transfiere a un asesor solo los prospectos calificados.</p>
+        <div class="usecase-result">📈 Resultado: 10× más prospectos calificados por semana</div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-industry">Agencias de Marketing</div>
+        <h3>White Label para tus clientes</h3>
+        <p>Ofrece VoiceOS bajo tu propia marca con dominio personalizado. Administra múltiples clientes desde un panel central. Nueva línea de ingresos recurrentes.</p>
+        <div class="usecase-result">📈 Resultado: Nuevo servicio de $2,000–$10,000/mes por cliente</div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-industry">Salud / Clínicas</div>
+        <h3>Recordatorios y confirmación de citas</h3>
+        <p>Confirma citas automáticamente, reduce no-shows enviando recordatorios personalizados y reagenda con pacientes que cancelaron — sin ocupar a tu personal.</p>
+        <div class="usecase-result">📈 Resultado: -35% no-shows, personal 100% enfocado en atención</div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-industry">E-commerce / Retail</div>
+        <h3>Recuperación de carritos y retención</h3>
+        <p>Llama a clientes que abandonaron el carrito, contacta a compradores inactivos con ofertas personalizadas y recoge NPS post-compra de forma automática.</p>
+        <div class="usecase-result">📈 Resultado: +25% recuperación de carritos vs email</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ TECH STACK ════════════════════ -->
+<section class="tech-section">
+  <div class="section-inner">
+    <div class="section-header reveal">
+      <div class="section-tag">Tecnología</div>
+      <h2 class="section-title">Construido con la<br/><span style="color:#a5b4fc">infraestructura más avanzada</span></h2>
+      <p class="section-sub">Solo las mejores herramientas del mercado. Cada componente elegido para máximo rendimiento y confiabilidad.</p>
+    </div>
+    <div class="tech-grid reveal">
+      <div class="tech-card">
+        <div class="tech-emoji">⚡</div>
+        <div class="tech-info"><h4>Groq + GPT-4o</h4><p>LLM ultra-rápido con fallback</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">🎤</div>
+        <div class="tech-info"><h4>Deepgram Nova-3</h4><p>STT multilingüe + PII redaction</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">🔊</div>
+        <div class="tech-info"><h4>Cartesia Sonic-3</h4><p>TTS con mapeo de emociones</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">📡</div>
+        <div class="tech-info"><h4>LiveKit WebRTC/SIP</h4><p>Llamadas en tiempo real</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">☁️</div>
+        <div class="tech-info"><h4>Supabase + pgvector</h4><p>DB con búsqueda semántica</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">📞</div>
+        <div class="tech-info"><h4>Twilio + Telnyx</h4><p>Telefonía cloud empresarial</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">💳</div>
+        <div class="tech-info"><h4>Stripe</h4><p>Facturación por uso (minutos)</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">🚀</div>
+        <div class="tech-info"><h4>Next.js 15 + Vercel</h4><p>Frontend global edge</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">🎭</div>
+        <div class="tech-info"><h4>ElevenLabs</h4><p>Clonación de voz realista</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">🔄</div>
+        <div class="tech-info"><h4>Upstash Redis</h4><p>Rate limiting en tiempo real</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">🔐</div>
+        <div class="tech-info"><h4>Supabase RLS</h4><p>Seguridad multi-tenant</p></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-emoji">📊</div>
+        <div class="tech-info"><h4>OpenAI Embeddings</h4><p>RAG con texto-embedding-3</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ INTEGRACIONES ════════════════════ -->
+<section class="integrations-section" id="integraciones">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Integraciones</div>
+      <h2 class="section-title">Conecta con tus herramientas<br/><span style="color:#67e8f9">sin fricción</span></h2>
+      <p class="section-sub" style="margin:0 auto">VoiceOS se integra con tu stack existente en minutos, no semanas.</p>
+    </div>
+    <div class="integrations-grid reveal">
+      <div class="integration-pill">🟠 HubSpot</div>
+      <div class="integration-pill">⚡ GoHighLevel</div>
+      <div class="integration-pill">☁️ Salesforce</div>
+      <div class="integration-pill">📅 Google Calendar</div>
+      <div class="integration-pill">📅 Calendly</div>
+      <div class="integration-pill">🔗 Zapier</div>
+      <div class="integration-pill">🔧 Make.com</div>
+      <div class="integration-pill">🔄 n8n</div>
+      <div class="integration-pill">💬 Telegram</div>
+      <div class="integration-pill">🔷 Microsoft Teams</div>
+      <div class="integration-pill">📞 Twilio</div>
+      <div class="integration-pill">📡 Telnyx</div>
+      <div class="integration-pill">💳 Stripe</div>
+      <div class="integration-pill">📧 Resend</div>
+      <div class="integration-pill">🔌 Webhooks</div>
+      <div class="integration-pill">🧩 API REST</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ COMPARACIÓN ════════════════════ -->
+<section class="comparison-section">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Comparación</div>
+      <h2 class="section-title">VoiceOS vs Alternativas</h2>
+      <p class="section-sub" style="margin:0 auto">¿Por qué líderes de ventas eligen VoiceOS?</p>
+    </div>
+    <div class="reveal" style="overflow-x:auto">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Característica</th>
+            <th>🚀 VoiceOS</th>
+            <th>SDR Humano</th>
+            <th>Competidores básicos</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Llamadas simultáneas</td>
+            <td><span class="tick">500+ 🔥</span></td>
+            <td><span class="cross">1</span></td>
+            <td>10-50</td>
+          </tr>
+          <tr>
+            <td>Disponibilidad</td>
+            <td><span class="tick">24/7/365</span></td>
+            <td><span class="cross">40 h/sem</span></td>
+            <td>24/7</td>
+          </tr>
+          <tr>
+            <td>Costo mensual</td>
+            <td><span class="tick">Desde $97</span></td>
+            <td><span class="cross">$3,000–$6,000</span></td>
+            <td>$300–$2,000</td>
+          </tr>
+          <tr>
+            <td>Idiomas</td>
+            <td><span class="tick">70+</span></td>
+            <td><span class="cross">1–2</span></td>
+            <td>5–15</td>
+          </tr>
+          <tr>
+            <td>Constructor visual de flujos</td>
+            <td><span class="tick">✓ Sin código</span></td>
+            <td><span class="cross">N/A</span></td>
+            <td>Limitado</td>
+          </tr>
+          <tr>
+            <td>Análisis post-llamada con IA</td>
+            <td><span class="tick">✓ Automático</span></td>
+            <td><span class="cross">Manual</span></td>
+            <td>Básico</td>
+          </tr>
+          <tr>
+            <td>Latencia de respuesta</td>
+            <td><span class="tick">{'<'}800ms</span></td>
+            <td>1–3 seg</td>
+            <td>1–3 seg</td>
+          </tr>
+          <tr>
+            <td>Base de conocimiento RAG</td>
+            <td><span class="tick">✓ Integrado</span></td>
+            <td>Memoria humana</td>
+            <td><span class="cross">No incluido</span></td>
+          </tr>
+          <tr>
+            <td>Transferencia a humano</td>
+            <td><span class="tick">✓ Automática</span></td>
+            <td>N/A</td>
+            <td>Limitada</td>
+          </tr>
+          <tr>
+            <td>Multi-tenant / White Label</td>
+            <td><span class="tick">✓ Incluido</span></td>
+            <td><span class="cross">N/A</span></td>
+            <td><span class="cross">Extra cost</span></td>
+          </tr>
+          <tr>
+            <td>API pública completa</td>
+            <td><span class="tick">✓ 40+ endpoints</span></td>
+            <td><span class="cross">N/A</span></td>
+            <td>Parcial</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ SEGURIDAD ════════════════════ -->
+<section class="security-section">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Seguridad & Cumplimiento</div>
+      <h2 class="section-title">Construido para<br/><span style="color:#a5b4fc">empresas exigentes</span></h2>
+    </div>
+    <div class="security-grid">
+      <div class="security-card reveal">
+        <div class="security-icon">🔒</div>
+        <div>
+          <h4>Aislamiento Multi-Tenant</h4>
+          <p>Row Level Security en PostgreSQL garantiza que los datos de cada workspace son completamente aislados. Imposible acceder a datos de otros clientes.</p>
+        </div>
+      </div>
+      <div class="security-card reveal">
+        <div class="security-icon">🛡️</div>
+        <div>
+          <h4>Redacción Automática de PII</h4>
+          <p>Deepgram redacta automáticamente tarjetas de crédito, SSN y datos numéricos sensibles antes de cualquier log o almacenamiento.</p>
+        </div>
+      </div>
+      <div class="security-card reveal">
+        <div class="security-icon">📋</div>
+        <div>
+          <h4>GDPR, TCPA y DNC</h4>
+          <p>Cumplimiento integrado con regulaciones de privacidad. Listas Do-Not-Call, horarios de llamada y gestión de consentimiento incluidos.</p>
+        </div>
+      </div>
+      <div class="security-card reveal">
+        <div class="security-icon">📊</div>
+        <div>
+          <h4>Audit Logs Completos</h4>
+          <p>Cada acción queda registrada en logs de auditoría inmutables. Cumplimiento SOC2 ready con trazabilidad total de acciones.</p>
+        </div>
+      </div>
+      <div class="security-card reveal">
+        <div class="security-icon">⚡</div>
+        <div>
+          <h4>Rate Limiting Avanzado</h4>
+          <p>Protección por IP y por workspace usando Redis distribuido. Previene abuso y garantiza fair-use en entornos compartidos.</p>
+        </div>
+      </div>
+      <div class="security-card reveal">
+        <div class="security-icon">🔑</div>
+        <div>
+          <h4>API Keys con Bearer Token</h4>
+          <p>API keys por workspace con prefijo único (vos_xxx). Control granular de permisos. Rotación de llaves sin downtime.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ TESTIMONIOS ════════════════════ -->
+<section class="testimonials-section">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Testimonios</div>
+      <h2 class="section-title">Lo que dicen los equipos<br/><span style="color:#a5b4fc">que ya lo usan</span></h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card reveal">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"VoiceOS transformó completamente nuestro proceso de prospección. En las primeras dos semanas agendamos más demos que en el mes anterior con todo el equipo de SDRs. Es como tener 20 vendedores trabajando las 24 horas."</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">AG</div>
+          <div>
+            <div class="author-name">Alejandro García</div>
+            <div class="author-title">VP de Ventas, TechScale SaaS</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"La calidad de voz es increíble — ninguno de nuestros leads sabe que habla con una IA hasta que se los decimos. El ROI fue positivo en la primera semana. Ahorramos $15,000 mensuales en costos de personal."</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">MR</div>
+          <div>
+            <div class="author-name">María Rodríguez</div>
+            <div class="author-title">CEO, PropiedadesXL Inmobiliaria</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"Como agencia, VoiceOS nos permitió lanzar un nuevo servicio de IA para nuestros clientes con nuestro propio branding. Ahora generamos $80,000/mes adicionales con un producto que tarda 30 minutos en configurar."</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">CP</div>
+          <div>
+            <div class="author-name">Carlos Petit</div>
+            <div class="author-title">Director, Digital Growth Agency</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ PRECIOS ════════════════════ -->
+<section class="pricing-section" id="precios">
+  <div class="section-inner">
+    <div class="section-header reveal" style="text-align:center">
+      <div class="section-tag">Precios</div>
+      <h2 class="section-title">Inversión que se paga<br/><span style="color:#a5b4fc">en las primeras 48 horas</span></h2>
+      <p class="section-sub" style="margin:0 auto">Todos los planes incluyen soporte premium. Sin contratos anuales obligatorios. Cancela cuando quieras.</p>
+    </div>
+    <div class="pricing-grid">
+
+      <div class="pricing-card reveal">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price">$0 <span>/mes</span></div>
+        <p class="plan-desc">Para probar la plataforma y entender el potencial antes de escalar.</p>
+        <ul class="plan-features">
+          <li>50 minutos de llamadas/mes</li>
+          <li>1 agente activo</li>
+          <li>1 campaña simultánea</li>
+          <li>Análisis post-llamada con IA</li>
+          <li>Constructor visual de flujos</li>
+          <li>Soporte por chat</li>
+        </ul>
+        <a href="#contacto" class="plan-cta plan-cta-outline">Empezar gratis</a>
+      </div>
+
+      <div class="pricing-card featured reveal">
+        <div class="featured-badge">⚡ Más popular</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$97 <span>/mes</span></div>
+        <p class="plan-desc">Para equipos de ventas que quieren resultados medibles desde el día uno.</p>
+        <ul class="plan-features">
+          <li>1,000 minutos de llamadas/mes</li>
+          <li>Agentes ilimitados</li>
+          <li>Campañas ilimitadas</li>
+          <li>Todas las integraciones CRM</li>
+          <li>Base de conocimiento RAG</li>
+          <li>API completa con 40+ endpoints</li>
+          <li>Múltiples números telefónicos</li>
+          <li>Analytics avanzados + QA</li>
+          <li>Soporte prioritario</li>
+        </ul>
+        <a href="#contacto" class="plan-cta plan-cta-filled">Empezar ahora →</a>
+      </div>
+
+      <div class="pricing-card reveal">
+        <div class="plan-name">Scale</div>
+        <div class="plan-price">$297 <span>/mes</span></div>
+        <p class="plan-desc">Para empresas que necesitan volumen alto y su propia marca.</p>
+        <ul class="plan-features">
+          <li>5,000 minutos de llamadas/mes</li>
+          <li>Todo en Pro, más:</li>
+          <li>White Label completo</li>
+          <li>Dominio personalizado</li>
+          <li>Multi-workspace para agencias</li>
+          <li>Panel de administración</li>
+          <li>Onboarding dedicado</li>
+          <li>SLA 99.9% garantizado</li>
+          <li>Soporte 24/7 dedicado</li>
+        </ul>
+        <a href="#contacto" class="plan-cta plan-cta-outline">Contactar ventas</a>
+      </div>
+
+    </div>
+    <p style="text-align:center; margin-top:2rem; color:var(--muted); font-size:0.88rem">
+      ✓ Sin tarjeta de crédito para Starter &nbsp;·&nbsp; ✓ Minutos adicionales disponibles &nbsp;·&nbsp; ✓ Descuentos para volumen anual
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════ CTA FINAL ════════════════════ -->
+<section class="cta-section" id="contacto">
+  <div class="cta-bg"></div>
+  <div class="section-inner">
+    <div class="reveal">
+      <h2>¿Listo para que la IA<br/><span class="gradient-text">cierre ventas por ti?</span></h2>
+      <p>Agenda una demo en vivo y te mostramos cómo VoiceOS puede transformar<br/>los resultados de tu equipo comercial en menos de 30 días.</p>
+      <div class="cta-actions">
+        <a href="mailto:contacto@voiceos.ai" class="btn-primary" style="font-size:1.1rem; padding:1rem 2.5rem;">
+          🚀 Agendar Demo Ahora
+        </a>
+        <a href="mailto:ventas@voiceos.ai" class="btn-secondary" style="font-size:1.1rem; padding:1rem 2.5rem;">
+          💬 Hablar con Ventas
+        </a>
+      </div>
+      <p class="cta-note">Sin compromisos · Demo gratuita de 30 minutos · Implementación en el mismo día</p>
+    </div>
+
+    <div class="reveal" style="margin-top:4rem; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1.5rem; text-align:center;">
+      <div style="padding:1.5rem; background:var(--card); border:1px solid var(--border); border-radius:14px;">
+        <div style="font-size:2rem; margin-bottom:0.5rem">🎯</div>
+        <div style="font-weight:700; margin-bottom:0.3rem">Demo Personalizada</div>
+        <div style="font-size:0.85rem; color:var(--muted)">Mostramos VoiceOS con tus propios casos de uso y datos</div>
+      </div>
+      <div style="padding:1.5rem; background:var(--card); border:1px solid var(--border); border-radius:14px;">
+        <div style="font-size:2rem; margin-bottom:0.5rem">⚡</div>
+        <div style="font-weight:700; margin-bottom:0.3rem">Setup en 24h</div>
+        <div style="font-size:0.85rem; color:var(--muted)">Nuestro equipo te acompaña en la implementación inicial</div>
+      </div>
+      <div style="padding:1.5rem; background:var(--card); border:1px solid var(--border); border-radius:14px;">
+        <div style="font-size:2rem; margin-bottom:0.5rem">💰</div>
+        <div style="font-weight:700; margin-bottom:0.3rem">ROI Garantizado</div>
+        <div style="font-size:0.85rem; color:var(--muted)">Si en 30 días no ves resultados, te devolvemos el dinero</div>
+      </div>
+      <div style="padding:1.5rem; background:var(--card); border:1px solid var(--border); border-radius:14px;">
+        <div style="font-size:2rem; margin-bottom:0.5rem">🔒</div>
+        <div style="font-weight:700; margin-bottom:0.3rem">Sin Lock-in</div>
+        <div style="font-size:0.85rem; color:var(--muted)">Cancela en cualquier momento. Tu data siempre es tuya</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════ FOOTER ════════════════════ -->
+<footer>
+  <div class="footer-logo">Voice<span>OS</span></div>
+  <p style="margin-top:0.5rem">La plataforma de Agentes de Voz IA para equipos de ventas modernos.</p>
+  <p style="margin-top:1rem; font-size:0.78rem; opacity:0.5">
+    Potenciado por Groq · Deepgram · Cartesia · LiveKit · Supabase · Vercel
+  </p>
+</footer>
+
+<script>
+  // Scroll reveal
+  const revealEls = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  }, { threshold: 0.12 });
+  revealEls.forEach(el => io.observe(el));
+
+  // Counter animation for hero stats
+  function animateCounter(el, target, suffix='') {
+    let start = 0;
+    const duration = 1500;
+    const startTime = performance.now();
+    function update(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(eased * target);
+      el.textContent = current + suffix;
+      if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  }
+
+  const heroObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const stats = document.querySelectorAll('.stat-num');
+        // only animate first time
+        heroObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.5 });
+  const heroStats = document.querySelector('.hero-stats');
+  if (heroStats) heroObserver.observe(heroStats);
+
+  // Smooth scroll for nav links
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+</script>
+
+</body>
+</html>
