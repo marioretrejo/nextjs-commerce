@@ -4626,12 +4626,12 @@ Option 2: Install and provide the "ws" package:
        * @category Realtime
        */
       async removeAllChannels() {
-        const promises = this.channels.map(async (channel) => {
+        const promises2 = this.channels.map(async (channel) => {
           const result2 = await channel.unsubscribe();
           channel.teardown();
           return result2;
         });
-        const result = await Promise.all(promises);
+        const result = await Promise.all(promises2);
         await this.disconnect();
         return result;
       }
@@ -11848,14 +11848,14 @@ var require_GoTrueClient = __commonJS({
             this.broadcastChannel.postMessage({ event, session });
           }
           const errors = [];
-          const promises = Array.from(this.stateChangeEmitters.values()).map(async (x) => {
+          const promises2 = Array.from(this.stateChangeEmitters.values()).map(async (x) => {
             try {
               await x.callback(event, session);
             } catch (e) {
               errors.push(e);
             }
           });
-          await Promise.all(promises);
+          await Promise.all(promises2);
           if (errors.length > 0) {
             for (let i = 0; i < errors.length; i += 1) {
               console.error(errors[i]);
@@ -27770,9 +27770,9 @@ var require_main4 = __commonJS({
 });
 
 // agent/worker_core.ts
-import { defineAgent, voice, llm as agentLlm, llm as llm2, tts as agentTts, cli, ServerOptions } from "@livekit/agents";
+import { defineAgent, voice, llm as agentLlm, llm as llm2, cli, ServerOptions } from "@livekit/agents";
 import { STT } from "@livekit/agents-plugin-deepgram";
-import { LLM, TTS as OpenAITTS } from "@livekit/agents-plugin-openai";
+import { LLM } from "@livekit/agents-plugin-openai";
 import { TTS as CartesiaTTS } from "@livekit/agents-plugin-cartesia";
 
 // node_modules/.pnpm/@supabase+supabase-js@2.106.1/node_modules/@supabase/supabase-js/dist/index.mjs
@@ -37208,9 +37208,28 @@ function getSupabaseAdmin() {
 var worker_core_default = defineAgent({
   entry: async (ctx) => {
     await ctx.connect();
+    const dgKey = process.env["DEEPGRAM_API_KEY"] ?? "";
+    const cartKey = process.env["CARTESIA_API_KEY"] ?? "";
+    const groqKey2 = process.env["GROQ_API_KEY"] ?? "";
+    const openaiKey2 = process.env["OPENAI_API_KEY"] ?? "";
+    console.log("[worker.diag] call.init", JSON.stringify({
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      room: ctx.room.name,
+      metadata_raw: ctx.room.metadata,
+      // Env var presence + first 4 chars (never log full keys)
+      DEEPGRAM_API_KEY: dgKey ? `set(len=${dgKey.length},prefix=${dgKey.slice(0, 4)})` : "MISSING",
+      CARTESIA_API_KEY: cartKey ? `set(len=${cartKey.length},prefix=${cartKey.slice(0, 4)})` : "MISSING",
+      GROQ_API_KEY: groqKey2 ? `set(len=${groqKey2.length},prefix=${groqKey2.slice(0, 4)})` : "MISSING",
+      OPENAI_API_KEY: openaiKey2 ? `set(len=${openaiKey2.length},prefix=${openaiKey2.slice(0, 4)})` : "MISSING",
+      LIVEKIT_URL: process.env["LIVEKIT_URL"] ?? "MISSING",
+      SUPABASE_URL_set: !!process.env["NEXT_PUBLIC_SUPABASE_URL"],
+      SUPABASE_SRK_set: !!process.env["SUPABASE_SERVICE_ROLE_KEY"],
+      // Deepgram connection URL that will be attempted
+      deepgram_url: `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`
+    }));
     let systemPrompt = "You are a helpful, friendly voice assistant. Keep answers short and conversational \u2014 1-3 sentences. Never use markdown, bullet points, or special characters in your responses.";
     let agentName = "Assistant";
-    let voiceId = "a0e99841-438c-4a64-b679-ae501e7d6091";
+    let voiceId = "02aeee94-c02b-456e-be7a-659672acf82d";
     let voiceEmotion = null;
     let firstMessage = null;
     let workspaceId = null;
@@ -37219,6 +37238,8 @@ var worker_core_default = defineAgent({
     let transferNumber = null;
     let flowJson = null;
     let flowConfig = null;
+    let ambientSound = null;
+    let ambientSoundVolume = 1;
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}");
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
@@ -37232,6 +37253,8 @@ var worker_core_default = defineAgent({
       if (meta.agent_id) agentId = meta.agent_id;
       if (meta.flow_json) flowJson = meta.flow_json;
       if (meta.flow_config) flowConfig = meta.flow_config;
+      if (meta.ambient_sound) ambientSound = String(meta.ambient_sound);
+      if (meta.ambient_sound_volume != null) ambientSoundVolume = Number(meta.ambient_sound_volume);
       if (meta.dynamic_variables && Object.keys(meta.dynamic_variables).length > 0) {
         const vars = meta.dynamic_variables;
         systemPrompt = injectVariables(systemPrompt, vars);
@@ -37274,30 +37297,35 @@ var worker_core_default = defineAgent({
       } catch {
       }
     }
+    const dgApiKey = process.env["DEEPGRAM_API_KEY"];
+    console.log("[worker.diag] stt.init", JSON.stringify({
+      model: "nova-2",
+      language: "en",
+      api_key_present: !!dgApiKey,
+      api_key_length: dgApiKey?.length ?? 0,
+      api_key_prefix: dgApiKey ? dgApiKey.slice(0, 4) : "MISSING"
+    }));
     const stt = new STT({
-      model: "nova-3",
-      language: "multi",
-      detectLanguage: true,
-      apiKey: process.env["DEEPGRAM_API_KEY"],
-      redact: ["pci", "ssn", "numbers"],
-      keywords: pronunciation.deepgramKeywords,
-      keyterm: pronunciation.deepgramKeyterms
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: "nova-2",
+      language: "es",
+      apiKey: dgApiKey
     });
-    const groqLLM = new LLM({
+    stt.on("error", (err) => {
+      console.error("[worker.diag] stt.error", JSON.stringify({
+        ts: (/* @__PURE__ */ new Date()).toISOString(),
+        error: String(err),
+        stack: err instanceof Error ? err.stack : void 0
+      }));
+    });
+    if (!groqKey) {
+      console.error("[worker.diag] CRITICAL: GROQ_API_KEY not set \u2014 every LLM call will return 401 and leave session stuck in Thinking");
+    }
+    const lm = new LLM({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       apiKey: groqKey ?? "",
       baseURL: "https://api.groq.com/openai/v1"
     });
-    const openaiLLM = new LLM({
-      model: "gpt-4o-mini",
-      apiKey: openaiKey ?? ""
-    });
-    const lm = groqKey ? new agentLlm.FallbackAdapter({
-      llms: [groqLLM, ...openaiKey ? [openaiLLM] : []],
-      attemptTimeout: 5,
-      maxRetryPerLLM: 1,
-      retryOnChunkSent: false
-    }) : openaiLLM;
     const EMOTION_MAP = {
       calm: ["positivity:low"],
       sympathetic: ["sadness:low"],
@@ -37307,26 +37335,29 @@ var worker_core_default = defineAgent({
       fearful: ["fearfulness:high"],
       surprised: ["surprise:positive:high"]
     };
-    const cartesiaTTS = new CartesiaTTS({
+    const ttsInitOpts = {
       model: "sonic-3",
       voice: voiceId,
       apiKey: process.env["CARTESIA_API_KEY"],
-      language: "en",
-      speed: "normal",
+      language: "es",
       ...voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}
+    };
+    console.log("[DEBUG_CARTESIA]", {
+      model: ttsInitOpts.model,
+      voice: ttsInitOpts.voice,
+      language: ttsInitOpts.language,
+      emotion: ttsInitOpts.emotion ?? null,
+      apiKeySet: !!process.env["CARTESIA_API_KEY"],
+      apiKeyPrefix: (process.env["CARTESIA_API_KEY"] ?? "").slice(0, 4)
     });
-    const tts = openaiKey ? new agentTts.FallbackAdapter({
-      ttsInstances: [
-        cartesiaTTS,
-        new OpenAITTS({
-          model: "tts-1",
-          voice: "alloy",
-          apiKey: openaiKey
-        })
-      ],
-      maxRetryPerTTS: 2,
-      recoveryDelayMs: 5e3
-    }) : cartesiaTTS;
+    let cartesiaTTS;
+    try {
+      cartesiaTTS = new CartesiaTTS(ttsInitOpts);
+    } catch (ttsInitErr) {
+      console.error("[worker.tts] CartesiaTTS constructor threw \u2014 aborting session:", ttsInitErr);
+      throw ttsInitErr;
+    }
+    const tts = cartesiaTTS;
     const flowPrompt = isFlowConfig2(flowConfig) ? null : buildFlowPrompt(flowJson);
     const stateMachine = isFlowConfig2(flowConfig) ? buildStateMachine(flowConfig) : null;
     const dynamicTools = {};
@@ -37611,7 +37642,7 @@ var worker_core_default = defineAgent({
           minWords: 1,
           // at least one word required — suppresses single-phoneme false triggers
           falseInterruptionTimeout: 1500,
-          resumeFalseInterruption: true,
+          resumeFalseInterruption: false,
           // backchannelBoundary: agent may emit a listening sound when user speech
           // falls within this ms range (600–3000ms of agent speaking before user interjects)
           backchannelBoundary: [600, 3e3]
@@ -37620,7 +37651,61 @@ var worker_core_default = defineAgent({
       }
     });
     agentRef.current = agent;
+    const BARGE_IN_TRANSITION_HINT = '[INSTRUCCI\xD3N INTERNA \u2014 NO MENCIONAR] El usuario te acaba de interrumpir. Empieza tu respuesta OBLIGATORIAMENTE con UNA sola palabra de transici\xF3n (ejemplos: "Claro,", "S\xED,", "Mire,", "Entendido,"). Este prefijo reduce el silencio digital percibido por el usuario.';
+    agent.onUserTurnCompleted = async (chatCtx, _msg) => {
+      if (_wasInterrupted) {
+        _wasInterrupted = false;
+        chatCtx.insert(
+          agentLlm.ChatMessage.create({ role: "system", content: BARGE_IN_TRANSITION_HINT })
+        );
+      }
+    };
     const session = new voice.AgentSession({ stt, llm: lm, tts });
+    const _doDeleteRoom = () => {
+      const wsUrl = process.env["LIVEKIT_URL"] ?? "";
+      const httpUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://");
+      const lkKey = process.env["LIVEKIT_API_KEY"];
+      const lkSecret = process.env["LIVEKIT_API_SECRET"];
+      if (httpUrl && lkKey && lkSecret) {
+        Promise.resolve().then(() => (init_dist2(), dist_exports2)).then(({ RoomServiceClient: RoomServiceClient2 }) => {
+          new RoomServiceClient2(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+        }).catch(() => null);
+      }
+    };
+    let _silenceTimer = null;
+    let _hangupTimer = null;
+    let _silenceArmed = false;
+    let _ambientAbort = null;
+    let _wasInterrupted = false;
+    let _bargeInAt = null;
+    let _endpointingReduced = false;
+    let _speakLockoutUntil = 0;
+    const _clearSilenceTimers = () => {
+      if (_silenceTimer) {
+        clearTimeout(_silenceTimer);
+        _silenceTimer = null;
+      }
+      if (_hangupTimer) {
+        clearTimeout(_hangupTimer);
+        _hangupTimer = null;
+      }
+    };
+    const _armSilenceTimer = () => {
+      _clearSilenceTimers();
+      if (!_silenceArmed) return;
+      _silenceTimer = setTimeout(() => {
+        _silenceTimer = null;
+        void session.say("\xBFHola? \xBFSigues ah\xED?").then(null, () => null);
+        _hangupTimer = setTimeout(() => {
+          _hangupTimer = null;
+          _silenceArmed = false;
+          void session.say(
+            "Parece que hay problemas de audio. Hasta luego.",
+            { allowInterruptions: false }
+          ).then(_doDeleteRoom, _doDeleteRoom);
+        }, 3500);
+      }, 4500);
+    };
     ctx.room.on("disconnected", async () => {
       const reason = ctx.room.disconnectReason;
       if (reason === "ROOM_DELETED" || reason === "SERVER_SHUTDOWN") {
@@ -37636,22 +37721,46 @@ var worker_core_default = defineAgent({
     let sttSpan = startSpan("stt");
     let llmSpan = startSpan("llm.first_token");
     let ttsSpan = startSpan("tts.first_chunk");
+    const NEGATIVE_INTENT_RE = /no\s+me\s+interesa|no\s+(vuelva?s?\s+a\s+)?llam|deja\s+de\s+llamar|no\s+quiero\s+(que\s+me\s+llam|m[aá]s\s+llamadas)|quit\s+calling|stop\s+calling|remove\s+(me\s+)?from\s+(your\s+)?list|not\s+interested|do\s+not\s+call|don'?t\s+(ever\s+)?call\s+(me|again)|fuck\s+off|piss\s+off|no\s+llames\s+m[aá]s|no\s+molest/i;
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       const typed = ev;
       const text = typed.transcript ?? "";
       if (!typed.isFinal) {
+        const partialText = text.trim();
+        if (session.agentState === "speaking" && !_wasInterrupted && Date.now() > _speakLockoutUntil && partialText.length >= 4 && !isFillerOnly(partialText)) {
+          void session.interrupt({ force: true }).await.catch(() => null);
+          _wasInterrupted = true;
+          _bargeInAt = Date.now();
+          const _audioRec = session["activity"]?.audioRecognition;
+          if (_audioRec?.endpointing && !_endpointingReduced) {
+            _audioRec.endpointing.updateOptions({ minDelay: 400, maxDelay: 1500 });
+            _endpointingReduced = true;
+          }
+        }
+        _clearSilenceTimers();
         backchannel.onPartial();
         return;
       }
       backchannel.onFinal();
-      if (isFillerOnly(text)) {
-        log("info", { message: "stt.filler_suppressed", text, agent_id: agentId });
+      _clearSilenceTimers();
+      const trimmed = text.trim();
+      if (trimmed.length < 3 || isFillerOnly(trimmed)) {
+        log("info", { message: "stt.noise_suppressed", text: trimmed, len: trimmed.length, agent_id: agentId });
+        _armSilenceTimer();
+        return;
+      }
+      if (NEGATIVE_INTENT_RE.test(trimmed)) {
+        log("info", { message: "negative_intent.fast_hangup", text: trimmed, agent_id: agentId });
+        _silenceArmed = false;
+        _clearSilenceTimers();
+        void session.interrupt({ force: true }).await.catch(() => null);
+        void session.say("Entendido, adi\xF3s.", { allowInterruptions: false }).then(_doDeleteRoom, _doDeleteRoom);
         return;
       }
       const result = endSpan(sttSpan, {
         agent_id: agentId,
         workspace_id: workspaceId,
-        transcript_chars: text.length
+        transcript_chars: trimmed.length
       });
       checkLatencyThreshold(result);
       sttSpan = startSpan("stt");
@@ -37664,10 +37773,40 @@ var worker_core_default = defineAgent({
       ttsSpan = startSpan("tts.first_chunk");
     });
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
-      if (ev.state === "speaking") {
+      const { oldState, newState } = ev;
+      if (newState === "speaking") {
         const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
         checkLatencyThreshold(ttsResult);
         ttsSpan = startSpan("tts.first_chunk");
+        _clearSilenceTimers();
+        _speakLockoutUntil = Date.now() + 450;
+        if (_bargeInAt !== null) {
+          const gapMs = Date.now() - _bargeInAt;
+          _bargeInAt = null;
+          console.log("[worker.barge_in.flow]", JSON.stringify({
+            ts: (/* @__PURE__ */ new Date()).toISOString(),
+            gap_ms: gapMs,
+            agent_id: agentId,
+            room: roomName
+          }));
+        }
+        if (_endpointingReduced) {
+          _endpointingReduced = false;
+          const _audioRec = session["activity"]?.audioRecognition;
+          if (_audioRec?.endpointing) {
+            _audioRec.endpointing.updateOptions({ minDelay: 450, maxDelay: 3e3 });
+          }
+        }
+      }
+      if (newState === "listening" && oldState === "speaking") {
+        _speakLockoutUntil = 0;
+        if (_wasInterrupted) {
+          _wasInterrupted = false;
+        }
+        if (_bargeInAt !== null) {
+          _bargeInAt = null;
+        }
+        _armSilenceTimer();
       }
     });
     const transcriptLines = [];
@@ -37723,6 +37862,9 @@ var worker_core_default = defineAgent({
     });
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
       backchannel.destroy();
+      _silenceArmed = false;
+      _clearSilenceTimers();
+      _ambientAbort?.abort();
       if (balanceCheckInterval) {
         clearInterval(balanceCheckInterval);
         balanceCheckInterval = null;
@@ -37756,21 +37898,121 @@ var worker_core_default = defineAgent({
         },
         { onConflict: "retell_call_id", ignoreDuplicates: false }
       );
+      await supabase.rpc("release_call_slot", { p_workspace_id: workspaceId }).then(() => null, () => null);
     });
+    console.log("[worker.diag] session.starting", JSON.stringify({
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      room: ctx.room.name,
+      first_message_set: !!firstMessage,
+      voice_id: voiceId,
+      cartesia_key_present: !!process.env["CARTESIA_API_KEY"],
+      groq_key_present: !!groqKey,
+      openai_key_present: !!openaiKey
+    }));
     await session.start({ agent, room: ctx.room });
+    if (ambientSound) {
+      _ambientAbort = new AbortController();
+      const _workerDir = path.dirname(fileURLToPath(import.meta.url));
+      void streamAmbientSound(
+        ctx.room,
+        ambientSound,
+        ambientSoundVolume,
+        _workerDir,
+        _ambientAbort.signal
+      ).catch((err) => {
+        console.error("[ambient_sound] Unexpected error:", String(err));
+      });
+    }
     const greeting = firstMessage?.trim() || "Hello! How can I help you today?";
+    console.log("[worker.diag] session.say.greeting", JSON.stringify({
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      greeting_preview: greeting.slice(0, 80)
+    }));
     await session.say(greeting);
+    _silenceArmed = true;
   }
 });
+var AMBIENT_ALLOWLIST = /* @__PURE__ */ new Set([
+  "coffee-shop",
+  "convention-hall",
+  "summer-outdoor",
+  "mountain-outdoor",
+  "static-noise",
+  "call-center"
+]);
+async function streamAmbientSound(room, soundName, volume, workerDir, signal) {
+  if (!AMBIENT_ALLOWLIST.has(soundName)) {
+    console.error("[ambient_sound] Unknown soundscape:", soundName);
+    return;
+  }
+  const wavPath = path.resolve(workerDir, "..", "public", "soundscapes", `${soundName}.wav`);
+  let wavBytes;
+  try {
+    wavBytes = await fs.promises.readFile(wavPath);
+  } catch {
+    console.error("[ambient_sound] File not found:", wavPath);
+    return;
+  }
+  if (wavBytes.length < 44) return;
+  const numChannels = wavBytes.readUInt16LE(22);
+  const sampleRate = wavBytes.readUInt32LE(24);
+  const bitsPerSample = wavBytes.readUInt16LE(34);
+  if (bitsPerSample !== 16) {
+    console.error("[ambient_sound] Unsupported bit depth:", bitsPerSample);
+    return;
+  }
+  const pcmData = wavBytes.subarray(44);
+  const samplesPerFrame = Math.floor(sampleRate * 0.1);
+  const bytesPerFrame = samplesPerFrame * numChannels * 2;
+  if (!room.localParticipant) {
+    console.error("[ambient_sound] No localParticipant");
+    return;
+  }
+  const { AudioSource, AudioFrame, LocalAudioTrack, TrackPublishOptions } = await import("@livekit/rtc-node");
+  const source = new AudioSource(sampleRate, numChannels);
+  const track = LocalAudioTrack.createAudioTrack("ambient", source);
+  await room.localParticipant.publishTrack(track, new TrackPublishOptions());
+  console.log("[ambient_sound] streaming", JSON.stringify({ soundName, sampleRate, numChannels, volume }));
+  let offset = 0;
+  while (!signal.aborted) {
+    if (offset + bytesPerFrame > pcmData.length) offset = 0;
+    const int16 = new Int16Array(samplesPerFrame * numChannels);
+    for (let i = 0; i < int16.length; i++) {
+      const s = pcmData.readInt16LE(offset + i * 2);
+      int16[i] = volume === 1 ? s : Math.max(-32768, Math.min(32767, Math.round(s * volume)));
+    }
+    offset += bytesPerFrame;
+    await source.captureFrame(new AudioFrame(int16, sampleRate, numChannels, samplesPerFrame));
+    if (!signal.aborted) await new Promise((r) => setTimeout(r, 100));
+  }
+  await source.close().catch(() => null);
+  console.log("[ambient_sound] stopped:", soundName);
+}
 var healthPort = Number(process.env["PORT"] ?? 1e4);
-var _healthServer = createServer((_, res) => {
-  res.writeHead(200);
-  res.end("ok");
+var _healthServer = createServer((req, res) => {
+  const url = req.url ?? "/";
+  if (url === "/" || url === "/healthz") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Worker Alive");
+  } else {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not Found");
+  }
 });
 _healthServer.on("error", (err) => {
   if (err.code !== "EADDRINUSE") throw err;
 });
-_healthServer.listen(healthPort);
+_healthServer.listen(healthPort, "0.0.0.0", () => {
+  console.log(`[worker.health] HTTP health server listening on 0.0.0.0:${healthPort}`);
+});
+var _selfUrl = process.env["RENDER_EXTERNAL_URL"];
+if (_selfUrl) {
+  setInterval(() => {
+    fetch(_selfUrl).catch(() => null);
+  }, 9 * 60 * 1e3);
+}
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(import.meta.url),
   wsURL: process.env["LIVEKIT_URL"] ?? "",

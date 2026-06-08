@@ -15,6 +15,7 @@ export interface CartesiaVoice {
   language:    string;
   is_public:   boolean;
   description: string | null;
+  tags?:       string[];
   embedding?:  number[];
 }
 
@@ -109,7 +110,7 @@ export async function createCartesiaTTSStream({
 }
 
 export const VOICE_ENGINE_MAP: Record<string, string> = {
-  standard:   'sonic-2',
-  ultra_fast: 'sonic-2',
+  standard:   'sonic-3',
+  ultra_fast: 'sonic-3',
   premium:    'sonic-3',
 };

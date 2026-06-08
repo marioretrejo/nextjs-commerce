@@ -16,9 +16,9 @@
  * Start: node --import tsx/esm agent/worker.ts dev
  * Prod:  node --import tsx/esm agent/worker.ts start
  */
-import { defineAgent, voice, llm as agentLlm, llm, tts as agentTts, cli, ServerOptions } from '@livekit/agents';
+import { defineAgent, voice, llm as agentLlm, llm, cli, ServerOptions } from '@livekit/agents';
 import { STT } from '@livekit/agents-plugin-deepgram';
-import { LLM, TTS as OpenAITTS } from '@livekit/agents-plugin-openai';
+import { LLM } from '@livekit/agents-plugin-openai';
 import { TTS as CartesiaTTS } from '@livekit/agents-plugin-cartesia';
 import { createClient } from '@supabase/supabase-js';
 import { buildTools } from './tools/index.js';
@@ -336,11 +336,32 @@ export default defineAgent({
   entry: async (ctx) => {
     await ctx.connect();
 
+    // ── DIAGNOSTIC: log full env snapshot at call start ──────────────────────
+    const dgKey = process.env['DEEPGRAM_API_KEY'] ?? '';
+    const cartKey = process.env['CARTESIA_API_KEY'] ?? '';
+    const groqKey2 = process.env['GROQ_API_KEY'] ?? '';
+    const openaiKey2 = process.env['OPENAI_API_KEY'] ?? '';
+    console.log('[worker.diag] call.init', JSON.stringify({
+      ts: new Date().toISOString(),
+      room: ctx.room.name,
+      metadata_raw: ctx.room.metadata,
+      // Env var presence + first 4 chars (never log full keys)
+      DEEPGRAM_API_KEY:    dgKey    ? `set(len=${dgKey.length},prefix=${dgKey.slice(0,4)})` : 'MISSING',
+      CARTESIA_API_KEY:    cartKey  ? `set(len=${cartKey.length},prefix=${cartKey.slice(0,4)})` : 'MISSING',
+      GROQ_API_KEY:        groqKey2 ? `set(len=${groqKey2.length},prefix=${groqKey2.slice(0,4)})` : 'MISSING',
+      OPENAI_API_KEY:      openaiKey2 ? `set(len=${openaiKey2.length},prefix=${openaiKey2.slice(0,4)})` : 'MISSING',
+      LIVEKIT_URL:         process.env['LIVEKIT_URL'] ?? 'MISSING',
+      SUPABASE_URL_set:    !!process.env['NEXT_PUBLIC_SUPABASE_URL'],
+      SUPABASE_SRK_set:    !!process.env['SUPABASE_SERVICE_ROLE_KEY'],
+      // Deepgram connection URL that will be attempted
+      deepgram_url:        `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
+    }));
+
     // ─── 1. Parse room metadata ───────────────────────────────────────────────
     let systemPrompt =
       'You are a helpful, friendly voice assistant. Keep answers short and conversational — 1-3 sentences. Never use markdown, bullet points, or special characters in your responses.';
     let agentName = 'Assistant';
-    let voiceId = 'a0e99841-438c-4a64-b679-ae501e7d6091'; // Cartesia "Helpful Woman"
+    let voiceId = '02aeee94-c02b-456e-be7a-659672acf82d'; // Cartesia LatAm Spanish neutral
     let voiceEmotion: string | null = null;
     let firstMessage: string | null = null;
     let workspaceId: string | null = null;
@@ -350,6 +371,8 @@ export default defineAgent({
 
     let flowJson: unknown = null;
     let flowConfig: unknown = null;
+    let ambientSound: string | null = null;
+    let ambientSoundVolume = 1.0;
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? '{}') as {
@@ -365,6 +388,8 @@ export default defineAgent({
         flow_json?: unknown;
         flow_config?: unknown;
         dynamic_variables?: Record<string, string>;
+        ambient_sound?: string | null;
+        ambient_sound_volume?: number | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -377,6 +402,8 @@ export default defineAgent({
       if (meta.agent_id) agentId = meta.agent_id;
       if (meta.flow_json) flowJson = meta.flow_json;
       if (meta.flow_config) flowConfig = meta.flow_config;
+      if (meta.ambient_sound) ambientSound = String(meta.ambient_sound);
+      if (meta.ambient_sound_volume != null) ambientSoundVolume = Number(meta.ambient_sound_volume);
 
       // Pilar D: inject contact/campaign variables into prompt and greeting
       if (meta.dynamic_variables && Object.keys(meta.dynamic_variables).length > 0) {
@@ -429,55 +456,47 @@ export default defineAgent({
       } catch { /* non-fatal — proceed without dynamic tools */ }
     }
 
-    // ─── 1. STT: Deepgram nova-3 + PII redaction + custom keywords ───────────
+    // ─── 1. STT: Deepgram nova-2 ──────────────────────────────────────────────
     //
-    // redact: 'pci'     → masks credit/debit card numbers
-    // redact: 'ssn'     → masks US Social Security Numbers
-    // redact: 'numbers' → masks all numeric sequences not otherwise matched
-    //
-    // Masked values appear as [REDACTED] in the transcript, preventing PII from
-    // ever reaching logs, Supabase, or LLM context.
+    // nova-2 is used instead of nova-3 to avoid runner initialization timeouts
+    // seen in production (nova-3 tier-gates some parameters that cause HTTP 400s
+    // and cascade into a 10-second timeout before STT is marked unavailable).
+    const dgApiKey = process.env['DEEPGRAM_API_KEY'];
+    console.log('[worker.diag] stt.init', JSON.stringify({
+      model: 'nova-2',
+      language: 'en',
+      api_key_present: !!dgApiKey,
+      api_key_length:  dgApiKey?.length ?? 0,
+      api_key_prefix:  dgApiKey ? dgApiKey.slice(0, 4) : 'MISSING',
+    }));
+
     const stt = new STT({
-      model: 'nova-3',
-      language: 'multi',
-      detectLanguage: true,
-      apiKey: process.env['DEEPGRAM_API_KEY'],
-      redact: ['pci', 'ssn', 'numbers'],
-      keywords:  pronunciation.deepgramKeywords,
-      keyterm:   pronunciation.deepgramKeyterms,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: 'nova-2' as any,
+      language: 'es',
+      apiKey: dgApiKey,
     });
 
-    // ─── 2. LLM: Groq primary (~200ms TTFT) → OpenAI gpt-4o-mini fallback ────
-    //
-    // FallbackAdapter automatically retries on 429 / 5xx / timeout.
-    // attemptTimeout: 5s per attempt — switches to OpenAI if Groq doesn't respond
-    // maxRetryPerLLM: 1 internal retry before marking the LLM unavailable
-    // retryOnChunkSent: false — don't retry if the user already heard partial audio
-    const groqLLM = new LLM({
+    // Log Deepgram connection errors with full detail
+    stt.on('error', (err: unknown) => {
+      console.error('[worker.diag] stt.error', JSON.stringify({
+        ts: new Date().toISOString(),
+        error: String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      }));
+    });
+
+    // ─── 2. LLM: Groq llama-4-scout (low-latency, ~200ms TTFT) ─────────────────
+    if (!groqKey) {
+      console.error('[worker.diag] CRITICAL: GROQ_API_KEY not set — every LLM call will return 401 and leave session stuck in Thinking');
+    }
+    const lm = new LLM({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       apiKey: groqKey ?? '',
       baseURL: 'https://api.groq.com/openai/v1',
     });
 
-    const openaiLLM = new LLM({
-      model: 'gpt-4o-mini',
-      apiKey: openaiKey ?? '',
-    });
-
-    const lm = groqKey
-      ? new agentLlm.FallbackAdapter({
-          llms: [groqLLM, ...(openaiKey ? [openaiLLM] : [])],
-          attemptTimeout: 5,
-          maxRetryPerLLM: 1,
-          retryOnChunkSent: false,
-        })
-      : openaiLLM;
-
-    // ─── 2. TTS: Cartesia sonic-3 primary → OpenAI TTS fallback ──────────────
-    //
-    // FallbackAdapter switches to OpenAI TTS if Cartesia returns a network error
-    // or times out. maxRetryPerTTS: 2 gives Cartesia two chances before switching.
-    // recoveryDelayMs: 5000 re-checks Cartesia every 5s to restore it.
+    // ─── 2. TTS: Cartesia ─────────────────────────────────────────────────────
     // Maps our emotion names → Cartesia experimental_controls emotion tags
     // (must match the same map used in /api/voices/preview for consistency)
     const EMOTION_MAP: Record<string, string[]> = {
@@ -489,29 +508,35 @@ export default defineAgent({
       fearful:     ['fearfulness:high'],
       surprised:   ['surprise:positive:high'],
     };
-    const cartesiaTTS = new CartesiaTTS({
-      model: 'sonic-3',
-      voice: voiceId,
-      apiKey: process.env['CARTESIA_API_KEY'],
-      language: 'en',
-      speed: 'normal',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ttsInitOpts: any = {
+      model:    'sonic-3',
+      voice:    voiceId,
+      apiKey:   process.env['CARTESIA_API_KEY'],
+      language: 'es',
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
+    };
+    console.log('[DEBUG_CARTESIA]', {
+      model:       ttsInitOpts.model,
+      voice:       ttsInitOpts.voice,
+      language:    ttsInitOpts.language,
+      emotion:     ttsInitOpts.emotion ?? null,
+      apiKeySet:   !!(process.env['CARTESIA_API_KEY']),
+      apiKeyPrefix:(process.env['CARTESIA_API_KEY'] ?? '').slice(0,4),
     });
+    let cartesiaTTS: CartesiaTTS;
+    try {
+      cartesiaTTS = new CartesiaTTS(ttsInitOpts);
+    } catch (ttsInitErr) {
+      console.error('[worker.tts] CartesiaTTS constructor threw — aborting session:', ttsInitErr);
+      throw ttsInitErr;
+    }
 
-    const tts = openaiKey
-      ? new agentTts.FallbackAdapter({
-          ttsInstances: [
-            cartesiaTTS,
-            new OpenAITTS({
-              model: 'tts-1',
-              voice: 'alloy',
-              apiKey: openaiKey,
-            }),
-          ],
-          maxRetryPerTTS: 2,
-          recoveryDelayMs: 5000,
-        })
-      : cartesiaTTS;
+    // Cartesia is the sole TTS provider — OpenAI TTS excluded (no active balance).
+    // Using Cartesia directly avoids the FallbackAdapter overhead and ensures any
+    // Cartesia error surfaces immediately in logs rather than triggering a fallback
+    // that would also fail, producing the "all TTS instances failed" fatal error.
+    const tts = cartesiaTTS;
 
     // ─── 3 + 4. Agent: tools (incl. transfer) + TTS pronunciation map ────────
     //
@@ -826,7 +851,7 @@ export default defineAgent({
           minDuration: 250,  // ignore sub-250ms noises (clicks, breath) as interruptions
           minWords: 1,       // at least one word required — suppresses single-phoneme false triggers
           falseInterruptionTimeout: 1500,
-          resumeFalseInterruption: true,
+          resumeFalseInterruption: false,
           // backchannelBoundary: agent may emit a listening sound when user speech
           // falls within this ms range (600–3000ms of agent speaking before user interjects)
           backchannelBoundary: [600, 3000],
@@ -838,7 +863,87 @@ export default defineAgent({
     // Wire mutable ref so transition_state tool can update agent.instructions
     agentRef.current = agent;
 
+    // ── Barge-in prefix injection via onUserTurnCompleted hook ─────────────
+    // LiveKit calls this hook with the chatCtx COPY that will be sent to the
+    // LLM. We insert a one-shot system message that instructs Groq to start
+    // its response with a short transition word (e.g. "Claro,", "Sí,").
+    // The message lives only in the copy — it's never persisted to history.
+    // _wasInterrupted is set in the partial-transcript handler below.
+    const BARGE_IN_TRANSITION_HINT =
+      '[INSTRUCCIÓN INTERNA — NO MENCIONAR] El usuario te acaba de interrumpir. ' +
+      'Empieza tu respuesta OBLIGATORIAMENTE con UNA sola palabra de transición ' +
+      '(ejemplos: "Claro,", "Sí,", "Mire,", "Entendido,"). ' +
+      'Este prefijo reduce el silencio digital percibido por el usuario.';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (agent as any).onUserTurnCompleted = async (chatCtx: any, _msg: any) => {
+      if (_wasInterrupted) {
+        _wasInterrupted = false;
+        chatCtx.insert(
+          agentLlm.ChatMessage.create({ role: 'system', content: BARGE_IN_TRANSITION_HINT })
+        );
+      }
+    };
+
     const session = new voice.AgentSession({ stt, llm: lm, tts });
+
+    // ─── Shared helper: delete the LiveKit room (triggers Close + SIP hangup) ───
+    // Extracted as a module-level function so it can be called from timers and
+    // event handlers without repeating the env-var boilerplate.
+    const _doDeleteRoom = () => {
+      const wsUrl    = process.env['LIVEKIT_URL'] ?? '';
+      const httpUrl  = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+      const lkKey    = process.env['LIVEKIT_API_KEY'];
+      const lkSecret = process.env['LIVEKIT_API_SECRET'];
+      if (httpUrl && lkKey && lkSecret) {
+        import('livekit-server-sdk').then(({ RoomServiceClient }) => {
+          new RoomServiceClient(httpUrl, lkKey, lkSecret).deleteRoom(roomName).catch(() => null);
+        }).catch(() => null);
+      }
+    };
+
+    // ─── Silence reprompt & auto-hangup system ───────────────────────────────
+    // Lifecycle:
+    //   1. After the greeting finishes speaking (AgentStateChanged → 'listening'),
+    //      a 4.5-second silence timer starts.
+    //   2. Any user speech (partial transcript) resets the timer immediately.
+    //   3. If 4.5 s elapse without user speech → agent says a check-in phrase.
+    //   4. If 3.5 s more elapse with no user speech → goodbye + room delete.
+    // All timer I/O is non-blocking — it never delays the audio pipeline.
+    let _silenceTimer:  ReturnType<typeof setTimeout> | null = null;
+    let _hangupTimer:   ReturnType<typeof setTimeout> | null = null;
+    let _silenceArmed   = false; // armed only after the greeting is spoken
+    let _ambientAbort:  AbortController | null = null;
+
+    // ── Barge-in state shared across event handlers ──────────────────────
+    let _wasInterrupted      = false; // signals onUserTurnCompleted to inject prefix hint
+    let _bargeInAt: number | null = null; // timestamp when interrupt fired (for gap log)
+    let _endpointingReduced  = false; // true while endpointing minDelay is lowered
+    // Speak lockout: ignore partial transcripts for the first 450ms after the agent
+    // starts speaking. This prevents the bot from interrupting its own audio due to
+    // echo / acoustic feedback reaching Deepgram before AEC stabilises.
+    let _speakLockoutUntil   = 0;
+
+    const _clearSilenceTimers = () => {
+      if (_silenceTimer)  { clearTimeout(_silenceTimer);  _silenceTimer  = null; }
+      if (_hangupTimer)   { clearTimeout(_hangupTimer);   _hangupTimer   = null; }
+    };
+
+    const _armSilenceTimer = () => {
+      _clearSilenceTimers();
+      if (!_silenceArmed) return;
+      _silenceTimer = setTimeout(() => {
+        _silenceTimer = null;
+        void session.say('¿Hola? ¿Sigues ahí?').then(null, () => null);
+        _hangupTimer = setTimeout(() => {
+          _hangupTimer = null;
+          _silenceArmed = false;
+          void session.say(
+            'Parece que hay problemas de audio. Hasta luego.',
+            { allowInterruptions: false },
+          ).then(_doDeleteRoom, _doDeleteRoom);
+        }, 3500);
+      }, 4500);
+    };
 
     // ─── Kill switch: handle graceful disconnect if room is deleted mid-call ──
     // When the webhook detects zero credits, it calls RoomServiceClient.deleteRoom().
@@ -866,30 +971,78 @@ export default defineAgent({
     let llmSpan = startSpan('llm.first_token');
     let ttsSpan = startSpan('tts.first_chunk');
 
+    // Regex for strong negative / DNC signals — triggers immediate fast hangup
+    // before the LLM round-trip to save API costs and latency.
+    const NEGATIVE_INTENT_RE =
+      /no\s+me\s+interesa|no\s+(vuelva?s?\s+a\s+)?llam|deja\s+de\s+llamar|no\s+quiero\s+(que\s+me\s+llam|m[aá]s\s+llamadas)|quit\s+calling|stop\s+calling|remove\s+(me\s+)?from\s+(your\s+)?list|not\s+interested|do\s+not\s+call|don'?t\s+(ever\s+)?call\s+(me|again)|fuck\s+off|piss\s+off|no\s+llames\s+m[aá]s|no\s+molest/i;
+
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       const typed = ev as { isFinal?: boolean; transcript?: string };
       const text = typed.transcript ?? '';
 
       if (!typed.isFinal) {
-        // Non-final (partial) transcript — user is still speaking
+        // ── Barge-in guard: only interrupt if lockout window has expired ───
+        // _speakLockoutUntil is set to Date.now()+450 when agent starts speaking.
+        // During that window, Deepgram may pick up agent echo before AEC kicks in
+        // and send short partial transcripts — we silently skip those to prevent
+        // the bot stuttering ("Me alec... / Me da... / Me pone...").
+        // We also require the partial to have at least 4 chars so single phonemes
+        // and punctuation blips don't trigger an interrupt.
+        const partialText = text.trim();
+        if (
+          session.agentState === 'speaking' &&
+          !_wasInterrupted &&
+          Date.now() > _speakLockoutUntil &&
+          partialText.length >= 4 &&
+          !isFillerOnly(partialText)
+        ) {
+          // ── Real barge-in confirmed — clear audio and inject transition ──
+          void session.interrupt({ force: true }).await.catch(() => null);
+          _wasInterrupted = true; // onUserTurnCompleted will inject a transition prefix
+          _bargeInAt      = Date.now(); // start gap timer for [worker.barge_in.flow] log
+          // Reduce endpointing for faster turn detection on this one turn
+          const _audioRec = (session as unknown as Record<string, any>)['activity']?.audioRecognition;
+          if (_audioRec?.endpointing && !_endpointingReduced) {
+            _audioRec.endpointing.updateOptions({ minDelay: 400, maxDelay: 1500 });
+            _endpointingReduced = true;
+          }
+        }
+        // Any partial transcript resets the silence timer (user is active)
+        _clearSilenceTimers();
         backchannel.onPartial();
         return;
       }
 
       // Final transcript — user finished a thought
       backchannel.onFinal();
+      _clearSilenceTimers(); // user spoke — reset silence countdown
 
-      // Suppress filler-only utterances: don't advance spans or log them as
-      // real turns — "uh", "hmm", "ok" alone should never trigger a full LLM response.
-      if (isFillerOnly(text)) {
-        log('info', { message: 'stt.filler_suppressed', text, agent_id: agentId });
+      // ── STT Noise Filter: suppress very short or filler-only transcripts ──
+      // Transcripts shorter than 3 chars are ambient noise or clipped phonemes.
+      // Filler-only transcripts ("uh", "hmm", "ok") should never trigger LLM.
+      const trimmed = text.trim();
+      if (trimmed.length < 3 || isFillerOnly(trimmed)) {
+        log('info', { message: 'stt.noise_suppressed', text: trimmed, len: trimmed.length, agent_id: agentId });
+        _armSilenceTimer(); // user "spoke" but it was noise — restart silence window
+        return;
+      }
+
+      // ── Fast hangup on strong negative / DNC intent ───────────────────────
+      // Bypasses LLM to save one full round-trip (~300ms Groq + ~300ms TTS).
+      if (NEGATIVE_INTENT_RE.test(trimmed)) {
+        log('info', { message: 'negative_intent.fast_hangup', text: trimmed, agent_id: agentId });
+        _silenceArmed = false;
+        _clearSilenceTimers();
+        void session.interrupt({ force: true }).await.catch(() => null);
+        void session.say('Entendido, adiós.', { allowInterruptions: false })
+          .then(_doDeleteRoom, _doDeleteRoom);
         return;
       }
 
       const result = endSpan(sttSpan, {
         agent_id: agentId,
         workspace_id: workspaceId,
-        transcript_chars: text.length,
+        transcript_chars: trimmed.length,
       });
       checkLatencyThreshold(result);
       sttSpan = startSpan('stt'); // reset for next utterance
@@ -904,10 +1057,47 @@ export default defineAgent({
     });
 
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
-      if ((ev as { state?: string }).state === 'speaking') {
+      const { oldState, newState } = ev as { oldState?: string; newState?: string };
+      if (newState === 'speaking') {
+        // TTS latency: first audio chunk arrived — record elapsed time
         const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
         checkLatencyThreshold(ttsResult);
-        ttsSpan = startSpan('tts.first_chunk'); // reset
+        ttsSpan = startSpan('tts.first_chunk'); // reset for next turn
+        _clearSilenceTimers(); // agent is speaking — pause silence countdown
+        // Speak lockout: block partial-transcript interrupts for the first 450ms
+        // after agent speech starts. This prevents self-interruption from echo/AEC.
+        _speakLockoutUntil = Date.now() + 450;
+
+        // ── Barge-in gap log ──────────────────────────────────────────────
+        // Measures ms from user interrupt → Cartesia first frame.
+        // Target: < 600ms (STT ≈ 100ms + Groq ≈ 300ms + Cartesia ≈ 150ms).
+        if (_bargeInAt !== null) {
+          const gapMs = Date.now() - _bargeInAt;
+          _bargeInAt = null;
+          console.log('[worker.barge_in.flow]', JSON.stringify({
+            ts:       new Date().toISOString(),
+            gap_ms:   gapMs,
+            agent_id: agentId,
+            room:     roomName,
+          }));
+        }
+        // Restore normal endpointing now that agent is speaking again
+        if (_endpointingReduced) {
+          _endpointingReduced = false;
+          const _audioRec = (session as unknown as Record<string, any>)['activity']?.audioRecognition;
+          if (_audioRec?.endpointing) {
+            _audioRec.endpointing.updateOptions({ minDelay: 450, maxDelay: 3000 });
+          }
+        }
+      }
+      if (newState === 'listening' && oldState === 'speaking') {
+        // Agent finished speaking — start silence watchdog and clear lockout
+        _speakLockoutUntil = 0;  // user is now free to interrupt immediately
+        // Queue cleanup: if the agent finished speaking without being interrupted,
+        // clear any stale barge-in state so it doesn't pollute the next turn.
+        if (_wasInterrupted) { _wasInterrupted = false; }
+        if (_bargeInAt !== null) { _bargeInAt = null; }
+        _armSilenceTimer();
       }
     });
 
@@ -977,6 +1167,9 @@ export default defineAgent({
     // ─── Session close — write transcript + duration to Supabase ─────────────
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
       backchannel.destroy();
+      _silenceArmed = false;
+      _clearSilenceTimers();
+      _ambientAbort?.abort();
       if (balanceCheckInterval) { clearInterval(balanceCheckInterval); balanceCheckInterval = null; }
       log('info', {
         message: 'call.ended',
@@ -1009,26 +1202,156 @@ export default defineAgent({
         },
         { onConflict: 'retell_call_id', ignoreDuplicates: false }
       );
+
+      // Release the concurrent call slot so the next call can proceed.
+      // This runs on every session close — success, error, or worker crash recovery.
+      await supabase.rpc('release_call_slot', { p_workspace_id: workspaceId }).then(() => null, () => null);
     });  // end Close handler
+
+    console.log('[worker.diag] session.starting', JSON.stringify({
+      ts: new Date().toISOString(),
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      room: ctx.room.name,
+      first_message_set: !!firstMessage,
+      voice_id: voiceId,
+      cartesia_key_present: !!process.env['CARTESIA_API_KEY'],
+      groq_key_present: !!groqKey,
+      openai_key_present: !!openaiKey,
+    }));
 
     await session.start({ agent, room: ctx.room });
 
+    // Start ambient background sound if configured for this agent
+    if (ambientSound) {
+      _ambientAbort = new AbortController();
+      const _workerDir = path.dirname(fileURLToPath(import.meta.url));
+      void streamAmbientSound(
+        ctx.room as LKRoom,
+        ambientSound,
+        ambientSoundVolume,
+        _workerDir,
+        _ambientAbort.signal,
+      ).catch((err: unknown) => {
+        console.error('[ambient_sound] Unexpected error:', String(err));
+      });
+    }
+
     const greeting = firstMessage?.trim() || 'Hello! How can I help you today?';
+    console.log('[worker.diag] session.say.greeting', JSON.stringify({
+      ts: new Date().toISOString(),
+      greeting_preview: greeting.slice(0, 80),
+    }));
     await session.say(greeting);
+    // Arm silence watchdog after greeting — silence timer starts when the
+    // AgentStateChanged 'speaking'→'listening' transition fires (greeting ends).
+    _silenceArmed = true;
   },
 });
 
-// Minimal HTTP health-check server so Render web services stay healthy.
-// LiveKit's supervised_proc spawns child copies of this file — each child
-// will also attempt to listen, so we silently ignore EADDRINUSE (port already
-// held by the parent). Any other listen error is rethrown.
-import { createServer } from 'node:http';
+// ── Ambient sound streaming ──────────────────────────────────────────────────
+// Reads a WAV file from public/soundscapes/, publishes it as a separate audio
+// track in the LiveKit room (heard only by the user, not by STT), and loops
+// until the call ends (signal aborted).
+const AMBIENT_ALLOWLIST = new Set([
+  'coffee-shop', 'convention-hall', 'summer-outdoor',
+  'mountain-outdoor', 'static-noise', 'call-center',
+]);
+// Minimal local type — avoids importing @livekit/rtc-node at module level
+interface LKRoom { localParticipant?: { publishTrack: (t: unknown, o: unknown) => Promise<unknown> } }
+async function streamAmbientSound(
+  room: LKRoom,
+  soundName: string,
+  volume: number,
+  workerDir: string,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!AMBIENT_ALLOWLIST.has(soundName)) {
+    console.error('[ambient_sound] Unknown soundscape:', soundName);
+    return;
+  }
+  const wavPath = path.resolve(workerDir, '..', 'public', 'soundscapes', `${soundName}.wav`);
+  let wavBytes: Buffer;
+  try {
+    wavBytes = await fs.promises.readFile(wavPath);
+  } catch {
+    console.error('[ambient_sound] File not found:', wavPath);
+    return;
+  }
+  if (wavBytes.length < 44) return;
+
+  const numChannels   = wavBytes.readUInt16LE(22);
+  const sampleRate    = wavBytes.readUInt32LE(24);
+  const bitsPerSample = wavBytes.readUInt16LE(34);
+  if (bitsPerSample !== 16) { console.error('[ambient_sound] Unsupported bit depth:', bitsPerSample); return; }
+
+  const pcmData       = wavBytes.subarray(44);
+  const samplesPerFrame = Math.floor(sampleRate * 0.1); // 100 ms
+  const bytesPerFrame   = samplesPerFrame * numChannels * 2;
+
+  if (!room.localParticipant) { console.error('[ambient_sound] No localParticipant'); return; }
+
+  // Dynamic import: defer native FFI init to avoid conflicts with agents framework startup
+  const { AudioSource, AudioFrame, LocalAudioTrack, TrackPublishOptions } =
+    await import('@livekit/rtc-node');
+
+  const source = new AudioSource(sampleRate, numChannels);
+  const track  = LocalAudioTrack.createAudioTrack('ambient', source);
+  await room.localParticipant.publishTrack(track, new TrackPublishOptions());
+
+  console.log('[ambient_sound] streaming', JSON.stringify({ soundName, sampleRate, numChannels, volume }));
+
+  let offset = 0;
+  while (!signal.aborted) {
+    if (offset + bytesPerFrame > pcmData.length) offset = 0;
+
+    const int16 = new Int16Array(samplesPerFrame * numChannels);
+    for (let i = 0; i < int16.length; i++) {
+      const s = pcmData.readInt16LE(offset + i * 2);
+      int16[i] = volume === 1.0 ? s : Math.max(-32768, Math.min(32767, Math.round(s * volume)));
+    }
+    offset += bytesPerFrame;
+
+    await source.captureFrame(new AudioFrame(int16, sampleRate, numChannels, samplesPerFrame));
+    // Pace at 100 ms per frame; check abort between frames
+    if (!signal.aborted) await new Promise<void>(r => setTimeout(r, 100));
+  }
+
+  await source.close().catch(() => null);
+  console.log('[ambient_sound] stopped:', soundName);
+}
+
+// HTTP health-check server — required so Render detects an open port and
+// doesn't block or restart the container. LiveKit's supervised_proc spawns
+// child copies of this file; children silently ignore EADDRINUSE because the
+// parent process already holds the port. Any other bind error is rethrown.
+import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 const healthPort = Number(process.env['PORT'] ?? 10000);
-const _healthServer = createServer((_, res) => { res.writeHead(200); res.end('ok'); });
+const _healthServer = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const url = req.url ?? '/';
+  if (url === '/' || url === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Worker Alive');
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+});
 _healthServer.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code !== 'EADDRINUSE') throw err;
 });
-_healthServer.listen(healthPort);
+_healthServer.listen(healthPort, '0.0.0.0', () => {
+  console.log(`[worker.health] HTTP health server listening on 0.0.0.0:${healthPort}`);
+});
+
+// Keep Render free-plan alive: ping our own public URL every 9 min so the
+// inactivity timer never reaches the 15-min hibernation threshold.
+// RENDER_EXTERNAL_URL is set automatically by Render in every deployment;
+// the request goes through the load balancer and resets the timer.
+const _selfUrl = process.env['RENDER_EXTERNAL_URL'];
+if (_selfUrl) {
+  setInterval(() => { fetch(_selfUrl).catch(() => null); }, 9 * 60 * 1000);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 cli.runApp(new ServerOptions({
