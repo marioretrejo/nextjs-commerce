@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   // ─── room_finished ─────────────────────────────────────────────────────────
   if (event.event === 'room_finished') {
     const roomName = event.room?.name ?? '';
-    const match = roomName.match(/^(?:agent|sip-agent)-([0-9a-f-]+)-?(\d*)$/i);
+    const match = roomName.match(/^(?:agent|sip-agent)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d+)$/i);
     if (!match) return NextResponse.json({ received: true });
 
     const agentId = match[1]!;
