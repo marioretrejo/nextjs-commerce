@@ -155,9 +155,10 @@ export function OutboundDialer({ agents, phoneNumbers = [], hasSipTrunk = false 
       const roomName = data.call_id ?? '';
       updateRow(index, { status: 'dialing', callId: roomName, attempts: row.attempts + 1 });
 
-      // Wait for the actual call outcome: ring + answer + up to 30s buffer.
-      // This turns 'no_answer'/'voicemail'/'failed' into a retry-eligible 'failed' row.
-      const pollTimeout = (ringingTimeout + 30) * 1000;
+      // Wait for the actual call outcome: ring time + full max call duration + 60s buffer
+      // for webhook round-trip. Without maxDuration here, any call longer than
+      // ringingTimeout+30s would time out and be incorrectly marked failed.
+      const pollTimeout = (ringingTimeout + maxDuration * 60 + 60) * 1000;
       const finalStatus = roomName ? await pollCallOutcome(roomName, pollTimeout) : 'no_answer';
 
       if (finalStatus === 'completed') {
