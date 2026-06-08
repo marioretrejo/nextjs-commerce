@@ -4626,12 +4626,12 @@ Option 2: Install and provide the "ws" package:
        * @category Realtime
        */
       async removeAllChannels() {
-        const promises = this.channels.map(async (channel) => {
+        const promises2 = this.channels.map(async (channel) => {
           const result2 = await channel.unsubscribe();
           channel.teardown();
           return result2;
         });
-        const result = await Promise.all(promises);
+        const result = await Promise.all(promises2);
         await this.disconnect();
         return result;
       }
@@ -11848,14 +11848,14 @@ var require_GoTrueClient = __commonJS({
             this.broadcastChannel.postMessage({ event, session });
           }
           const errors = [];
-          const promises = Array.from(this.stateChangeEmitters.values()).map(async (x) => {
+          const promises2 = Array.from(this.stateChangeEmitters.values()).map(async (x) => {
             try {
               await x.callback(event, session);
             } catch (e) {
               errors.push(e);
             }
           });
-          await Promise.all(promises);
+          await Promise.all(promises2);
           if (errors.length > 0) {
             for (let i = 0; i < errors.length; i += 1) {
               console.error(errors[i]);
@@ -37238,6 +37238,8 @@ var worker_core_default = defineAgent({
     let transferNumber = null;
     let flowJson = null;
     let flowConfig = null;
+    let ambientSound = null;
+    let ambientSoundVolume = 1;
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}");
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
@@ -37251,6 +37253,8 @@ var worker_core_default = defineAgent({
       if (meta.agent_id) agentId = meta.agent_id;
       if (meta.flow_json) flowJson = meta.flow_json;
       if (meta.flow_config) flowConfig = meta.flow_config;
+      if (meta.ambient_sound) ambientSound = String(meta.ambient_sound);
+      if (meta.ambient_sound_volume != null) ambientSoundVolume = Number(meta.ambient_sound_volume);
       if (meta.dynamic_variables && Object.keys(meta.dynamic_variables).length > 0) {
         const vars = meta.dynamic_variables;
         systemPrompt = injectVariables(systemPrompt, vars);
@@ -37314,6 +37318,9 @@ var worker_core_default = defineAgent({
         stack: err instanceof Error ? err.stack : void 0
       }));
     });
+    if (!groqKey) {
+      console.error("[worker.diag] CRITICAL: GROQ_API_KEY not set \u2014 every LLM call will return 401 and leave session stuck in Thinking");
+    }
     const lm = new LLM({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       apiKey: groqKey ?? "",
@@ -37328,14 +37335,28 @@ var worker_core_default = defineAgent({
       fearful: ["fearfulness:high"],
       surprised: ["surprise:positive:high"]
     };
-    const cartesiaTTS = new CartesiaTTS({
-      model: "sonic-3-5",
+    const ttsInitOpts = {
+      model: "sonic-3",
       voice: voiceId,
       apiKey: process.env["CARTESIA_API_KEY"],
       language: "es",
-      // sonic-3.5 requires numeric speed (0.6–2.0); omitting uses the API default (1.0).
       ...voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}
+    };
+    console.log("[DEBUG_CARTESIA]", {
+      model: ttsInitOpts.model,
+      voice: ttsInitOpts.voice,
+      language: ttsInitOpts.language,
+      emotion: ttsInitOpts.emotion ?? null,
+      apiKeySet: !!process.env["CARTESIA_API_KEY"],
+      apiKeyPrefix: (process.env["CARTESIA_API_KEY"] ?? "").slice(0, 4)
     });
+    let cartesiaTTS;
+    try {
+      cartesiaTTS = new CartesiaTTS(ttsInitOpts);
+    } catch (ttsInitErr) {
+      console.error("[worker.tts] CartesiaTTS constructor threw \u2014 aborting session:", ttsInitErr);
+      throw ttsInitErr;
+    }
     const tts = cartesiaTTS;
     const flowPrompt = isFlowConfig2(flowConfig) ? null : buildFlowPrompt(flowJson);
     const stateMachine = isFlowConfig2(flowConfig) ? buildStateMachine(flowConfig) : null;
@@ -37654,6 +37675,7 @@ var worker_core_default = defineAgent({
     let _silenceTimer = null;
     let _hangupTimer = null;
     let _silenceArmed = false;
+    let _ambientAbort = null;
     let _wasInterrupted = false;
     let _bargeInAt = null;
     let _endpointingReduced = false;
@@ -37842,6 +37864,7 @@ var worker_core_default = defineAgent({
       backchannel.destroy();
       _silenceArmed = false;
       _clearSilenceTimers();
+      _ambientAbort?.abort();
       if (balanceCheckInterval) {
         clearInterval(balanceCheckInterval);
         balanceCheckInterval = null;
@@ -37889,6 +37912,19 @@ var worker_core_default = defineAgent({
       openai_key_present: !!openaiKey
     }));
     await session.start({ agent, room: ctx.room });
+    if (ambientSound) {
+      _ambientAbort = new AbortController();
+      const _workerDir = path.dirname(fileURLToPath(import.meta.url));
+      void streamAmbientSound(
+        ctx.room,
+        ambientSound,
+        ambientSoundVolume,
+        _workerDir,
+        _ambientAbort.signal
+      ).catch((err) => {
+        console.error("[ambient_sound] Unexpected error:", String(err));
+      });
+    }
     const greeting = firstMessage?.trim() || "Hello! How can I help you today?";
     console.log("[worker.diag] session.say.greeting", JSON.stringify({
       ts: (/* @__PURE__ */ new Date()).toISOString(),
@@ -37898,6 +37934,62 @@ var worker_core_default = defineAgent({
     _silenceArmed = true;
   }
 });
+var AMBIENT_ALLOWLIST = /* @__PURE__ */ new Set([
+  "coffee-shop",
+  "convention-hall",
+  "summer-outdoor",
+  "mountain-outdoor",
+  "static-noise",
+  "call-center"
+]);
+async function streamAmbientSound(room, soundName, volume, workerDir, signal) {
+  if (!AMBIENT_ALLOWLIST.has(soundName)) {
+    console.error("[ambient_sound] Unknown soundscape:", soundName);
+    return;
+  }
+  const wavPath = path.resolve(workerDir, "..", "public", "soundscapes", `${soundName}.wav`);
+  let wavBytes;
+  try {
+    wavBytes = await fs.promises.readFile(wavPath);
+  } catch {
+    console.error("[ambient_sound] File not found:", wavPath);
+    return;
+  }
+  if (wavBytes.length < 44) return;
+  const numChannels = wavBytes.readUInt16LE(22);
+  const sampleRate = wavBytes.readUInt32LE(24);
+  const bitsPerSample = wavBytes.readUInt16LE(34);
+  if (bitsPerSample !== 16) {
+    console.error("[ambient_sound] Unsupported bit depth:", bitsPerSample);
+    return;
+  }
+  const pcmData = wavBytes.subarray(44);
+  const samplesPerFrame = Math.floor(sampleRate * 0.1);
+  const bytesPerFrame = samplesPerFrame * numChannels * 2;
+  if (!room.localParticipant) {
+    console.error("[ambient_sound] No localParticipant");
+    return;
+  }
+  const { AudioSource, AudioFrame, LocalAudioTrack, TrackPublishOptions } = await import("@livekit/rtc-node");
+  const source = new AudioSource(sampleRate, numChannels);
+  const track = LocalAudioTrack.createAudioTrack("ambient", source);
+  await room.localParticipant.publishTrack(track, new TrackPublishOptions());
+  console.log("[ambient_sound] streaming", JSON.stringify({ soundName, sampleRate, numChannels, volume }));
+  let offset = 0;
+  while (!signal.aborted) {
+    if (offset + bytesPerFrame > pcmData.length) offset = 0;
+    const int16 = new Int16Array(samplesPerFrame * numChannels);
+    for (let i = 0; i < int16.length; i++) {
+      const s = pcmData.readInt16LE(offset + i * 2);
+      int16[i] = volume === 1 ? s : Math.max(-32768, Math.min(32767, Math.round(s * volume)));
+    }
+    offset += bytesPerFrame;
+    await source.captureFrame(new AudioFrame(int16, sampleRate, numChannels, samplesPerFrame));
+    if (!signal.aborted) await new Promise((r) => setTimeout(r, 100));
+  }
+  await source.close().catch(() => null);
+  console.log("[ambient_sound] stopped:", soundName);
+}
 var healthPort = Number(process.env["PORT"] ?? 1e4);
 var _healthServer = createServer((req, res) => {
   const url = req.url ?? "/";
