@@ -15,7 +15,7 @@ interface UsageData {
   last_reset_at: string | null;
 }
 
-const PLAN_PRICES: Record<string, number> = { free: 0, pro: 97, scale: 297 };
+const PLAN_PRICES: Record<string, number> = { free: 0, pro: 79, scale: 299 };
 const OVERAGE_RATES: Record<string, number> = { free: 0, pro: 0.15, scale: 0.10 };
 
 export default function UsagePage() {
@@ -163,10 +163,10 @@ export default function UsagePage() {
                 <span>${(planPrice + overageCharge).toFixed(2)}</span>
               </div>
               {usage?.next_billing_date && (
-                <p className="text-xs text-[#6b6b6b]">Next billing date: {new Date(usage.next_billing_date).toLocaleDateString()}</p>
+                <p className="text-xs text-[#6b6b6b]">Next billing date: {new Date(usage.next_billing_date).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'numeric', day: 'numeric', year: 'numeric' })}</p>
               )}
               {usage?.last_reset_at && (
-                <p className="text-xs text-[#6b6b6b]">Last reset: {new Date(usage.last_reset_at).toLocaleDateString()}</p>
+                <p className="text-xs text-[#6b6b6b]">Last reset: {new Date(usage.last_reset_at).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'numeric', day: 'numeric', year: 'numeric' })}</p>
               )}
               <div className="pt-2">
                 <Link href="/billing" className="text-xs text-[#0a0a0a] underline underline-offset-2">Manage plan & billing →</Link>

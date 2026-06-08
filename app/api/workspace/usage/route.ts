@@ -18,9 +18,9 @@ export async function GET() {
   const minutesLimit = Number(ws.minutes_limit ?? 0);
   const overageMinutes = Math.max(0, minutesUsed - minutesLimit);
 
-  // Calculate next billing date (1st of next month)
+  // Calculate next billing date (1st of next month in UTC)
   const now = new Date();
-  const nextBillingDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+  const nextBillingDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
 
   return NextResponse.json({
     minutes_used: minutesUsed,
