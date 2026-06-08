@@ -31,6 +31,7 @@ interface IntegrationRow {
   status: string;
   credentials: Record<string, string> | null;
   webhook_url: string | null;
+  webhook_events: string[] | null;
 }
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -177,9 +178,12 @@ async function fireGoogleCalendar(creds: Record<string, string>, p: PostCallPayl
   const accessToken = tokenData.access_token;
   if (!accessToken) return;
 
-  // Build a calendar event starting 24h from now (placeholder — real date
-  // would come from extracted_data.meeting_date when the LLM extracts it)
-  const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  // Use meeting_date extracted by LLM if present and valid; fall back to 24h from now
+  const rawDate = p.extracted_data?.['meeting_date'] as string | null | undefined;
+  let start = rawDate ? new Date(rawDate) : null;
+  if (!start || isNaN(start.getTime()) || start < new Date()) {
+    start = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  }
   const end   = new Date(start.getTime() + 60 * 60 * 1000); // 1h meeting
 
   const contact = p.contact_name ?? p.contact_phone ?? 'Contact';
@@ -201,6 +205,50 @@ async function fireGoogleCalendar(creds: Record<string, string>, p: PostCallPayl
   });
 }
 
+async function fireCustomWebhook(
+  webhookUrl: string,
+  webhookEvents: string[],
+  p: PostCallPayload,
+): Promise<void> {
+  if (!webhookUrl || !webhookEvents.length) return;
+
+  // Determine which events apply to this analyzed call
+  const toFire: string[] = [];
+  if (webhookEvents.includes('call.completed')) toFire.push('call.completed');
+  if (webhookEvents.includes('call.converted') && p.disposition === 'meeting_booked') {
+    toFire.push('call.converted');
+  }
+  if (!toFire.length) return;
+
+  const callPayload = {
+    id:               p.call_id,
+    workspace_id:     p.workspace_id,
+    agent_id:         p.agent_id,
+    contact_name:     p.contact_name,
+    contact_phone:    p.contact_phone,
+    direction:        p.direction,
+    duration_seconds: p.duration_seconds,
+    disposition:      p.disposition,
+    summary:          p.summary,
+    sentiment:        p.sentiment,
+    transcript:       p.transcript,
+    extracted_data:   p.extracted_data,
+    extracted_name:   p.extracted_name,
+    extracted_email:  p.extracted_email,
+    extracted_interest:   p.extracted_interest,
+    extracted_objections: p.extracted_objections,
+    created_at:       p.created_at,
+  };
+
+  for (const event of toFire) {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, timestamp: new Date().toISOString(), call: callPayload }),
+    });
+  }
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────────
 
 export async function dispatchPostCallEvents(
@@ -215,7 +263,7 @@ export async function dispatchPostCallEvents(
   let integrations: IntegrationRow[] = [];
   try {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/integrations?workspace_id=eq.${workspaceId}&status=eq.connected&select=type,status,credentials,webhook_url`,
+      `${supabaseUrl}/rest/v1/integrations?workspace_id=eq.${workspaceId}&status=eq.connected&select=type,status,credentials,webhook_url,webhook_events`,
       {
         headers: {
           apikey: supabaseKey,
@@ -249,6 +297,11 @@ export async function dispatchPostCallEvents(
       case 'google_calendar':
         handlers.push(fireGoogleCalendar(creds, payload).catch(() => null));
         break;
+      case 'webhook': {
+        const events = (integration.webhook_events ?? []) as string[];
+        handlers.push(fireCustomWebhook(webhookUrl, events, payload).catch(() => null));
+        break;
+      }
     }
   }
 

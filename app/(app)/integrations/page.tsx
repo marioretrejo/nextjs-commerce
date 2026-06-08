@@ -376,8 +376,13 @@ export default function IntegrationsPage() {
 
   const fetchIntegrations = useCallback(async () => {
     setLoading(true);
-    const res = await fetch('/api/integrations');
-    if (res.ok) {
+    try {
+      const res = await fetch('/api/integrations');
+      if (!res.ok) {
+        toast.error('Failed to load integrations');
+        setLoading(false);
+        return;
+      }
       const d = await res.json() as { integrations: Integration[] };
       const map: Record<string, Integration | null> = {};
       INTEGRATIONS.forEach(i => { map[i.type] = null; });
@@ -389,6 +394,8 @@ export default function IntegrationsPage() {
         setWebhookUrl(webhook.webhook_url ?? '');
         setWebhookEvents(webhook.webhook_events ?? []);
       }
+    } catch {
+      toast.error('Network error loading integrations');
     }
     setLoading(false);
   }, []);
@@ -398,27 +405,44 @@ export default function IntegrationsPage() {
   // ── Generic connect/disconnect (OAuth-style) ─────────────────────────────
   async function connect(type: IntegrationType) {
     setConnecting(type);
-    const res = await fetch('/api/integrations/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type }),
-    });
-    if (res.ok) {
-      const d = await res.json() as { redirect_url?: string };
-      if (d.redirect_url) { window.location.href = d.redirect_url; return; }
-      await fetchIntegrations();
+    try {
+      const res = await fetch('/api/integrations/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        toast.error(d.error ?? 'Failed to connect');
+      } else {
+        const d = await res.json() as { redirect_url?: string };
+        if (d.redirect_url) { window.location.href = d.redirect_url; return; }
+        toast.success(`${type} connected`);
+        await fetchIntegrations();
+      }
+    } catch {
+      toast.error('Network error — could not connect');
     }
     setConnecting(null);
   }
 
   async function disconnect(type: IntegrationType) {
     setConnecting(type);
-    await fetch('/api/integrations/disconnect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type }),
-    });
-    await fetchIntegrations();
+    try {
+      const res = await fetch('/api/integrations/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      if (!res.ok) {
+        toast.error('Failed to disconnect');
+      } else {
+        toast.success(`${type} disconnected`);
+        await fetchIntegrations();
+      }
+    } catch {
+      toast.error('Network error — could not disconnect');
+    }
     setConnecting(null);
   }
 
@@ -440,37 +464,66 @@ export default function IntegrationsPage() {
       credentials[webhookFieldId] = fields[webhookFieldId]!;
     }
 
-    await fetch('/api/integrations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        workspace_id: workspaceId,
-        type,
-        status: 'connected',
-        credentials,
-        webhook_url,
-      }),
-    });
-    await fetchIntegrations();
+    try {
+      const res = await fetch('/api/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          type,
+          status: 'connected',
+          credentials,
+          webhook_url,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        toast.error(d.error ?? 'Failed to save integration');
+        return;
+      }
+      toast.success(`${def.name} connected`);
+      await fetchIntegrations();
+    } catch {
+      toast.error('Network error — could not save integration');
+    }
   }
 
   async function disconnectCredential(type: IntegrationType) {
-    await fetch('/api/integrations/disconnect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type }),
-    });
-    await fetchIntegrations();
+    try {
+      const res = await fetch('/api/integrations/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      if (!res.ok) {
+        toast.error('Failed to disconnect');
+        return;
+      }
+      toast.success('Integration disconnected');
+      await fetchIntegrations();
+    } catch {
+      toast.error('Network error — could not disconnect');
+    }
   }
 
   async function saveWebhook() {
     setSavingWebhook(true);
-    await fetch('/api/integrations/webhook', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhook_url: webhookUrl, webhook_events: webhookEvents }),
-    });
-    await fetchIntegrations();
+    try {
+      const res = await fetch('/api/integrations/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhook_url: webhookUrl, webhook_events: webhookEvents }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        toast.error(d.error ?? 'Failed to save webhook');
+      } else {
+        toast.success('Webhook saved — events will fire after each analyzed call');
+        await fetchIntegrations();
+      }
+    } catch {
+      toast.error('Network error — could not save webhook');
+    }
     setSavingWebhook(false);
   }
 
