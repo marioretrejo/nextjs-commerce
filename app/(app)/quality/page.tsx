@@ -70,13 +70,17 @@ export default function QualityPage() {
 
   useEffect(() => {
     fetch('/api/admin/workspace-id')
-      .then((r) => r.json())
-      .then((d: { workspace_id: string }) => setWorkspaceId(d.workspace_id ?? ''))
+      .then((r) => r.ok ? r.json() as Promise<{ workspace_id: string }> : Promise.reject(r.status))
+      .then((d) => {
+        const id = d.workspace_id ?? '';
+        setWorkspaceId(id);
+        if (!id) setLoading(false); // no workspace → stop spinner
+      })
       .catch(() => setLoading(false));
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!workspaceId) { setLoading(false); return; }
     setLoading(true);
     try {
       const since = subDays(new Date(), 90).toISOString();
@@ -103,7 +107,7 @@ export default function QualityPage() {
         setCalls(d.data ?? []);
       }
     } catch {
-      // network error — fall through to setLoading(false)
+      toast.error('Error loading QA data');
     }
     setLoading(false);
   }, [workspaceId]);
