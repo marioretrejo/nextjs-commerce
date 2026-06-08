@@ -31,7 +31,9 @@ export async function PUT(req: Request) {
   }
 
   const admin = createAdminClient();
-  const { error } = await admin.from('provider_costs').update(patch).eq('label', 'default');
+  const { error } = await admin
+    .from('provider_costs')
+    .upsert({ label: 'default', ...patch }, { onConflict: 'label' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
