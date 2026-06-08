@@ -496,9 +496,7 @@ export default defineAgent({
       baseURL: 'https://api.groq.com/openai/v1',
     });
 
-    // ─── 2. TTS: Cartesia sonic-3 ─────────────────────────────────────────────
-    // sonic-3 is the correct multilingual model — supports 'es' via language param.
-    // 'sonic-multilingual' is NOT a valid Cartesia model ID and causes "Model not found".
+    // ─── 2. TTS: Cartesia ─────────────────────────────────────────────────────
     // Maps our emotion names → Cartesia experimental_controls emotion tags
     // (must match the same map used in /api/voices/preview for consistency)
     const EMOTION_MAP: Record<string, string[]> = {
@@ -510,24 +508,29 @@ export default defineAgent({
       fearful:     ['fearfulness:high'],
       surprised:   ['surprise:positive:high'],
     };
-    const cartesiaConfig = {
-      model:    'sonic-3' as const,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ttsInitOpts: any = {
+      model:    'sonic-multilingual',
       voice:    voiceId,
       apiKey:   process.env['CARTESIA_API_KEY'],
       language: 'es',
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
     };
     console.log('[DEBUG_CARTESIA]', {
-      model:    cartesiaConfig.model,
-      model_id: cartesiaConfig.model,
-      modelId:  cartesiaConfig.model,
-      voice:    cartesiaConfig.voice,
-      language: cartesiaConfig.language,
-      emotion:  (cartesiaConfig as Record<string,unknown>)['emotion'] ?? null,
-      apiKeySet: !!(process.env['CARTESIA_API_KEY']),
-      apiKeyPrefix: (process.env['CARTESIA_API_KEY'] ?? '').slice(0,4),
+      model:       ttsInitOpts.model,
+      voice:       ttsInitOpts.voice,
+      language:    ttsInitOpts.language,
+      emotion:     ttsInitOpts.emotion ?? null,
+      apiKeySet:   !!(process.env['CARTESIA_API_KEY']),
+      apiKeyPrefix:(process.env['CARTESIA_API_KEY'] ?? '').slice(0,4),
     });
-    const cartesiaTTS = new CartesiaTTS(cartesiaConfig);
+    let cartesiaTTS: CartesiaTTS;
+    try {
+      cartesiaTTS = new CartesiaTTS(ttsInitOpts);
+    } catch (ttsInitErr) {
+      console.error('[worker.tts] CartesiaTTS constructor threw — aborting session:', ttsInitErr);
+      throw ttsInitErr;
+    }
 
     // Cartesia is the sole TTS provider — OpenAI TTS excluded (no active balance).
     // Using Cartesia directly avoids the FallbackAdapter overhead and ensures any
