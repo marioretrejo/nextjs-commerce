@@ -49,10 +49,10 @@ export default async function AdminBillingPage() {
     .single() as { data: Record<string, number> | null };
 
   const pc = {
-    twilio_outbound_per_min: Number(providerCosts?.['twilio_outbound_per_min'] ?? 0.85),
-    stt_per_min:             Number(providerCosts?.['stt_per_min']             ?? 0.59),
-    llm_per_1k_tokens:       Number(providerCosts?.['llm_per_1k_tokens']       ?? 0.06),
-    tts_per_1k_chars:        Number(providerCosts?.['tts_per_1k_chars']        ?? 0.65),
+    twilio_outbound_per_min: Number(providerCosts?.['twilio_outbound_per_min'] ?? 0.0140),
+    stt_per_min:             Number(providerCosts?.['stt_per_min']             ?? 0.0077),
+    llm_per_1k_tokens:       Number(providerCosts?.['llm_per_1k_tokens']       ?? 0.000225),
+    tts_per_1k_chars:        Number(providerCosts?.['tts_per_1k_chars']        ?? 0.0500),
   };
 
   // Recent calls with cost + tokens
@@ -175,8 +175,15 @@ export default async function AdminBillingPage() {
                   pc.stt_per_min             * durMin +
                   pc.llm_per_1k_tokens       * ((call.tokens_used ?? 0) / 1000) +
                   pc.tts_per_1k_chars        * (800 * durMin / 1000);
-                const revenue   = Number(call.cost_usd ?? 0) * 100; // cents
+                const revenue   = Number(call.cost_usd ?? 0); // USD
                 const gross     = revenue - cogs;
+                const fmtUSD = (v: number) => {
+                  if (v === 0) return '$0.00';
+                  if (Math.abs(v) < 0.001) return `$${v.toFixed(5)}`;
+                  if (Math.abs(v) < 0.01)  return `$${v.toFixed(4)}`;
+                  if (Math.abs(v) < 1)     return `$${v.toFixed(3)}`;
+                  return `$${v.toFixed(2)}`;
+                };
                 const statusVariant =
                   call.status === 'completed' ? 'secondary' :
                   call.status === 'dialing'   ? 'outline'   : 'destructive';
@@ -187,9 +194,9 @@ export default async function AdminBillingPage() {
                       <p className="text-[11px] text-[#a0a0a0]">{format(new Date(call.created_at), 'MMM d, HH:mm')}</p>
                     </div>
                     <span className="text-xs text-[#0a0a0a]">{durMin.toFixed(1)}</span>
-                    <span className="text-xs text-red-600 font-mono">{cogs < 1 ? `${cogs.toFixed(2)}¢` : `$${(cogs / 100).toFixed(3)}`}</span>
+                    <span className="text-xs text-red-600 font-mono">{fmtUSD(cogs)}</span>
                     <span className={`text-xs font-mono font-medium ${gross >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {gross < 1 && gross > -1 ? `${gross.toFixed(2)}¢` : `$${(gross / 100).toFixed(3)}`}
+                      {fmtUSD(gross)}
                     </span>
                     <Badge variant={statusVariant} className="text-[10px] justify-center capitalize">
                       {call.status ?? '—'}

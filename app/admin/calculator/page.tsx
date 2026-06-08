@@ -195,14 +195,17 @@ export default function CalculatorPage() {
                     </Tooltip>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      min="0"
-                      value={costs[key]}
-                      onChange={e => setCostField(key, e.target.value)}
-                      className="h-8 text-sm w-32 font-mono"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[#6b6b6b] pointer-events-none select-none">$</span>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        value={costs[key]}
+                        onChange={e => setCostField(key, e.target.value)}
+                        className="h-8 text-sm w-32 font-mono pl-5"
+                      />
+                    </div>
                     <span className="text-xs text-[#6b6b6b]">{hint}</span>
                   </div>
                 </div>
@@ -227,9 +230,12 @@ export default function CalculatorPage() {
               </div>
               <div>
                 <Label className="text-xs">Precio de venta (USD/min)</Label>
-                <Input type="number" min="0" step="0.01" value={pricePerMin}
-                  onChange={e => setPricePerMin(parseFloat(e.target.value) || 0)}
-                  className="h-9 text-sm mt-1 font-mono" />
+                <div className="relative mt-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[#6b6b6b] pointer-events-none select-none">$</span>
+                  <Input type="number" min="0" step="0.01" value={pricePerMin}
+                    onChange={e => setPricePerMin(parseFloat(e.target.value) || 0)}
+                    className="h-9 text-sm font-mono pl-5" />
+                </div>
               </div>
             </div>
 
