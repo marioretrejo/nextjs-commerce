@@ -162,7 +162,7 @@ export default async function AdminBillingPage() {
             <CardTitle className="text-base">Recent Calls — Unit Economics</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="grid grid-cols-[1fr_44px_64px_64px_56px] gap-2 px-5 py-3 border-t border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
+            <div className="grid grid-cols-[1fr_44px_64px_64px_80px] gap-2 px-5 py-3 border-t border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
               <span>Workspace</span><span>Min</span><span>Real Cost</span><span>Gross $</span><span>Status</span>
             </div>
             <div className="divide-y divide-[#f0f0f0]">
@@ -177,8 +177,11 @@ export default async function AdminBillingPage() {
                   pc.tts_per_1k_chars        * (800 * durMin / 1000);
                 const revenue   = Number(call.cost_usd ?? 0) * 100; // cents
                 const gross     = revenue - cogs;
+                const statusVariant =
+                  call.status === 'completed' ? 'secondary' :
+                  call.status === 'dialing'   ? 'outline'   : 'destructive';
                 return (
-                  <div key={call.id} className="grid grid-cols-[1fr_44px_64px_64px_56px] gap-2 px-5 py-2.5 text-sm items-center hover:bg-[#f9f9f9]">
+                  <div key={call.id} className="grid grid-cols-[1fr_44px_64px_64px_80px] gap-2 px-5 py-2.5 text-sm items-center hover:bg-[#f9f9f9]">
                     <div>
                       <p className="text-xs font-mono text-[#6b6b6b] truncate">{call.workspace_id.slice(0, 8)}…</p>
                       <p className="text-[11px] text-[#a0a0a0]">{format(new Date(call.created_at), 'MMM d, HH:mm')}</p>
@@ -188,11 +191,8 @@ export default async function AdminBillingPage() {
                     <span className={`text-xs font-mono font-medium ${gross >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {gross < 1 && gross > -1 ? `${gross.toFixed(2)}¢` : `$${(gross / 100).toFixed(3)}`}
                     </span>
-                    <Badge
-                      variant={call.status === 'completed' ? 'secondary' : 'destructive'}
-                      className="text-[10px] justify-center"
-                    >
-                      {call.status?.slice(0, 6)}
+                    <Badge variant={statusVariant} className="text-[10px] justify-center capitalize">
+                      {call.status ?? '—'}
                     </Badge>
                   </div>
                 );
