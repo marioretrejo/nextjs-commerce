@@ -30,6 +30,19 @@ const envSchema = z.object({
       "INTERNAL_API_SECRET must not be a common weak value (secret, changeme, test…)",
     )
     .optional(),
+  // Dedicated secret for signing outbound call.completed webhook payloads.
+  // Separate from INTERNAL_API_SECRET so webhook signing keys can be rotated
+  // independently of internal API auth. Optional — if absent, webhooks are
+  // sent unsigned (X-VoiceOS-Signature: unsigned) and a warning is logged.
+  // Generate: openssl rand -hex 32
+  VOICEOS_WEBHOOK_SIGNING_SECRET: z
+    .string()
+    .min(16, "VOICEOS_WEBHOOK_SIGNING_SECRET must be at least 16 characters")
+    .refine(
+      (val) => !WEAK_SECRETS.has(val.toLowerCase()),
+      "VOICEOS_WEBHOOK_SIGNING_SECRET must not be a common weak value",
+    )
+    .optional(),
 });
 
 // Validated at module load time — fails with a clear error during build/startup if any var is missing

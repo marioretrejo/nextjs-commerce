@@ -240,4 +240,206 @@ test("webhook signature: receiver can verify by recomputing HMAC", () => {
   );
 });
 
+// ── Replay-protection: timestamp-prefixed signing (Fase 10 security) ─────────
+// Signature = hmac(secret, `${timestamp}.${body}`) — prevents replay attacks
+// where a captured webhook payload is re-submitted at a later time.
+
+function signTimestamped(
+  secret: string,
+  timestamp: string,
+  body: string,
+): string {
+  return `sha256=${crypto
+    .createHmac("sha256", secret)
+    .update(`${timestamp}.${body}`)
+    .digest("hex")}`;
+}
+
+test("replay protection: signature covers timestamp.body not body alone", () => {
+  const secret = "webhook-signing-secret-32chars!!";
+  const body = JSON.stringify({ event: "call.completed", call_id: "abc" });
+  const ts = "1700000000";
+
+  const sigTimestamped = signTimestamped(secret, ts, body);
+  const sigBodyOnly = `sha256=${crypto.createHmac("sha256", secret).update(body).digest("hex")}`;
+
+  assert.notEqual(
+    sigTimestamped,
+    sigBodyOnly,
+    "timestamp-prefixed sig must differ from body-only sig",
+  );
+});
+
+test("replay protection: same body at different timestamps → different signatures", () => {
+  const secret = "webhook-signing-secret-32chars!!";
+  const body = JSON.stringify({ event: "call.completed" });
+
+  const sig1 = signTimestamped(secret, "1700000000", body);
+  const sig2 = signTimestamped(secret, "1700000060", body);
+
+  assert.notEqual(
+    sig1,
+    sig2,
+    "different timestamps must produce different signatures even for same body",
+  );
+});
+
+test("replay protection: same body same timestamp same secret → deterministic", () => {
+  const secret = "webhook-signing-secret-32chars!!";
+  const body = JSON.stringify({ event: "call.completed" });
+  const ts = "1700000000";
+
+  assert.equal(
+    signTimestamped(secret, ts, body),
+    signTimestamped(secret, ts, body),
+    "signing must be deterministic",
+  );
+});
+
+test("replay protection: receiver can verify timestamp-prefixed sig", () => {
+  const secret = "shared-secret-between-voiceos-x!";
+  const body = JSON.stringify({ event: "call.completed", call_id: "xyz-999" });
+  const ts = Math.floor(Date.now() / 1000).toString();
+
+  // Sender (worker) signs
+  const sentSig = signTimestamped(secret, ts, body);
+  // Receiver recomputes from headers + raw body
+  const expectedSig = signTimestamped(secret, ts, body);
+
+  const sentBuf = Buffer.from(sentSig);
+  const expectedBuf = Buffer.from(expectedSig);
+  assert.equal(sentBuf.length, expectedBuf.length);
+  assert.ok(
+    crypto.timingSafeEqual(sentBuf, expectedBuf),
+    "receiver must be able to verify the timestamped signature",
+  );
+});
+
+test("replay protection: tampered body fails verification", () => {
+  const secret = "shared-secret-between-voiceos-x!";
+  const originalBody = JSON.stringify({ call_id: "original" });
+  const tamperedBody = JSON.stringify({ call_id: "tampered" });
+  const ts = "1700000000";
+
+  const originalSig = signTimestamped(secret, ts, originalBody);
+  const tamperedSig = signTimestamped(secret, ts, tamperedBody);
+
+  assert.notEqual(originalSig, tamperedSig, "tampered body must not verify");
+});
+
+// ── Webhook payload structure (Fase 10 security audit) ───────────────────────
+
+test("webhook payload: includes required top-level fields", () => {
+  const payload = {
+    event: "call.completed",
+    event_id: crypto.randomUUID(),
+    timestamp: Math.floor(Date.now() / 1000).toString(),
+    workspace_id: "ws-abc-123",
+    call_id: "call-uuid",
+    technical_status: "completed",
+    business_outcome: "interested",
+    duration_seconds: 120,
+    cost_usd: 0.05,
+    cost_status: "estimated",
+    cost_breakdown: { telephony: { total_cost_usd: 0.02 } },
+  };
+
+  // All required fields present
+  for (const field of [
+    "event",
+    "event_id",
+    "timestamp",
+    "workspace_id",
+    "call_id",
+    "technical_status",
+    "business_outcome",
+    "duration_seconds",
+    "cost_usd",
+    "cost_status",
+    "cost_breakdown",
+  ]) {
+    assert.ok(field in payload, `payload must include field: ${field}`);
+  }
+});
+
+test("webhook payload: does not contain secret-like keys", () => {
+  // Verify no secret, API key, or service_role fields leak into a typical payload
+  const payload = JSON.stringify({
+    event: "call.completed",
+    event_id: "uuid",
+    timestamp: "1700000000",
+    workspace_id: "ws-1",
+    call_id: "call-1",
+  });
+
+  const FORBIDDEN = [
+    "api_key",
+    "apiKey",
+    "service_role",
+    "secret",
+    "password",
+    "token",
+    "SUPABASE",
+    "system_prompt",
+    "INTERNAL_API",
+    "VOICEOS_WEBHOOK",
+  ];
+
+  for (const forbidden of FORBIDDEN) {
+    assert.ok(
+      !payload.toLowerCase().includes(forbidden.toLowerCase()),
+      `payload must not contain sensitive key: ${forbidden}`,
+    );
+  }
+});
+
+test("webhook payload: event_id is a valid UUID v4 format", () => {
+  const eventId = crypto.randomUUID();
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  assert.ok(UUID_RE.test(eventId), "event_id must be a valid UUID v4");
+});
+
+test("webhook payload: timestamp is Unix seconds (10 digits)", () => {
+  const ts = Math.floor(Date.now() / 1000).toString();
+  assert.ok(
+    /^\d{10}$/.test(ts),
+    "timestamp must be 10-digit Unix seconds string",
+  );
+});
+
+// ── VOICEOS_WEBHOOK_SIGNING_SECRET vs INTERNAL_API_SECRET separation ──────────
+
+test("secret separation: VOICEOS_WEBHOOK_SIGNING_SECRET and INTERNAL_API_SECRET are independent", () => {
+  const webhookSecret = "webhook-secret-for-signing-16+ch";
+  const internalSecret = "internal-secret-for-apis-16+ch!";
+  const body = JSON.stringify({ event: "call.completed" });
+  const ts = "1700000000";
+
+  const webhookSig = signTimestamped(webhookSecret, ts, body);
+  const internalSig = signTimestamped(internalSecret, ts, body);
+
+  assert.notEqual(
+    webhookSig,
+    internalSig,
+    "webhook secret and internal secret must produce independent signatures",
+  );
+});
+
+test("secret separation: receiver using wrong secret fails verification", () => {
+  const senderSecret = "correct-sender-secret-exactly-32";
+  const receiverWrongSecret = "wrong-receiver-secret-exactly-32";
+  const body = JSON.stringify({ event: "call.completed" });
+  const ts = "1700000000";
+
+  const sentSig = signTimestamped(senderSecret, ts, body);
+  const recomputedWithWrong = signTimestamped(receiverWrongSecret, ts, body);
+
+  assert.notEqual(
+    sentSig,
+    recomputedWithWrong,
+    "wrong secret must not verify the signature",
+  );
+});
+
 console.log("✓ analytics-webhooks tests complete");

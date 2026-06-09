@@ -52,6 +52,11 @@ import {
 } from "./providers/tts-provider-router.js";
 import { lookupProviderCosts } from "../lib/billing/provider-pricing.js";
 import type { ProviderCostRow } from "../lib/billing/provider-pricing.js";
+import {
+  compileSystemPrompt,
+  buildSystemVariables,
+  extractMetadataVars,
+} from "../lib/prompts/compiler.js";
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(
@@ -497,18 +502,84 @@ function buildRagTool(
 }
 
 // ── Pilar D: Dynamic Variable Injection ─────────────────────────────────────
-// Replaces {{key}} placeholders in system prompts and first messages with real
-// contact/campaign data passed via room metadata before the call starts.
-// Unresolved placeholders are left in place (not removed) so the LLM sees
-// the key name and can ask the caller for that information if needed.
+// Legacy thin wrapper — delegates to compileSystemPrompt from lib/prompts/compiler.
+// Kept for call-sites that pre-date the Fase 10 compiler refactor.
 function injectVariables(
   template: string,
   vars: Record<string, string>,
 ): string {
-  return template.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key: string) => vars[key] ?? `{{${key}}}`,
-  );
+  return compileSystemPrompt(template, vars);
+}
+
+// ── Fase 10: Routing Context Resolver ───────────────────────────────────────
+// Looks up per-number metadata_config from the phone_numbers table using the
+// inbound_phone_id written into room metadata by the Twilio inbound webhook.
+// Returns metadata vars for prompt injection and optionally a canonical agent
+// config (overrides metadata when the DB record disagrees with room meta).
+//
+// FAIL-OPEN: any DB error returns empty context so the call still proceeds.
+interface RoutingContext {
+  agentId: string | null;
+  systemPrompt: string | null;
+  voiceId: string | null;
+  voiceEmotion: string | null;
+  phoneVars: Record<string, string>;
+}
+
+async function _resolveRoutingContext(
+  inboundPhoneId: string | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: ReturnType<typeof createClient<any, any, any>>,
+): Promise<RoutingContext> {
+  const empty: RoutingContext = {
+    agentId: null,
+    systemPrompt: null,
+    voiceId: null,
+    voiceEmotion: null,
+    phoneVars: {},
+  };
+  if (!inboundPhoneId) return empty;
+
+  try {
+    const { data: phoneRow, error: phoneErr } = await supabase
+      .from("phone_numbers")
+      .select("agent_id, metadata_config")
+      .eq("id", inboundPhoneId)
+      .maybeSingle();
+
+    if (phoneErr || !phoneRow) return empty;
+
+    const phone = phoneRow as {
+      agent_id: string | null;
+      metadata_config: Record<string, unknown> | null;
+    };
+    const phoneVars = extractMetadataVars(phone.metadata_config);
+
+    if (!phone.agent_id) return { ...empty, phoneVars };
+
+    // Fetch full agent config to enable per-number voice/prompt overrides
+    const { data: agentRow } = await supabase
+      .from("agents")
+      .select("system_prompt, voice_id, voice_emotion")
+      .eq("id", phone.agent_id)
+      .maybeSingle();
+
+    const agent = agentRow as {
+      system_prompt: string | null;
+      voice_id: string | null;
+      voice_emotion: string | null;
+    } | null;
+
+    return {
+      agentId: phone.agent_id,
+      systemPrompt: agent?.system_prompt ?? null,
+      voiceId: agent?.voice_id ?? null,
+      voiceEmotion: agent?.voice_emotion ?? null,
+      phoneVars,
+    };
+  } catch {
+    return empty;
+  }
 }
 
 function getSupabaseAdmin() {
@@ -671,6 +742,7 @@ export default defineAgent({
     let crmCountry: string | null = null;
     let crmCampaign: string | null = null;
     let callEndedWebhookUrl: string | null = null;
+    let inboundPhoneId: string | null = null;
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}") as {
@@ -694,6 +766,8 @@ export default defineAgent({
         Campaign?: string | null;
         webhook_url?: string | null;
         language?: string | null;
+        // Fase 10: set by Twilio inbound webhook (app/api/webhooks/twilio/incoming)
+        inbound_phone_id?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -733,6 +807,7 @@ export default defineAgent({
       if (meta.Campaign) crmCampaign = meta.Campaign;
       if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
       if (meta.language) agentLanguage = meta.language;
+      if (meta.inbound_phone_id) inboundPhoneId = meta.inbound_phone_id;
     } catch {
       /* use defaults */
     }
@@ -786,6 +861,53 @@ export default defineAgent({
     let _circuitBreakerTriggered = false;
     // callStartedAt: 0 until session.start() — circuit breaker uses this as a guard.
     let callStartedAt = 0;
+
+    // ── Fase 10: Routing context — per-number metadata_config + agent override ──
+    // Runs before pronunciation and tools so that routing-resolved agent_id is
+    // used for all subsequent DB lookups. FAIL-OPEN: any error leaves defaults.
+    if (inboundPhoneId && _lifecycleSupabase) {
+      const routingCtx = await _resolveRoutingContext(
+        inboundPhoneId,
+        _lifecycleSupabase,
+      );
+
+      if (routingCtx.agentId || Object.keys(routingCtx.phoneVars).length > 0) {
+        // Merge phone-level vars (lower priority) + system vars into prompt
+        const compiledVars = buildSystemVariables(routingCtx.phoneVars);
+        systemPrompt = compileSystemPrompt(systemPrompt, compiledVars);
+        if (firstMessage)
+          firstMessage = compileSystemPrompt(firstMessage, compiledVars);
+
+        // Override agent config from DB when routing resolved a different agent
+        if (routingCtx.agentId && !agentId) agentId = routingCtx.agentId;
+        if (routingCtx.voiceId && !voiceId) voiceId = routingCtx.voiceId;
+        if (routingCtx.voiceEmotion && !voiceEmotion)
+          voiceEmotion = routingCtx.voiceEmotion;
+
+        void emit("routing.context_resolved", {
+          inbound_phone_id: inboundPhoneId,
+          phone_vars_count: Object.keys(routingCtx.phoneVars).length,
+          agent_override: !!routingCtx.agentId,
+        });
+      } else {
+        // Phone not found — apply system vars only and continue with defaults
+        const sysVars = buildSystemVariables();
+        systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
+        if (firstMessage)
+          firstMessage = compileSystemPrompt(firstMessage, sysVars);
+
+        void emit("routing.context_fallback", {
+          inbound_phone_id: inboundPhoneId,
+          reason: "phone_not_found",
+        });
+      }
+    } else {
+      // No inbound_phone_id — still apply system vars (current_date, etc.)
+      const sysVars = buildSystemVariables();
+      systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
+      if (firstMessage)
+        firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
 
     // Mark call as in-progress immediately (agent entry = call already connected)
     void lifecycle?.transitionTo("in_progress").catch(() => null);
@@ -2468,8 +2590,9 @@ export default defineAgent({
               .eq("id", callRow.id);
           }
 
-          // Outbound webhook — signed call.completed payload (Fase 9)
-          // Sources: room metadata webhook_url OR workspace-level webhook_url column.
+          // Outbound webhook — signed call.completed payload (Fase 9/10)
+          // Priority: room metadata webhook_url > workspace-level webhook_url column.
+          // Both sources checked; metadata wins (more specific override).
           let effectiveWebhookUrl = callEndedWebhookUrl;
           if (!effectiveWebhookUrl && workspaceId) {
             const { data: wsRow } = await supabase
@@ -2482,10 +2605,35 @@ export default defineAgent({
               null;
           }
 
-          if (effectiveWebhookUrl) {
+          if (!effectiveWebhookUrl) {
+            void emit("webhook.skipped", {
+              reason: "no_webhook_url",
+              workspace_id: workspaceId,
+            });
+          } else {
+            // Generate replay-protection identifiers
+            const webhookEventId = crypto.randomUUID();
+            const webhookTimestamp = Math.floor(Date.now() / 1000).toString();
+
+            // Safe host-only log (never log full URL — may contain tokens in path)
+            let webhookHost = effectiveWebhookUrl;
+            try {
+              webhookHost = new URL(effectiveWebhookUrl).host;
+            } catch {
+              /* malformed URL — use raw string for observability */
+            }
+
+            void emit("webhook.started", {
+              event_id: webhookEventId,
+              url_host: webhookHost,
+              workspace_id: workspaceId,
+            });
+
             const webhookPayload = {
               event: "call.completed",
-              timestamp: new Date().toISOString(),
+              event_id: webhookEventId,
+              timestamp: webhookTimestamp,
+              workspace_id: workspaceId ?? null,
               call_id: _postCallId ?? null,
               technical_status: finalTechnicalStatus,
               business_outcome: lifecycle?.outcome ?? null,
@@ -2499,10 +2647,18 @@ export default defineAgent({
                   (transcript.length > 400 ? "…" : "")
                 : null,
               call: {
+                id: _postCallId ?? null,
                 room: roomName,
                 agent_id: agentId,
                 workspace_id: workspaceId,
                 direction: callDirection,
+                status: finalTechnicalStatus,
+                technical_status: finalTechnicalStatus,
+                business_outcome: lifecycle?.outcome ?? null,
+                duration_seconds: durationSeconds,
+                cost_usd: _postCostUsd,
+                cost_status: _postCostStatus,
+                cost_breakdown: _postCostBreakdown,
                 voicemail: _voicemailDetected,
               },
               crm_fields: {
@@ -2514,31 +2670,79 @@ export default defineAgent({
               analysis: crmAnalysis,
             };
             const payloadStr = JSON.stringify(webhookPayload);
-            const secret = process.env["INTERNAL_API_SECRET"];
+
+            // Sign over timestamp.body — prevents payload replay across timestamps.
+            // VOICEOS_WEBHOOK_SIGNING_SECRET is dedicated for outbound webhooks;
+            // INTERNAL_API_SECRET is reserved for internal endpoint auth only.
+            const signingSecret = process.env["VOICEOS_WEBHOOK_SIGNING_SECRET"];
             const headers: Record<string, string> = {
               "Content-Type": "application/json",
+              "X-VoiceOS-Event-Id": webhookEventId,
+              "X-VoiceOS-Timestamp": webhookTimestamp,
+              "X-VoiceOS-Workspace-Id": workspaceId ?? "",
             };
-            if (secret) {
+
+            if (signingSecret) {
+              const sigInput = `${webhookTimestamp}.${payloadStr}`;
               headers["X-VoiceOS-Signature"] = `sha256=${crypto
-                .createHmac("sha256", secret)
-                .update(payloadStr)
+                .createHmac("sha256", signingSecret)
+                .update(sigInput)
                 .digest("hex")}`;
+              void emit("webhook.signature_generated", {
+                event_id: webhookEventId,
+              });
+            } else {
+              // No signing secret — mark header so receivers know payload is unsigned
+              headers["X-VoiceOS-Signature"] = "unsigned";
+              console.warn(
+                "[worker.webhook] VOICEOS_WEBHOOK_SIGNING_SECRET not set — webhook sent unsigned",
+              );
+              void emit("webhook.unsigned", {
+                event_id: webhookEventId,
+                reason: "no_signing_secret",
+              });
             }
-            await Promise.race([
-              fetch(effectiveWebhookUrl, {
-                method: "POST",
-                headers,
-                body: payloadStr,
-              }),
-              new Promise<never>((_, rej) =>
-                setTimeout(() => rej(new Error("webhook timeout")), 8_000),
-              ),
-            ]);
-            log("info", {
-              message: "call.webhook.sent",
-              room: roomName,
-              signed: !!secret,
-            });
+
+            const webhookStart = Date.now();
+            try {
+              const webhookRes = await Promise.race([
+                fetch(effectiveWebhookUrl, {
+                  method: "POST",
+                  headers,
+                  body: payloadStr,
+                }),
+                new Promise<never>((_, rej) =>
+                  setTimeout(() => rej(new Error("webhook timeout")), 8_000),
+                ),
+              ]);
+              void emit("webhook.sent", {
+                event_id: webhookEventId,
+                url_host: webhookHost,
+                status_code: webhookRes.status,
+                duration_ms: Date.now() - webhookStart,
+                signed: !!signingSecret,
+              });
+              log("info", {
+                message: "call.webhook.sent",
+                room: roomName,
+                event_id: webhookEventId,
+                signed: !!signingSecret,
+                status_code: webhookRes.status,
+              });
+            } catch (webhookErr) {
+              void emit("webhook.failed", {
+                event_id: webhookEventId,
+                url_host: webhookHost,
+                error: String(webhookErr),
+                duration_ms: Date.now() - webhookStart,
+              });
+              log("error", {
+                message: "call.webhook.failed",
+                room: roomName,
+                event_id: webhookEventId,
+                error: String(webhookErr),
+              });
+            }
           }
         } catch (err) {
           log("error", {

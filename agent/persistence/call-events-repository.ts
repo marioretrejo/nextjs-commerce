@@ -53,7 +53,17 @@ export type CallEventType =
   | "billing.cost_events_backfilled"
   | "billing.preflight_passed"
   | "billing.preflight_failed"
-  | "billing.circuit_breaker_triggered";
+  | "billing.circuit_breaker_triggered"
+  // Outbound webhooks
+  | "webhook.started"
+  | "webhook.sent"
+  | "webhook.failed"
+  | "webhook.unsigned"
+  | "webhook.skipped"
+  | "webhook.signature_generated"
+  // Dynamic routing
+  | "routing.context_resolved"
+  | "routing.context_fallback";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,

@@ -43,6 +43,19 @@ export async function GET(req: Request) {
   const endDate = url.searchParams.get("end_date");
   const agentId = url.searchParams.get("agent_id");
 
+  // Validate date format — must be YYYY-MM-DD when provided
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (startDate && !DATE_RE.test(startDate))
+    return NextResponse.json(
+      { error: "Invalid start_date: expected YYYY-MM-DD" },
+      { status: 400 },
+    );
+  if (endDate && !DATE_RE.test(endDate))
+    return NextResponse.json(
+      { error: "Invalid end_date: expected YYYY-MM-DD" },
+      { status: 400 },
+    );
+
   // ── Fetch calls ──────────────────────────────────────────────────────────────
   const admin = createAdminClient();
   let query = admin

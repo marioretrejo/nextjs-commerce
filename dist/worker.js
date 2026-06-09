@@ -46221,6 +46221,50 @@ function createTTSProvider(config2) {
   return null;
 }
 
+// lib/prompts/compiler.ts
+function compileSystemPrompt(basePrompt, variables) {
+  if (!basePrompt) return basePrompt;
+  return basePrompt.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key) => variables[key] ?? `{{${key}}}`,
+  );
+}
+function buildSystemVariables(
+  extraVars,
+  locale = "es-MX",
+  timezone = "America/Mexico_City",
+) {
+  const now = /* @__PURE__ */ new Date();
+  const fmt = (opts) =>
+    now.toLocaleString(locale, { timeZone: timezone, ...opts });
+  const base = {
+    current_date: fmt({ year: "numeric", month: "long", day: "numeric" }),
+    current_time: fmt({ hour: "2-digit", minute: "2-digit" }),
+    current_datetime: fmt({
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    current_year: String(now.getFullYear()),
+    current_month: fmt({ month: "long" }),
+    current_day: fmt({ weekday: "long" }),
+  };
+  if (extraVars && Object.keys(extraVars).length > 0) {
+    return { ...base, ...extraVars };
+  }
+  return base;
+}
+function extractMetadataVars(config2) {
+  if (!config2 || typeof config2 !== "object") return {};
+  const result = {};
+  for (const [k, v] of Object.entries(config2)) {
+    if (typeof v === "string") result[k] = v;
+  }
+  return result;
+}
+
 // agent/worker_core.ts
 var import_node_http = require("node:http");
 var import_meta = {};
@@ -46520,10 +46564,43 @@ function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey, billing) {
   });
 }
 function injectVariables(template, vars) {
-  return template.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key) => vars[key] ?? `{{${key}}}`,
-  );
+  return compileSystemPrompt(template, vars);
+}
+async function _resolveRoutingContext(inboundPhoneId, supabase) {
+  const empty = {
+    agentId: null,
+    systemPrompt: null,
+    voiceId: null,
+    voiceEmotion: null,
+    phoneVars: {},
+  };
+  if (!inboundPhoneId) return empty;
+  try {
+    const { data: phoneRow, error: phoneErr } = await supabase
+      .from("phone_numbers")
+      .select("agent_id, metadata_config")
+      .eq("id", inboundPhoneId)
+      .maybeSingle();
+    if (phoneErr || !phoneRow) return empty;
+    const phone = phoneRow;
+    const phoneVars = extractMetadataVars(phone.metadata_config);
+    if (!phone.agent_id) return { ...empty, phoneVars };
+    const { data: agentRow } = await supabase
+      .from("agents")
+      .select("system_prompt, voice_id, voice_emotion")
+      .eq("id", phone.agent_id)
+      .maybeSingle();
+    const agent = agentRow;
+    return {
+      agentId: phone.agent_id,
+      systemPrompt: agent?.system_prompt ?? null,
+      voiceId: agent?.voice_id ?? null,
+      voiceEmotion: agent?.voice_emotion ?? null,
+      phoneVars,
+    };
+  } catch {
+    return empty;
+  }
 }
 function getSupabaseAdmin() {
   const url = process.env["NEXT_PUBLIC_SUPABASE_URL"];
@@ -46656,6 +46733,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
     let crmCountry = null;
     let crmCampaign = null;
     let callEndedWebhookUrl = null;
+    let inboundPhoneId = null;
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}");
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
@@ -46690,6 +46768,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       if (meta.Campaign) crmCampaign = meta.Campaign;
       if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
       if (meta.language) agentLanguage = meta.language;
+      if (meta.inbound_phone_id) inboundPhoneId = meta.inbound_phone_id;
     } catch {}
     if (crmFunnel || crmLeadId || crmCountry || crmCampaign) {
       systemPrompt += [
@@ -46725,6 +46804,41 @@ var worker_core_default = (0, import_agents2.defineAgent)({
     let cachedProviderCosts = null;
     let _circuitBreakerTriggered = false;
     let callStartedAt = 0;
+    if (inboundPhoneId && _lifecycleSupabase) {
+      const routingCtx = await _resolveRoutingContext(
+        inboundPhoneId,
+        _lifecycleSupabase,
+      );
+      if (routingCtx.agentId || Object.keys(routingCtx.phoneVars).length > 0) {
+        const compiledVars = buildSystemVariables(routingCtx.phoneVars);
+        systemPrompt = compileSystemPrompt(systemPrompt, compiledVars);
+        if (firstMessage)
+          firstMessage = compileSystemPrompt(firstMessage, compiledVars);
+        if (routingCtx.agentId && !agentId) agentId = routingCtx.agentId;
+        if (routingCtx.voiceId && !voiceId) voiceId = routingCtx.voiceId;
+        if (routingCtx.voiceEmotion && !voiceEmotion)
+          voiceEmotion = routingCtx.voiceEmotion;
+        void emit("routing.context_resolved", {
+          inbound_phone_id: inboundPhoneId,
+          phone_vars_count: Object.keys(routingCtx.phoneVars).length,
+          agent_override: !!routingCtx.agentId,
+        });
+      } else {
+        const sysVars = buildSystemVariables();
+        systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
+        if (firstMessage)
+          firstMessage = compileSystemPrompt(firstMessage, sysVars);
+        void emit("routing.context_fallback", {
+          inbound_phone_id: inboundPhoneId,
+          reason: "phone_not_found",
+        });
+      }
+    } else {
+      const sysVars = buildSystemVariables();
+      systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
+      if (firstMessage)
+        firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
     void lifecycle?.transitionTo("in_progress").catch(() => null);
     void emit("call.initiated", {
       agent_id: agentId,
@@ -48079,10 +48193,28 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 .maybeSingle();
               effectiveWebhookUrl = wsRow?.webhook_url ?? null;
             }
-            if (effectiveWebhookUrl) {
+            if (!effectiveWebhookUrl) {
+              void emit("webhook.skipped", {
+                reason: "no_webhook_url",
+                workspace_id: workspaceId,
+              });
+            } else {
+              const webhookEventId = crypto5.randomUUID();
+              const webhookTimestamp = Math.floor(Date.now() / 1e3).toString();
+              let webhookHost = effectiveWebhookUrl;
+              try {
+                webhookHost = new URL(effectiveWebhookUrl).host;
+              } catch {}
+              void emit("webhook.started", {
+                event_id: webhookEventId,
+                url_host: webhookHost,
+                workspace_id: workspaceId,
+              });
               const webhookPayload = {
                 event: "call.completed",
-                timestamp: /* @__PURE__ */ new Date().toISOString(),
+                event_id: webhookEventId,
+                timestamp: webhookTimestamp,
+                workspace_id: workspaceId ?? null,
                 call_id: _postCallId ?? null,
                 technical_status: finalTechnicalStatus,
                 business_outcome: lifecycle?.outcome ?? null,
@@ -48096,10 +48228,18 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                     (transcript.length > 400 ? "\u2026" : "")
                   : null,
                 call: {
+                  id: _postCallId ?? null,
                   room: roomName,
                   agent_id: agentId,
                   workspace_id: workspaceId,
                   direction: callDirection,
+                  status: finalTechnicalStatus,
+                  technical_status: finalTechnicalStatus,
+                  business_outcome: lifecycle?.outcome ?? null,
+                  duration_seconds: durationSeconds,
+                  cost_usd: _postCostUsd,
+                  cost_status: _postCostStatus,
+                  cost_breakdown: _postCostBreakdown,
                   voicemail: _voicemailDetected,
                 },
                 crm_fields: {
@@ -48111,29 +48251,71 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 analysis: crmAnalysis,
               };
               const payloadStr = JSON.stringify(webhookPayload);
-              const secret = process.env["INTERNAL_API_SECRET"];
+              const signingSecret =
+                process.env["VOICEOS_WEBHOOK_SIGNING_SECRET"];
               const headers = {
                 "Content-Type": "application/json",
+                "X-VoiceOS-Event-Id": webhookEventId,
+                "X-VoiceOS-Timestamp": webhookTimestamp,
+                "X-VoiceOS-Workspace-Id": workspaceId ?? "",
               };
-              if (secret) {
+              if (signingSecret) {
+                const sigInput = `${webhookTimestamp}.${payloadStr}`;
                 headers["X-VoiceOS-Signature"] =
-                  `sha256=${crypto5.createHmac("sha256", secret).update(payloadStr).digest("hex")}`;
+                  `sha256=${crypto5.createHmac("sha256", signingSecret).update(sigInput).digest("hex")}`;
+                void emit("webhook.signature_generated", {
+                  event_id: webhookEventId,
+                });
+              } else {
+                headers["X-VoiceOS-Signature"] = "unsigned";
+                console.warn(
+                  "[worker.webhook] VOICEOS_WEBHOOK_SIGNING_SECRET not set \u2014 webhook sent unsigned",
+                );
+                void emit("webhook.unsigned", {
+                  event_id: webhookEventId,
+                  reason: "no_signing_secret",
+                });
               }
-              await Promise.race([
-                fetch(effectiveWebhookUrl, {
-                  method: "POST",
-                  headers,
-                  body: payloadStr,
-                }),
-                new Promise((_, rej) =>
-                  setTimeout(() => rej(new Error("webhook timeout")), 8e3),
-                ),
-              ]);
-              log("info", {
-                message: "call.webhook.sent",
-                room: roomName,
-                signed: !!secret,
-              });
+              const webhookStart = Date.now();
+              try {
+                const webhookRes = await Promise.race([
+                  fetch(effectiveWebhookUrl, {
+                    method: "POST",
+                    headers,
+                    body: payloadStr,
+                  }),
+                  new Promise((_, rej) =>
+                    setTimeout(() => rej(new Error("webhook timeout")), 8e3),
+                  ),
+                ]);
+                void emit("webhook.sent", {
+                  event_id: webhookEventId,
+                  url_host: webhookHost,
+                  status_code: webhookRes.status,
+                  duration_ms: Date.now() - webhookStart,
+                  signed: !!signingSecret,
+                });
+                log("info", {
+                  message: "call.webhook.sent",
+                  room: roomName,
+                  event_id: webhookEventId,
+                  signed: !!signingSecret,
+                  status_code: webhookRes.status,
+                });
+              } catch (webhookErr) {
+                void emit("webhook.failed", {
+                  event_id: webhookEventId,
+                  url_host: webhookHost,
+                  error: String(webhookErr),
+                  duration_ms: Date.now() - webhookStart,
+                });
+                log("error", {
+                  message: "call.webhook.failed",
+                  room: roomName,
+                  event_id: webhookEventId,
+                  error: String(webhookErr),
+                });
+              }
             }
           } catch (err) {
             log("error", {
