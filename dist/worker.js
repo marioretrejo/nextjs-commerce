@@ -45078,13 +45078,14 @@ function createMockBooking(params) {
 function buildTransferToHuman(config2) {
   return import_agents.llm.tool({
     description:
-      "Transfer the call to a live human agent. Use when: user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts.",
+      "Transfer the call to a live human agent or specialist. Use when: the user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts. Call this tool instead of trying to resolve the issue yourself.",
     parameters: {
       type: "object",
       properties: {
         reason: {
           type: "string",
-          description: "Brief reason for the transfer (used for routing)",
+          description:
+            "Brief reason for the transfer (e.g. 'customer_request', 'complaint', 'complex_query')",
         },
         urgency: {
           type: "string",
@@ -45095,95 +45096,137 @@ function buildTransferToHuman(config2) {
       required: ["reason"],
     },
     execute: async (args, opts) => {
-      opts.ctx.session.say(
-        "Of course. I'm transferring your call to one of our team members right now. Please hold on for just a moment.",
-      );
       const {
         roomName,
         transferNumber,
         livekitWsUrl,
         livekitApiKey,
         livekitApiSecret,
+        twilioCallSid,
+        twilioAccountSid,
+        twilioAuthToken,
+        onTransferInitiated,
       } = config2;
-      if (
-        !roomName ||
-        !transferNumber ||
-        !livekitApiKey ||
-        !livekitApiSecret ||
-        !livekitWsUrl
-      ) {
+      const targetNumber = transferNumber ?? null;
+      if (!targetNumber) {
         console.warn(
-          "[transfer_to_human] SIP transfer not configured; logging escalation only",
+          "[transfer_to_human] No transfer number configured \u2014 logging escalation only",
+        );
+        opts.ctx.session.say(
+          "I'm sorry, our transfer service is temporarily unavailable. A team member will call you back shortly.",
         );
         return {
           transfer_initiated: false,
           reason: args.reason,
-          urgency: args.urgency ?? "normal",
-          message: "A team member will call you back shortly.",
+          message:
+            "Transfer service unavailable. A team member will call back.",
         };
       }
-      try {
-        const httpUrl = livekitWsUrl
-          .replace("wss://", "https://")
-          .replace("ws://", "http://");
-        const roomService = new RoomServiceClient(
-          httpUrl,
-          livekitApiKey,
-          livekitApiSecret,
-        );
-        const participants = await withTimeout(
-          roomService.listParticipants(roomName),
-          5e3,
-        );
-        const sipParticipant = participants.find(
-          (p) => p.identity?.startsWith("sip_") || p.kind === 3,
-          // ParticipantInfo_Kind.SIP = 3
-        );
-        if (sipParticipant?.identity) {
-          const sipClient = new SipClient(
+      opts.ctx.session.say(
+        "Por favor espere un momento, estoy transfiriendo su llamada con un especialista.",
+      );
+      if (twilioCallSid && twilioAccountSid && twilioAuthToken) {
+        try {
+          const twiml = `<Response><Dial>${targetNumber}</Dial></Response>`;
+          const res = await withTimeout(
+            fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Calls/${twilioCallSid}.json`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64")}`,
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: new URLSearchParams({ Twiml: twiml }).toString(),
+              },
+            ),
+            TOOL_TIMEOUT_MS,
+          );
+          if (res.ok) {
+            console.log(
+              `[transfer_to_human] Twilio redirect sent to ${targetNumber} (SID: ${twilioCallSid})`,
+            );
+            onTransferInitiated?.({ reason: args.reason, targetNumber });
+            return {
+              transfer_initiated: true,
+              transfer_type: "twilio_redirect",
+              destination: targetNumber,
+              reason: args.reason,
+              urgency: args.urgency ?? "normal",
+            };
+          }
+          console.warn(
+            `[transfer_to_human] Twilio redirect failed (${res.status}), trying SIP REFER`,
+          );
+        } catch (twilioErr) {
+          console.warn(
+            "[transfer_to_human] Twilio redirect threw, trying SIP REFER:",
+            String(twilioErr),
+          );
+        }
+      }
+      if (roomName && livekitApiKey && livekitApiSecret && livekitWsUrl) {
+        try {
+          const httpUrl = livekitWsUrl
+            .replace("wss://", "https://")
+            .replace("ws://", "http://");
+          const roomService = new RoomServiceClient(
             httpUrl,
             livekitApiKey,
             livekitApiSecret,
           );
-          const transferTo = transferNumber.startsWith("sip:")
-            ? transferNumber
-            : `sip:${transferNumber.replace("+", "")}@sip.twilio.com`;
-          await withTimeout(
-            sipClient.transferSipParticipant(
-              roomName,
-              sipParticipant.identity,
-              transferTo,
-            ),
-            8e3,
+          const participants = await withTimeout(
+            roomService.listParticipants(roomName),
+            5e3,
           );
-          console.log(
-            `[transfer_to_human] SIP REFER sent to ${transferTo} for participant ${sipParticipant.identity}`,
+          const sipParticipant = participants.find(
+            (p) => p.identity?.startsWith("sip_") || p.kind === 3,
           );
-          return {
-            transfer_initiated: true,
-            transfer_type: "sip_refer",
-            destination: transferTo,
-            reason: args.reason,
-            urgency: args.urgency ?? "normal",
-          };
+          if (sipParticipant?.identity) {
+            const sipClient = new SipClient(
+              httpUrl,
+              livekitApiKey,
+              livekitApiSecret,
+            );
+            const transferTo = targetNumber.startsWith("sip:")
+              ? targetNumber
+              : `sip:${targetNumber.replace("+", "")}@sip.twilio.com`;
+            await withTimeout(
+              sipClient.transferSipParticipant(
+                roomName,
+                sipParticipant.identity,
+                transferTo,
+              ),
+              8e3,
+            );
+            console.log(
+              `[transfer_to_human] SIP REFER sent to ${transferTo} for ${sipParticipant.identity}`,
+            );
+            onTransferInitiated?.({ reason: args.reason, targetNumber });
+            return {
+              transfer_initiated: true,
+              transfer_type: "sip_refer",
+              destination: transferTo,
+              reason: args.reason,
+              urgency: args.urgency ?? "normal",
+            };
+          }
+          console.warn(
+            "[transfer_to_human] No SIP participant found; cannot issue REFER",
+          );
+        } catch (sipErr) {
+          console.error("[transfer_to_human] SIP REFER failed:", sipErr);
         }
-        console.warn(
-          "[transfer_to_human] No SIP participant found in room; cannot issue REFER",
-        );
-        return {
-          transfer_initiated: false,
-          reason: args.reason,
-          message: "A team member will reach out to you within a few minutes.",
-        };
-      } catch (err) {
-        console.error("[transfer_to_human] Transfer failed:", err);
-        return {
-          transfer_initiated: false,
-          reason: args.reason,
-          error:
-            "Transfer encountered an issue. A team member will contact you shortly.",
-        };
       }
+      opts.ctx.session.say(
+        "En este momento todos nuestros especialistas est\xE1n ocupados. Por favor llame de nuevo en unos minutos.",
+      );
+      return {
+        transfer_initiated: false,
+        reason: args.reason,
+        message:
+          "All specialists are currently busy. Please call back in a few minutes.",
+      };
     },
   });
 }
@@ -46630,18 +46673,24 @@ async function _resolveRoutingContext(inboundPhoneId, supabase) {
     voiceId: null,
     voiceEmotion: null,
     phoneVars: {},
+    transferTargetPhone: null,
   };
   if (!inboundPhoneId) return empty;
   try {
     const { data: phoneRow, error: phoneErr } = await supabase
       .from("phone_numbers")
-      .select("agent_id, metadata_config")
+      .select("agent_id, metadata_config, transfer_target_phone")
       .eq("id", inboundPhoneId)
       .maybeSingle();
     if (phoneErr || !phoneRow) return empty;
     const phone = phoneRow;
     const phoneVars = extractMetadataVars(phone.metadata_config);
-    if (!phone.agent_id) return { ...empty, phoneVars };
+    if (!phone.agent_id)
+      return {
+        ...empty,
+        phoneVars,
+        transferTargetPhone: phone.transfer_target_phone ?? null,
+      };
     const { data: agentRow } = await supabase
       .from("agents")
       .select("system_prompt, voice_id, voice_emotion")
@@ -46654,6 +46703,7 @@ async function _resolveRoutingContext(inboundPhoneId, supabase) {
       voiceId: agent?.voice_id ?? null,
       voiceEmotion: agent?.voice_emotion ?? null,
       phoneVars,
+      transferTargetPhone: phone.transfer_target_phone ?? null,
     };
   } catch {
     return empty;
@@ -46823,6 +46873,8 @@ var worker_core_default = (0, import_agents2.defineAgent)({
     let agentId = null;
     let callDirection = "inbound";
     let transferNumber = null;
+    let _transferredToHuman = false;
+    let twilioCallSid = null;
     let flowJson = null;
     let flowConfig = null;
     let ambientSound = null;
@@ -46917,6 +46969,8 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         if (routingCtx.voiceId && !voiceId) voiceId = routingCtx.voiceId;
         if (routingCtx.voiceEmotion && !voiceEmotion)
           voiceEmotion = routingCtx.voiceEmotion;
+        if (routingCtx.transferTargetPhone && !transferNumber)
+          transferNumber = routingCtx.transferTargetPhone;
         void emit("routing.context_resolved", {
           inbound_phone_id: inboundPhoneId,
           phone_vars_count: Object.keys(routingCtx.phoneVars).length,
@@ -46937,6 +46991,19 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
       if (firstMessage)
         firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
+    if (_lifecycleSupabase && roomName) {
+      try {
+        const { data: callRecord } = await _lifecycleSupabase
+          .from("calls")
+          .select("routing_data")
+          .eq("retell_call_id", roomName)
+          .maybeSingle();
+        const rd = callRecord?.routing_data;
+        if (rd && typeof rd["twilio_call_sid"] === "string") {
+          twilioCallSid = rd["twilio_call_sid"];
+        }
+      } catch {}
     }
     void lifecycle?.transitionTo("in_progress").catch(() => null);
     void emit("call.initiated", {
@@ -47055,7 +47122,9 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       });
       console.warn(
         "[worker.llm] Groq unavailable \u2014 using OpenAI fallback",
-        { reason: llmRouterResult.reason },
+        {
+          reason: llmRouterResult.reason,
+        },
       );
     } else {
       void emit("llm.provider_selected", {
@@ -47479,13 +47548,29 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         ...buildTools({
           enableTransfer: true,
           enableOrders: false,
-          // ── 3. Pass call context for SIP transfer ─────────────────────────
+          // ── 3. Pass call context for SIP REFER + Twilio redirect ──────────
           roomName,
           transferNumber:
-            transferNumber ?? process.env["SUPPORT_TRANSFER_NUMBER"] ?? null,
+            transferNumber ??
+            process.env["SUPPORT_TRANSFER_NUMBER"] ??
+            process.env["VOICEOS_GLOBAL_TRANSFER_FALLBACK"] ??
+            null,
           livekitWsUrl: process.env["LIVEKIT_URL"] ?? "",
           livekitApiKey: process.env["LIVEKIT_API_KEY"] ?? "",
           livekitApiSecret: process.env["LIVEKIT_API_SECRET"] ?? "",
+          // Twilio hot-redirect (Fase 12) — only present for Twilio-originated calls
+          twilioCallSid,
+          twilioAccountSid: process.env["TWILIO_ACCOUNT_SID"] ?? null,
+          twilioAuthToken: process.env["TWILIO_AUTH_TOKEN"] ?? null,
+          onTransferInitiated: ({ reason, targetNumber }) => {
+            _transferredToHuman = true;
+            lifecycle?.setOutcome("transferred_to_human");
+            void emit("call.transferred", {
+              reason,
+              target: targetNumber,
+              transfer_method: twilioCallSid ? "twilio_redirect" : "sip_refer",
+            });
+          },
         }),
         // Pilar B: workspace-defined custom HTTP tools
         ...dynamicTools,
