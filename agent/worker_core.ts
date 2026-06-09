@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { runStartupCleanup } from './startup-cleanup.js';
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.local');
@@ -1538,10 +1539,21 @@ if (_selfUrl) {
   setInterval(() => { fetch(_selfUrl).catch(() => null); }, 9 * 60 * 1000);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-cli.runApp(new ServerOptions({
-  agent: fileURLToPath(import.meta.url),
-  wsURL: process.env['LIVEKIT_URL'] ?? '',
-  apiKey: process.env['LIVEKIT_API_KEY'],
-  apiSecret: process.env['LIVEKIT_API_SECRET'],
-}) as any);
+// Run startup cleanup BEFORE registering the agent, so any zombie calls from
+// the previous process are resolved and call slots are freed before the worker
+// starts accepting new LiveKit sessions.
+void (async () => {
+  try {
+    await runStartupCleanup();
+  } catch (err) {
+    // Non-fatal — a cleanup failure must never block the worker from starting
+    console.error('[startup-cleanup] Unexpected error (non-fatal):', String(err));
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  cli.runApp(new ServerOptions({
+    agent: fileURLToPath(import.meta.url),
+    wsURL: process.env['LIVEKIT_URL'] ?? '',
+    apiKey: process.env['LIVEKIT_API_KEY'],
+    apiSecret: process.env['LIVEKIT_API_SECRET'],
+  }) as any);
+})();
