@@ -34899,7 +34899,6 @@ __export(worker_core_exports, {
 module.exports = __toCommonJS(worker_core_exports);
 var import_agents2 = require("@livekit/agents");
 var import_agents_plugin_deepgram = require("@livekit/agents-plugin-deepgram");
-var import_agents_plugin_openai2 = require("@livekit/agents-plugin-openai");
 
 // node_modules/.pnpm/@supabase+supabase-js@2.106.1/node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -45786,6 +45785,10 @@ var BillingTracker = class {
     this._usage = [];
     // TTS provider name — updated at session construction if a fallback was used.
     this._ttsProvider = "cartesia";
+    // LLM provider name — updated at session construction if a fallback was used.
+    // Determines the provider field on the LLM cost row so Groq vs OpenAI costs
+    // are tracked separately when fallback activates.
+    this._llmProvider = "groq";
     // TTS: two separate source buckets flushed into a single cost event at call-end.
     this._manualSayChars = 0;
     // from trackedSay() / explicit session.say() injections
@@ -45805,6 +45808,12 @@ var BillingTracker = class {
   // Called right after TTS provider construction to record which provider is active.
   setTTSProvider(provider) {
     this._ttsProvider = provider;
+  }
+  // Called right after LLM provider construction to record which provider is active.
+  // When Groq fallback to OpenAI occurs, this ensures the cost row uses "openai"
+  // as provider so billing reflects the actual API that incurred charges.
+  setLLMProvider(provider) {
+    this._llmProvider = provider;
   }
   // Pure, synchronous estimate of accumulated call cost so far.
   // Used by the budget circuit breaker to decide whether to terminate the call.
@@ -45965,7 +45974,7 @@ var BillingTracker = class {
     }
     if (this._llmTokensTotal > 0) {
       this._usage.push({
-        provider: "groq",
+        provider: this._llmProvider,
         cost_type: "llm",
         quantity: this._llmTokensTotal,
         unit: "tokens",
@@ -45974,6 +45983,8 @@ var BillingTracker = class {
           confidence: "low",
           quantity_source: "estimated",
           pricing_unit: "usd_per_1k_tokens",
+          provider_source:
+            this._llmProvider === "groq" ? "primary" : "fallback",
         },
       });
     }
@@ -46263,6 +46274,52 @@ function extractMetadataVars(config2) {
     if (typeof v === "string") result[k] = v;
   }
   return result;
+}
+
+// agent/providers/llm-provider-router.ts
+var import_agents_plugin_openai2 = require("@livekit/agents-plugin-openai");
+var GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+var DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+var DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+function createLLMProvider(config2) {
+  const groqFactory =
+    config2._groqFactory ?? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((opts) => new import_agents_plugin_openai2.LLM(opts));
+  const openaiFactory =
+    config2._openaiFactory ?? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((opts) => new import_agents_plugin_openai2.LLM(opts));
+  if (config2.groqApiKey) {
+    try {
+      const llm3 = groqFactory({
+        model: config2.groqModel ?? DEFAULT_GROQ_MODEL,
+        apiKey: config2.groqApiKey,
+        baseURL: GROQ_BASE_URL,
+      });
+      return { llm: llm3, providerName: "groq", fallbackUsed: false };
+    } catch (err) {
+      const reason = `groq_constructor_failed: ${String(err).slice(0, 120)}`;
+      return _tryOpenAI(config2, openaiFactory, reason);
+    }
+  }
+  return _tryOpenAI(config2, openaiFactory, "groq_key_missing");
+}
+function _tryOpenAI(config2, factory, fallbackReason) {
+  if (!config2.openaiApiKey) return null;
+  try {
+    const llm3 = factory({
+      model: config2.openaiModel ?? DEFAULT_OPENAI_MODEL,
+      apiKey: config2.openaiApiKey,
+      // No baseURL override — uses OpenAI native endpoint
+    });
+    return {
+      llm: llm3,
+      providerName: "openai",
+      fallbackUsed: true,
+      reason: fallbackReason,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // agent/worker_core.ts
@@ -46608,60 +46665,35 @@ function getSupabaseAdmin() {
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
-async function extractCrmAnalysis(
-  transcript,
-  groqApiKey,
-  crmFunnel,
-  crmLeadId,
-  crmCountry,
-  crmCampaign,
-  voicemailDetected,
+async function _callOpenAIChatCompletion(
+  apiKey,
+  baseURL,
+  model,
+  messages,
+  maxTokens,
 ) {
-  const blank = {
-    Age: null,
-    Name: null,
-    Motivation: null,
-    interested: null,
-    occupation: null,
-    Financial_goal: null,
-    Call_transferred: null,
-    monthly_expenses: null,
-    time_in_occupation: null,
-    "In Voicemail": voicemailDetected,
-    "Call Success": !voicemailDetected,
-  };
-  if (!transcript.trim() || !groqApiKey) return blank;
+  const res = await fetch(`${baseURL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      max_tokens: maxTokens,
+      messages,
+    }),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.choices?.[0]?.message?.content?.trim() ?? null;
+}
+function _parseCrmJson(raw, blank, voicemailDetected) {
+  if (!raw) return blank;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return blank;
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${groqApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
-        temperature: 0,
-        max_tokens: 512,
-        messages: [
-          {
-            role: "system",
-            content: `You are a CRM data extractor. Extract the following fields from the call transcript and return ONLY a valid JSON object with exactly these keys. Use null for unknown fields.
-Keys: Age, Name, Motivation, interested (boolean), occupation, Financial_goal, Call_transferred (boolean), monthly_expenses, time_in_occupation, "In Voicemail" (boolean, value: ${voicemailDetected}), "Call Success" (boolean)
-CRM Context: Funnel=${crmFunnel ?? "N/A"}, LeadId=${crmLeadId ?? "N/A"}, Country=${crmCountry ?? "N/A"}, Campaign=${crmCampaign ?? "N/A"}`,
-          },
-          {
-            role: "user",
-            content: `Transcript:
-${transcript.slice(0, 4e3)}`,
-          },
-        ],
-      }),
-    });
-    if (!res.ok) return blank;
-    const json = await res.json();
-    const raw = json.choices?.[0]?.message?.content?.trim() ?? "";
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return blank;
     const parsed = JSON.parse(jsonMatch[0]);
     return {
       Age: parsed.Age ?? null,
@@ -46679,6 +46711,73 @@ ${transcript.slice(0, 4e3)}`,
   } catch {
     return blank;
   }
+}
+async function extractCrmAnalysis(
+  transcript,
+  groqApiKey,
+  crmFunnel,
+  crmLeadId,
+  crmCountry,
+  crmCampaign,
+  voicemailDetected,
+  openaiApiKey,
+) {
+  const blank = {
+    Age: null,
+    Name: null,
+    Motivation: null,
+    interested: null,
+    occupation: null,
+    Financial_goal: null,
+    Call_transferred: null,
+    monthly_expenses: null,
+    time_in_occupation: null,
+    "In Voicemail": voicemailDetected,
+    "Call Success": !voicemailDetected,
+  };
+  const deterministic = {
+    data: blank,
+    provider: "deterministic",
+  };
+  if (!transcript.trim()) return deterministic;
+  const systemContent = `You are a CRM data extractor. Extract the following fields from the call transcript and return ONLY a valid JSON object with exactly these keys. Use null for unknown fields.
+Keys: Age, Name, Motivation, interested (boolean), occupation, Financial_goal, Call_transferred (boolean), monthly_expenses, time_in_occupation, "In Voicemail" (boolean, value: ${voicemailDetected}), "Call Success" (boolean)
+CRM Context: Funnel=${crmFunnel ?? "N/A"}, LeadId=${crmLeadId ?? "N/A"}, Country=${crmCountry ?? "N/A"}, Campaign=${crmCampaign ?? "N/A"}`;
+  const messages = [
+    { role: "system", content: systemContent },
+    {
+      role: "user",
+      content: `Transcript:
+${transcript.slice(0, 4e3)}`,
+    },
+  ];
+  if (groqApiKey) {
+    try {
+      const raw = await _callOpenAIChatCompletion(
+        groqApiKey,
+        "https://api.groq.com/openai/v1",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        messages,
+        512,
+      );
+      const parsed = _parseCrmJson(raw, blank, voicemailDetected);
+      if (raw) return { data: parsed, provider: "groq" };
+    } catch {}
+  }
+  if (openaiApiKey) {
+    try {
+      const raw = await _callOpenAIChatCompletion(
+        openaiApiKey,
+        "https://api.openai.com/v1",
+        "gpt-4o-mini",
+        messages,
+        512,
+      );
+      const parsed = _parseCrmJson(raw, blank, voicemailDetected);
+      if (raw) return { data: parsed, provider: "openai" };
+    } catch {}
+  }
+  return deterministic;
 }
 var worker_core_default = (0, import_agents2.defineAgent)({
   entry: async (ctx) => {
@@ -46921,16 +47020,53 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         }),
       );
     });
-    if (!groqKey) {
-      console.error(
-        "[worker.diag] CRITICAL: GROQ_API_KEY not set \u2014 every LLM call will return 401 and leave session stuck in Thinking",
-      );
-    }
-    const lm = new import_agents_plugin_openai2.LLM({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      apiKey: groqKey ?? "",
-      baseURL: "https://api.groq.com/openai/v1",
+    const llmRouterResult = createLLMProvider({
+      groqApiKey: groqKey ?? void 0,
+      openaiApiKey: openaiKey ?? void 0,
     });
+    if (!llmRouterResult) {
+      void emit("llm.provider_constructor_failed", {
+        reason: "all_providers_failed",
+        groq_key_present: !!groqKey,
+        openai_key_present: !!openaiKey,
+        agent_id: agentId,
+        room: roomName,
+      });
+      console.error(
+        "[worker.llm] No LLM provider could be constructed \u2014 aborting session",
+        { groq_key_present: !!groqKey, openai_key_present: !!openaiKey },
+      );
+      void lifecycle
+        ?.transitionTo("failed", "llm_provider_failure")
+        .catch(() => null);
+      return;
+    }
+    if (llmRouterResult.fallbackUsed) {
+      void emit("llm.fallback_selected", {
+        provider: llmRouterResult.providerName,
+        reason: llmRouterResult.reason,
+        agent_id: agentId,
+        room: roomName,
+      });
+      void emit("llm.provider_constructor_failed", {
+        reason: llmRouterResult.reason ?? "groq_failed",
+        agent_id: agentId,
+        room: roomName,
+      });
+      console.warn(
+        "[worker.llm] Groq unavailable \u2014 using OpenAI fallback",
+        { reason: llmRouterResult.reason },
+      );
+    } else {
+      void emit("llm.provider_selected", {
+        provider: llmRouterResult.providerName,
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        agent_id: agentId,
+        room: roomName,
+      });
+    }
+    billing?.setLLMProvider(llmRouterResult.providerName);
+    const lm = llmRouterResult.llm;
     const EMOTION_MAP = {
       calm: ["positivity:low"],
       sympathetic: ["sadness:low"],
@@ -47806,10 +47942,17 @@ var worker_core_default = (0, import_agents2.defineAgent)({
               agent_id: agentId,
               room: roomName,
             });
+            void emit("llm.provider_degraded", {
+              provider: llmRouterResult.providerName,
+              elapsed_ms: 4e3,
+              agent_id: agentId,
+              room: roomName,
+            });
             console.warn(
               "[worker.watchdog] thinking phase-1 (4s) \u2014 llm.slow",
               {
                 agent_id: agentId,
+                provider: llmRouterResult.providerName,
               },
             );
           }, 4e3);
@@ -47817,6 +47960,13 @@ var worker_core_default = (0, import_agents2.defineAgent)({
             _thinkingWd2 = null;
             if (session.agentState !== "thinking") return;
             void emit("watchdog.thinking_phase2", {
+              agent_id: agentId,
+              room: roomName,
+            });
+            void emit("llm.runtime_fallback_unavailable", {
+              provider: llmRouterResult.providerName,
+              reason: "mid_session_swap_not_supported",
+              elapsed_ms: 7e3,
               agent_id: agentId,
               room: roomName,
             });
@@ -47835,9 +47985,19 @@ var worker_core_default = (0, import_agents2.defineAgent)({
               agent_id: agentId,
               room: roomName,
             });
+            void emit("llm.provider_down", {
+              provider: llmRouterResult.providerName,
+              elapsed_ms: 1e4,
+              agent_id: agentId,
+              room: roomName,
+            });
             console.error(
               "[worker.watchdog] thinking phase-3 (10s) \u2014 llm.timeout, silent interrupt",
-              { agent_id: agentId, room: roomName },
+              {
+                agent_id: agentId,
+                room: roomName,
+                provider: llmRouterResult.providerName,
+              },
             );
             _isThinkingInterventionActive = true;
             try {
@@ -48164,7 +48324,11 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           }
           try {
             const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
-            const crmAnalysis = await extractCrmAnalysis(
+            const openaiKeyForAnalysis = process.env["OPENAI_API_KEY"];
+            void emit("crm.extraction_started", {
+              has_transcript: transcript.trim().length > 0,
+            });
+            const crmResult = await extractCrmAnalysis(
               transcript,
               groqKeyForAnalysis,
               crmFunnel,
@@ -48172,7 +48336,22 @@ var worker_core_default = (0, import_agents2.defineAgent)({
               crmCountry,
               crmCampaign,
               _voicemailDetected,
+              openaiKeyForAnalysis,
             );
+            if (crmResult.provider === "openai") {
+              void emit("crm.extraction_fallback_used", {
+                fallback_provider: "openai",
+              });
+            } else if (crmResult.provider === "deterministic") {
+              void emit("crm.extraction_failed", {
+                reason: "all_llm_providers_failed",
+              });
+            } else {
+              void emit("crm.extraction_completed", {
+                provider: crmResult.provider,
+              });
+            }
+            const crmAnalysis = crmResult.data;
             const { data: callRow } = await supabase
               .from("calls")
               .select("id")

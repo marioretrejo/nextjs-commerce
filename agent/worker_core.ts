@@ -57,6 +57,10 @@ import {
   buildSystemVariables,
   extractMetadataVars,
 } from "../lib/prompts/compiler.js";
+import {
+  createLLMProvider,
+  EMERGENCY_LLM_FILLERS,
+} from "./providers/llm-provider-router.js";
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(
@@ -604,61 +608,43 @@ interface CrmAnalysisData {
   "Call Success": boolean;
 }
 
-async function extractCrmAnalysis(
-  transcript: string,
-  groqApiKey: string,
-  crmFunnel: string | null,
-  crmLeadId: string | null,
-  crmCountry: string | null,
-  crmCampaign: string | null,
-  voicemailDetected: boolean,
-): Promise<CrmAnalysisData> {
-  const blank: CrmAnalysisData = {
-    Age: null,
-    Name: null,
-    Motivation: null,
-    interested: null,
-    occupation: null,
-    Financial_goal: null,
-    Call_transferred: null,
-    monthly_expenses: null,
-    time_in_occupation: null,
-    "In Voicemail": voicemailDetected,
-    "Call Success": !voicemailDetected,
+async function _callOpenAIChatCompletion(
+  apiKey: string,
+  baseURL: string,
+  model: string,
+  messages: Array<{ role: string; content: string }>,
+  maxTokens: number,
+): Promise<string | null> {
+  const res = await fetch(`${baseURL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      max_tokens: maxTokens,
+      messages,
+    }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
   };
-  if (!transcript.trim() || !groqApiKey) return blank;
+  return json.choices?.[0]?.message?.content?.trim() ?? null;
+}
+
+// Parses the LLM text response into CrmAnalysisData, returning blank on parse failure.
+function _parseCrmJson(
+  raw: string | null,
+  blank: CrmAnalysisData,
+  voicemailDetected: boolean,
+): CrmAnalysisData {
+  if (!raw) return blank;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return blank;
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${groqApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
-        temperature: 0,
-        max_tokens: 512,
-        messages: [
-          {
-            role: "system",
-            content: `You are a CRM data extractor. Extract the following fields from the call transcript and return ONLY a valid JSON object with exactly these keys. Use null for unknown fields.
-Keys: Age, Name, Motivation, interested (boolean), occupation, Financial_goal, Call_transferred (boolean), monthly_expenses, time_in_occupation, "In Voicemail" (boolean, value: ${voicemailDetected}), "Call Success" (boolean)
-CRM Context: Funnel=${crmFunnel ?? "N/A"}, LeadId=${crmLeadId ?? "N/A"}, Country=${crmCountry ?? "N/A"}, Campaign=${crmCampaign ?? "N/A"}`,
-          },
-          {
-            role: "user",
-            content: `Transcript:\n${transcript.slice(0, 4000)}`,
-          },
-        ],
-      }),
-    });
-    if (!res.ok) return blank;
-    const json = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const raw = json.choices?.[0]?.message?.content?.trim() ?? "";
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return blank;
     const parsed = JSON.parse(jsonMatch[0]) as Partial<CrmAnalysisData>;
     return {
       Age: parsed.Age ?? null,
@@ -676,6 +662,88 @@ CRM Context: Funnel=${crmFunnel ?? "N/A"}, LeadId=${crmLeadId ?? "N/A"}, Country
   } catch {
     return blank;
   }
+}
+
+// Return type used by caller to determine which provider (if any) succeeded.
+interface CrmExtractionResult {
+  data: CrmAnalysisData;
+  provider: "groq" | "openai" | "deterministic";
+}
+
+async function extractCrmAnalysis(
+  transcript: string,
+  groqApiKey: string,
+  crmFunnel: string | null,
+  crmLeadId: string | null,
+  crmCountry: string | null,
+  crmCampaign: string | null,
+  voicemailDetected: boolean,
+  openaiApiKey?: string,
+): Promise<CrmExtractionResult> {
+  const blank: CrmAnalysisData = {
+    Age: null,
+    Name: null,
+    Motivation: null,
+    interested: null,
+    occupation: null,
+    Financial_goal: null,
+    Call_transferred: null,
+    monthly_expenses: null,
+    time_in_occupation: null,
+    "In Voicemail": voicemailDetected,
+    "Call Success": !voicemailDetected,
+  };
+  const deterministic: CrmExtractionResult = {
+    data: blank,
+    provider: "deterministic",
+  };
+
+  if (!transcript.trim()) return deterministic;
+
+  const systemContent = `You are a CRM data extractor. Extract the following fields from the call transcript and return ONLY a valid JSON object with exactly these keys. Use null for unknown fields.
+Keys: Age, Name, Motivation, interested (boolean), occupation, Financial_goal, Call_transferred (boolean), monthly_expenses, time_in_occupation, "In Voicemail" (boolean, value: ${voicemailDetected}), "Call Success" (boolean)
+CRM Context: Funnel=${crmFunnel ?? "N/A"}, LeadId=${crmLeadId ?? "N/A"}, Country=${crmCountry ?? "N/A"}, Campaign=${crmCampaign ?? "N/A"}`;
+  const messages = [
+    { role: "system", content: systemContent },
+    { role: "user", content: `Transcript:\n${transcript.slice(0, 4000)}` },
+  ];
+
+  // ── Primary: Groq ─────────────────────────────────────────────────────────
+  if (groqApiKey) {
+    try {
+      const raw = await _callOpenAIChatCompletion(
+        groqApiKey,
+        "https://api.groq.com/openai/v1",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        messages,
+        512,
+      );
+      const parsed = _parseCrmJson(raw, blank, voicemailDetected);
+      if (raw) return { data: parsed, provider: "groq" };
+    } catch {
+      // Groq threw — try OpenAI fallback
+    }
+  }
+
+  // ── Fallback: OpenAI ──────────────────────────────────────────────────────
+  if (openaiApiKey) {
+    try {
+      const raw = await _callOpenAIChatCompletion(
+        openaiApiKey,
+        "https://api.openai.com/v1",
+        "gpt-4o-mini",
+        messages,
+        512,
+      );
+      const parsed = _parseCrmJson(raw, blank, voicemailDetected);
+      if (raw) return { data: parsed, provider: "openai" };
+    } catch {
+      // Both failed
+    }
+  }
+
+  // Both providers failed — return deterministic minimal analysis
+  return deterministic;
 }
 
 export default defineAgent({
@@ -1013,17 +1081,64 @@ export default defineAgent({
       );
     });
 
-    // ─── 2. LLM: Groq llama-4-scout (low-latency, ~200ms TTFT) ─────────────────
-    if (!groqKey) {
-      console.error(
-        "[worker.diag] CRITICAL: GROQ_API_KEY not set — every LLM call will return 401 and leave session stuck in Thinking",
-      );
-    }
-    const lm = new LLM({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      apiKey: groqKey ?? "",
-      baseURL: "https://api.groq.com/openai/v1",
+    // ─── 2. LLM: Groq (primary) → OpenAI (fallback) via LLM Provider Router ───
+    // Constructor-level fallback: if GROQ_API_KEY is missing or Groq constructor
+    // throws, the router tries OpenAI. If both fail, the session is aborted cleanly.
+    //
+    // NOTE: Mid-session LLM swap is architecturally impossible with LiveKit Agents
+    // SDK ^1.4.4 — voice.AgentSession.llm is immutable after construction.
+    // Runtime degradation is detected by the thinking watchdog and emits
+    // llm.provider_degraded / llm.runtime_fallback_unavailable, but the provider
+    // cannot be hot-swapped. See docs/voice-runtime-limitations.md.
+    const llmRouterResult = createLLMProvider({
+      groqApiKey: groqKey ?? undefined,
+      openaiApiKey: openaiKey ?? undefined,
     });
+
+    if (!llmRouterResult) {
+      void emit("llm.provider_constructor_failed", {
+        reason: "all_providers_failed",
+        groq_key_present: !!groqKey,
+        openai_key_present: !!openaiKey,
+        agent_id: agentId,
+        room: roomName,
+      });
+      console.error(
+        "[worker.llm] No LLM provider could be constructed — aborting session",
+        { groq_key_present: !!groqKey, openai_key_present: !!openaiKey },
+      );
+      void lifecycle
+        ?.transitionTo("failed", "llm_provider_failure")
+        .catch(() => null);
+      return;
+    }
+
+    if (llmRouterResult.fallbackUsed) {
+      void emit("llm.fallback_selected", {
+        provider: llmRouterResult.providerName,
+        reason: llmRouterResult.reason,
+        agent_id: agentId,
+        room: roomName,
+      });
+      void emit("llm.provider_constructor_failed", {
+        reason: llmRouterResult.reason ?? "groq_failed",
+        agent_id: agentId,
+        room: roomName,
+      });
+      console.warn("[worker.llm] Groq unavailable — using OpenAI fallback", {
+        reason: llmRouterResult.reason,
+      });
+    } else {
+      void emit("llm.provider_selected", {
+        provider: llmRouterResult.providerName,
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        agent_id: agentId,
+        room: roomName,
+      });
+    }
+
+    billing?.setLLMProvider(llmRouterResult.providerName);
+    const lm = llmRouterResult.llm;
 
     // ─── 3. TTS: Cartesia (primary) → OpenAI TTS (fallback) ─────────────────
     // Maps our emotion names → Cartesia experimental_controls emotion tags
@@ -2132,8 +2247,15 @@ export default defineAgent({
             agent_id: agentId,
             room: roomName,
           });
+          void emit("llm.provider_degraded", {
+            provider: llmRouterResult.providerName,
+            elapsed_ms: 4_000,
+            agent_id: agentId,
+            room: roomName,
+          });
           console.warn("[worker.watchdog] thinking phase-1 (4s) — llm.slow", {
             agent_id: agentId,
+            provider: llmRouterResult.providerName,
           });
         }, 4_000);
 
@@ -2142,6 +2264,15 @@ export default defineAgent({
           _thinkingWd2 = null;
           if (session.agentState !== "thinking") return;
           void emit("watchdog.thinking_phase2", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          // Mid-session LLM swap is architecturally impossible (AgentSession.llm
+          // is immutable). Emit observability event but cannot hot-swap provider.
+          void emit("llm.runtime_fallback_unavailable", {
+            provider: llmRouterResult.providerName,
+            reason: "mid_session_swap_not_supported",
+            elapsed_ms: 7_000,
             agent_id: agentId,
             room: roomName,
           });
@@ -2162,9 +2293,19 @@ export default defineAgent({
             agent_id: agentId,
             room: roomName,
           });
+          void emit("llm.provider_down", {
+            provider: llmRouterResult.providerName,
+            elapsed_ms: 10_000,
+            agent_id: agentId,
+            room: roomName,
+          });
           console.error(
             "[worker.watchdog] thinking phase-3 (10s) — llm.timeout, silent interrupt",
-            { agent_id: agentId, room: roomName },
+            {
+              agent_id: agentId,
+              room: roomName,
+              provider: llmRouterResult.providerName,
+            },
           );
           _isThinkingInterventionActive = true;
           try {
@@ -2567,7 +2708,11 @@ export default defineAgent({
 
         try {
           const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
-          const crmAnalysis = await extractCrmAnalysis(
+          const openaiKeyForAnalysis = process.env["OPENAI_API_KEY"];
+          void emit("crm.extraction_started", {
+            has_transcript: transcript.trim().length > 0,
+          });
+          const crmResult = await extractCrmAnalysis(
             transcript,
             groqKeyForAnalysis,
             crmFunnel,
@@ -2575,7 +2720,22 @@ export default defineAgent({
             crmCountry,
             crmCampaign,
             _voicemailDetected,
+            openaiKeyForAnalysis,
           );
+          if (crmResult.provider === "openai") {
+            void emit("crm.extraction_fallback_used", {
+              fallback_provider: "openai",
+            });
+          } else if (crmResult.provider === "deterministic") {
+            void emit("crm.extraction_failed", {
+              reason: "all_llm_providers_failed",
+            });
+          } else {
+            void emit("crm.extraction_completed", {
+              provider: crmResult.provider,
+            });
+          }
+          const crmAnalysis = crmResult.data;
 
           // Persist extracted_data to the calls row
           const { data: callRow } = await supabase

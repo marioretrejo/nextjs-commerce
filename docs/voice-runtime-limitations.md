@@ -62,15 +62,69 @@ This means:
 
 ---
 
-## LLM fallback limitation (Fase 9 — not yet implemented)
+## LLM fallback limitation (Fase 11)
 
-LLM fallback (Groq → OpenAI) is planned for Fase 9. As of Fase 8:
+### What is implemented (Fase 11)
 
-- Groq is the only LLM provider.
-- If Groq returns 401/429 or times out, the session will stall in `thinking` state.
-- The thinking watchdog (phases 1–3) will detect the stall and inject a filler phrase,
-  then interrupt after 10 seconds.
+**Constructor-level fallback** is active:
+
+- `agent/providers/llm-provider-router.ts` — `createLLMProvider()` tries to instantiate
+  Groq as the primary provider (via the OpenAI-compatible API). If the constructor throws
+  or `GROQ_API_KEY` is absent **and** `OPENAI_API_KEY` is set, it automatically falls back
+  to native OpenAI (`gpt-4o-mini`).
+- Both providers use the same `LLM` class from `@livekit/agents-plugin-openai` — Groq is
+  accessed via a `baseURL` override pointing to `https://api.groq.com/openai/v1`. No extra
+  SDK dependency.
+- The `LLMRouterResult` carries `providerName`, `fallbackUsed`, and `reason` so
+  `worker_core.ts` can emit the correct `call_events`:
+  - `llm.provider_selected` — Groq started successfully
+  - `llm.provider_constructor_failed` — both providers failed; call aborted
+  - `llm.fallback_selected` + `llm.fallback_succeeded` — OpenAI is active
+- `BillingTracker.setLLMProvider()` ensures cost rows use the correct provider field.
+- Emergency deterministic responses (`agent/behavior/emergency-responses.ts`) provide
+  fast filler phrases when the thinking watchdog fires and no LLM response has arrived.
+- CRM extraction (`extractCrmAnalysis`) also follows Groq → OpenAI → deterministic blank
+  fallback, emitting `crm.extraction_*` events at each stage.
+
+### What is NOT implemented
+
+**Mid-session (runtime) LLM provider swap is architecturally impossible** with the
+current version of the LiveKit Agents SDK (`@livekit/agents ^1.4.4`).
+
+Root cause: `voice.AgentSession` receives the LLM at construction time:
+
+```typescript
+const session = new voice.AgentSession({ stt, llm, tts });
+//                                              ^^^
+// Immutable after construction. There is no .setLLM() or .replaceLLM() method.
+```
+
+This means:
+
+| Failure scenario                        | Current behaviour                                                                                                                |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Groq constructor fails                  | → OpenAI LLM used for **entire call** ✓                                                                                          |
+| Groq key absent                         | → OpenAI LLM used for **entire call** ✓                                                                                          |
+| Both providers fail at construction     | → call aborted with `technical_status = failed` ✓                                                                                |
+| Groq degrades mid-call (thinking > 3 s) | → `llm.provider_degraded` + emergency filler emitted; `llm.runtime_fallback_unavailable` logged; call continues on same provider |
+| Groq down mid-call (thinking > 10 s)    | → `llm.provider_down` emitted; session interrupted to recover turn; provider unchanged                                           |
+
+### Thinking watchdog phases (Fase 11)
+
+| Phase | Threshold | Action                                                                             |
+| ----- | --------- | ---------------------------------------------------------------------------------- |
+| 1     | 3 s       | Emit `llm.provider_degraded`; say filler via `llm_slow` emergency response         |
+| 2     | 6 s       | Emit `llm.runtime_fallback_unavailable` (`reason: mid_session_swap_not_supported`) |
+| 3     | 10 s      | Emit `llm.provider_down`; force-interrupt session to recover from silence          |
+
+### Future solutions
+
+1. **LiveKit SDK upgrade** — If a future SDK version supports a `session.replaceLLM()` API,
+   the runtime swap can be wired up with minimal changes.
+
+2. **LLM proxy layer** — A transparent HTTP proxy that races requests across providers and
+   returns the first valid response. Provider-agnostic; no SDK changes required.
 
 ---
 
-_Last updated: Fase 8 — TTS Fallback Router + Financial Circuit Breaker_
+_Last updated: Fase 11 — LLM Fallback Router + Emergency Responses_

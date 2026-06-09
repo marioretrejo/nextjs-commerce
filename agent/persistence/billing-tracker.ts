@@ -39,6 +39,11 @@ export class BillingTracker {
   // TTS provider name — updated at session construction if a fallback was used.
   private _ttsProvider = "cartesia";
 
+  // LLM provider name — updated at session construction if a fallback was used.
+  // Determines the provider field on the LLM cost row so Groq vs OpenAI costs
+  // are tracked separately when fallback activates.
+  private _llmProvider = "groq";
+
   // TTS: two separate source buckets flushed into a single cost event at call-end.
   private _manualSayChars = 0; // from trackedSay() / explicit session.say() injections
   private _manualSayCount = 0;
@@ -61,6 +66,13 @@ export class BillingTracker {
   // Called right after TTS provider construction to record which provider is active.
   setTTSProvider(provider: string): void {
     this._ttsProvider = provider;
+  }
+
+  // Called right after LLM provider construction to record which provider is active.
+  // When Groq fallback to OpenAI occurs, this ensures the cost row uses "openai"
+  // as provider so billing reflects the actual API that incurred charges.
+  setLLMProvider(provider: string): void {
+    this._llmProvider = provider;
   }
 
   // Pure, synchronous estimate of accumulated call cost so far.
@@ -248,7 +260,7 @@ export class BillingTracker {
     }
     if (this._llmTokensTotal > 0) {
       this._usage.push({
-        provider: "groq",
+        provider: this._llmProvider,
         cost_type: "llm",
         quantity: this._llmTokensTotal,
         unit: "tokens",
@@ -257,6 +269,8 @@ export class BillingTracker {
           confidence: "low",
           quantity_source: "estimated",
           pricing_unit: "usd_per_1k_tokens",
+          provider_source:
+            this._llmProvider === "groq" ? "primary" : "fallback",
         },
       });
     }

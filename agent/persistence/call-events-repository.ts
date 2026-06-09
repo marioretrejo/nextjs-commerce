@@ -63,7 +63,23 @@ export type CallEventType =
   | "webhook.signature_generated"
   // Dynamic routing
   | "routing.context_resolved"
-  | "routing.context_fallback";
+  | "routing.context_fallback"
+  // LLM pipeline (Fase 11)
+  | "llm.provider_selected"
+  | "llm.provider_constructor_failed"
+  | "llm.provider_degraded"
+  | "llm.provider_down"
+  | "llm.fallback_selected"
+  | "llm.fallback_attempted"
+  | "llm.fallback_succeeded"
+  | "llm.fallback_failed"
+  | "llm.runtime_fallback_unavailable"
+  | "llm.emergency_response_used"
+  // CRM extraction
+  | "crm.extraction_started"
+  | "crm.extraction_completed"
+  | "crm.extraction_failed"
+  | "crm.extraction_fallback_used";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,
