@@ -45684,6 +45684,378 @@ function makeEventRecorder(supabase, callRoom, workspaceId) {
   };
 }
 
+// lib/billing/provider-pricing.ts
+async function lookupProviderCosts(supabase) {
+  const { data } = await supabase
+    .from("provider_costs")
+    .select(
+      "twilio_outbound_per_min,twilio_inbound_per_min,livekit_per_min,stt_per_min,llm_per_1k_tokens,tts_per_1k_chars",
+    )
+    .eq("label", "default")
+    .maybeSingle();
+  return data ?? null;
+}
+function priceTelephonyMinutes(minutes, direction, costs) {
+  const cents =
+    costs?.[
+      direction === "outbound"
+        ? "twilio_outbound_per_min"
+        : "twilio_inbound_per_min"
+    ];
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(minutes * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceLiveKitMinutes(minutes, costs) {
+  const cents = costs?.livekit_per_min;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(minutes * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceSTTMinutes(minutes, costs) {
+  const cents = costs?.stt_per_min;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(minutes * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceTTSChars(chars, costs) {
+  const cents = costs?.tts_per_1k_chars;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100 / 1e3;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(chars * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceLLMTokens(tokens, costs) {
+  const cents = costs?.llm_per_1k_tokens;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100 / 1e3;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(tokens * unitCost),
+    pricing_source: "configured",
+  };
+}
+function round6(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+// agent/persistence/billing-tracker.ts
+var BillingTracker = class {
+  constructor(room, workspaceId, agentId) {
+    this._usage = [];
+    // TTS is accumulated across many session.say() calls during a call;
+    // we flush into _usage as a single consolidated record in computeAndPersist().
+    this._ttsCharsTotal = 0;
+    this._ttsSayCount = 0;
+    // LLM tokens are estimated once at call-end; accumulated for completeness.
+    this._llmTokensTotal = 0;
+    this._room = room;
+    this._workspaceId = workspaceId;
+    this._agentId = agentId ?? null;
+  }
+  trackTelephony(durationSeconds, direction) {
+    this._usage.push({
+      provider: "twilio",
+      cost_type: "telephony",
+      quantity: durationSeconds / 60,
+      unit: "minutes",
+      metadata: {
+        direction,
+        estimation_method: "call_duration_seconds",
+        confidence: "medium",
+        quantity_source: "real",
+        duration_seconds: durationSeconds,
+        pricing_unit: "usd_per_minute",
+      },
+    });
+  }
+  trackLiveKit(durationSeconds) {
+    this._usage.push({
+      provider: "livekit",
+      cost_type: "livekit_media",
+      quantity: durationSeconds / 60,
+      unit: "minutes",
+      metadata: {
+        estimation_method: "call_duration_seconds_rounded_to_minutes",
+        confidence: "medium",
+        quantity_source: "real",
+        duration_seconds: durationSeconds,
+        pricing_unit: "usd_per_minute",
+      },
+    });
+  }
+  trackSTT(durationSeconds) {
+    this._usage.push({
+      provider: "deepgram",
+      cost_type: "stt",
+      quantity: durationSeconds / 60,
+      unit: "minutes",
+      metadata: {
+        estimation_method: "call_duration_seconds",
+        confidence: "medium",
+        quantity_source: "real",
+        duration_seconds: durationSeconds,
+        pricing_unit: "usd_per_minute",
+      },
+    });
+  }
+  // Accumulates TTS characters across all session.say() calls.
+  // Call this every time text is sent to TTS (via trackedSay wrapper).
+  // A single consolidated cost event is emitted at computeAndPersist time.
+  trackTTS(characters) {
+    if (characters <= 0) return;
+    this._ttsCharsTotal += characters;
+    this._ttsSayCount++;
+  }
+  // Accumulates estimated LLM token counts (estimated from transcript length).
+  // A single consolidated cost event is emitted at computeAndPersist time.
+  trackLLMTokens(estimatedTokens) {
+    if (estimatedTokens <= 0) return;
+    this._llmTokensTotal += estimatedTokens;
+  }
+  async computeAndPersist(callId, supabase) {
+    if (this._ttsCharsTotal > 0) {
+      this._usage.push({
+        provider: "cartesia",
+        cost_type: "tts",
+        quantity: this._ttsCharsTotal,
+        unit: "characters",
+        metadata: {
+          estimation_method: "tracked_session_say_text_length",
+          confidence: "medium",
+          quantity_source: "estimated",
+          pricing_unit: "usd_per_1k_characters",
+          say_count: this._ttsSayCount,
+        },
+      });
+    }
+    if (this._llmTokensTotal > 0) {
+      this._usage.push({
+        provider: "groq",
+        cost_type: "llm",
+        quantity: this._llmTokensTotal,
+        unit: "tokens",
+        metadata: {
+          estimation_method: "transcript_chars_divided_by_3",
+          confidence: "low",
+          quantity_source: "estimated",
+          pricing_unit: "usd_per_1k_tokens",
+        },
+      });
+    }
+    if (this._usage.length === 0) return;
+    try {
+      const costs = await lookupProviderCosts(supabase);
+      const rows = [];
+      let pricedCount = 0;
+      let unknownCount = 0;
+      let totalCostUsd = 0;
+      for (const u of this._usage) {
+        const priced = this._priceUsage(u, costs);
+        if (priced.total_cost_usd === null) {
+          unknownCount++;
+        } else {
+          pricedCount++;
+          totalCostUsd += priced.total_cost_usd;
+        }
+        rows.push({
+          call_id: callId,
+          workspace_id: this._workspaceId,
+          agent_id: this._agentId,
+          call_room: this._room,
+          provider: u.provider,
+          cost_type: u.cost_type,
+          quantity: u.quantity,
+          unit: u.unit,
+          unit_cost_usd: priced.unit_cost_usd,
+          total_cost_usd: priced.total_cost_usd,
+          currency: "usd",
+          pricing_source: priced.pricing_source,
+          // Merge per-record estimation metadata with any pricing-time metadata
+          metadata: { ...u.metadata, ...priced.pricingMeta },
+        });
+      }
+      const { error: insertErr } = await supabase
+        .from("call_cost_events")
+        .insert(rows);
+      if (insertErr) {
+        console.warn("[billing-tracker] insert failed:", insertErr.message);
+        if (callId) {
+          await supabase
+            .from("calls")
+            .update({ cost_status: "failed" })
+            .eq("id", callId);
+        }
+        return;
+      }
+      if (callId) {
+        const breakdown = buildBreakdown(rows);
+        const costStatus =
+          pricedCount === 0
+            ? "not_calculated"
+            : unknownCount > 0
+              ? "partial"
+              : "estimated";
+        await supabase
+          .from("calls")
+          .update({
+            cost_usd: pricedCount > 0 ? round62(totalCostUsd) : 0,
+            cost_breakdown: breakdown,
+            cost_status: costStatus,
+          })
+          .eq("id", callId);
+      }
+    } catch (err) {
+      console.warn("[billing-tracker] computeAndPersist error:", String(err));
+    }
+  }
+  // Safety backfill: sets call_id on any cost events written before the calls
+  // row existed. In normal flow cost events already have call_id set, but this
+  // guard handles edge-cases (e.g. DB contention during upsert).
+  async backfillCallId(callId, supabase) {
+    try {
+      const { error } = await supabase
+        .from("call_cost_events")
+        .update({ call_id: callId })
+        .eq("call_room", this._room)
+        .eq("workspace_id", this._workspaceId)
+        .is("call_id", null);
+      if (!error) {
+        console.info(
+          `[billing-tracker] billing.cost_events_backfilled room=${this._room} call_id=${callId}`,
+        );
+      }
+    } catch (err) {
+      console.warn("[billing-tracker] backfillCallId error:", String(err));
+    }
+  }
+  _priceUsage(u, costs) {
+    let base;
+    let pricingMeta = {};
+    switch (u.cost_type) {
+      case "telephony": {
+        const dir = u.metadata["direction"];
+        base = priceTelephonyMinutes(u.quantity, dir, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents:
+              costs?.[
+                dir === "outbound"
+                  ? "twilio_outbound_per_min"
+                  : "twilio_inbound_per_min"
+              ] ?? null,
+            calculation: `${u.quantity.toFixed(4)} min \xD7 $${base.unit_cost_usd.toFixed(8)}/min`,
+          };
+        }
+        break;
+      }
+      case "livekit_media": {
+        base = priceLiveKitMinutes(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.livekit_per_min ?? null,
+            calculation: `${u.quantity.toFixed(4)} min \xD7 $${base.unit_cost_usd.toFixed(8)}/min`,
+          };
+        }
+        break;
+      }
+      case "stt": {
+        base = priceSTTMinutes(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.stt_per_min ?? null,
+            calculation: `${u.quantity.toFixed(4)} min \xD7 $${base.unit_cost_usd.toFixed(8)}/min`,
+          };
+        }
+        break;
+      }
+      case "tts": {
+        base = priceTTSChars(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.tts_per_1k_chars ?? null,
+            calculation: `${u.quantity} chars \xD7 $${base.unit_cost_usd.toFixed(10)}/char`,
+          };
+        }
+        break;
+      }
+      case "llm": {
+        base = priceLLMTokens(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.llm_per_1k_tokens ?? null,
+            calculation: `${u.quantity} tokens \xD7 $${base.unit_cost_usd.toFixed(10)}/token`,
+          };
+        }
+        break;
+      }
+      default:
+        base = {
+          unit_cost_usd: null,
+          total_cost_usd: null,
+          pricing_source: "unknown",
+        };
+    }
+    return { ...base, pricingMeta };
+  }
+};
+function buildBreakdown(rows) {
+  const out = {};
+  for (const r of rows) {
+    out[r["cost_type"]] = {
+      provider: r["provider"],
+      quantity: r["quantity"],
+      unit: r["unit"],
+      total_cost_usd: r["total_cost_usd"],
+      pricing_source: r["pricing_source"],
+    };
+  }
+  return out;
+}
+function round62(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
 // agent/worker_core.ts
 var import_node_http = require("node:http");
 var import_meta = {};
@@ -45870,13 +46242,15 @@ function buildStateMachine(config2) {
     },
   };
 }
-function buildDynamicTool(t) {
+function buildDynamicTool(t, billing) {
   return import_agents2.llm.tool({
     description: t.description || t.name,
     parameters: t.parameter_schema,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     execute: async (args, opts) => {
-      opts.ctx.session.say("One moment, let me check that for you.");
+      const sayText = "One moment, let me check that for you.";
+      billing?.trackTTS(sayText.length);
+      opts.ctx.session.say(sayText);
       try {
         const res = await Promise.race([
           fetch(t.server_url, {
@@ -45896,7 +46270,7 @@ function buildDynamicTool(t) {
     },
   });
 }
-function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey) {
+function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey, billing) {
   return import_agents2.llm.tool({
     description:
       "Search the knowledge base for information relevant to the user's question. Use when you need specific facts, policies, product details, or procedures.",
@@ -45913,7 +46287,9 @@ function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey) {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     execute: async (args, opts) => {
-      opts.ctx.session.say("Let me look that up for you.");
+      const sayText = "Let me look that up for you.";
+      billing?.trackTTS(sayText.length);
+      opts.ctx.session.say(sayText);
       try {
         const embRes = await Promise.race([
           fetch("https://api.openai.com/v1/embeddings", {
@@ -46176,6 +46552,10 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       _lifecycleSupabase && workspaceId
         ? makeEventRecorder(_lifecycleSupabase, roomName, workspaceId)
         : (_type, _payload) => {};
+    const billing =
+      _lifecycleSupabase && workspaceId && agentId
+        ? new BillingTracker(roomName, workspaceId, agentId)
+        : null;
     void lifecycle?.transitionTo("in_progress").catch(() => null);
     void emit("call.initiated", {
       agent_id: agentId,
@@ -46318,12 +46698,18 @@ var worker_core_default = (0, import_agents2.defineAgent)({
     const dynamicTools = {};
     for (const t of agentToolRows) {
       try {
-        dynamicTools[t.name] = buildDynamicTool(t);
+        dynamicTools[t.name] = buildDynamicTool(t, billing);
       } catch {}
     }
     const ragTool =
       workspaceId && openaiKey && supabaseUrl && supabaseKey
-        ? buildRagTool(workspaceId, openaiKey, supabaseUrl, supabaseKey)
+        ? buildRagTool(
+            workspaceId,
+            openaiKey,
+            supabaseUrl,
+            supabaseKey,
+            billing,
+          )
         : null;
     const endCallTool = import_agents2.llm.tool({
       description: `Hang up and end the call. Call this when: the conversation goal is complete, the user says goodbye or "that's all I needed", the flow script reaches [END], the user is unresponsive, or the user explicitly wants to stop. Include a natural, warm farewell in the farewell parameter.`,
@@ -46359,6 +46745,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           room: roomName,
         });
         try {
+          billing?.trackTTS(args.farewell.length);
           await opts.ctx.session.say(args.farewell, {
             allowInterruptions: false,
           });
@@ -46518,6 +46905,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 targetNode.data.farewell ??
                 "Thank you for calling. Have a great day!";
               try {
+                billing?.trackTTS(farewell.length);
                 await opts.ctx.session.say(farewell, {
                   allowInterruptions: false,
                 });
@@ -46543,7 +46931,9 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 targetNode.data.transfer_number ?? transferNumber ?? null;
               if (tn && agentRef.current) {
                 try {
-                  opts.ctx.session.say("One moment, let me transfer you now.");
+                  const transferSay = "One moment, let me transfer you now.";
+                  billing?.trackTTS(transferSay.length);
+                  opts.ctx.session.say(transferSay);
                 } catch {}
               }
               sm.setCurrentNodeId(edge.target);
@@ -46715,6 +47105,10 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       llm: lm,
       tts,
     });
+    const trackedSay = (text, options) => {
+      billing?.trackTTS(text.length);
+      return session.say(text, options);
+    };
     const _doDeleteRoom = () => {
       const wsUrl = process.env["LIVEKIT_URL"] ?? "";
       const httpUrl = wsUrl
@@ -46821,7 +47215,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       const policy = SILENCE_POLICIES[_silencePhase];
       _silenceTimer = setTimeout(() => {
         _silenceTimer = null;
-        void session.say(policy.repromptText).then(null, () => null);
+        void trackedSay(policy.repromptText).then(null, () => null);
         _hangupTimer = setTimeout(() => {
           _hangupTimer = null;
           _silenceArmed = false;
@@ -46831,9 +47225,9 @@ var worker_core_default = (0, import_agents2.defineAgent)({
             agent_id: agentId,
             phase: _silencePhase,
           });
-          void session
-            .say(policy.hangupText, { allowInterruptions: false })
-            .then(_doDeleteRoom, _doDeleteRoom);
+          void trackedSay(policy.hangupText, {
+            allowInterruptions: false,
+          }).then(_doDeleteRoom, _doDeleteRoom);
         }, policy.hangupMs);
       }, policy.repromptMs);
     };
@@ -46841,7 +47235,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       const reason = ctx.room.disconnectReason;
       if (reason === "ROOM_DELETED" || reason === "SERVER_SHUTDOWN") {
         try {
-          await session.say(
+          await trackedSay(
             "I'm sorry, we need to end our call now due to account limits. Please contact support to continue.",
           );
         } catch {}
@@ -47065,7 +47459,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 agent_id: agentId,
               },
             );
-            void session.say("Un momento\u2026").then(null, () => null);
+            void trackedSay("Un momento\u2026").then(null, () => null);
           }, 7e3);
           _thinkingWd3 = setTimeout(() => {
             _thinkingWd3 = null;
@@ -47200,7 +47594,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
             clearInterval(balanceCheckInterval);
             balanceCheckInterval = null;
             try {
-              await session.say(
+              await trackedSay(
                 "I'm sorry, your account has reached its minute limit. Please upgrade your plan to continue. Goodbye!",
                 { allowInterruptions: false },
               );
@@ -47354,6 +47748,33 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         });
         void (async () => {
           try {
+            if (billing) {
+              const { data: costCallRow } = await supabase
+                .from("calls")
+                .select("id")
+                .eq("retell_call_id", roomName)
+                .maybeSingle();
+              const resolvedCallId = costCallRow?.id ?? null;
+              billing.trackTelephony(durationSeconds, callDirection);
+              billing.trackLiveKit(durationSeconds);
+              billing.trackSTT(durationSeconds);
+              const transcriptChars = transcriptLines.join("").length;
+              if (transcriptChars > 0) {
+                billing.trackLLMTokens(Math.round(transcriptChars / 3));
+              }
+              await billing.computeAndPersist(resolvedCallId, supabase);
+              if (resolvedCallId) {
+                await billing.backfillCallId(resolvedCallId, supabase);
+                void emit("billing.cost_events_backfilled", {
+                  call_id: resolvedCallId,
+                  room: roomName,
+                });
+              }
+            }
+          } catch (costErr) {
+            console.warn("[billing] cost tracking error:", String(costErr));
+          }
+          try {
             const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
             const crmAnalysis = await extractCrmAnalysis(
               transcript,
@@ -47454,7 +47875,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         greeting_preview: greeting.slice(0, 80),
       }),
     );
-    await session.say(greeting);
+    await trackedSay(greeting);
     _silenceArmed = true;
   },
 });

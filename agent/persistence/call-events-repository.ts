@@ -37,7 +37,9 @@ export type CallEventType =
   | "watchdog.ttfb_phase1"
   | "watchdog.ttfb_phase2"
   | "watchdog.ttfb_phase3"
-  | "watchdog.speaking_fired";
+  | "watchdog.speaking_fired"
+  // Billing
+  | "billing.cost_events_backfilled";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,

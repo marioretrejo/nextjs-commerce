@@ -352,7 +352,7 @@ interface AgentToolRow {
   headers: Record<string, string>;
 }
 
-function buildDynamicTool(t: AgentToolRow) {
+function buildDynamicTool(t: AgentToolRow, billing?: BillingTracker | null) {
   return llm.tool({
     description: t.description || t.name,
     parameters: t.parameter_schema,
@@ -361,7 +361,9 @@ function buildDynamicTool(t: AgentToolRow) {
       args: any,
       opts: Parameters<llm.FunctionTool<any>["execute"]>[1],
     ) => {
-      opts.ctx.session.say("One moment, let me check that for you.");
+      const sayText = "One moment, let me check that for you.";
+      billing?.trackTTS(sayText.length);
+      opts.ctx.session.say(sayText);
       try {
         const res = await Promise.race([
           fetch(t.server_url, {
@@ -390,6 +392,7 @@ function buildRagTool(
   openaiKey: string,
   sbUrl: string,
   sbKey: string,
+  billing?: BillingTracker | null,
 ) {
   return llm.tool({
     description:
@@ -410,7 +413,9 @@ function buildRagTool(
       args: { query: string },
       opts: Parameters<llm.FunctionTool<any>["execute"]>[1],
     ) => {
-      opts.ctx.session.say("Let me look that up for you.");
+      const sayText = "Let me look that up for you.";
+      billing?.trackTTS(sayText.length);
+      opts.ctx.session.say(sayText);
       try {
         // Embed the query using OpenAI text-embedding-3-small (1536 dims)
         const embRes = await Promise.race([
@@ -955,7 +960,7 @@ export default defineAgent({
     const dynamicTools: agentLlm.ToolContext = {};
     for (const t of agentToolRows) {
       try {
-        dynamicTools[t.name] = buildDynamicTool(t);
+        dynamicTools[t.name] = buildDynamicTool(t, billing);
       } catch {
         /* skip malformed tool */
       }
@@ -964,7 +969,13 @@ export default defineAgent({
     // ── Pilar C: Add RAG tool when workspace has knowledge base data ─────────
     const ragTool =
       workspaceId && openaiKey && supabaseUrl && supabaseKey
-        ? buildRagTool(workspaceId, openaiKey, supabaseUrl, supabaseKey)
+        ? buildRagTool(
+            workspaceId,
+            openaiKey,
+            supabaseUrl,
+            supabaseKey,
+            billing,
+          )
         : null;
 
     // ── end_call tool: built here to close over roomName ────────────────────
@@ -1012,6 +1023,7 @@ export default defineAgent({
         });
         // Speak the farewell before disconnecting so the caller hears it
         try {
+          billing?.trackTTS(args.farewell.length);
           await opts.ctx.session.say(args.farewell, {
             allowInterruptions: false,
           });
@@ -1200,6 +1212,7 @@ export default defineAgent({
                 targetNode.data.farewell ??
                 "Thank you for calling. Have a great day!";
               try {
+                billing?.trackTTS(farewell.length);
                 await opts.ctx.session.say(farewell, {
                   allowInterruptions: false,
                 });
@@ -1229,7 +1242,9 @@ export default defineAgent({
               if (tn && agentRef.current) {
                 // Use the existing transfer tool via session
                 try {
-                  opts.ctx.session.say("One moment, let me transfer you now.");
+                  const transferSay = "One moment, let me transfer you now.";
+                  billing?.trackTTS(transferSay.length);
+                  opts.ctx.session.say(transferSay);
                 } catch {
                   /* ok */
                 }
@@ -1419,6 +1434,19 @@ export default defineAgent({
 
     const session = new voice.AgentSession({ stt, llm: lm, tts });
 
+    // trackedSay: wraps session.say() to automatically count TTS characters.
+    // Use in place of direct session.say() calls throughout this handler so
+    // all injected speech (greetings, fillers, farewells, error messages) is
+    // captured by BillingTracker. Does not track ReadableStream inputs since
+    // those don't have a known char count at call time.
+    const trackedSay = (
+      text: string,
+      options?: Parameters<(typeof session)["say"]>[1],
+    ): ReturnType<(typeof session)["say"]> => {
+      billing?.trackTTS(text.length);
+      return session.say(text, options);
+    };
+
     // ─── Shared helper: delete the LiveKit room (triggers Close + SIP hangup) ───
     // Extracted as a module-level function so it can be called from timers and
     // event handlers without repeating the env-var boilerplate.
@@ -1580,7 +1608,7 @@ export default defineAgent({
       const policy = SILENCE_POLICIES[_silencePhase];
       _silenceTimer = setTimeout(() => {
         _silenceTimer = null;
-        void session.say(policy.repromptText).then(null, () => null);
+        void trackedSay(policy.repromptText).then(null, () => null);
         _hangupTimer = setTimeout(() => {
           _hangupTimer = null;
           _silenceArmed = false;
@@ -1590,9 +1618,9 @@ export default defineAgent({
             agent_id: agentId,
             phase: _silencePhase,
           });
-          void session
-            .say(policy.hangupText, { allowInterruptions: false })
-            .then(_doDeleteRoom, _doDeleteRoom);
+          void trackedSay(policy.hangupText, {
+            allowInterruptions: false,
+          }).then(_doDeleteRoom, _doDeleteRoom);
         }, policy.hangupMs);
       }, policy.repromptMs);
     };
@@ -1606,7 +1634,7 @@ export default defineAgent({
       if (reason === "ROOM_DELETED" || reason === "SERVER_SHUTDOWN") {
         try {
           // Best-effort — room may already be gone
-          await session.say(
+          await trackedSay(
             "I'm sorry, we need to end our call now due to account limits. Please contact support to continue.",
           );
         } catch {
@@ -1884,7 +1912,7 @@ export default defineAgent({
               agent_id: agentId,
             },
           );
-          void session.say("Un momento…").then(null, () => null);
+          void trackedSay("Un momento…").then(null, () => null);
         }, 7_000);
 
         // Phase 3 — 10 s: silent interrupt — pipeline is definitively stalled
@@ -2054,7 +2082,7 @@ export default defineAgent({
             balanceCheckInterval = null;
             // Say goodbye before LiveKit drops the connection
             try {
-              await session.say(
+              await trackedSay(
                 "I'm sorry, your account has reached its minute limit. Please upgrade your plan to continue. Goodbye!",
                 { allowInterruptions: false },
               );
@@ -2098,10 +2126,8 @@ export default defineAgent({
       if (text.trim()) {
         const speaker = role === "assistant" ? agentName : "User";
         transcriptLines.push(`${speaker}: ${text.trim()}`);
-        // Accumulate TTS chars from agent utterances for cost estimation
-        if (role === "assistant" && billing) {
-          billing.trackTTS(text.trim().length);
-        }
+        // TTS chars are tracked via trackedSay() — not here — to prevent
+        // double-counting with the explicit session.say() injections.
       }
     });
 
@@ -2249,7 +2275,7 @@ export default defineAgent({
             billing.trackTelephony(durationSeconds, callDirection);
             billing.trackLiveKit(durationSeconds);
             billing.trackSTT(durationSeconds);
-            // TTS chars already accumulated in ConversationItemAdded handler
+            // TTS chars accumulated via trackedSay() throughout the call
 
             // LLM token estimate: total transcript chars / 3 (rough; labeled 'estimated')
             const transcriptChars = transcriptLines.join("").length;
@@ -2258,6 +2284,15 @@ export default defineAgent({
             }
 
             await billing.computeAndPersist(resolvedCallId, supabase);
+
+            // Safety backfill: update any cost events written with null call_id
+            if (resolvedCallId) {
+              await billing.backfillCallId(resolvedCallId, supabase);
+              void emit("billing.cost_events_backfilled", {
+                call_id: resolvedCallId,
+                room: roomName,
+              });
+            }
           }
         } catch (costErr) {
           console.warn("[billing] cost tracking error:", String(costErr));
@@ -2370,7 +2405,7 @@ export default defineAgent({
         greeting_preview: greeting.slice(0, 80),
       }),
     );
-    await session.say(greeting);
+    await trackedSay(greeting);
     // Arm silence watchdog after greeting — silence timer starts when the
     // AgentStateChanged 'speaking'→'listening' transition fires (greeting ends).
     _silenceArmed = true;

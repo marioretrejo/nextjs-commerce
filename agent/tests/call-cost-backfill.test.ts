@@ -24,7 +24,11 @@ interface CostEventRow {
 
 function makeBackfillStub(initialEvents: CostEventRow[]) {
   const events = [...initialEvents];
-  const updateLog: Array<{ call_id: string; call_room: string; workspace_id: string }> = [];
+  const updateLog: Array<{
+    call_id: string;
+    call_room: string;
+    workspace_id: string;
+  }> = [];
 
   const stub = {
     from: (table: string) => {
@@ -72,8 +76,20 @@ function makeBackfillStub(initialEvents: CostEventRow[]) {
 
 test("backfillCallId: sets call_id on events with null call_id", async () => {
   const events: CostEventRow[] = [
-    { id: "e1", call_room: "room-1", workspace_id: "ws-1", call_id: null, cost_type: "telephony" },
-    { id: "e2", call_room: "room-1", workspace_id: "ws-1", call_id: null, cost_type: "stt" },
+    {
+      id: "e1",
+      call_room: "room-1",
+      workspace_id: "ws-1",
+      call_id: null,
+      cost_type: "telephony",
+    },
+    {
+      id: "e2",
+      call_room: "room-1",
+      workspace_id: "ws-1",
+      call_id: null,
+      cost_type: "stt",
+    },
   ];
 
   const stub = makeBackfillStub(events);
@@ -87,8 +103,20 @@ test("backfillCallId: sets call_id on events with null call_id", async () => {
 
 test("backfillCallId: does not affect events from a different room", async () => {
   const events: CostEventRow[] = [
-    { id: "e1", call_room: "room-1", workspace_id: "ws-1", call_id: null, cost_type: "telephony" },
-    { id: "e2", call_room: "room-other", workspace_id: "ws-1", call_id: null, cost_type: "telephony" },
+    {
+      id: "e1",
+      call_room: "room-1",
+      workspace_id: "ws-1",
+      call_id: null,
+      cost_type: "telephony",
+    },
+    {
+      id: "e2",
+      call_room: "room-other",
+      workspace_id: "ws-1",
+      call_id: null,
+      cost_type: "telephony",
+    },
   ];
 
   const stub = makeBackfillStub(events);
@@ -101,7 +129,13 @@ test("backfillCallId: does not affect events from a different room", async () =>
 
 test("backfillCallId: does not overwrite already-set call_id", async () => {
   const events: CostEventRow[] = [
-    { id: "e1", call_room: "room-1", workspace_id: "ws-1", call_id: "existing-id", cost_type: "telephony" },
+    {
+      id: "e1",
+      call_room: "room-1",
+      workspace_id: "ws-1",
+      call_id: "existing-id",
+      cost_type: "telephony",
+    },
   ];
 
   const stub = makeBackfillStub(events);

@@ -42,7 +42,11 @@ export function priceTelephonyMinutes(
         : "twilio_inbound_per_min"
     ];
   if (typeof cents !== "number")
-    return { unit_cost_usd: null, total_cost_usd: null, pricing_source: "unknown" };
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
   const unitCost = cents / 100;
   return {
     unit_cost_usd: unitCost,
@@ -57,7 +61,11 @@ export function priceLiveKitMinutes(
 ): PricedUsage {
   const cents = costs?.livekit_per_min;
   if (typeof cents !== "number")
-    return { unit_cost_usd: null, total_cost_usd: null, pricing_source: "unknown" };
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
   const unitCost = cents / 100;
   return {
     unit_cost_usd: unitCost,
@@ -72,7 +80,11 @@ export function priceSTTMinutes(
 ): PricedUsage {
   const cents = costs?.stt_per_min;
   if (typeof cents !== "number")
-    return { unit_cost_usd: null, total_cost_usd: null, pricing_source: "unknown" };
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
   const unitCost = cents / 100;
   return {
     unit_cost_usd: unitCost,
@@ -87,7 +99,11 @@ export function priceTTSChars(
 ): PricedUsage {
   const cents = costs?.tts_per_1k_chars;
   if (typeof cents !== "number")
-    return { unit_cost_usd: null, total_cost_usd: null, pricing_source: "unknown" };
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
   const unitCost = cents / 100 / 1000; // cents per 1k → USD per char
   return {
     unit_cost_usd: unitCost,
@@ -102,7 +118,11 @@ export function priceLLMTokens(
 ): PricedUsage {
   const cents = costs?.llm_per_1k_tokens;
   if (typeof cents !== "number")
-    return { unit_cost_usd: null, total_cost_usd: null, pricing_source: "unknown" };
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
   const unitCost = cents / 100 / 1000; // cents per 1k → USD per token
   return {
     unit_cost_usd: unitCost,

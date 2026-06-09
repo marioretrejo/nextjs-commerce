@@ -21,7 +21,7 @@ import type { ProviderCostRow } from "../../lib/billing/provider-pricing.js";
 const DEFAULT_COSTS: ProviderCostRow = {
   twilio_outbound_per_min: 0.85,
   twilio_inbound_per_min: 0.85,
-  livekit_per_min: 0.20,
+  livekit_per_min: 0.2,
   stt_per_min: 0.59,
   llm_per_1k_tokens: 0.06,
   tts_per_1k_chars: 0.65,

@@ -34,8 +34,7 @@ export async function GET(
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!ws)
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!ws) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { data: events } = await admin
     .from("call_cost_events")
