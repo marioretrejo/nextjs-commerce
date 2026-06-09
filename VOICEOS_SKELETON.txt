@@ -1,0 +1,1087 @@
+================================================================================
+  VOICEOS — ESQUELETO COMPLETO DEL SISTEMA
+  Rama activa: claude/voiceos-saas-build-D8nrY
+  Fecha:       2026-06-09
+  Generado por: Claude (claude-sonnet-4-6)
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DESCRIPCIÓN GENERAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Plataforma SaaS de call-center con agentes de voz IA (VoiceOS).
+  Stack: Next.js 15 + React 19 (frontend/API), Node.js TypeScript (worker de voz),
+         Supabase PostgreSQL + pgvector (base de datos + RAG),
+         LiveKit (WebRTC/SIP), Groq LLM, Deepgram STT, Cartesia TTS.
+
+  Dos procesos en producción:
+    1. Next.js app  → Vercel  (NEXT_PUBLIC_SUPABASE_URL, STRIPE_SECRET_KEY, etc.)
+    2. Voice worker → Render  (LIVEKIT_*, DEEPGRAM_API_KEY, CARTESIA_API_KEY, GROQ_API_KEY)
+
+  URL producción: https://nextjs-commerce-jet-five-49.vercel.app
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. SCRIPTS (package.json)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  dev             → next dev --turbopack             (desarrollo Next.js)
+  build           → next build                       (build Next.js para Vercel)
+  start           → next start -H 0.0.0.0            (Next.js en prod)
+
+  agent           → tsx agent/worker_core.ts dev     (worker local con live-reload)
+  agent:prod      → node dist/worker.js start        (worker en Render)
+  start:prod      → node dist/worker.js start        (alias agent:prod)
+  start:worker    → tsx agent/worker.ts start        (launcher de producción)
+
+  build:worker    → esbuild agent/worker_core.ts
+                      --bundle --platform=node --format=cjs --target=node24
+                      --external:@livekit/agents --external:@livekit/agents-plugin-*
+                      --external:@livekit/rtc-node --external:fsevents
+                      --outfile=dist/worker.js
+                    (genera dist/worker.js, el bundle de producción del agente)
+
+  test            → pnpm prettier:check
+  lint            → next lint
+  scraper         → node scraper/tracker-scraper.js
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. DEPENDENCIAS CLAVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  RUNTIME CRÍTICO:
+    next 15.3.9                → Framework app / API routes
+    react 19.0.0               → UI
+    @supabase/supabase-js 2.x  → DB client (workspaces, calls, agents…)
+    @supabase/ssr 0.6.x        → Auth SSR helpers
+    @livekit/agents 1.4.4      → SDK del worker de voz
+    @livekit/agents-plugin-deepgram 1.4.4   → STT
+    @livekit/agents-plugin-cartesia 1.4.4   → TTS
+    @livekit/agents-plugin-openai 1.4.4     → LLM fallback TTS (OpenAI)
+    @livekit/rtc-node 0.13.29  → WebRTC nativo
+    livekit-server-sdk 2.15.3  → Admin (deleteRoom, listRooms, createSipParticipant)
+    livekit-client 2.19.x      → Cliente WebRTC en browser
+    @deepgram/sdk 5.3.x        → Deepgram REST (fuera del worker)
+    @cartesia/cartesia-js 3.1.x → Cartesia REST (preview de voz)
+    groq-sdk 1.2.x             → Cliente Groq (LLM: llama-4-scout)
+    openai 6.39.x              → OpenAI (RAG embeddings, fallback LLM)
+    stripe 17.7.x              → Pagos y suscripciones
+    twilio 6.0.x               → Telefonía + SIP trunks
+    retell-sdk 5.28.x          → Retell (legado, en proceso de migración)
+    resend 6.x                 → Email transaccional
+    @upstash/ratelimit 2.x     → Rate limiting (Redis)
+    @upstash/redis 1.38.x      → Redis (Upstash serverless)
+    zod 3.25.x                 → Validación de schemas
+
+  FRONTEND ADICIONAL:
+    @xyflow/react 12.x         → Editor de flujos visual (ReactFlow)
+    recharts 2.15.x            → Gráficas de analítica
+    @react-three/fiber + drei  → Sección hero 3D
+    three 0.184.x              → Motor 3D (hero landing)
+    wavesurfer.js 7.x          → Reproductor de waveform en llamadas
+    @radix-ui/* (15 paquetes)  → Componentes UI accesibles (Dialog, Select, etc.)
+    lucide-react 0.511.x       → Iconos
+    next-themes 0.4.x          → Dark/light mode
+    next-intl 4.13.x           → Internacionalización (i18n)
+    sonner 2.0.x               → Toast notifications
+    date-fns 4.1.x             → Utilidades de fecha
+    papaparse 5.5.x            → Import/export CSV
+    libphonenumber-js 1.13.x   → Validación E.164 de teléfonos
+
+  DEV:
+    tsx 4.22.x                 → Ejecutar TypeScript directamente (dev worker)
+    typescript 5.8.2           → Compilador
+    tailwindcss 4.x            → CSS utility framework
+    prettier 3.5.3             → Formateador (test = prettier check)
+    esbuild                    → Bundler del worker (vía pnpm/node_modules/.pnpm)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. DIRECTORIO agent/ — EL WORKER DE VOZ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  agent/
+  ├── worker.ts            Launcher de producción. Importa dist/worker.js (bundle CJS).
+  │                        Usado por Render: "node dist/worker.js start"
+  │                        SIN lógica de negocio — solo import() del bundle.
+  │
+  ├── worker_core.ts       ★ ARCHIVO PRINCIPAL DEL AGENTE (≈1600 líneas)
+  │                        Pipeline completo: LiveKit → Deepgram STT → Groq LLM → Cartesia TTS
+  │                        Ver sección 4.1 para el detalle completo.
+  │
+  ├── startup-cleanup.ts   Reconciliación de "zombie calls" al arrancar.
+  │                        Consulta calls WHERE status IN ('in_progress','dialing'),
+  │                        cruza con LiveKit.listRooms(), marca zombies como 'completed',
+  │                        llama release_call_slot() por workspace afectado.
+  │                        Se await ANTES de cli.runApp().
+  │
+  ├── backchannel.ts       BackchannelManager: inyecta frases de escucha activa
+  │                        ("Mhm.", "I see.", "Claro.") cuando el usuario habla
+  │                        más de 3.2 s continuos. También expone isFillerOnly()
+  │                        para filtrar "uh", "er", "ok" que no deben disparar LLM.
+  │
+  ├── pronunciation.ts     loadPronunciationConfig(agentId, supabaseUrl, supabaseKey)
+  │                        Lee pronunciation_config de Supabase.
+  │                        Retorna { keywords: [], ttsMap: {} } para inyectar en
+  │                        Deepgram (keywords) y Cartesia (ttsPronunciationMap).
+  │
+  ├── tools/
+  │   └── index.ts         buildTools({ enableTransfer, roomName, transferNumber,
+  │                           livekitWsUrl, livekitApiKey, livekitApiSecret })
+  │                        Retorna herramientas del agente:
+  │                          - transfer_to_human: SIP REFER via LiveKit
+  │                          - (extensible: check_availability, orders)
+  │
+  └── tsconfig.json        TypeScript config para el workspace del agente.
+
+  ─────────────────────────────────────────────────────────────────────────────
+  4.1 worker_core.ts — ESTRUCTURA INTERNA DETALLADA
+  ─────────────────────────────────────────────────────────────────────────────
+
+  IMPORTS Y GUARDS GLOBALES (líneas 1-73)
+  ────────────────────────────────────────
+  - Importa: defineAgent, voice, llm, cli, ServerOptions (@livekit/agents)
+  - STT: @livekit/agents-plugin-deepgram
+  - LLM: @livekit/agents-plugin-openai (usado para Groq vía baseURL)
+  - TTS: @livekit/agents-plugin-cartesia
+  - Supabase createClient, dotenv, path, fs, net, runStartupCleanup
+  - Carga .env.local desde la raíz del proyecto (solo en dev)
+
+  CRASH GUARDS (líneas 39-73)
+  ────────────────────────────
+  - process.on('uncaughtException') → suprime ECONNRESET, ETIMEDOUT, EPIPE,
+    ENOTCONN, ECONNABORTED (errores transitorios de socket TCP)
+    Para otros errores: console.error + process.exit(1)
+  - process.on('unhandledRejection') → log sin exit
+  - TCP KeepAlive monkey-patch en net.Socket.prototype.connect:
+    Aplica setKeepAlive(true, 15_000) en el evento 'connect' (POST-conexión)
+    NUNCA antes de connect (causaba crash en sockets TLS)
+
+  FLOW BUILDER — Pilar A (líneas 75-250)
+  ────────────────────────────────────────
+  buildFlowPrompt(flowJson) → string | null
+  - Convierte el grafo ReactFlow (nodes + edges) en instrucciones de script LLM
+  - Soporta nodos: start, message, question, condition, transfer, webhook, end
+  - BFS desde nodo start → genera "Paso N: [tipo] — [contenido]"
+  - Si flowJson es null/vacío → retorna null (no aplica script)
+
+  STATE MACHINE — Pilar E (líneas 250-370)
+  ──────────────────────────────────────────
+  isFlowConfig2(obj) → boolean
+  buildStateMachine(flowConfig) → StateMachine
+  StateMachine class:
+    - buildStateInstructions(nodeId, HARD_CONSTRAINTS, systemPrompt, ...)
+      Genera el system prompt completo para el nodo actual
+    - getOutEdges(nodeId) → edges disponibles para transicionar
+    - setCurrentNodeId(id) → actualiza estado
+    - getNode(id) → retorna nodo del flow
+
+  CRM ANALYSIS — extractCrmAnalysis() (líneas 370-450)
+  ──────────────────────────────────────────────────────
+  Interface CrmAnalysisData {
+    Age, Name, Motivation, interested (bool), occupation, Financial_goal,
+    Call_transferred (bool), monthly_expenses, time_in_occupation,
+    'In Voicemail' (bool), 'Call Success' (bool)
+  }
+  - Llama a Groq (llama-4-scout-17b) con el transcript de la llamada
+  - Extrae campos CRM como JSON estructurado
+  - Limit: transcript.slice(0, 4000) para evitar exceder token limit
+  - En error o transcript vacío: retorna objeto "blank" con valores null
+  - Se usa al final de cada llamada en el handler Close
+
+  defineAgent ENTRY (líneas 451-1554)
+  ─────────────────────────────────────
+
+  [1] DIAGNÓSTICO INICIAL (líneas 455-474)
+      Loguea: timestamp, room, metadata_raw,
+              primeros 4 chars + longitud de cada API key (NUNCA la key completa),
+              deepgram_url tentativa con language=agentLanguage, endpointing=300
+
+  [2] VARIABLES DE ESTADO (líneas 455-502)
+      let agentLanguage = 'es'   ← default; se sobreescribe desde metadata
+      let systemPrompt           ← prompt base
+      let agentName = 'Assistant'
+      let voiceId = '02aeee94...' ← Cartesia LatAm Spanish neutral
+      let voiceEmotion: string | null
+      let firstMessage: string | null
+      let workspaceId, agentId
+      let callDirection: 'inbound' | 'outbound' = 'inbound'
+      let transferNumber: string | null
+      let flowJson, flowConfig
+      let ambientSound, ambientSoundVolume = 1.0
+      let crmFunnel, crmLeadId, crmCountry, crmCampaign
+      let callEndedWebhookUrl: string | null
+
+  [3] PARSE DE METADATA (líneas 503-567)
+      JSON.parse(ctx.room.metadata)
+      Campos admitidos:
+        system_prompt, agent_name, voice_id, voice_emotion, first_message,
+        workspace_id, transfer_number, call_direction, agent_id,
+        flow_json, flow_config, dynamic_variables, ambient_sound,
+        ambient_sound_volume, Funnel, LeadId, Country, Campaign,
+        webhook_url, language
+      Variable injectables: dynamic_variables inyectadas en systemPrompt y firstMessage
+      CRM fields: leídos de dynamic_variables Y de nivel superior (top-level gana)
+      Contexto CRM: añadido al systemPrompt si hay algún campo CRM presente
+
+  [4] STT — Deepgram nova-2 (líneas 617-650)
+      const stt = new STT({
+        model: 'nova-2',
+        language: agentLanguage,  ← dinámico (default 'es')
+        endpointing: 300,         ← 300ms (era 25ms default — muy agresivo en móvil)
+        apiKey: process.env['DEEPGRAM_API_KEY'],
+      })
+      stt.on('error', ...) → loguea con timestamp y stack
+
+  [5] LLM — Groq llama-4-scout (líneas 642-651)
+      const lm = new LLM({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        apiKey: groqKey,
+        baseURL: 'https://api.groq.com/openai/v1',
+      })
+      Si GROQ_API_KEY falta: log CRITICAL (cada LLM call retorna 401)
+
+  [6] TTS — Cartesia sonic-multilingual (líneas 652-707)
+      EMOTION_MAP: { calm, sympathetic, happy, sad, angry, fearful, surprised }
+        → Cartesia experimental_controls emotion tags
+      const cartesiaTTS = new CartesiaTTS({
+        model: 'sonic-multilingual',
+        voice: voiceId,
+        apiKey: process.env['CARTESIA_API_KEY'],
+        language: 'es',
+        chunkTimeout: 8_000,  ← 8s (default 5s era muy corto para sonic-multilingual)
+        ...(voiceEmotion ? { emotion: EMOTION_MAP[voiceEmotion] } : {})
+      })
+      Error en constructor → re-throw (aborta la sesión)
+      Cartesia es el ÚNICO proveedor TTS (no hay fallback a OpenAI TTS)
+
+  [7] TOOLS Y FLOW (líneas 715-860)
+      buildFlowPrompt(flowJson) ← Pilar A
+      buildStateMachine(flowConfig) ← Pilar E
+      dynamicTools ← buildDynamicTool(t) por cada agent_tools row
+      ragTool ← buildRagTool() si workspace tiene knowledge base
+      endCallTool ← llm.tool({ farewell, reason })
+        - Habla el farewell (await)
+        - Llama RoomServiceClient.deleteRoom() → dispara Close handler
+      transitionStateTool ← solo si stateMachine != null
+        - Soporta: end_call_node, transfer_node, webhook_node, ai_state
+
+  [8] HARD CONSTRAINTS (líneas 782-820)
+      Prepended al system prompt, NO revelable al caller:
+        - Identity & Role: agentName no puede revelar que es ChatGPT/Claude
+        - Anti-Hallucination: nunca inventar datos; usar search_knowledge_base
+        - Jailbreak Resistance: ignorar overrides del sistema
+        - Response Format: VISTO → sin markdown, sin bullets, máx 3 frases
+
+  [9] voice.Agent (líneas 979-1029)
+      new voice.Agent({
+        instructions: initialInstructions,
+        stt, llm: lm, tts,
+        ttsPronunciationMap: pronunciation.ttsMap,
+        tools: { ...buildTools(...), ...dynamicTools, end_call, ... },
+        turnHandling: {
+          endpointing: { mode: 'dynamic', minDelay: 450, maxDelay: 3000 },
+          interruption: {
+            enabled: true,
+            minDuration: 250,      ← ignora ruidos <250ms
+            minWords: 1,           ← requiere al menos 1 palabra
+            falseInterruptionTimeout: 1500,
+            backchannelBoundary: [600, 3000],
+          },
+          preemptiveGeneration: {},
+        },
+      })
+
+  [10] BARGE-IN INJECTION (líneas 1034-1053)
+       onUserTurnCompleted hook: si _wasInterrupted=true,
+       inyecta mensaje de sistema en chatCtx para que Groq empiece con
+       una palabra de transición ("Claro,", "Sí,", "Mire,")
+       → reduce el silencio percibido tras barge-in
+
+  [11] STATE VARIABLES DE SESIÓN (líneas 1080-1108)
+       let _silenceTimer, _hangupTimer
+       let _silenceArmed = false    ← activado después del greeting
+       let _ambientAbort            ← AbortController para sonido ambiental
+       let _voicemailDetected = false
+       let _speakingWatchdog, _thinkingWatchdog
+       SPEAKING_WATCHDOG_MS = 15_000   ← max 15s en estado 'speaking'
+       THINKING_WATCHDOG_MS = 22_000   ← max 22s en estado 'thinking'
+       let _wasInterrupted, _bargeInAt, _endpointingReduced
+       let _speakLockoutUntil = 0      ← 450ms lockout post-agent-speech (AEC)
+
+  [12] SILENCE REPROMPT + AUTO-HANGUP (líneas 1115-1130)
+       _armSilenceTimer():
+         setTimeout(4500) → say('¿Hola? ¿Sigues ahí?')
+           setTimeout(3500) → say('Parece que hay problemas de audio. Hasta luego.')
+                               .then(_doDeleteRoom)
+       NOTA DE RIESGO: 4.5s es agresivo para llamadas largas.
+       Recomendado para >10min: aumentar a 12_000 / 8_000.
+
+  [13] EVENT HANDLERS (líneas 1132-1413)
+       ctx.room.on('disconnected') → ROOM_DELETED o SERVER_SHUTDOWN → say goodbye
+       BackchannelManager (3200ms onset, 8000ms max) → Pilar 5
+       Tracing spans: sttSpan, llmSpan, ttsSpan (latencia por etapa)
+
+       REGEX FILTERS:
+         NEGATIVE_INTENT_RE → "no me interesa", "deja de llamar", "fuck off", etc.
+           → Fast hangup: interrupt + say('Entendido, adiós.') + deleteRoom
+         VOICEMAIL_RE → "deja tu mensaje", "leave a message", "after the tone", etc.
+           → Solo primeros 30s: _voicemailDetected=true + deleteRoom inmediato
+
+       UserInputTranscribed:
+         - Partial: barge-in si agentState='speaking' && !lockout && len>=4 && !filler
+           → interrupt({force:true}) + _wasInterrupted=true
+           → Reduce endpointing a {minDelay:400, maxDelay:1500} por 1 turno
+         - Final: filtrar <3 chars o filler-only → _armSilenceTimer()
+         - Final válido: endSpan(sttSpan) + startSpan(llmSpan)
+
+       SpeechCreated: endSpan(llmSpan) + startSpan(ttsSpan)
+
+       AgentStateChanged:
+         'thinking' → clearWatchdogs + arm thinkingWatchdog (22s)
+           Si dispara: say('Disculpa, un momento.')
+         'speaking' → clearWatchdogs + arm speakingWatchdog (15s)
+           Si dispara: interrupt({force:true}) SILENCIOSO
+             Si en 3s sigue en 'speaking': deleteRoom
+           También: _speakLockoutUntil = now+450, clearSilenceTimers
+         'listening' ← desde 'speaking' → clearWatchdogs + armSilenceTimer
+
+  [14] BALANCE CHECKER PERIÓDICO (líneas 1357-1395)
+       setInterval cada 60s mientras workspaceId esté definido
+       Llama: supabase.rpc('check_workspace_balance', { p_workspace_id, p_elapsed_min })
+       Si retorna true (balance agotado):
+         → say("account has reached its minute limit...") + deleteRoom
+
+  [15] TRANSCRIPT ACCUMULATION (líneas 1353-1413)
+       ConversationItemAdded → transcriptLines.push(`${speaker}: ${text}`)
+       callStartedAt = Date.now()
+
+  [16] CLOSE HANDLER (líneas 1416-1513)
+       - Destruye backchannel, limpia timers y watchdogs
+       - Limpia balanceCheckInterval
+       - Loguea call.ended con duration_seconds
+       - supabase.from('calls').upsert({ workspace_id, agent_id, retell_call_id,
+           direction, duration_seconds, status:'completed', transcript, cost_usd:0 })
+         (onConflict: retell_call_id → upsert idempotente)
+       - extractCrmAnalysis(transcript, groqKey, crmFunnel, crmLeadId, ...)
+         → crmAnalysis guarda en calls.extracted_data
+       - supabase.rpc('release_call_slot', { p_workspace_id }) → decrementa counter
+       - Si callEndedWebhookUrl: POST JSON {event:'call.completed', call:{...}, crm_fields, analysis}
+         Timeout: 8s
+
+  [17] SESSION START (líneas 1527-1552)
+       await session.start({ agent, room: ctx.room })
+       Ambient sound: streamAmbientSound() si ambientSound está configurado
+       await session.say(greeting)    ← primer mensaje al usuario
+       _silenceArmed = true           ← activa el silence watchdog desde aquí
+
+  [18] cli.runApp() — INICIO DEL WORKER (líneas finales)
+       Envuelto en async IIFE:
+         1. await runStartupCleanup()   ← reconcilia zombies
+         2. cli.runApp(new ServerOptions({ agent: fileURLToPath(import.meta.url),
+                                           wsURL, apiKey, apiSecret }))
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. DIRECTORIO app/ — NEXT.JS APP ROUTER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  5.1 RUTAS DE APLICACIÓN (app/(app)/...)
+  ─────────────────────────────────────────
+
+  DASHBOARD
+    dashboard/page.tsx              Métricas live: agentes activos, llamadas hoy,
+                                    campañas activas, historial reciente
+    dashboard/dashboard-charts.tsx  Recharts: uso de minutos, distribución de llamadas
+    dashboard/live-calls-counter.tsx Contador de llamadas activas en tiempo real
+
+  AGENTES
+    agents/page.tsx                 Lista de agentes del workspace
+    agents/new/page.tsx             Crear nuevo agente
+    agents/[id]/page.tsx            Vista y edición de agente
+    agents/[id]/agent-edit-form.tsx Form de configuración (nombre, voz, prompt, tools)
+    agents/[id]/test/page.tsx       Simulador de llamada (WebRTC en browser)
+    agents/[id]/flow/page.tsx       Editor visual de flujo (ReactFlow)
+    agents/[id]/widget/page.tsx     Snippet de embed del widget web
+    agents/[id]/workflow/page.tsx   Configuración de workflow del agente
+    agents/[id]/workflow/WorkflowClientWrapper.tsx  Wrapper cliente del editor
+
+  LLAMADAS
+    calls/page.tsx                  Historial de llamadas con filtros
+    calls/live/page.tsx             Monitor de llamadas activas en vivo
+    calls/[id]/page.tsx             Detalle: transcript, grabación, evaluación QA
+
+  CAMPAÑAS
+    campaigns/page.tsx              Lista de campañas outbound
+    campaigns/new/page.tsx          Crear campaña nueva
+    campaigns/[id]/page.tsx         Detalle: progreso, contactos, analítica
+
+  KNOWLEDGE (RAG)
+    knowledge/page.tsx              Lista de bases de conocimiento
+    knowledge/[agent_id]/page.tsx   Subir documentos, gestionar embeddings pgvector
+
+  COMPLIANCE
+    compliance/page.tsx             DNC lists, consent, recording rules
+    compliance/CompliancePanel.tsx  UI de reglas de compliance
+    compliance/QARulesManager.tsx   Editor de reglas de QA
+    compliance/layout.tsx           Layout de la sección
+
+  QA CENTER
+    qa-center/page.tsx              Dashboard principal de QA
+    qa-center/calls/[id]/page.tsx   Evaluación individual con scoring
+    qa-center/leaderboard/page.tsx  Ranking de agentes por desempeño
+    qa-center/assist/page.tsx       Copilot de QA (feedback automático)
+
+  NÚMEROS DE TELÉFONO
+    numbers/page.tsx                Gestión de números Twilio
+    numbers/[id]/routing/page.tsx   Reglas de enrutamiento inbound
+
+  INTEGRACIONES
+    integrations/page.tsx           Slack, Notion, HubSpot, Zapier, etc.
+    integrations/webhooks/page.tsx  Gestión de webhooks salientes
+
+  ANALÍTICA
+    analytics/page.tsx              Métricas de llamadas y performance
+    analytics/costs/page.tsx        Desglose de costos por proveedor
+
+  SETTINGS
+    settings/page.tsx               Configuración general
+    settings/workspace/page.tsx     Branding y dominio personalizado
+    settings/api-keys/page.tsx      API keys del workspace
+    settings/reset-password/page.tsx Cambio de contraseña
+    settings/sip-trunks/page.tsx    Configuración de SIP trunks
+
+  EQUIPO
+    team/page.tsx                   Miembros, invitaciones, roles
+    notifications/page.tsx          Notificaciones del usuario
+
+  DEVELOPERS
+    developers/page.tsx             Docs de API + Swagger UI embebido
+
+  VOICE STUDIO
+    voice-studio/page.tsx           Clonación de voz, gestión de voces custom
+
+  BILLING
+    billing/page.tsx                Resumen de facturación, uso, facturas
+    billing/actions.ts              Server actions para operaciones de billing
+
+  ADMIN (marketing)
+    admin/marketing-finance/page.tsx  Analítica de precios y marketing (enterprise)
+
+  LAYOUTS Y ERROR
+    layout.tsx                      Layout principal (sidebar + header + notifs)
+    error.tsx                       Error boundary de la app
+
+  ─────────────────────────────────────────────────────────────────────────────
+  5.2 PANEL DE ADMINISTRACIÓN (app/admin/...)
+  ─────────────────────────────────────────────────────────────────────────────
+
+    page.tsx                        Admin home
+    layout.tsx                      Layout admin
+    users/page.tsx                  Gestión de usuarios de la plataforma
+    metrics/page.tsx                Métricas de sistema
+    infrastructure/page.tsx         Estado de infraestructura
+    settings/page.tsx               Configuración global
+    settings/AdminSettingsForm.tsx  Formulario de settings admin
+    billing/page.tsx                Billing y uso de la plataforma
+    activity/page.tsx               Audit logs
+    copilot/page.tsx                Configuración del copilot IA
+    calculator/page.tsx             Calculadora de costos
+    workspaces/page.tsx             Gestión de workspaces
+    workspaces/WorkspaceCommandCenter.tsx  UI de administración de workspaces
+    AdminLiveCallsTable.tsx         Tabla de llamadas activas en tiempo real
+
+  ─────────────────────────────────────────────────────────────────────────────
+  5.3 AUTH (app/(auth)/...)
+  ─────────────────────────────────────────────────────────────────────────────
+
+    login/page.tsx                  Login con email/password
+    register/page.tsx               Registro nuevo usuario
+    forgot-password/page.tsx        Solicitud de reset de contraseña
+    verify-email/page.tsx           Flujo de verificación de email
+    onboarding/page.tsx             Wizard post-signup
+    invite/[token]/page.tsx         Redención de token de invitación
+    suspended/page.tsx              Workspace suspendido
+    layout.tsx                      Layout de auth
+
+  ─────────────────────────────────────────────────────────────────────────────
+  5.4 WIDGETS Y MARKETING
+  ─────────────────────────────────────────────────────────────────────────────
+
+    widget/[agent_id]/page.tsx      Widget embebible (iframe, chat de voz)
+    widget/layout.tsx               Layout del widget
+    (marketing)/layout.tsx          Layout de landing marketing
+
+  ─────────────────────────────────────────────────────────────────────────────
+  5.5 API ROUTES (app/api/...)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  AGENTES
+    api/agents/route.ts                          GET list / POST create
+    api/agents/[id]/route.ts                     GET / PATCH / DELETE
+    api/agents/[id]/test-call/route.ts           POST → simula llamada de prueba
+    api/agents/[id]/web-call/route.ts            POST → inicia llamada WebRTC
+    api/agents/[id]/simulate/route.ts            POST → simulación de escenario
+    api/agents/[id]/automation/route.ts          GET / POST reglas de automatización
+    api/agents/[id]/criteria/route.ts            GET / POST criterios de scoring
+    api/agents/[id]/scorecard/route.ts           GET scorecard del agente
+    api/agents/[id]/widget-config/route.ts       GET / PATCH config del widget
+    api/agents/[id]/flow/route.ts                GET / PUT flow_json
+    api/agents/[id]/flow/generate/route.ts       POST → AI-genera flow desde descripción
+    api/agents/[id]/tools/route.ts               GET list / POST create tool
+    api/agents/[id]/tools/[toolId]/route.ts      GET / PATCH / DELETE tool
+    api/agents/[id]/call-actions/route.ts        GET / POST call action handlers
+    api/agents/[id]/scenario-handlers/route.ts   GET / POST scenario branching
+
+  LLAMADAS
+    api/calls/route.ts                           GET list (con filtros)
+    api/calls/[id]/route.ts                      GET detalle de llamada
+    api/calls/live/route.ts                      GET llamadas activas
+    api/calls/live/[roomName]/token/route.ts     POST → LiveKit token para observer
+    api/calls/dial/route.ts                      POST → dial outbound
+    api/calls/dial/status/route.ts               GET estado del dial
+    api/calls/transfer-whisper/route.ts          POST → transfer con whisper audio
+
+  CAMPAÑAS
+    api/campaigns/route.ts                       GET / POST
+    api/campaigns/[id]/route.ts                  GET / PATCH / DELETE
+    api/campaigns/[id]/contacts/route.ts         POST bulk contacts (CSV)
+    api/campaigns/[id]/clone/route.ts            POST → clonar campaña
+    api/campaigns/[id]/launch/route.ts           POST → iniciar campaña
+    api/campaigns/[id]/pause/route.ts            POST → pausar campaña
+    api/campaign-templates/route.ts              GET templates públicos
+
+  COMPLIANCE Y QA
+    api/compliance/dnc/route.ts                  GET / POST DNC list
+    api/compliance/settings/route.ts             GET / PATCH settings
+    api/compliance/rules/route.ts                GET / POST reglas
+    api/compliance/rules/[id]/route.ts           GET / PATCH / DELETE
+    api/qa/score/route.ts                        POST → score llamada
+    api/qac/dashboard/route.ts                   GET métricas dashboard QAC
+    api/qac/rules/route.ts                       GET / POST reglas QAC
+    api/qac/rules/[id]/route.ts                  GET / PATCH / DELETE
+    api/qac/interactions/route.ts                GET lista de interacciones
+                                                 ← FIX: filtro min_score/max_score
+                                                    usa qac_evaluations.overall_score
+    api/qac/interactions/[id]/route.ts           GET / DELETE interacción
+    api/qac/interactions/[id]/analyze/route.ts   POST → AI analiza la interacción
+    api/qac/stats/route.ts                       GET estadísticas (range: 7d/30d/90d)
+    api/qac/assist/route.ts                      POST → QAC copilot
+    api/qac/integrations/route.ts                GET / POST integraciones QAC
+    api/qac/webhooks/[token]/route.ts            POST → webhook receptor QAC
+                                                 (valida INTERNAL_API_SECRET)
+
+  NÚMEROS Y SIP
+    api/numbers/route.ts                         GET / POST números
+    api/numbers/[id]/routing/route.ts            GET / PUT routing rules
+    api/numbers/twilio-search/route.ts           GET → buscar números disponibles
+    api/numbers/twilio-buy/route.ts              POST → comprar número Twilio
+    api/numbers/twilio-sync/route.ts             POST → sincronizar números
+    api/sip/route.ts                             GET SIP trunks
+    api/sip/trunks/route.ts                      GET / POST
+    api/sip/dispatch/route.ts                    POST → dispatch SIP call
+    api/settings/sip/route.ts                    GET / PATCH SIP settings
+    api/settings/sip-trunks/[id]/route.ts        GET / PATCH / DELETE trunk
+    api/settings/sip-trunks/route.ts             GET / POST trunks
+    api/settings/twilio/route.ts                 GET / PATCH Twilio settings
+    api/settings/dialing-schedules/route.ts      GET / POST horarios de marcación
+
+  BILLING Y PAGOS
+    api/billing/balance/route.ts                 GET balance de créditos
+    api/billing/topup/route.ts                   POST → top-up de créditos
+    api/billing/enterprise-inquiry/route.ts      POST → solicitud enterprise
+    api/billing/checkout/route.ts                POST → crear sesión Stripe
+    api/billing/portal/route.ts                  POST → portal Stripe
+    api/stripe/checkout/route.ts                 POST → Stripe Checkout
+    api/stripe/portal/route.ts                   POST → Stripe Portal
+    api/stripe/webhook/route.ts                  POST → eventos Stripe
+
+  KNOWLEDGE Y RAG
+    api/knowledge/route.ts                       GET / POST knowledge bases
+    api/knowledge/[id]/route.ts                  GET / DELETE
+    api/knowledge/upload/route.ts                POST → subir documento (embedding)
+    api/knowledge/bases/route.ts                 GET lista
+
+  VOCES
+    api/voices/route.ts                          GET voces disponibles (Cartesia)
+    api/voices/clone/route.ts                    POST → clonar voz
+    api/voices/preview/route.ts                  POST → preview audio de voz
+
+  AUTH
+    api/auth/callback/route.ts                   GET → Supabase OAuth callback
+    api/auth/set-session/route.ts                POST → set cookie de sesión
+    api/auth/direct-access/route.ts              POST → acceso directo a workspace
+    api/auth/signout/route.ts                    POST → logout
+
+  USUARIO
+    api/me/route.ts                              GET usuario actual
+    api/me/avatar/route.ts                       POST → upload avatar
+    api/me/password/route.ts                     PATCH → cambiar contraseña
+    api/me/notifications/route.ts                GET / PATCH preferencias
+    api/notifications/route.ts                   GET notificaciones
+    api/notifications/[id]/read/route.ts         POST → marcar leída
+    api/notifications/read-all/route.ts          POST → marcar todas leídas
+
+  EQUIPO
+    api/team/route.ts                            GET / POST miembros
+    api/team/[id]/route.ts                       DELETE miembro
+    api/team/current-user-role/route.ts          GET rol del usuario actual
+    api/team/invite/route.ts                     POST → enviar invitación
+    api/team/invite/accept/route.ts              POST → aceptar invitación
+
+  INTEGRACIONES
+    api/integrations/route.ts                    GET lista
+    api/integrations/connect/route.ts            POST → conectar integración
+    api/integrations/disconnect/route.ts         POST → desconectar
+    api/integrations/hubspot/auth/route.ts       GET → OAuth start HubSpot
+    api/integrations/hubspot/callback/route.ts   GET → OAuth callback HubSpot
+    api/integrations/webhook/route.ts            POST → webhook de integración
+
+  WEBHOOKS OUTBOUND
+    api/webhooks/endpoints/route.ts              GET / POST endpoints
+    api/webhooks/endpoints/[id]/route.ts         GET / PATCH / DELETE
+
+  WEBHOOKS INBOUND (proveedores)
+    api/webhooks/retell/route.ts                 POST → eventos Retell
+    api/webhooks/elevenlabs/route.ts             POST → estado ElevenLabs
+    api/webhooks/livekit/route.ts                POST → eventos de rooms LiveKit
+    api/webhooks/twilio/incoming/route.ts        POST → llamada entrante Twilio
+    api/webhooks/twilio/status/route.ts          POST → estado de llamada Twilio
+    api/webhooks/stripe/route.ts                 POST → eventos Stripe
+
+  LIVEKIT
+    api/livekit/token/route.ts                   POST → generar token de participante
+    api/livekit/webhook/route.ts                 POST → eventos LiveKit
+
+  CRON Y JOBS
+    api/cron/reset-minutes/route.ts              GET → reset mensual de minutos
+    api/cron/data-retention/route.ts             GET → borrar registros antiguos
+    api/cron/campaign-dial/route.ts              GET → dial scheduler de campañas
+    api/jobs/analyze-call/route.ts               POST → analizar transcript
+    api/jobs/reanalyze-calls/route.ts            POST → reanalizar batch
+
+  API PÚBLICA (v1)
+    api/v1/webhooks/route.ts                     POST → crear webhook (API externa)
+    api/v1/webhooks/[id]/route.ts                PATCH / DELETE
+    api/v1/outbound/twiml/route.ts               GET → TwiML para llamada outbound
+    api/v1/calls/outbound/route.ts               POST → llamada outbound vía API pública
+
+  ADMIN
+    api/admin/adjust-minutes/route.ts            POST → ajuste manual de minutos
+    api/admin/workspace-id/route.ts              GET → ID de workspace
+    api/admin/rate-limit-stats/route.ts          GET → estadísticas de rate limit
+    api/admin/users/route.ts                     GET → lista de usuarios plataforma
+    api/admin/audit-logs/route.ts                GET → audit logs globales
+    api/admin/broadcast/route.ts                 POST → broadcast a todos los usuarios
+    api/admin/live-rooms/route.ts                GET → rooms LiveKit activas
+    api/admin/provider-costs/route.ts            GET / POST → costos de proveedores
+    api/admin/copilot-config/route.ts            GET / PATCH → config del copilot
+    api/admin/workspaces/[id]/impersonate/route.ts  POST → impersonar workspace
+    api/admin/workspaces/[id]/flags/route.ts        GET / PATCH → feature flags
+    api/admin/workspaces/[id]/enterprise-quota/route.ts  GET / PATCH
+    api/admin/workspaces/[id]/billing-status/route.ts   GET / PATCH
+    api/admin/workspaces/[id]/branding/route.ts         GET / PATCH
+    api/admin/workspaces/[id]/compliance-qa/route.ts    GET / PATCH
+    api/admin/workspaces/[id]/plan/route.ts             POST → cambiar plan
+    api/admin/workspaces/[id]/suspend/route.ts          POST → suspender workspace
+
+  UTILIDADES
+    api/copilot/route.ts                         POST → AI copilot asistente
+    api/debug/route.ts                           GET → info de debug
+    api/debug/server-auth/route.ts               GET → estado de auth servidor
+    api/debug/middleware-check/route.ts          GET → debug de middleware
+    api/health/route.ts                          GET → health check
+    api/user/locale/route.ts                     GET / POST → locale del usuario
+    api/workspace/branding/route.ts              GET / PATCH → branding workspace
+    api/workspace/usage/route.ts                 GET → uso del workspace
+    api/workspaces/route.ts                      GET → lista workspaces del usuario
+    api/api-keys/route.ts                        GET / POST / DELETE → API keys
+    api/marketing-finance/route.ts               GET → datos de marketing-finance
+    api/marketing-finance/prices/route.ts        GET / POST precios
+    api/marketing-finance/prices/[id]/route.ts   GET / PATCH / DELETE precio
+    api/workflow/generate/route.ts               POST → AI-genera workflow
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. DIRECTORIO lib/ — BACKEND UTILITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SUPABASE
+    supabase/client.ts          Cliente browser (createBrowserClient)
+    supabase/server.ts          Cliente server SSR (createServerClient con cookies)
+    supabase/admin.ts           Cliente admin (service_role, sin auth check)
+    supabase/types.ts           Tipos TypeScript generados del schema
+
+  AUTH Y WORKSPACE
+    workspace.ts                getWorkspaceData() → user + workspace + plan (cacheado)
+    team/permissions.ts         checkPermission(role, action) → boolean
+
+  API HELPERS
+    api.ts                      withHandler(req, handler) + apiOk() + apiError()
+    ratelimit.ts                Upstash Redis rate limiter (10 req/s default)
+
+  MINUTOS Y BILLING
+    checkMinuteLimit.ts         checkMinuteLimit(workspaceId) → throws si agotado
+    updateWorkspaceMinutes.ts   deductMinutes(workspaceId, seconds) → actualiza DB
+
+  SPEECH Y AUDIO
+    deepgram.ts                 createDeepgramClient() → cliente Deepgram REST
+    cartesia.ts                 createCartesiaClient() + fallback logic
+    elevenlabs/client.ts        ElevenLabs voice API (clonación)
+
+  LLM Y AI
+    embeddings.ts               createEmbedding(text, openaiKey) → vector[]
+    qa/evaluator.ts             evaluateCall(transcript, criteria) → scores
+
+  LLAMADAS
+    calls/actions.ts            createCallRecord() + updateCallRecord()
+    calls/scenario.ts           branchScenario(call, rules) → next action
+
+  AUTOMATIZACIÓN
+    automation/execute.ts       executeAutomation(callId, disposition) → side effects
+
+  INTEGRACIONES
+    hubspot/client.ts           HubSpot CRM API (contacts, deals)
+    retell/client.ts            Retell API (legado)
+    retell/sync.ts              syncRetellCall(callId) → Supabase upsert
+    integrations/dispatcher.ts  dispatchEvent(event, workspaceId) → envía a integraciones
+    stripe/client.ts            Stripe SDK (checkout, subscriptions, webhooks)
+    twilio/client.ts            Twilio REST + SIP trunk management
+    twilio/validate.ts          validateTwilioWebhook(req) → boolean
+
+  LIVEKIT
+    livekit/edge.ts             getRoomServiceClient() → RoomServiceClient (edge-safe)
+
+  DIALING
+    dialing/strategy.ts         Predictive, power, preview dialing logic
+
+  NOTIFICACIONES
+    notifications/activity.ts   generateActivityNotification(event) → notification row
+
+  UTILIDADES
+    sanitize.ts                 sanitizeInput(str) → XSS/SQL safe string
+    utils.ts                    cn(), formatDuration(), truncate(), etc.
+    env.ts                      validateEnv() → throws si faltan vars críticas
+    tracing.ts                  startSpan() + endSpan() + checkLatencyThreshold()
+    feature-flags.ts            isFeatureEnabled(workspaceId, flag) → boolean
+    email.ts                    sendEmail(to, subject, html) → Resend
+    admin-audit.ts              logAdminAction(adminId, action, details) → DB
+
+  WEBHOOKS
+    webhooks/deliver.ts         deliverWebhook(endpointId, event) → HTTP POST
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. DIRECTORIO components/ — COMPONENTES REACT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  UI BASE (Shadcn/Radix)
+    ui/button.tsx               Variantes: default, outline, ghost, destructive
+    ui/input.tsx                Text input base
+    ui/textarea.tsx             Textarea base
+    ui/select.tsx               Dropdown select (Radix)
+    ui/checkbox.tsx             Checkbox (Radix)
+    ui/switch.tsx               Toggle switch (Radix)
+    ui/dialog.tsx               Modal dialog (Radix)
+    ui/dropdown-menu.tsx        Menú contextual (Radix)
+    ui/tabs.tsx                 Tabs de navegación (Radix)
+    ui/badge.tsx                Badge de estado (colores semánticos)
+    ui/card.tsx                 Contenedor card
+    ui/label.tsx                Label de form
+    ui/separator.tsx            Divisor horizontal/vertical
+    ui/avatar.tsx               Avatar con imagen o fallback inicial
+    ui/progress.tsx             Barra de progreso
+    ui/skeleton.tsx             Skeleton de carga
+    ui/slider.tsx               Slider/range (Radix)
+    ui/tooltip.tsx              Tooltip (Radix)
+    ui/field-tooltip.tsx        Tooltip específico para campos de formulario
+
+  LAYOUT Y NAVEGACIÓN
+    layout/header.tsx           Top bar: título de página + acciones + user menu
+    layout/sidebar.tsx          Sidebar izquierdo: navegación + workspace selector
+    layout/mobile-nav.tsx       Drawer de navegación mobile
+    layout/route-guard.tsx      Guard de permisos/auth por ruta
+    layout/language-switcher.tsx  Selector de idioma (next-intl)
+
+  BILLING Y USO
+    billing/TopUpModal.tsx          Modal para comprar créditos (Stripe)
+    billing/EnterpriseQuotaBar.tsx  Barra de progreso de cuota enterprise
+    billing/ActivationBanner.tsx    Banner de activación / upgrade de plan
+    billing/enterprise-inquiry-modal.tsx  Form de contacto enterprise
+    minute-usage/minute-pill.tsx    Badge con minutos restantes
+    minute-usage/minute-alerts.tsx  Alertas de uso (70%, 90%, 100%)
+    minute-usage/circular-ring.tsx  Anillo circular de progreso de minutos
+
+  LLAMADAS Y AUDIO
+    calls/WaveformPlayer.tsx    Reproductor de audio con waveform (wavesurfer.js)
+
+  WORKFLOW (ReactFlow)
+    workflow/WorkflowEditor.tsx     Editor principal drag-and-drop de flujos
+    workflow/nodes/GreetingNode.tsx Nodo: saludo inicial
+    workflow/nodes/MessageNode.tsx  Nodo: mensaje de texto
+    workflow/nodes/ConditionNode.tsx  Nodo: bifurcación condicional
+    workflow/nodes/TransferNode.tsx   Nodo: transferir a humano o número
+    workflow/nodes/ApiCallNode.tsx    Nodo: llamada HTTP externa
+    workflow/nodes/EndNode.tsx        Nodo: fin de llamada
+    workflow/nodes/shared.tsx         Utilidades compartidas de nodos
+
+  ADMIN
+    admin/adjust-minutes-modal.tsx   Modal para ajuste manual de minutos
+    admin/ImpersonateConfirmModal.tsx  Confirmar impersonación de workspace
+    admin/SuspendModal.tsx            Confirmar suspensión de workspace
+    admin/ImpersonationBanner.tsx     Banner que indica impersonación activa
+    admin/BroadcastForm.tsx           Form para enviar broadcast a todos los usuarios
+
+  AGENTES Y QA
+    agents/agent-scorecard.tsx       Scorecard de performance del agente
+
+  AI COPILOT
+    copilot/AnalyticsCopilot.tsx     Asistente IA para analítica (chat embebido)
+
+  DIALING
+    outbound/OutboundDialer.tsx      Interfaz click-to-dial
+
+  ONBOARDING
+    onboarding/onboarding-wizard.tsx  Wizard multi-paso post-registro
+
+  MISCELÁNEOS
+    command-palette.tsx              Paleta de comandos Cmd+K (cmdk)
+    hero-3d-section.tsx              Sección hero animada en 3D (React Three Fiber)
+    integrations-section.tsx         Logos y estado de integraciones conectadas
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. SUPABASE/ — MIGRACIONES DE BASE DE DATOS (44 archivos)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  migrations/
+  ├── 001_initial_schema.sql          Tablas core: users, workspaces, agents, calls
+  ├── 002_add_notification_preferences.sql  Configuración de notificaciones
+  ├── 003_campaign_templates.sql      Biblioteca de templates de campaña
+  ├── 004_ab_testing.sql              Variantes A/B testing para agentes
+  ├── 005_agent_flows.sql             Columna flow_json en agents
+  ├── 006_inbound_routing.sql         Reglas de enrutamiento inbound por número
+  ├── 007_workspace_branding.sql      Branding personalizado (logo, colores)
+  ├── 008_onboarding.sql              Estado de onboarding por workspace
+  ├── 009_automation_rules.sql        Reglas post-llamada (automation_rules table)
+  ├── 010_compliance.sql              Tablas: dnc_entries, compliance_settings, consent_logs
+  ├── 012_byot.sql                    Bring Your Own Twilio (twilio_configs table)
+  ├── 013_cartesia_engine.sql         Selección de engine Cartesia por agente
+  ├── 014_workspace_events.sql        Audit log y webhooks (workspace_events)
+  ├── 015_minute_enforcement.sql      acquire_call_slot(), release_call_slot(),
+  │                                   check_workspace_balance() RPCs
+  ├── 016_enterprise_inquiry_event.sql  Registro de solicitudes enterprise
+  ├── 017_invite_tokens.sql           Tokens de invitación de equipo
+  ├── 018_webhook_endpoints.sql       Tabla de endpoints de webhook saliente
+  ├── 019_api_rate_limits.sql         Configuración de rate limits por API key
+  ├── 020_workspace_billing_status_and_enterprise_quota.sql
+  │                                   Estados de billing + cuota enterprise
+  ├── 022_provider_costs.sql          Costos por proveedor (Deepgram, Cartesia, Groq)
+  ├── 023_pgvector_rag.sql            Extensión vector, tabla document_chunks,
+  │                                   función match_documents() para RAG
+  ├── 024_custom_voices.sql           Tabla custom_voices (clonación de voz)
+  ├── 026_agent_tools.ts              Tabla agent_tools (tools HTTP custom por agente)
+  ├── 027_api_keys_is_active.sql      Columna is_active en api_keys
+  ├── 028_perf_security_fixes.sql     Índices de performance + fixes de seguridad RLS
+  ├── 029_call_disposition.sql        Columna disposition en calls (hot/warm/cold/dnc)
+  ├── 030_integrations_dispatch.sql   Tabla integration_events y dispatcher
+  ├── 031_flow_config.sql             Columna flow_config en agents (v2 state machine)
+  ├── 033_campaign_max_retries.sql    Columna max_retries en campaigns
+  ├── 034_visible_modules.sql         Módulos visibles por workspace (feature gating)
+  ├── 035_enterprise_modules.sql      Módulos enterprise disponibles por plan
+  ├── 036_workspace_stripe_fields.sql  stripe_customer_id, stripe_subscription_id
+  ├── 037_sip_dialing_strategy.sql    Modos de marcación SIP (predictive, power, preview)
+  ├── 038_compliance_qa_flag.sql      Flag de compliance en QA evaluations
+  ├── 039_compliance_rules.sql        Tabla compliance_rules (TCPA, GDPR, custom)
+  ├── 040_call_center_qa.sql          QA Center: tablas qac_evaluations, qac_rules
+  ├── 040_qa_center.sql               Alias/extensión del QA center schema
+  ├── 041_qac_integrations.sql        Integraciones del QA center (Slack, etc.)
+  ├── 042_qac_enterprise.sql          Features enterprise del QA center
+  ├── 043_qac_field_mappings.sql      Mapeo de campos QAC a campos CRM externos
+  └── 044_auto_reset_zombie_call_slots.sql
+                                      Trigger/cron DB-side para limpiar slots zombie
+                                      (complementa runStartupCleanup del worker)
+
+  FUNCIONES RPC CLAVE (en 015_minute_enforcement.sql):
+    acquire_call_slot(p_workspace_id)  → true si hay slot disponible, false si límite
+    release_call_slot(p_workspace_id)  → decrementa active_calls (siempre exitoso)
+    check_workspace_balance(p_workspace_id, p_elapsed_min)
+                                       → true si debe cortarse la llamada por saldo
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. VARIABLES DE ENTORNO REQUERIDAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  NEXT.JS APP (Vercel):
+    NEXT_PUBLIC_SUPABASE_URL        URL del proyecto Supabase
+    NEXT_PUBLIC_SUPABASE_ANON_KEY   Anon/public key de Supabase
+    SUPABASE_SERVICE_ROLE_KEY       Service role key (solo servidor)
+    NEXT_PUBLIC_LIVEKIT_URL         URL WebSocket de LiveKit (wss://...)
+    LIVEKIT_API_KEY                 API key de LiveKit
+    LIVEKIT_API_SECRET              API secret de LiveKit
+    STRIPE_SECRET_KEY               Stripe secret key
+    STRIPE_WEBHOOK_SECRET           Secret para verificar webhooks Stripe
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY  Stripe publishable key
+    RESEND_API_KEY                  Resend para email transaccional
+    UPSTASH_REDIS_REST_URL          Redis para rate limiting
+    UPSTASH_REDIS_REST_TOKEN        Token Redis
+    INTERNAL_API_SECRET             ★ PENDIENTE: secreto para endpoints internos
+                                    (qac/webhooks + interactions/analyze)
+                                    Generar: openssl rand -hex 32
+
+  VOICE WORKER (Render):
+    LIVEKIT_URL                     URL WebSocket LiveKit (wss://...)
+    LIVEKIT_API_KEY                 API key LiveKit
+    LIVEKIT_API_SECRET              API secret LiveKit
+    DEEPGRAM_API_KEY                API key Deepgram (STT)
+    CARTESIA_API_KEY                API key Cartesia (TTS)
+    GROQ_API_KEY                    API key Groq (LLM: llama-4-scout)
+    OPENAI_API_KEY                  API key OpenAI (RAG embeddings + fallback)
+    NEXT_PUBLIC_SUPABASE_URL        (mismo que app)
+    SUPABASE_SERVICE_ROLE_KEY       (mismo que app)
+    SUPPORT_TRANSFER_NUMBER         Número E.164 para transferencia a humano (opcional)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10. PIPELINE DE VOZ — FLUJO COMPLETO DE UNA LLAMADA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  OUTBOUND:
+    1. Frontend → POST /api/calls/dial
+    2. API → acquire_call_slot() (Supabase RPC) → rechaza si límite
+    3. API → LiveKit CreateRoom + CreateSipParticipant
+    4. LiveKit → SIP trunk → número destino (Twilio/Telnyx)
+    5. Worker recibe Room → defineAgent.entry() ejecuta
+    6. Worker parsea room.metadata: {systemPrompt, voiceId, language, CRM fields...}
+    7. Worker → await runStartupCleanup() (ya completado al arrancar)
+    8. Worker inicializa: STT (Deepgram nova-2, es, endpointing=300)
+                         LLM (Groq llama-4-scout vía openai-compatible)
+                         TTS (Cartesia sonic-multilingual, es, chunkTimeout=8s)
+    9. session.say(firstMessage) → Cartesia genera audio → LiveKit → SIP → teléfono
+   10. Usuario habla → SIP → LiveKit → Deepgram STT → transcript
+   11. Transcript → LLM → respuesta → Cartesia TTS → LiveKit → SIP → teléfono
+   12. Fin: LLM llama end_call tool → deleteRoom → Close handler
+   13. Close handler: upsert calls table + extractCrmAnalysis + release_call_slot
+                    + outbound webhook (si configurado)
+
+  INBOUND:
+    1. Llamada llega al número Twilio
+    2. Twilio → POST /api/webhooks/twilio/incoming
+    3. API responde con TwiML que conecta al SIP trunk de LiveKit
+    4. LiveKit → Worker → mismo flujo desde paso 5
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11. BUGS CORREGIDOS (historial de fixes en esta sesión)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✅ B-01 CARTESIA HANG / "PARECE" SILENCE
+         Causa: ws.close() esperaba 30s en TCP muerto (ws closeTimeout default)
+         Fix:   chunkTimeout: 8_000 + Speaking watchdog 15s (recovery silenciosa)
+         Archivo: agent/worker_core.ts
+
+  ✅ B-02 HARD CRASH EN RENDER POST-FIRST-CHUNK
+         Causa: setKeepAlive() llamado ANTES de connect → error sin listener → crash
+         Fix:   Aplicar keepAlive en evento 'connect' + process.on('uncaughtException')
+         Archivo: agent/worker_core.ts
+
+  ✅ B-03 STT SORDO EN ESPAÑOL (language='en' hardcodeado)
+         Causa: language hardcodeado como 'en' en constructor STT
+         Fix:   agentLanguage='es' default, override desde room metadata
+         Archivo: agent/worker_core.ts
+
+  ✅ B-04 ENDPOINTING AGRESIVO (25ms default)
+         Causa: corta palabras en conexiones móviles
+         Fix:   endpointing: 300 (300ms de silencio para considerar fin de turno)
+         Archivo: agent/worker_core.ts
+
+  ✅ B-05 LLAMADAS ZOMBIE (slots bloqueados tras crash)
+         Causa: worker crash → calls quedan en 'in_progress' → concurrent limit error
+         Fix:   runStartupCleanup() al arrancar (cruza con LiveKit.listRooms())
+         Archivo: agent/startup-cleanup.ts
+
+  ✅ B-06 BUILD CJS PARA RENDER
+         Causa: ESM bundle no compatible con runtime Render
+         Fix:   esbuild --format=cjs --target=node24 → dist/worker.js
+         Archivo: package.json (build:worker script)
+
+  ✅ B-07 qac/interactions min_score/max_score columna inexistente
+         Causa: .gte('overall_score') en tabla qac_interactions (no existe ahí)
+         Fix:   .gte('qac_evaluations.overall_score') (relación embebida PostgREST)
+         Archivo: app/api/qac/interactions/route.ts:61-62
+
+  ✅ B-08 leaderboard fallo silencioso res.ok===false
+         Causa: sin throw en !res.ok → catch nunca ejecuta → usuario no ve error
+         Fix:   if (!res.ok) throw new Error('Failed to load leaderboard data')
+         Archivo: app/(app)/qa-center/leaderboard/page.tsx:262-271
+
+  ✅ B-09 dashboard errores solo en console.error
+         Causa: sin toast ni estado de error visible al usuario
+         Fix:   toast.error('Error loading dashboard data') + estado de error UI
+         Archivo: app/(app)/dashboard/page.tsx:53-54
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12. BUGS / RIESGOS PENDIENTES (a corregir)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ⚠️  RISK-01 SILENCE TIMER AGRESIVO (alta probabilidad en llamadas >5 min)
+      Archivo: agent/worker_core.ts líneas 1115-1130
+      Actual:  4.5s → "¿Hola? ¿Sigues ahí?" | +3.5s → cuelga
+      Fix rec: 12_000ms → reprompt | +8_000ms → hangup
+      Impacto: llamadas cortadas prematuramente en pausas de pensamiento
+
+  ⚠️  RISK-02 CARTESIA WEBSOCKET LATENCIA PUNTUAL (moderada en llamadas largas)
+      Cada TTS abre un WebSocket nuevo. En conexión flaky de Render:
+      el usuario puede oír el inicio de la frase y 15s de silencio (watchdog limit)
+      Mitigación actual: Speaking watchdog a 15s + recovery silenciosa
+      Fix ideal: retry con backoff en el plugin (no disponible en v1.4.4)
+
+  ⚠️  RISK-03 THINKING WATCHDOG DICE "DISCULPA, UN MOMENTO" SIN CONTEXTO
+      Archivo: agent/worker_core.ts línea 1274
+      Si Groq tarda >22s (carga alta, contexto largo): el bot dice la frase
+      y luego Groq responde superponiéndose. Confuso para el usuario.
+      Fix rec: Solo interrupt() silencioso (como el speaking watchdog)
+
+  🔐  SEC-01 INTERNAL_API_SECRET NO DEFINIDA EN VERCEL
+      Archivo: app/api/qac/webhooks/[token]/route.ts
+               app/api/qac/interactions/[id]/analyze/route.ts
+      Riesgo:  vacío===vacío → cualquiera puede triggerear análisis sin auth
+      Fix:     openssl rand -hex 32 → añadir en Vercel → Settings → Env Vars
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+13. DATOS CLAVE DEL PROYECTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Repositorio:    github.com/marioretrejo/nextjs-commerce
+  Rama trabajo:   claude/voiceos-saas-build-D8nrY
+  Deploy app:     Vercel → https://nextjs-commerce-jet-five-49.vercel.app
+  Deploy worker:  Render (node dist/worker.js start)
+  DB:             Supabase (PostgreSQL + pgvector)
+  STT provider:   Deepgram (nova-2, language=agentLanguage, endpointing=300)
+  LLM provider:   Groq (meta-llama/llama-4-scout-17b-16e-instruct)
+  TTS provider:   Cartesia (sonic-multilingual, chunkTimeout=8000)
+  WebRTC/SIP:     LiveKit (wss)
+  Telefonía:      Twilio (SIP trunk + números)
+  Pagos:          Stripe (subscriptions + credits)
+  Email:          Resend
+  Cache/RL:       Upstash Redis
+
+  CRM DATOS DE LLAMADA EXTRAÍDOS (Groq al final de cada llamada):
+    Age, Name, Motivation, interested (bool), occupation, Financial_goal,
+    Call_transferred (bool), monthly_expenses, time_in_occupation,
+    'In Voicemail' (bool), 'Call Success' (bool)
+
+  METADATA DE ROOM LIVEKIT (campos admitidos):
+    system_prompt, agent_name, voice_id, voice_emotion, first_message,
+    workspace_id, transfer_number, call_direction, agent_id,
+    flow_json, flow_config, dynamic_variables, ambient_sound,
+    ambient_sound_volume, Funnel, LeadId, Country, Campaign,
+    webhook_url, language
+
+================================================================================
+  FIN DEL DOCUMENTO — VOICEOS_SKELETON.txt
+================================================================================
