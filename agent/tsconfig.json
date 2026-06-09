@@ -7,6 +7,7 @@
   },
   "include": [
     "*.ts",
+    "providers/**/*.ts",
     "runtime/**/*.ts",
     "persistence/**/*.ts",
     "tests/**/*.ts",

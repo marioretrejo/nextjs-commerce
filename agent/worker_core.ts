@@ -26,7 +26,6 @@ import {
 } from "@livekit/agents";
 import { STT } from "@livekit/agents-plugin-deepgram";
 import { LLM } from "@livekit/agents-plugin-openai";
-import { TTS as CartesiaTTS } from "@livekit/agents-plugin-cartesia";
 import { createClient } from "@supabase/supabase-js";
 import { buildTools } from "./tools/index.js";
 import { loadPronunciationConfig } from "./pronunciation.js";
@@ -46,6 +45,12 @@ import { runStartupCleanup } from "./startup-cleanup.js";
 import { CallLifecycleManager } from "./runtime/call-lifecycle.js";
 import { makeEventRecorder } from "./persistence/call-events-repository.js";
 import { BillingTracker } from "./persistence/billing-tracker.js";
+import {
+  createTTSProvider,
+  EMERGENCY_PHRASES,
+} from "./providers/tts-provider-router.js";
+import { lookupProviderCosts } from "../lib/billing/provider-pricing.js";
+import type { ProviderCostRow } from "../lib/billing/provider-pricing.js";
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(
@@ -773,6 +778,14 @@ export default defineAgent({
         ? new BillingTracker(roomName, workspaceId, agentId)
         : null;
 
+    // Fase 8: Budget circuit breaker state — populated by pre-flight check.
+    // availableWorkspaceBalanceCents: MAX_SAFE_INTEGER = guard skipped (non-billing workspace)
+    let availableWorkspaceBalanceCents = Number.MAX_SAFE_INTEGER;
+    let cachedProviderCosts: ProviderCostRow | null = null;
+    let _circuitBreakerTriggered = false;
+    // callStartedAt: 0 until session.start() — circuit breaker uses this as a guard.
+    let callStartedAt = 0;
+
     // Mark call as in-progress immediately (agent entry = call already connected)
     void lifecycle?.transitionTo("in_progress").catch(() => null);
     void emit("call.initiated", {
@@ -889,7 +902,7 @@ export default defineAgent({
       baseURL: "https://api.groq.com/openai/v1",
     });
 
-    // ─── 2. TTS: Cartesia ─────────────────────────────────────────────────────
+    // ─── 3. TTS: Cartesia (primary) → OpenAI TTS (fallback) ─────────────────
     // Maps our emotion names → Cartesia experimental_controls emotion tags
     // (must match the same map used in /api/voices/preview for consistency)
     const EMOTION_MAP: Record<string, string[]> = {
@@ -901,44 +914,64 @@ export default defineAgent({
       fearful: ["fearfulness:high"],
       surprised: ["surprise:positive:high"],
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ttsInitOpts: any = {
-      model: "sonic-multilingual",
-      voice: voiceId,
-      apiKey: process.env["CARTESIA_API_KEY"],
-      language: "es",
+
+    const ttsRouterResult = createTTSProvider({
+      cartesiaApiKey: process.env["CARTESIA_API_KEY"],
+      openaiApiKey: process.env["OPENAI_API_KEY"],
+      voiceId,
+      language: agentLanguage ?? "es",
+      ttsModel: "sonic-multilingual",
       // sonic-multilingual generates chunks with longer inter-chunk gaps than sonic-3.
       // The plugin default (5000 ms) cuts the stream prematurely, causing the agent
       // to go silent mid-sentence. 8 s gives the model enough breathing room.
       chunkTimeout: 8_000,
-      ...(voiceEmotion && EMOTION_MAP[voiceEmotion]
-        ? { emotion: EMOTION_MAP[voiceEmotion] }
-        : {}),
-    };
-    console.log("[DEBUG_CARTESIA]", {
-      model: ttsInitOpts.model,
-      voice: ttsInitOpts.voice,
-      language: ttsInitOpts.language,
-      emotion: ttsInitOpts.emotion ?? null,
-      apiKeySet: !!process.env["CARTESIA_API_KEY"],
-      apiKeyPrefix: (process.env["CARTESIA_API_KEY"] ?? "").slice(0, 4),
+      emotion:
+        voiceEmotion && EMOTION_MAP[voiceEmotion]
+          ? EMOTION_MAP[voiceEmotion]
+          : null,
     });
-    let cartesiaTTS: CartesiaTTS;
-    try {
-      cartesiaTTS = new CartesiaTTS(ttsInitOpts);
-    } catch (ttsInitErr) {
+
+    if (!ttsRouterResult) {
+      void emit("tts.provider_constructor_failed", {
+        reason: "all_providers_failed",
+        agent_id: agentId,
+        room: roomName,
+      });
       console.error(
-        "[worker.tts] CartesiaTTS constructor threw — aborting session:",
-        ttsInitErr,
+        "[worker.tts] No TTS provider could be constructed — aborting session",
       );
-      throw ttsInitErr;
+      void lifecycle?.transitionTo("failed").catch(() => null);
+      return;
     }
 
-    // Cartesia is the sole TTS provider — OpenAI TTS excluded (no active balance).
-    // Using Cartesia directly avoids the FallbackAdapter overhead and ensures any
-    // Cartesia error surfaces immediately in logs rather than triggering a fallback
-    // that would also fail, producing the "all TTS instances failed" fatal error.
-    const tts = cartesiaTTS;
+    console.log("[DEBUG_TTS_ROUTER]", {
+      providerName: ttsRouterResult.providerName,
+      fallbackUsed: ttsRouterResult.fallbackUsed,
+      reason: ttsRouterResult.reason ?? null,
+      cartesiaKeySet: !!process.env["CARTESIA_API_KEY"],
+      cartesiaKeyPrefix: (process.env["CARTESIA_API_KEY"] ?? "").slice(0, 4),
+    });
+
+    // Emit provider selection event for observability
+    if (ttsRouterResult.fallbackUsed) {
+      void emit("tts.fallback_selected", {
+        provider: ttsRouterResult.providerName,
+        reason: ttsRouterResult.reason,
+        agent_id: agentId,
+      });
+      void emit("tts.provider_constructor_failed", {
+        reason: ttsRouterResult.reason ?? "cartesia_failed",
+        agent_id: agentId,
+      });
+    } else {
+      void emit("tts.provider_selected", {
+        provider: ttsRouterResult.providerName,
+        agent_id: agentId,
+      });
+    }
+    billing?.setTTSProvider(ttsRouterResult.providerName);
+
+    const tts = ttsRouterResult.tts;
 
     // ─── 3 + 4. Agent: tools (incl. transfer) + TTS pronunciation map ────────
     //
@@ -1434,6 +1467,61 @@ export default defineAgent({
 
     const session = new voice.AgentSession({ stt, llm: lm, tts });
 
+    // ─── Budget circuit breaker — terminates calls that exceed available balance ──
+    // Invoked after every TTS char accumulation (trackManualSay + trackPipelineTTS).
+    // Uses in-memory cost estimate so there is zero DB overhead in the hot path.
+    const _evaluateBudgetCircuitBreaker = async (): Promise<void> => {
+      if (_circuitBreakerTriggered) return;
+      if (callStartedAt === 0) return; // session not started yet
+      if (availableWorkspaceBalanceCents === Number.MAX_SAFE_INTEGER) return; // no billing workspace
+
+      const elapsedSeconds = (Date.now() - callStartedAt) / 1_000;
+      const estimatedUSD = billing
+        ? billing.getEstimatedCurrentCostUSD(
+            elapsedSeconds,
+            cachedProviderCosts,
+          )
+        : 0;
+      const availableUSD = availableWorkspaceBalanceCents / 100;
+
+      if (estimatedUSD < availableUSD) return;
+
+      _circuitBreakerTriggered = true;
+      console.warn(
+        "[worker.circuit_breaker] Budget limit reached — terminating call",
+        {
+          estimated_usd: estimatedUSD,
+          available_usd: availableUSD,
+          workspace_id: workspaceId,
+          room: roomName,
+        },
+      );
+
+      void emit("billing.circuit_breaker_triggered", {
+        estimated_usd: estimatedUSD,
+        available_usd: availableUSD,
+        workspace_id: workspaceId,
+        agent_id: agentId,
+        room: roomName,
+      });
+      void lifecycle?.transitionTo("failed").catch(() => null);
+
+      const phrase = EMERGENCY_PHRASES["circuit_breaker"]!;
+      billing?.trackManualSay(phrase);
+      try {
+        // Use session.say directly — NOT trackedSay — to avoid recursive circuit breaker calls.
+        await session.say(phrase, { allowInterruptions: false });
+      } catch {
+        /* room may already be closing */
+      }
+      try {
+        session.interrupt({ force: true });
+      } catch {
+        /* ignore */
+      }
+      _doDeleteRoom();
+    };
+
     // trackedSay: wraps session.say() to automatically count TTS characters.
     // Use in place of direct session.say() calls throughout this handler so
     // all injected speech (greetings, fillers, farewells, error messages) is
@@ -1446,6 +1534,7 @@ export default defineAgent({
       // Register as manual before calling say() so that when ConversationItemAdded
       // fires for this text it is deduplicated into the manual_session_say bucket.
       billing?.trackManualSay(text);
+      void _evaluateBudgetCircuitBreaker();
       return session.say(text, options);
     };
 
@@ -1840,13 +1929,32 @@ export default defineAgent({
           agent_id: agentId,
           room: roomName,
         });
-        console.warn(
-          "[worker.watchdog] TTFB phase-2 (2500ms) — checking for TTS fallback",
-          {
+        // Provider is degraded — mid-session TTS swap is architecturally infeasible
+        // (AgentSession.tts is immutable after creation). Emit observability events.
+        void emit("tts.provider_degraded", {
+          provider: ttsRouterResult.providerName,
+          elapsed_ms: 2_500,
+          agent_id: agentId,
+          room: roomName,
+        });
+        if (ttsRouterResult.fallbackUsed) {
+          // Fallback was already activated at session construction — note it is in use.
+          void emit("tts.fallback_attempted", {
+            provider: ttsRouterResult.providerName,
+            reason: "already_active",
             agent_id: agentId,
-          },
+          });
+        } else {
+          // No live fallback possible mid-session.
+          void emit("tts.fallback_unavailable", {
+            reason: "mid_session_swap_not_supported",
+            agent_id: agentId,
+          });
+        }
+        console.warn(
+          "[worker.watchdog] TTFB phase-2 (2500ms) — tts.provider_degraded",
+          { agent_id: agentId, provider: ttsRouterResult.providerName },
         );
-        // No TTS fallback implemented yet — future: swap to Deepgram Aura / ElevenLabs
       }, 2_500);
 
       _ttfbWd3 = setTimeout(() => {
@@ -1856,8 +1964,14 @@ export default defineAgent({
           agent_id: agentId,
           room: roomName,
         });
+        void emit("tts.provider_down", {
+          provider: ttsRouterResult.providerName,
+          elapsed_ms: 4_000,
+          agent_id: agentId,
+          room: roomName,
+        });
         console.error(
-          "[worker.watchdog] TTFB phase-3 (4000ms) — tts.first_audio_timeout, silent interrupt",
+          "[worker.watchdog] TTFB phase-3 (4000ms) — tts.provider_down, silent interrupt",
           { agent_id: agentId, room: roomName },
         );
         try {
@@ -2047,7 +2161,7 @@ export default defineAgent({
 
     // ─── Transcript accumulation ──────────────────────────────────────────────
     const transcriptLines: string[] = [];
-    const callStartedAt = Date.now();
+    callStartedAt = Date.now();
     log("info", {
       message: "call.started",
       agent_id: agentId,
@@ -2135,6 +2249,7 @@ export default defineAgent({
         // responses are attributed to agent_pipeline_tts — no double-counting.
         if (role === "assistant") {
           billing?.trackPipelineTTS(text.trim());
+          void _evaluateBudgetCircuitBreaker();
         }
       }
     });
@@ -2373,6 +2488,72 @@ export default defineAgent({
       })();
     }); // end Close handler
 
+    // ── Pre-flight billing guard ──────────────────────────────────────────────
+    // Verify workspace has sufficient balance before connecting the LiveKit session.
+    // Uses the get_workspace_billing_status RPC (migration 050) for an atomic read.
+    // Also pre-fetches provider cost rates so the circuit breaker can estimate costs
+    // without any DB round-trips during the call.
+    if (workspaceId && _lifecycleSupabase) {
+      try {
+        const [billingRes, costsRes] = await Promise.allSettled([
+          _lifecycleSupabase.rpc("get_workspace_billing_status", {
+            p_workspace_id: workspaceId,
+          }),
+          lookupProviderCosts(_lifecycleSupabase),
+        ]);
+
+        if (billingRes.status === "fulfilled" && !billingRes.value.error) {
+          const bs = billingRes.value.data as {
+            is_frozen: boolean;
+            balance_cents: number;
+            billing_status: string;
+            reason?: string;
+          } | null;
+
+          if (bs?.is_frozen) {
+            console.warn(
+              "[worker.billing] Pre-flight failed — workspace frozen:",
+              {
+                billing_status: bs.billing_status,
+                balance_cents: bs.balance_cents,
+                reason: bs.reason,
+              },
+            );
+            void emit("billing.preflight_failed", {
+              reason: bs.reason ?? bs.billing_status,
+              balance_cents: bs.balance_cents,
+              workspace_id: workspaceId,
+            });
+            void lifecycle?.transitionTo("failed").catch(() => null);
+            _doDeleteRoom();
+            return;
+          }
+
+          if (typeof bs?.balance_cents === "number") {
+            availableWorkspaceBalanceCents = bs.balance_cents;
+          }
+          void emit("billing.preflight_passed", {
+            balance_cents: bs?.balance_cents,
+            workspace_id: workspaceId,
+          });
+        } else if (billingRes.status === "rejected") {
+          console.warn(
+            "[worker.billing] Pre-flight RPC error (non-fatal):",
+            billingRes.reason,
+          );
+        }
+
+        if (costsRes.status === "fulfilled") {
+          cachedProviderCosts = costsRes.value;
+        }
+      } catch (err) {
+        console.warn(
+          "[worker.billing] Pre-flight check threw (non-fatal):",
+          String(err),
+        );
+      }
+    }
+
     console.log(
       "[worker.diag] session.starting",
       JSON.stringify({
@@ -2382,7 +2563,8 @@ export default defineAgent({
         room: ctx.room.name,
         first_message_set: !!firstMessage,
         voice_id: voiceId,
-        cartesia_key_present: !!process.env["CARTESIA_API_KEY"],
+        tts_provider: ttsRouterResult.providerName,
+        tts_fallback_used: ttsRouterResult.fallbackUsed,
         groq_key_present: !!groqKey,
         openai_key_present: !!openaiKey,
       }),

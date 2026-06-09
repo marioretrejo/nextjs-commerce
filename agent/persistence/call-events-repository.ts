@@ -30,6 +30,17 @@ export type CallEventType =
   | "tts.first_audio_slow"
   | "tts.first_audio_timeout"
   | "tts.fallback_used"
+  | "tts.provider_selected"
+  | "tts.provider_constructor_failed"
+  | "tts.provider_degraded"
+  | "tts.provider_down"
+  | "tts.fallback_selected"
+  | "tts.fallback_attempted"
+  | "tts.fallback_succeeded"
+  | "tts.fallback_failed"
+  | "tts.fallback_unavailable"
+  | "tts.manual_say_failed"
+  | "tts.provider_recovered"
   // Watchdogs
   | "watchdog.thinking_phase1"
   | "watchdog.thinking_phase2"
@@ -39,7 +50,10 @@ export type CallEventType =
   | "watchdog.ttfb_phase3"
   | "watchdog.speaking_fired"
   // Billing
-  | "billing.cost_events_backfilled";
+  | "billing.cost_events_backfilled"
+  | "billing.preflight_passed"
+  | "billing.preflight_failed"
+  | "billing.circuit_breaker_triggered";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,

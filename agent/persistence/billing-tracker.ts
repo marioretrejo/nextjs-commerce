@@ -7,6 +7,7 @@ import {
   priceTTSChars,
   priceLLMTokens,
 } from "../../lib/billing/provider-pricing.js";
+import type { ProviderCostRow } from "../../lib/billing/provider-pricing.js";
 
 interface UsageRecord {
   provider: string;
@@ -35,6 +36,9 @@ export class BillingTracker {
   private readonly _agentId: string | null;
   private readonly _usage: UsageRecord[] = [];
 
+  // TTS provider name — updated at session construction if a fallback was used.
+  private _ttsProvider = "cartesia";
+
   // TTS: two separate source buckets flushed into a single cost event at call-end.
   private _manualSayChars = 0; // from trackedSay() / explicit session.say() injections
   private _manualSayCount = 0;
@@ -52,6 +56,44 @@ export class BillingTracker {
     this._room = room;
     this._workspaceId = workspaceId;
     this._agentId = agentId ?? null;
+  }
+
+  // Called right after TTS provider construction to record which provider is active.
+  setTTSProvider(provider: string): void {
+    this._ttsProvider = provider;
+  }
+
+  // Pure, synchronous estimate of accumulated call cost so far.
+  // Used by the budget circuit breaker to decide whether to terminate the call.
+  // Returns 0 when costs are not configured (pricing_source=unknown scenarios).
+  getEstimatedCurrentCostUSD(
+    elapsedSeconds: number,
+    costs: ProviderCostRow | null,
+  ): number {
+    if (!costs) return 0;
+    const elapsedMin = elapsedSeconds / 60;
+    // Use the higher of inbound/outbound telephony rate as a conservative estimate
+    const telephonyCents =
+      elapsedMin *
+      Math.max(
+        costs.twilio_inbound_per_min ?? 0,
+        costs.twilio_outbound_per_min ?? 0,
+      );
+    const livekitCents = elapsedMin * (costs.livekit_per_min ?? 0);
+    const sttCents = elapsedMin * (costs.stt_per_min ?? 0);
+    // Include chars that are in _pendingManual (trackManualSay registered, but
+    // ConversationItemAdded hasn't fired yet). They will be billed regardless.
+    const pendingChars = Array.from(this._pendingManual.values()).reduce(
+      (sum, p) => sum + p.chars * p.count,
+      0,
+    );
+    const ttsChars = this._manualSayChars + this._pipelineChars + pendingChars;
+    const ttsCents = (ttsChars / 1_000) * (costs.tts_per_1k_chars ?? 0);
+    const llmCents =
+      (this._llmTokensTotal / 1_000) * (costs.llm_per_1k_tokens ?? 0);
+    return (
+      (telephonyCents + livekitCents + sttCents + ttsCents + llmCents) / 100
+    );
   }
 
   trackTelephony(
@@ -181,7 +223,7 @@ export class BillingTracker {
             : "none";
 
       this._usage.push({
-        provider: "cartesia",
+        provider: this._ttsProvider,
         cost_type: "tts",
         quantity: totalTtsChars,
         unit: "characters",
