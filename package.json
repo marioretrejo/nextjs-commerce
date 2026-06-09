@@ -13,6 +13,7 @@
     "prettier": "prettier --write --ignore-unknown .",
     "prettier:check": "prettier --check --ignore-unknown .",
     "test": "pnpm prettier:check",
+    "test:unit": "tsx --test agent/tests/call-lifecycle.test.ts agent/tests/call-events-repository.test.ts",
     "scraper:install": "pnpm add -D playwright && npx playwright install chromium",
     "scraper": "node scraper/tracker-scraper.js"
   },

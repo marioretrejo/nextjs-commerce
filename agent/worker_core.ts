@@ -43,6 +43,8 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import { runStartupCleanup } from "./startup-cleanup.js";
+import { CallLifecycleManager } from "./runtime/call-lifecycle.js";
+import { makeEventRecorder } from "./persistence/call-events-repository.js";
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(
@@ -744,6 +746,28 @@ export default defineAgent({
     const openaiKey = process.env["OPENAI_API_KEY"];
     const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"] ?? "";
     const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+
+    // ── Fase 5/6: Lifecycle manager + event recorder ──────────────────────────
+    // Best-effort: missing Supabase config produces a no-op stub so callers never
+    // need to null-check. Both objects share the same admin client.
+    const _lifecycleSupabase = getSupabaseAdmin();
+    const lifecycle =
+      _lifecycleSupabase && workspaceId
+        ? new CallLifecycleManager(roomName, workspaceId, _lifecycleSupabase)
+        : null;
+    // emit: fire-and-forget event logger. Falls back to a no-op if supabase unavailable.
+    const emit =
+      _lifecycleSupabase && workspaceId
+        ? makeEventRecorder(_lifecycleSupabase, roomName, workspaceId)
+        : (_type: unknown, _payload?: Record<string, unknown>): void => {};
+
+    // Mark call as in-progress immediately (agent entry = call already connected)
+    void lifecycle?.transitionTo("in_progress").catch(() => null);
+    void emit("call.initiated", {
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      direction: callDirection,
+    });
 
     // ─── 4. Load pronunciation dictionaries from Supabase ────────────────────
     // Non-blocking: awaited here but designed to never throw
@@ -1452,37 +1476,73 @@ export default defineAgent({
       },
     };
 
-    // ── Speaking / Thinking watchdogs ─────────────────────────────────────────
-    // Guard against a hung TTS stream (agent says one word then goes silent) or
-    // a stalled LLM pipeline. Both timers are cleared on every AgentStateChanged.
+    // ── Speaking / Thinking / TTFB watchdogs — 3-phase escalation ───────────
+    // Each watchdog has three independent timers that fire at escalating delays,
+    // giving the pipeline time to recover before taking more drastic action.
     let _speakingWatchdog: ReturnType<typeof setTimeout> | null = null;
-    let _thinkingWatchdog: ReturnType<typeof setTimeout> | null = null;
-    // TAREA 4: Timer tracking Cartesia time-to-first-byte (SpeechCreated → 'speaking')
-    let _ttfbWatchdog: ReturnType<typeof setTimeout> | null = null;
-    // TAREA 3: Flag preventing double-speak when the thinking watchdog fires and the
+
+    // Thinking watchdog phases (LLM pipeline stall):
+    //   Phase 1 (4 s)  — log llm.slow; mark _thinkingSlow for metrics
+    //   Phase 2 (7 s)  — say a short filler phrase to reassure the caller
+    //   Phase 3 (10 s) — silent interrupt + log llm.timeout
+    let _thinkingWd1: ReturnType<typeof setTimeout> | null = null;
+    let _thinkingWd2: ReturnType<typeof setTimeout> | null = null;
+    let _thinkingWd3: ReturnType<typeof setTimeout> | null = null;
+    let _thinkingSlow = false;
+
+    // TTFB watchdog phases (Cartesia time-to-first-byte):
+    //   Phase 1 (1500 ms) — log tts.first_audio_slow (no action yet)
+    //   Phase 2 (2500 ms) — log again; placeholder for future TTS fallback
+    //   Phase 3 (4000 ms) — silent interrupt + log tts.first_audio_timeout
+    let _ttfbWd1: ReturnType<typeof setTimeout> | null = null;
+    let _ttfbWd2: ReturnType<typeof setTimeout> | null = null;
+    let _ttfbWd3: ReturnType<typeof setTimeout> | null = null;
+
+    // Flag preventing double-speak when the thinking watchdog fires and the
     // LLM responds shortly after — avoids two simultaneous audio streams.
     let _isThinkingInterventionActive = false;
+
     // 15 s: agent HARD CONSTRAINT caps responses at 1-3 sentences ≈ 8-12 s max
     const SPEAKING_WATCHDOG_MS = 15_000;
-    // 4 s: intervene early when the LLM/TTS pipeline stalls (TAREA 3).
-    // Recovery is SILENT (interrupt only) so a late LLM response never overlaps.
-    const THINKING_WATCHDOG_MS = 4_000;
-    // 1500 ms: Cartesia TTFB budget (SpeechCreated → first audio frame) (TAREA 4)
-    const TTS_TTFB_BUDGET_MS = 1_500;
+
+    const _clearThinkingWatchdogs = () => {
+      if (_thinkingWd1) {
+        clearTimeout(_thinkingWd1);
+        _thinkingWd1 = null;
+      }
+      if (_thinkingWd2) {
+        clearTimeout(_thinkingWd2);
+        _thinkingWd2 = null;
+      }
+      if (_thinkingWd3) {
+        clearTimeout(_thinkingWd3);
+        _thinkingWd3 = null;
+      }
+      _thinkingSlow = false;
+    };
+
+    const _clearTtfbWatchdogs = () => {
+      if (_ttfbWd1) {
+        clearTimeout(_ttfbWd1);
+        _ttfbWd1 = null;
+      }
+      if (_ttfbWd2) {
+        clearTimeout(_ttfbWd2);
+        _ttfbWd2 = null;
+      }
+      if (_ttfbWd3) {
+        clearTimeout(_ttfbWd3);
+        _ttfbWd3 = null;
+      }
+    };
 
     const _clearWatchdogs = () => {
       if (_speakingWatchdog) {
         clearTimeout(_speakingWatchdog);
         _speakingWatchdog = null;
       }
-      if (_thinkingWatchdog) {
-        clearTimeout(_thinkingWatchdog);
-        _thinkingWatchdog = null;
-      }
-      if (_ttfbWatchdog) {
-        clearTimeout(_ttfbWatchdog);
-        _ttfbWatchdog = null;
-      }
+      _clearThinkingWatchdogs();
+      _clearTtfbWatchdogs();
     };
 
     // ── Barge-in state shared across event handlers ──────────────────────
@@ -1517,6 +1577,12 @@ export default defineAgent({
         _hangupTimer = setTimeout(() => {
           _hangupTimer = null;
           _silenceArmed = false;
+          lifecycle?.setOutcome("silence_timeout");
+          void lifecycle?.transitionTo("completed", "silence_timeout");
+          void emit("call.silence_timeout", {
+            agent_id: agentId,
+            phase: _silencePhase,
+          });
           void session
             .say(policy.hangupText, { allowInterruptions: false })
             .then(_doDeleteRoom, _doDeleteRoom);
@@ -1632,16 +1698,28 @@ export default defineAgent({
         return;
       }
 
-      // TAREA 2: First real user turn — switch to generous silence policy.
+      // First real user turn — switch to generous silence policy and mark answered.
       // 'greeting' has a tight 5s window for fast voicemail detection.
       // Once a real human speaks, switch to 'normal' (12s reprompt / 8s hangup).
       if (_silencePhase === "greeting") {
         _silencePhase = "normal";
+        lifecycle?.markAnswered();
+        void emit("call.answered", {
+          agent_id: agentId,
+          elapsed_ms: Date.now() - callStartedAt,
+          transcript_preview: trimmed.slice(0, 60),
+        });
       }
 
       // ── Fast hangup on strong negative / DNC intent ───────────────────────
       // Bypasses LLM to save one full round-trip (~300ms Groq + ~300ms TTS).
       if (NEGATIVE_INTENT_RE.test(trimmed)) {
+        lifecycle?.setOutcome("dnc");
+        void lifecycle?.transitionTo("cancelled", "dnc_detected");
+        void emit("call.dnc_detected", {
+          agent_id: agentId,
+          text: trimmed.slice(0, 80),
+        });
         log("info", {
           message: "negative_intent.fast_hangup",
           text: trimmed,
@@ -1663,6 +1741,13 @@ export default defineAgent({
         VOICEMAIL_RE.test(trimmed)
       ) {
         _voicemailDetected = true;
+        lifecycle?.setOutcome("voicemail");
+        void lifecycle?.transitionTo("no_answer", "voicemail_detected");
+        void emit("call.voicemail_detected", {
+          agent_id: agentId,
+          elapsed_ms: Date.now() - callStartedAt,
+          text: trimmed.slice(0, 80),
+        });
         log("info", {
           message: "voicemail.detected",
           text: trimmed,
@@ -1690,28 +1775,60 @@ export default defineAgent({
       llmSpan = startSpan("llm.first_token"); // reset
       ttsSpan = startSpan("tts.first_chunk"); // start TTS clock
 
-      // TAREA 4: Cartesia TTFB watchdog ─────────────────────────────────────────
-      // If Cartesia does not deliver the first audio frame within TTS_TTFB_BUDGET_MS,
-      // the WebSocket connection is likely stalled. Interrupt silently so the user
-      // can re-speak rather than waiting for the 15s speaking watchdog.
-      if (_ttfbWatchdog) clearTimeout(_ttfbWatchdog);
-      _ttfbWatchdog = setTimeout(() => {
-        _ttfbWatchdog = null;
-        if (session.agentState === "speaking") return; // audio arrived normally — no-op
+      // Cartesia TTFB watchdog — 3-phase escalation ───────────────────────────
+      // Phase 1 (1500 ms): log tts.first_audio_slow — no action yet, just telemetry
+      // Phase 2 (2500 ms): log again; placeholder for future TTS fallback switch
+      // Phase 3 (4000 ms): interrupt silently — Cartesia connection is definitively stalled
+      _clearTtfbWatchdogs();
+
+      _ttfbWd1 = setTimeout(() => {
+        _ttfbWd1 = null;
+        if (session.agentState === "speaking") return;
+        void emit("watchdog.ttfb_phase1", {
+          agent_id: agentId,
+          room: roomName,
+        });
         console.warn(
-          "[worker.watchdog] Cartesia TTFB exceeded budget — silent interrupt",
+          "[worker.watchdog] TTFB phase-1 (1500ms) — tts.first_audio_slow",
           {
-            budget_ms: TTS_TTFB_BUDGET_MS,
             agent_id: agentId,
-            room: roomName,
           },
+        );
+      }, 1_500);
+
+      _ttfbWd2 = setTimeout(() => {
+        _ttfbWd2 = null;
+        if (session.agentState === "speaking") return;
+        void emit("watchdog.ttfb_phase2", {
+          agent_id: agentId,
+          room: roomName,
+        });
+        console.warn(
+          "[worker.watchdog] TTFB phase-2 (2500ms) — checking for TTS fallback",
+          {
+            agent_id: agentId,
+          },
+        );
+        // No TTS fallback implemented yet — future: swap to Deepgram Aura / ElevenLabs
+      }, 2_500);
+
+      _ttfbWd3 = setTimeout(() => {
+        _ttfbWd3 = null;
+        if (session.agentState === "speaking") return;
+        void emit("watchdog.ttfb_phase3", {
+          agent_id: agentId,
+          room: roomName,
+        });
+        console.error(
+          "[worker.watchdog] TTFB phase-3 (4000ms) — tts.first_audio_timeout, silent interrupt",
+          { agent_id: agentId, room: roomName },
         );
         try {
           session.interrupt({ force: true });
         } catch {
           /* ignore */
         }
-      }, TTS_TTFB_BUDGET_MS);
+      }, 4_000);
     });
 
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
@@ -1730,22 +1847,50 @@ export default defineAgent({
       );
 
       if (newState === "thinking") {
-        // Disarm all watchdogs, arm thinking watchdog
         _clearWatchdogs();
-        // TAREA 3: Thinking watchdog — fires at THINKING_WATCHDOG_MS (4s).
-        // Uses SILENT interrupt only to avoid competing with a late LLM response.
-        // Old behavior (say 'Disculpa, un momento.') caused two audio streams to
-        // collide when Groq responded just after the watchdog fired.
-        _thinkingWatchdog = setTimeout(() => {
-          _thinkingWatchdog = null;
+
+        // Phase 1 — 4 s: mark slow, log metric (no user-visible action)
+        _thinkingWd1 = setTimeout(() => {
+          _thinkingWd1 = null;
           if (session.agentState !== "thinking") return;
+          _thinkingSlow = true;
+          void emit("watchdog.thinking_phase1", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          console.warn("[worker.watchdog] thinking phase-1 (4s) — llm.slow", {
+            agent_id: agentId,
+          });
+        }, 4_000);
+
+        // Phase 2 — 7 s: say a brief filler phrase so the caller isn't confused
+        _thinkingWd2 = setTimeout(() => {
+          _thinkingWd2 = null;
+          if (session.agentState !== "thinking") return;
+          void emit("watchdog.thinking_phase2", {
+            agent_id: agentId,
+            room: roomName,
+          });
           console.warn(
-            "[worker.watchdog] Thinking watchdog fired — silent interrupt of stalled pipeline",
+            "[worker.watchdog] thinking phase-2 (7s) — filler phrase",
             {
               agent_id: agentId,
-              room: roomName,
-              budget_ms: THINKING_WATCHDOG_MS,
             },
+          );
+          void session.say("Un momento…").then(null, () => null);
+        }, 7_000);
+
+        // Phase 3 — 10 s: silent interrupt — pipeline is definitively stalled
+        _thinkingWd3 = setTimeout(() => {
+          _thinkingWd3 = null;
+          if (session.agentState !== "thinking") return;
+          void emit("watchdog.thinking_phase3", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          console.error(
+            "[worker.watchdog] thinking phase-3 (10s) — llm.timeout, silent interrupt",
+            { agent_id: agentId, room: roomName },
           );
           _isThinkingInterventionActive = true;
           try {
@@ -1753,11 +1898,10 @@ export default defineAgent({
           } catch {
             /* ignore */
           }
-          // Auto-clear the flag after 2s to allow the next turn's silence timer to arm normally
           setTimeout(() => {
             _isThinkingInterventionActive = false;
           }, 2_000);
-        }, THINKING_WATCHDOG_MS);
+        }, 10_000);
       }
 
       if (newState === "speaking") {
@@ -1961,14 +2105,25 @@ export default defineAgent({
         clearInterval(balanceCheckInterval);
         balanceCheckInterval = null;
       }
+
+      const durationSeconds = Math.round((Date.now() - callStartedAt) / 1000);
+      const closeReason = (ev as { reason?: string })?.reason;
+
       log("info", {
         message: "call.ended",
         agent_id: agentId,
         workspace_id: workspaceId,
         room: roomName,
-        duration_seconds: Math.round((Date.now() - callStartedAt) / 1000),
-        close_reason: (ev as { reason?: string })?.reason,
+        duration_seconds: durationSeconds,
+        close_reason: closeReason,
       });
+
+      // Finalise lifecycle — derives outcome from voicemail/dnc flags set during the call
+      await lifecycle?.finalize({
+        voicemailDetected: _voicemailDetected,
+        durationSeconds,
+      });
+
       const supabase = getSupabaseAdmin();
       if (!supabase) {
         log("error", {
@@ -1980,8 +2135,18 @@ export default defineAgent({
       }
       if (!agentId || !workspaceId) return;
 
-      const durationSeconds = Math.round((Date.now() - callStartedAt) / 1000);
       const transcript = transcriptLines.join("\n");
+
+      // Derive legacy status from lifecycle for backwards-compatible UI queries
+      const finalTechnicalStatus = lifecycle?.status ?? "completed";
+      const legacyStatus =
+        finalTechnicalStatus === "no_answer"
+          ? "no_answer"
+          : finalTechnicalStatus === "cancelled"
+            ? "cancelled"
+            : finalTechnicalStatus === "failed"
+              ? "failed"
+              : "completed";
 
       await supabase.from("calls").upsert(
         {
@@ -1990,18 +2155,26 @@ export default defineAgent({
           retell_call_id: roomName,
           direction: callDirection,
           duration_seconds: durationSeconds,
-          status: "completed",
+          status: legacyStatus,
+          technical_status: finalTechnicalStatus,
+          ...(lifecycle?.outcome
+            ? { business_outcome: lifecycle.outcome }
+            : {}),
+          ...(lifecycle?.endReason ? { end_reason: lifecycle.endReason } : {}),
+          ...(lifecycle?.answeredAt
+            ? { answered_at: lifecycle.answeredAt.toISOString() }
+            : {}),
+          ...(lifecycle?.endedAt
+            ? { ended_at: lifecycle.endedAt.toISOString() }
+            : {}),
           transcript: transcript || null,
           cost_usd: 0,
         },
         { onConflict: "retell_call_id", ignoreDuplicates: false },
       );
 
-      // TAREA 1: Release call slot IMMEDIATELY after upsert.
-      // Previously, release_call_slot was called AFTER extractCrmAnalysis (a Groq
-      // network call). If Groq was slow (5-10s), the workspace's concurrent-call
-      // counter stayed inflated and new calls got "Concurrent call limit reached".
-      // By releasing here, new calls can start as soon as this call is recorded.
+      // Release call slot IMMEDIATELY after upsert so the workspace concurrent-call
+      // counter drops before any Groq/webhook background work begins.
       await supabase
         .rpc("release_call_slot", { p_workspace_id: workspaceId })
         .then(
@@ -2009,7 +2182,16 @@ export default defineAgent({
           () => null,
         );
 
-      // TAREA 1: CRM extraction and webhook are fire-and-forget.
+      // Record final lifecycle event for debugging and analytics dashboards
+      void emit("call.ended", {
+        agent_id: agentId,
+        duration_seconds: durationSeconds,
+        technical_status: finalTechnicalStatus,
+        business_outcome: lifecycle?.outcome ?? null,
+        close_reason: closeReason ?? null,
+      });
+
+      // CRM extraction and webhook are fire-and-forget.
       // They run in the background after the slot is released so they never block
       // the call lifecycle. Any Groq/DB error is logged but doesn't affect the worker.
       void (async () => {

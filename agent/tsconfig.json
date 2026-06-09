@@ -5,5 +5,5 @@
     "moduleResolution": "bundler",
     "target": "ES2022"
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "runtime/**/*.ts", "persistence/**/*.ts", "tests/**/*.ts"]
 }
