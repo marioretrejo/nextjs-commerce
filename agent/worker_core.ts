@@ -45,6 +45,7 @@ import * as net from "node:net";
 import { runStartupCleanup } from "./startup-cleanup.js";
 import { CallLifecycleManager } from "./runtime/call-lifecycle.js";
 import { makeEventRecorder } from "./persistence/call-events-repository.js";
+import { BillingTracker } from "./persistence/billing-tracker.js";
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(
@@ -760,6 +761,12 @@ export default defineAgent({
       _lifecycleSupabase && workspaceId
         ? makeEventRecorder(_lifecycleSupabase, roomName, workspaceId)
         : (_type: unknown, _payload?: Record<string, unknown>): void => {};
+
+    // Fase 7: Cost tracker — accumulates usage during the call, persisted at close
+    const billing =
+      _lifecycleSupabase && workspaceId && agentId
+        ? new BillingTracker(roomName, workspaceId, agentId)
+        : null;
 
     // Mark call as in-progress immediately (agent entry = call already connected)
     void lifecycle?.transitionTo("in_progress").catch(() => null);
@@ -2091,6 +2098,10 @@ export default defineAgent({
       if (text.trim()) {
         const speaker = role === "assistant" ? agentName : "User";
         transcriptLines.push(`${speaker}: ${text.trim()}`);
+        // Accumulate TTS chars from agent utterances for cost estimation
+        if (role === "assistant" && billing) {
+          billing.trackTTS(text.trim().length);
+        }
       }
     });
 
@@ -2204,6 +2215,7 @@ export default defineAgent({
 
       // Release call slot IMMEDIATELY after upsert so the workspace concurrent-call
       // counter drops before any Groq/webhook background work begins.
+      // Cost tracking runs in the background after slot release — never blocks it.
       await supabase
         .rpc("release_call_slot", { p_workspace_id: workspaceId })
         .then(
@@ -2220,10 +2232,37 @@ export default defineAgent({
         close_reason: closeReason ?? null,
       });
 
-      // CRM extraction and webhook are fire-and-forget.
-      // They run in the background after the slot is released so they never block
-      // the call lifecycle. Any Groq/DB error is logged but doesn't affect the worker.
+      // Cost tracking + CRM extraction + webhook — all fire-and-forget.
+      // Runs after slot release so none of this can delay the call lifecycle.
       void (async () => {
+        try {
+          // ── Fase 7: compute and persist call costs ───────────────────────────
+          if (billing) {
+            // Retrieve callId for cost event linking
+            const { data: costCallRow } = await supabase
+              .from("calls")
+              .select("id")
+              .eq("retell_call_id", roomName)
+              .maybeSingle();
+            const resolvedCallId = costCallRow?.id ?? null;
+
+            billing.trackTelephony(durationSeconds, callDirection);
+            billing.trackLiveKit(durationSeconds);
+            billing.trackSTT(durationSeconds);
+            // TTS chars already accumulated in ConversationItemAdded handler
+
+            // LLM token estimate: total transcript chars / 3 (rough; labeled 'estimated')
+            const transcriptChars = transcriptLines.join("").length;
+            if (transcriptChars > 0) {
+              billing.trackLLMTokens(Math.round(transcriptChars / 3));
+            }
+
+            await billing.computeAndPersist(resolvedCallId, supabase);
+          }
+        } catch (costErr) {
+          console.warn("[billing] cost tracking error:", String(costErr));
+        }
+
         try {
           const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
           const crmAnalysis = await extractCrmAnalysis(
