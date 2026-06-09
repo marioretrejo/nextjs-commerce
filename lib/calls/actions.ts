@@ -9,41 +9,41 @@
  *
  * Errors are isolated per action: one failing webhook never blocks others.
  */
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ActionTrigger =
-  | 'pre_call'
-  | 'post_call'
-  | 'on_transfer'
-  | 'on_voicemail'
-  | 'on_converted'
-  | 'on_no_answer'
-  | 'on_error';
+  | "pre_call"
+  | "post_call"
+  | "on_transfer"
+  | "on_voicemail"
+  | "on_converted"
+  | "on_no_answer"
+  | "on_error";
 
 export interface CallActionVars {
-  contact_name?:     string;
-  contact_phone?:    string;
-  agent_name?:       string;
-  workspace_id?:     string;
-  call_id?:          string;
-  room_name?:        string;
-  disposition?:      string;
-  outcome?:          string;
+  contact_name?: string;
+  contact_phone?: string;
+  agent_name?: string;
+  workspace_id?: string;
+  call_id?: string;
+  room_name?: string;
+  disposition?: string;
+  outcome?: string;
   duration_seconds?: number;
-  transcript?:       string;
-  summary?:          string;
-  [key: string]:     unknown;
+  transcript?: string;
+  summary?: string;
+  [key: string]: unknown;
 }
 
 interface ActionRow {
-  id:      string;
-  name:    string;
-  type:    string;
-  config:  Record<string, unknown>;
+  id: string;
+  name: string;
+  type: string;
+  config: Record<string, unknown>;
 }
 
 // ─── Template resolution ──────────────────────────────────────────────────────
@@ -52,15 +52,21 @@ interface ActionRow {
  * Replace {{key}} placeholders in `template` with values from `vars`.
  * Unresolved keys are left as {{key}} so the caller can debug missing data.
  */
-export function resolveTemplate(template: string, vars: CallActionVars): string {
+export function resolveTemplate(
+  template: string,
+  vars: CallActionVars,
+): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) =>
-    vars[key] != null ? String(vars[key]) : `{{${key}}}`
+    vars[key] != null ? String(vars[key]) : `{{${key}}}`,
   );
 }
 
 // ─── Action executors ─────────────────────────────────────────────────────────
 
-async function runWebhook(action: ActionRow, vars: CallActionVars): Promise<void> {
+async function runWebhook(
+  action: ActionRow,
+  vars: CallActionVars,
+): Promise<void> {
   const cfg = action.config as {
     url: string;
     method?: string;
@@ -68,20 +74,20 @@ async function runWebhook(action: ActionRow, vars: CallActionVars): Promise<void
     body_template?: string;
   };
 
-  const url    = resolveTemplate(cfg.url, vars);
-  const method = (cfg.method ?? 'POST').toUpperCase();
-  const body   = cfg.body_template
+  const url = resolveTemplate(cfg.url, vars);
+  const method = (cfg.method ?? "POST").toUpperCase();
+  const body = cfg.body_template
     ? resolveTemplate(cfg.body_template, vars)
     : JSON.stringify(vars);
 
   const res = await Promise.race([
     fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json', ...cfg.headers },
-      body: method === 'GET' ? undefined : body,
+      headers: { "Content-Type": "application/json", ...cfg.headers },
+      body: method === "GET" ? undefined : body,
     }),
     new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error('webhook timeout')), 10_000)
+      setTimeout(() => rej(new Error("webhook timeout")), 10_000),
     ),
   ]);
 
@@ -97,23 +103,26 @@ async function runSms(action: ActionRow, vars: CallActionVars): Promise<void> {
     provider?: string;
   };
 
-  const to   = resolveTemplate(cfg.to_template, vars);
+  const to = resolveTemplate(cfg.to_template, vars);
   const body = resolveTemplate(cfg.body_template, vars);
 
   // Route through workspace's configured SMS provider via internal API
   await Promise.race([
-    fetch(`${process.env['NEXT_PUBLIC_APP_URL'] ?? ''}/api/internal/sms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, body, provider: cfg.provider ?? 'twilio' }),
+    fetch(`${process.env["NEXT_PUBLIC_APP_URL"] ?? ""}/api/internal/sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, body, provider: cfg.provider ?? "twilio" }),
     }),
     new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error('sms timeout')), 10_000)
+      setTimeout(() => rej(new Error("sms timeout")), 10_000),
     ),
   ]);
 }
 
-async function runCrmUpdate(action: ActionRow, vars: CallActionVars): Promise<void> {
+async function runCrmUpdate(
+  action: ActionRow,
+  vars: CallActionVars,
+): Promise<void> {
   const cfg = action.config as {
     crm_type: string;
     field_mappings: Record<string, string>;
@@ -125,24 +134,35 @@ async function runCrmUpdate(action: ActionRow, vars: CallActionVars): Promise<vo
   }
 
   await Promise.race([
-    fetch(`${process.env['NEXT_PUBLIC_APP_URL'] ?? ''}/api/internal/crm/${cfg.crm_type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload, workspace_id: vars.workspace_id }),
-    }),
+    fetch(
+      `${process.env["NEXT_PUBLIC_APP_URL"] ?? ""}/api/internal/crm/${cfg.crm_type}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload, workspace_id: vars.workspace_id }),
+      },
+    ),
     new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error('crm timeout')), 10_000)
+      setTimeout(() => rej(new Error("crm timeout")), 10_000),
     ),
   ]);
 }
 
-async function dispatchAction(action: ActionRow, vars: CallActionVars): Promise<void> {
+async function dispatchAction(
+  action: ActionRow,
+  vars: CallActionVars,
+): Promise<void> {
   switch (action.type) {
-    case 'webhook':    return runWebhook(action, vars);
-    case 'sms':        return runSms(action, vars);
-    case 'crm_update': return runCrmUpdate(action, vars);
+    case "webhook":
+      return runWebhook(action, vars);
+    case "sms":
+      return runSms(action, vars);
+    case "crm_update":
+      return runCrmUpdate(action, vars);
     default:
-      console.warn(`[call-action] unknown type "${action.type}" for action "${action.name}"`);
+      console.warn(
+        `[call-action] unknown type "${action.type}" for action "${action.name}"`,
+      );
   }
 }
 
@@ -165,35 +185,38 @@ export async function executeCallActions(
   vars: CallActionVars,
 ): Promise<void> {
   let query = admin
-    .from('call_actions')
-    .select('id, name, type, config')
-    .eq('workspace_id', workspaceId)
-    .eq('trigger', trigger)
-    .eq('is_active', true);
+    .from("call_actions")
+    .select("id, name, type, config")
+    .eq("workspace_id", workspaceId)
+    .eq("trigger", trigger)
+    .eq("is_active", true);
 
   if (agentId) {
     // agent-specific OR workspace-wide (agent_id is null)
     query = query.or(`agent_id.eq.${agentId},agent_id.is.null`);
   } else {
-    query = query.is('agent_id', null);
+    query = query.is("agent_id", null);
   }
 
   const { data, error } = await query;
   if (error) {
-    console.error('[call-action] failed to load actions:', error.message);
+    console.error("[call-action] failed to load actions:", error.message);
     return;
   }
   if (!data?.length) return;
 
   const results = await Promise.allSettled(
-    (data as ActionRow[]).map(a => dispatchAction(a, vars))
+    (data as ActionRow[]).map((a) => dispatchAction(a, vars)),
   );
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
-    if (r?.status === 'rejected') {
+    if (r?.status === "rejected") {
       const a = (data as ActionRow[])[i];
-      console.error(`[call-action] "${a?.name}" (${a?.type}) failed:`, String(r.reason));
+      console.error(
+        `[call-action] "${a?.name}" (${a?.type}) failed:`,
+        String(r.reason),
+      );
     }
   }
 }

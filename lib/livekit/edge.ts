@@ -20,14 +20,19 @@
  * endpoint to embed the correct wsUrl in the client token response.
  */
 
-export type LiveKitRegion = 'us-east' | 'us-west' | 'eu-west' | 'ap-se' | 'default';
+export type LiveKitRegion =
+  | "us-east"
+  | "us-west"
+  | "eu-west"
+  | "ap-se"
+  | "default";
 
 const REGION_ENV_MAP: Record<LiveKitRegion, string> = {
-  'us-east':  'LIVEKIT_URL_US_EAST',
-  'us-west':  'LIVEKIT_URL_US_WEST',
-  'eu-west':  'LIVEKIT_URL_EU_WEST',
-  'ap-se':    'LIVEKIT_URL_AP_SE',
-  'default':  'LIVEKIT_URL',
+  "us-east": "LIVEKIT_URL_US_EAST",
+  "us-west": "LIVEKIT_URL_US_WEST",
+  "eu-west": "LIVEKIT_URL_EU_WEST",
+  "ap-se": "LIVEKIT_URL_AP_SE",
+  default: "LIVEKIT_URL",
 };
 
 /**
@@ -37,9 +42,9 @@ const REGION_ENV_MAP: Record<LiveKitRegion, string> = {
  * @param region — detected from Vercel's `x-vercel-ip-country` header or
  *                 your own geo-IP service
  */
-export function getRegionalWsUrl(region: LiveKitRegion = 'default'): string {
+export function getRegionalWsUrl(region: LiveKitRegion = "default"): string {
   const envKey = REGION_ENV_MAP[region];
-  const url = process.env[envKey] ?? process.env['LIVEKIT_URL'] ?? '';
+  const url = process.env[envKey] ?? process.env["LIVEKIT_URL"] ?? "";
   return url;
 }
 
@@ -48,37 +53,45 @@ export function getRegionalWsUrl(region: LiveKitRegion = 'default'): string {
  * Vercel sets `x-vercel-ip-country` to a 2-letter ISO country code on edge requests.
  */
 export function detectRegion(req: Request): LiveKitRegion {
-  const country = req.headers.get('x-vercel-ip-country') ?? '';
+  const country = req.headers.get("x-vercel-ip-country") ?? "";
 
   // Europe
-  if (['GB', 'DE', 'FR', 'ES', 'IT', 'NL', 'SE', 'PL', 'PT', 'BE'].includes(country)) {
-    return process.env['LIVEKIT_URL_EU_WEST'] ? 'eu-west' : 'default';
+  if (
+    ["GB", "DE", "FR", "ES", "IT", "NL", "SE", "PL", "PT", "BE"].includes(
+      country,
+    )
+  ) {
+    return process.env["LIVEKIT_URL_EU_WEST"] ? "eu-west" : "default";
   }
   // Asia-Pacific
-  if (['SG', 'JP', 'KR', 'AU', 'IN', 'HK', 'TW', 'TH', 'PH', 'MY'].includes(country)) {
-    return process.env['LIVEKIT_URL_AP_SE'] ? 'ap-se' : 'default';
+  if (
+    ["SG", "JP", "KR", "AU", "IN", "HK", "TW", "TH", "PH", "MY"].includes(
+      country,
+    )
+  ) {
+    return process.env["LIVEKIT_URL_AP_SE"] ? "ap-se" : "default";
   }
   // US West
-  if (['US'].includes(country)) {
+  if (["US"].includes(country)) {
     // Rough split: Vercel doesn't expose state, but US-West can be inferred
     // from x-vercel-ip-timezone if available
-    const tz = req.headers.get('x-vercel-ip-timezone') ?? '';
+    const tz = req.headers.get("x-vercel-ip-timezone") ?? "";
     if (/America\/(Los_Angeles|Denver|Phoenix|Anchorage|Honolulu)/.test(tz)) {
-      return process.env['LIVEKIT_URL_US_WEST'] ? 'us-west' : 'default';
+      return process.env["LIVEKIT_URL_US_WEST"] ? "us-west" : "default";
     }
-    return process.env['LIVEKIT_URL_US_EAST'] ? 'us-east' : 'default';
+    return process.env["LIVEKIT_URL_US_EAST"] ? "us-east" : "default";
   }
 
-  return 'default';
+  return "default";
 }
 
 /**
  * Returns the HTTP REST URL for the LiveKit server (used by RoomServiceClient).
  */
-export function getRegionalHttpUrl(region: LiveKitRegion = 'default'): string {
+export function getRegionalHttpUrl(region: LiveKitRegion = "default"): string {
   return getRegionalWsUrl(region)
-    .replace('wss://', 'https://')
-    .replace('ws://', 'http://');
+    .replace("wss://", "https://")
+    .replace("ws://", "http://");
 }
 
 /**
@@ -86,7 +99,10 @@ export function getRegionalHttpUrl(region: LiveKitRegion = 'default'): string {
  */
 export function getAllRegionalUrls(): Partial<Record<LiveKitRegion, string>> {
   const result: Partial<Record<LiveKitRegion, string>> = {};
-  for (const [region, envKey] of Object.entries(REGION_ENV_MAP) as [LiveKitRegion, string][]) {
+  for (const [region, envKey] of Object.entries(REGION_ENV_MAP) as [
+    LiveKitRegion,
+    string,
+  ][]) {
     const url = process.env[envKey];
     if (url) result[region] = url;
   }

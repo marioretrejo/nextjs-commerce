@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
@@ -15,17 +15,44 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <span className="font-semibold text-[#0a0a0a]">VoiceOS</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-[#6b6b6b]">
-            <Link href="/#features" className="hover:text-[#0a0a0a] transition-colors">Features</Link>
-            <Link href="/#pricing"  className="hover:text-[#0a0a0a] transition-colors">Pricing</Link>
-            <Link href="/docs"      className="hover:text-[#0a0a0a] transition-colors">Docs</Link>
-            <Link href="/developers" className="hover:text-[#0a0a0a] transition-colors">API</Link>
+            <Link
+              href="/#features"
+              className="hover:text-[#0a0a0a] transition-colors"
+            >
+              Features
+            </Link>
+            <Link
+              href="/#pricing"
+              className="hover:text-[#0a0a0a] transition-colors"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="/docs"
+              className="hover:text-[#0a0a0a] transition-colors"
+            >
+              Docs
+            </Link>
+            <Link
+              href="/developers"
+              className="hover:text-[#0a0a0a] transition-colors"
+            >
+              API
+            </Link>
           </nav>
           <div className="flex items-center gap-3">
             <Link href="/login">
-              <Button variant="ghost" size="sm">Sign in</Button>
+              <Button variant="ghost" size="sm">
+                Sign in
+              </Button>
             </Link>
             <Link href="/register">
-              <Button size="sm" className="bg-[#0a0a0a] text-white hover:bg-[#262626]">Start free</Button>
+              <Button
+                size="sm"
+                className="bg-[#0a0a0a] text-white hover:bg-[#262626]"
+              >
+                Start free
+              </Button>
             </Link>
           </div>
         </div>
@@ -43,22 +70,51 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </div>
               <span className="font-semibold text-[#0a0a0a]">VoiceOS</span>
             </div>
-            <p className="leading-relaxed">AI voice agents for outbound sales and support at scale.</p>
+            <p className="leading-relaxed">
+              AI voice agents for outbound sales and support at scale.
+            </p>
           </div>
           <div>
             <p className="font-medium text-[#0a0a0a] mb-3">Product</p>
             <ul className="space-y-2">
-              <li><Link href="/#features" className="hover:text-[#0a0a0a]">Features</Link></li>
-              <li><Link href="/#pricing"  className="hover:text-[#0a0a0a]">Pricing</Link></li>
-              <li><Link href="/developers" className="hover:text-[#0a0a0a]">API Reference</Link></li>
+              <li>
+                <Link href="/#features" className="hover:text-[#0a0a0a]">
+                  Features
+                </Link>
+              </li>
+              <li>
+                <Link href="/#pricing" className="hover:text-[#0a0a0a]">
+                  Pricing
+                </Link>
+              </li>
+              <li>
+                <Link href="/developers" className="hover:text-[#0a0a0a]">
+                  API Reference
+                </Link>
+              </li>
             </ul>
           </div>
           <div>
             <p className="font-medium text-[#0a0a0a] mb-3">Company</p>
             <ul className="space-y-2">
-              <li><a href="mailto:hello@voiceos.app" className="hover:text-[#0a0a0a]">Contact</a></li>
-              <li><Link href="/privacy" className="hover:text-[#0a0a0a]">Privacy</Link></li>
-              <li><Link href="/terms"   className="hover:text-[#0a0a0a]">Terms</Link></li>
+              <li>
+                <a
+                  href="mailto:hello@voiceos.app"
+                  className="hover:text-[#0a0a0a]"
+                >
+                  Contact
+                </a>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-[#0a0a0a]">
+                  Privacy
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms" className="hover:text-[#0a0a0a]">
+                  Terms
+                </Link>
+              </li>
             </ul>
           </div>
           <div>

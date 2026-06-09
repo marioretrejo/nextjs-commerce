@@ -26,14 +26,14 @@
  */
 
 export type SpanName =
-  | 'stt'             // Speech-to-text transcription
-  | 'llm.first_token' // Time to first LLM token (TTFT)
-  | 'llm.full'        // Full LLM response time
-  | 'tts.first_chunk' // Time to first TTS audio chunk
-  | 'tts.full'        // Full TTS synthesis
-  | 'tool'            // Tool / function call execution
-  | 'token.issue'     // LiveKit token issuance
-  | 'call.total';     // End-to-end call duration
+  | "stt" // Speech-to-text transcription
+  | "llm.first_token" // Time to first LLM token (TTFT)
+  | "llm.full" // Full LLM response time
+  | "tts.first_chunk" // Time to first TTS audio chunk
+  | "tts.full" // Full TTS synthesis
+  | "tool" // Tool / function call execution
+  | "token.issue" // LiveKit token issuance
+  | "call.total"; // End-to-end call duration
 
 export interface Span {
   name: SpanName | string;
@@ -55,7 +55,7 @@ function newTraceId(): string {
 
 export function startSpan(
   name: SpanName | string,
-  meta: Record<string, unknown> = {}
+  meta: Record<string, unknown> = {},
 ): Span {
   return {
     name,
@@ -68,9 +68,10 @@ export function startSpan(
 
 export function endSpan(
   span: Span,
-  extra: Record<string, unknown> = {}
+  extra: Record<string, unknown> = {},
 ): SpanResult {
-  const durationMs = Number(process.hrtime.bigint() - span.startedHr) / 1_000_000;
+  const durationMs =
+    Number(process.hrtime.bigint() - span.startedHr) / 1_000_000;
   const result: SpanResult = {
     ...span,
     meta: { ...span.meta, ...extra },
@@ -81,7 +82,7 @@ export function endSpan(
   // startedHr is a BigInt used only for duration math — exclude it from the
   // JSON log so JSON.stringify never throws "Do not know how to serialize a BigInt"
   const { startedHr: _hr, ...loggable } = result;
-  log('trace', loggable as unknown as Record<string, unknown>);
+  log("trace", loggable as unknown as Record<string, unknown>);
   return result;
 }
 
@@ -104,7 +105,7 @@ export function traceRequest(req: Request, operation: string) {
 export async function timed<T>(
   name: SpanName | string,
   fn: () => Promise<T>,
-  meta: Record<string, unknown> = {}
+  meta: Record<string, unknown> = {},
 ): Promise<T> {
   const span = startSpan(name, meta);
   try {
@@ -119,26 +120,31 @@ export async function timed<T>(
 
 // ─── Core logger ─────────────────────────────────────────────────────────────
 
-type LogLevel = 'info' | 'warn' | 'error' | 'trace';
+type LogLevel = "info" | "warn" | "error" | "trace";
 
-export function log(level: LogLevel, data: Record<string, unknown> | string): void {
+export function log(
+  level: LogLevel,
+  data: Record<string, unknown> | string,
+): void {
   const entry = {
     ts: new Date().toISOString(),
     level,
-    service: 'voiceos',
-    ...(typeof data === 'string' ? { message: data } : data),
+    service: "voiceos",
+    ...(typeof data === "string" ? { message: data } : data),
   };
 
   // Single JSON line — trivially parseable by any log aggregator.
   // The BigInt replacer is a backstop; startedHr is already stripped above.
-  const line = JSON.stringify(entry, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+  const line = JSON.stringify(entry, (_, v) =>
+    typeof v === "bigint" ? v.toString() : v,
+  );
 
-  if (level === 'error') {
+  if (level === "error") {
     console.error(line);
     // TODO: forward to Sentry — uncomment after adding @sentry/nextjs:
     // import * as Sentry from '@sentry/nextjs';
     // Sentry.captureMessage(line, 'error');
-  } else if (level === 'warn') {
+  } else if (level === "warn") {
     console.warn(line);
   } else {
     console.log(line);
@@ -149,16 +155,16 @@ export function log(level: LogLevel, data: Record<string, unknown> | string): vo
 // Logs a warning if a stage exceeds the expected p95 threshold.
 
 const P95_THRESHOLDS_MS: Partial<Record<SpanName, number>> = {
-  'stt':             800,   // Deepgram nova-3 should respond in < 800ms
-  'llm.first_token': 600,   // Groq Llama 4 Scout TTFT < 600ms
-  'tts.first_chunk': 400,   // Cartesia sonic-3 < 400ms
-  'tool':           5000,   // Tools have 8s timeout; warn at 5s
+  stt: 800, // Deepgram nova-3 should respond in < 800ms
+  "llm.first_token": 600, // Groq Llama 4 Scout TTFT < 600ms
+  "tts.first_chunk": 400, // Cartesia sonic-3 < 400ms
+  tool: 5000, // Tools have 8s timeout; warn at 5s
 };
 
 export function checkLatencyThreshold(result: SpanResult): void {
   const threshold = P95_THRESHOLDS_MS[result.name as SpanName];
   if (threshold && result.durationMs > threshold) {
-    log('warn', {
+    log("warn", {
       message: `Latency threshold exceeded for stage "${result.name}"`,
       stage: result.name,
       durationMs: result.durationMs,

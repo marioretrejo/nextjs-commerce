@@ -7,9 +7,20 @@ export const ROLE_WEIGHT: Record<string, number> = {
 };
 
 export const ALL_MODULES = [
-  'dashboard', 'agents', 'campaigns', 'calls', 'analytics',
-  'knowledge', 'quality', 'numbers', 'compliance', 'integrations',
-  'team', 'billing', 'settings', 'developers',
+  "dashboard",
+  "agents",
+  "campaigns",
+  "calls",
+  "analytics",
+  "knowledge",
+  "quality",
+  "numbers",
+  "compliance",
+  "integrations",
+  "team",
+  "billing",
+  "settings",
+  "developers",
 ] as const;
 
 export type ModuleKey = (typeof ALL_MODULES)[number];

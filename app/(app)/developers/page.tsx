@@ -1,20 +1,47 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
-import { toast } from 'sonner';
+import { useState, useEffect, useCallback } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Key, Plus, Trash2, Copy, Check, Loader2, Download,
-  ChevronDown, ChevronRight, Code2, Globe, Webhook, Phone,
-  AlertTriangle, BookOpen, FileJson, FileText,
-} from 'lucide-react';
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
+import {
+  Key,
+  Plus,
+  Trash2,
+  Copy,
+  Check,
+  Loader2,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  Code2,
+  Globe,
+  Webhook,
+  Phone,
+  AlertTriangle,
+  BookOpen,
+  FileJson,
+  FileText,
+} from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,13 +171,19 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   return (
     <div className="relative rounded-xl bg-[#0a0a0a] border border-[#1f1f1f]">
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#1f1f1f]">
-        <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">{language}</span>
+        <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
+          {language}
+        </span>
         <button
           onClick={copy}
           className="flex items-center gap-1.5 text-xs text-[#6b6b6b] hover:text-white transition-colors"
         >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? 'Copied!' : 'Copy'}
+          {copied ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+          {copied ? "Copied!" : "Copy"}
         </button>
       </div>
       <pre className="overflow-x-auto p-4 text-sm font-mono text-[#e0e0e0] leading-relaxed">
@@ -160,17 +193,19 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   );
 }
 
-type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 function MethodBadge({ method }: { method: HttpMethod }) {
   const colors: Record<HttpMethod, string> = {
-    GET:    'bg-blue-100 text-blue-700',
-    POST:   'bg-green-100 text-green-700',
-    PATCH:  'bg-amber-100 text-amber-700',
-    DELETE: 'bg-red-100 text-red-700',
+    GET: "bg-blue-100 text-blue-700",
+    POST: "bg-green-100 text-green-700",
+    PATCH: "bg-amber-100 text-amber-700",
+    DELETE: "bg-red-100 text-red-700",
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${colors[method]}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${colors[method]}`}
+    >
       {method}
     </span>
   );
@@ -184,23 +219,37 @@ interface EndpointCardProps {
   children: React.ReactNode;
 }
 
-function EndpointCard({ method, path, summary, description, children }: EndpointCardProps) {
+function EndpointCard({
+  method,
+  path,
+  summary,
+  description,
+  children,
+}: EndpointCardProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="border border-[#e0e0e0] rounded-xl overflow-hidden">
       <button
         className="flex w-full items-center gap-3 px-5 py-4 bg-white hover:bg-[#fafafa] transition-colors text-left"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
       >
         <MethodBadge method={method} />
         <code className="text-sm font-mono text-[#0a0a0a] flex-1">{path}</code>
-        <span className="text-sm text-[#6b6b6b] hidden sm:block">{summary}</span>
-        {open ? <ChevronDown className="h-4 w-4 text-[#6b6b6b] shrink-0" /> : <ChevronRight className="h-4 w-4 text-[#6b6b6b] shrink-0" />}
+        <span className="text-sm text-[#6b6b6b] hidden sm:block">
+          {summary}
+        </span>
+        {open ? (
+          <ChevronDown className="h-4 w-4 text-[#6b6b6b] shrink-0" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-[#6b6b6b] shrink-0" />
+        )}
       </button>
       {open && (
         <div className="border-t border-[#e0e0e0] bg-[#fafafa] p-5 space-y-4">
-          <p className="text-sm text-[#6b6b6b] leading-relaxed">{description}</p>
+          <p className="text-sm text-[#6b6b6b] leading-relaxed">
+            {description}
+          </p>
           {children}
         </div>
       )}
@@ -210,29 +259,49 @@ function EndpointCard({ method, path, summary, description, children }: Endpoint
 
 function StatusBadge({ code }: { code: number | string }) {
   const n = Number(code);
-  const cls = n < 300 ? 'bg-green-100 text-green-700' : n < 500 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${cls}`}>{code}</span>;
+  const cls =
+    n < 300
+      ? "bg-green-100 text-green-700"
+      : n < 500
+        ? "bg-amber-100 text-amber-700"
+        : "bg-red-100 text-red-700";
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${cls}`}
+    >
+      {code}
+    </span>
+  );
 }
 
 // ─── Download helpers ─────────────────────────────────────────────────────────
 
 function downloadJson(obj: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
   URL.revokeObjectURL(url);
 }
 
-function downloadText(text: string, filename: string, type = 'text/plain') {
+function downloadText(text: string, filename: string, type = "text/plain") {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
   URL.revokeObjectURL(url);
 }
 
-async function buildPostmanCollection(spec: Record<string, unknown>, apiKey: string) {
+async function buildPostmanCollection(
+  spec: Record<string, unknown>,
+  apiKey: string,
+) {
   const info = spec.info as Record<string, unknown>;
   const paths = spec.paths as Record<string, Record<string, unknown>>;
   const items = Object.entries(paths).flatMap(([path, methods]) =>
@@ -243,32 +312,39 @@ async function buildPostmanCollection(spec: Record<string, unknown>, apiKey: str
         request: {
           method: method.toUpperCase(),
           header: [
-            { key: 'Authorization', value: `Bearer ${apiKey}`, type: 'text' },
-            { key: 'Content-Type', value: 'application/json', type: 'text' },
+            { key: "Authorization", value: `Bearer ${apiKey}`, type: "text" },
+            { key: "Content-Type", value: "application/json", type: "text" },
           ],
           url: {
             raw: `https://app.voiceos.ai${path}`,
-            protocol: 'https',
-            host: ['app', 'voiceos', 'ai'],
-            path: path.split('/').filter(Boolean),
+            protocol: "https",
+            host: ["app", "voiceos", "ai"],
+            path: path.split("/").filter(Boolean),
           },
-          body: method === 'post' || method === 'patch' ? {
-            mode: 'raw',
-            raw: '{}',
-            options: { raw: { language: 'json' } },
-          } : undefined,
+          body:
+            method === "post" || method === "patch"
+              ? {
+                  mode: "raw",
+                  raw: "{}",
+                  options: { raw: { language: "json" } },
+                }
+              : undefined,
         },
         response: [],
       };
-    })
+    }),
   );
 
   return {
     info: {
-      name: `VoiceOS API — ${(info.version as string)}`,
-      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+      name: `VoiceOS API — ${info.version as string}`,
+      schema:
+        "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     },
-    auth: { type: 'bearer', bearer: [{ key: 'token', value: apiKey, type: 'string' }] },
+    auth: {
+      type: "bearer",
+      bearer: [{ key: "token", value: apiKey, type: "string" }],
+    },
     item: items,
   };
 }
@@ -448,51 +524,66 @@ export default function DevelopersPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loadingKeys, setLoadingKeys] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
-  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyName, setNewKeyName] = useState("");
   const [creating, setCreating] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [codeTab, setCodeTab] = useState<'curl' | 'node' | 'python'>('curl');
-  const [openApiSpec, setOpenApiSpec] = useState<Record<string, unknown> | null>(null);
+  const [codeTab, setCodeTab] = useState<"curl" | "node" | "python">("curl");
+  const [openApiSpec, setOpenApiSpec] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
-  const displayKey = generatedKey ?? (keys[0] ? `${keys[0]?.key_prefix}...` : 'vos_live_YOUR_API_KEY');
+  const displayKey =
+    generatedKey ??
+    (keys[0] ? `${keys[0]?.key_prefix}...` : "vos_live_YOUR_API_KEY");
 
   const fetchKeys = useCallback(async () => {
-    const res = await fetch('/api/settings/api-keys');
+    const res = await fetch("/api/settings/api-keys");
     if (res.ok) setKeys(((await res.json()) as { keys: ApiKey[] }).keys);
     setLoadingKeys(false);
   }, []);
 
   useEffect(() => {
     fetchKeys();
-    fetch('/openapi.json').then(r => r.json()).then(d => setOpenApiSpec(d as Record<string, unknown>)).catch(() => null);
+    fetch("/openapi.json")
+      .then((r) => r.json())
+      .then((d) => setOpenApiSpec(d as Record<string, unknown>))
+      .catch(() => null);
   }, [fetchKeys]);
 
   async function createKey() {
-    if (!newKeyName.trim()) { toast.error('Name required'); return; }
+    if (!newKeyName.trim()) {
+      toast.error("Name required");
+      return;
+    }
     setCreating(true);
     try {
-      const res = await fetch('/api/settings/api-keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/settings/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newKeyName.trim() }),
       });
-      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      if (!res.ok)
+        throw new Error(((await res.json()) as { error: string }).error);
       const d = (await res.json()) as { key: string };
       setGeneratedKey(d.key);
-      setNewKeyName('');
+      setNewKeyName("");
       await fetchKeys();
       setCreateOpen(false);
-    } catch (e) { toast.error(String(e)); }
-    finally { setCreating(false); }
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function deleteKey(id: string) {
     setDeletingId(id);
-    await fetch(`/api/settings/api-keys/${id}`, { method: 'DELETE' });
-    setKeys(k => k.filter(key => key.id !== id));
-    toast.success('Key revoked');
+    await fetch(`/api/settings/api-keys/${id}`, { method: "DELETE" });
+    setKeys((k) => k.filter((key) => key.id !== id));
+    toast.success("Key revoked");
     setDeletingId(null);
   }
 
@@ -503,24 +594,37 @@ export default function DevelopersPage() {
   }
 
   async function handleDownloadPostman() {
-    if (!openApiSpec) { toast.error('Spec not loaded'); return; }
+    if (!openApiSpec) {
+      toast.error("Spec not loaded");
+      return;
+    }
     const collection = await buildPostmanCollection(openApiSpec, displayKey);
-    downloadJson(collection, 'voiceos-postman.json');
-    toast.success('Postman collection downloaded');
+    downloadJson(collection, "voiceos-postman.json");
+    toast.success("Postman collection downloaded");
   }
 
   function handleDownloadOpenApi() {
-    if (!openApiSpec) { toast.error('Spec not loaded'); return; }
-    downloadJson(openApiSpec, 'voiceos-openapi.json');
-    toast.success('OpenAPI spec downloaded');
+    if (!openApiSpec) {
+      toast.error("Spec not loaded");
+      return;
+    }
+    downloadJson(openApiSpec, "voiceos-openapi.json");
+    toast.success("OpenAPI spec downloaded");
   }
 
   function handleDownloadMarkdown() {
-    downloadText(buildMarkdownDocs(displayKey), 'voiceos-api-docs.md', 'text/markdown');
-    toast.success('Markdown docs downloaded');
+    downloadText(
+      buildMarkdownDocs(displayKey),
+      "voiceos-api-docs.md",
+      "text/markdown",
+    );
+    toast.success("Markdown docs downloaded");
   }
 
-  const codeExamples: Record<'outbound' | 'webhook' | 'verify', Record<string, string>> = {
+  const codeExamples: Record<
+    "outbound" | "webhook" | "verify",
+    Record<string, string>
+  > = {
     outbound: {
       curl: curlOutbound(displayKey),
       node: nodeOutbound(displayKey),
@@ -528,7 +632,7 @@ export default function DevelopersPage() {
     },
     webhook: {
       curl: curlWebhook(displayKey),
-      node: nodeWebhookVerify('YOUR_WEBHOOK_SECRET'),
+      node: nodeWebhookVerify("YOUR_WEBHOOK_SECRET"),
       python: `import requests
 
 response = requests.post(
@@ -556,7 +660,7 @@ V1=$(echo $SIG | grep -o 'v1=.*' | cut -d= -f2)
 # Compute expected
 EXPECTED=$(echo -n "$TS.$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
 [ "$EXPECTED" = "$V1" ] && echo "Valid" || echo "Invalid"`,
-      node: nodeWebhookVerify('YOUR_WEBHOOK_SECRET'),
+      node: nodeWebhookVerify("YOUR_WEBHOOK_SECRET"),
       python: `import hmac, hashlib, time
 
 def verify_webhook(raw_body: bytes, signature: str, secret: str) -> bool:
@@ -594,8 +698,13 @@ def handle_webhook():
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Developer Portal</h1>
-        <p className="mt-1 text-sm text-[#6b6b6b]">API keys, reference documentation, and code examples for integrating VoiceOS.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">
+          Developer Portal
+        </h1>
+        <p className="mt-1 text-sm text-[#6b6b6b]">
+          API keys, reference documentation, and code examples for integrating
+          VoiceOS.
+        </p>
       </div>
 
       <Tabs defaultValue="reference">
@@ -614,13 +723,23 @@ def handle_webhook():
             <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-amber-800 text-sm">Copy this key now — it won&apos;t be shown again.</p>
+                <p className="font-semibold text-amber-800 text-sm">
+                  Copy this key now — it won&apos;t be shown again.
+                </p>
                 <div className="mt-2 flex items-center gap-2">
                   <code className="flex-1 bg-white border border-amber-200 rounded px-3 py-1.5 text-xs font-mono text-[#0a0a0a] truncate">
                     {generatedKey}
                   </code>
-                  <Button size="sm" variant="outline" onClick={() => copyKey(generatedKey)}>
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyKey(generatedKey)}
+                  >
+                    {copied ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -631,7 +750,9 @@ def handle_webhook():
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle>Access Keys</CardTitle>
-                <CardDescription>Authenticate API requests with Bearer tokens.</CardDescription>
+                <CardDescription>
+                  Authenticate API requests with Bearer tokens.
+                </CardDescription>
               </div>
               <Button size="sm" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" /> New Key
@@ -645,8 +766,12 @@ def handle_webhook():
               ) : keys.length === 0 ? (
                 <div className="text-center py-12 text-[#6b6b6b]">
                   <Key className="h-10 w-10 mx-auto mb-3 text-[#e0e0e0]" />
-                  <p className="font-medium text-[#0a0a0a] mb-1">No API keys yet</p>
-                  <p className="text-sm mb-4">Create your first key to start making API calls.</p>
+                  <p className="font-medium text-[#0a0a0a] mb-1">
+                    No API keys yet
+                  </p>
+                  <p className="text-sm mb-4">
+                    Create your first key to start making API calls.
+                  </p>
                   <Button size="sm" onClick={() => setCreateOpen(true)}>
                     <Plus className="h-4 w-4 mr-1" /> Create Key
                   </Button>
@@ -654,13 +779,21 @@ def handle_webhook():
               ) : (
                 <div className="divide-y divide-[#f0f0f0]">
                   {keys.map((k) => (
-                    <div key={k.id} className="flex items-center justify-between py-3">
+                    <div
+                      key={k.id}
+                      className="flex items-center justify-between py-3"
+                    >
                       <div>
-                        <p className="text-sm font-medium text-[#0a0a0a]">{k.name}</p>
-                        <p className="text-xs text-[#6b6b6b] font-mono mt-0.5">{k.key_prefix}••••••••</p>
+                        <p className="text-sm font-medium text-[#0a0a0a]">
+                          {k.name}
+                        </p>
+                        <p className="text-xs text-[#6b6b6b] font-mono mt-0.5">
+                          {k.key_prefix}••••••••
+                        </p>
                         {k.last_used_at && (
                           <p className="text-xs text-[#a0a0a0] mt-0.5">
-                            Last used {new Date(k.last_used_at).toLocaleDateString()}
+                            Last used{" "}
+                            {new Date(k.last_used_at).toLocaleDateString()}
                           </p>
                         )}
                       </div>
@@ -671,7 +804,11 @@ def handle_webhook():
                         disabled={deletingId === k.id}
                         onClick={() => deleteKey(k.id)}
                       >
-                        {deletingId === k.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {deletingId === k.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   ))}
@@ -684,21 +821,33 @@ def handle_webhook():
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create API Key</DialogTitle>
-                <DialogDescription>Give this key a descriptive name (e.g. &quot;Production Server&quot;, &quot;CI/CD Pipeline&quot;).</DialogDescription>
+                <DialogDescription>
+                  Give this key a descriptive name (e.g. &quot;Production
+                  Server&quot;, &quot;CI/CD Pipeline&quot;).
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
                 <Label>Key name</Label>
                 <Input
                   placeholder="Production Server"
                   value={newKeyName}
-                  onChange={e => setNewKeyName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && createKey()}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createKey()}
                 />
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                <Button onClick={createKey} disabled={creating || !newKeyName.trim()}>
-                  {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={createKey}
+                  disabled={creating || !newKeyName.trim()}
+                >
+                  {creating ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
                   Create
                 </Button>
               </DialogFooter>
@@ -710,14 +859,20 @@ def handle_webhook():
         <TabsContent value="reference">
           {/* Download bar */}
           <div className="flex items-center gap-2 mb-6 flex-wrap">
-            <span className="text-sm font-medium text-[#6b6b6b] mr-1">Download:</span>
+            <span className="text-sm font-medium text-[#6b6b6b] mr-1">
+              Download:
+            </span>
             <Button size="sm" variant="outline" onClick={handleDownloadOpenApi}>
               <FileJson className="h-3.5 w-3.5 mr-1.5" /> OpenAPI Spec
             </Button>
             <Button size="sm" variant="outline" onClick={handleDownloadPostman}>
               <Globe className="h-3.5 w-3.5 mr-1.5" /> Postman Collection
             </Button>
-            <Button size="sm" variant="outline" onClick={handleDownloadMarkdown}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadMarkdown}
+            >
               <FileText className="h-3.5 w-3.5 mr-1.5" /> Markdown Docs
             </Button>
           </div>
@@ -732,11 +887,19 @@ def handle_webhook():
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-[#6b6b6b]">
-                All API requests must include an <code className="bg-[#f5f5f5] px-1 rounded text-xs font-mono">Authorization</code> header:
+                All API requests must include an{" "}
+                <code className="bg-[#f5f5f5] px-1 rounded text-xs font-mono">
+                  Authorization
+                </code>{" "}
+                header:
               </p>
-              <CodeBlock code={`Authorization: Bearer ${displayKey}`} language="http" />
+              <CodeBlock
+                code={`Authorization: Bearer ${displayKey}`}
+                language="http"
+              />
               <p className="text-xs text-[#a0a0a0]">
-                Keys are workspace-scoped. Generate them from <strong>Settings → API Keys</strong>.
+                Keys are workspace-scoped. Generate them from{" "}
+                <strong>Settings → API Keys</strong>.
               </p>
             </CardContent>
           </Card>
@@ -751,26 +914,41 @@ def handle_webhook():
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-[#6b6b6b]">
-                Limits apply per workspace (not per IP). Standard: <strong>10 req/s</strong>, burst up to <strong>50</strong>.
+                Limits apply per workspace (not per IP). Standard:{" "}
+                <strong>10 req/s</strong>, burst up to <strong>50</strong>.
               </p>
               <div className="rounded-xl border border-[#e0e0e0] overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-[#f5f5f5] border-b border-[#e0e0e0]">
                     <tr>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">Header</th>
-                      <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">Description</th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">
+                        Header
+                      </th>
+                      <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">
+                        Description
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0f0f0]">
                     {[
-                      ['X-RateLimit-Limit', 'Max requests per window'],
-                      ['X-RateLimit-Remaining', 'Requests remaining in current window'],
-                      ['X-RateLimit-Reset', 'Unix timestamp when window resets'],
-                      ['Retry-After', 'Seconds to wait (429 responses only)'],
+                      ["X-RateLimit-Limit", "Max requests per window"],
+                      [
+                        "X-RateLimit-Remaining",
+                        "Requests remaining in current window",
+                      ],
+                      [
+                        "X-RateLimit-Reset",
+                        "Unix timestamp when window resets",
+                      ],
+                      ["Retry-After", "Seconds to wait (429 responses only)"],
                     ].map(([h, d]) => (
                       <tr key={h}>
-                        <td className="px-4 py-2.5 font-mono text-xs text-[#0a0a0a]">{h}</td>
-                        <td className="px-4 py-2.5 text-xs text-[#6b6b6b]">{d}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-[#0a0a0a]">
+                          {h}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-[#6b6b6b]">
+                          {d}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -795,43 +973,88 @@ def handle_webhook():
               {/* Code tabs */}
               <div>
                 <div className="flex gap-1 mb-2">
-                  {(['curl', 'node', 'python'] as const).map(lang => (
+                  {(["curl", "node", "python"] as const).map((lang) => (
                     <button
                       key={lang}
                       onClick={() => setCodeTab(lang)}
-                      className={`px-3 py-1 text-xs rounded font-medium transition-colors ${codeTab === lang ? 'bg-[#0a0a0a] text-white' : 'text-[#6b6b6b] hover:bg-[#f0f0f0]'}`}
+                      className={`px-3 py-1 text-xs rounded font-medium transition-colors ${codeTab === lang ? "bg-[#0a0a0a] text-white" : "text-[#6b6b6b] hover:bg-[#f0f0f0]"}`}
                     >
-                      {lang === 'node' ? 'Node.js' : lang.charAt(0).toUpperCase() + lang.slice(1)}
+                      {lang === "node"
+                        ? "Node.js"
+                        : lang.charAt(0).toUpperCase() + lang.slice(1)}
                     </button>
                   ))}
                 </div>
-                <CodeBlock code={codeExamples.outbound[codeTab] ?? ''} language={codeTab === 'node' ? 'javascript' : codeTab} />
+                <CodeBlock
+                  code={codeExamples.outbound[codeTab] ?? ""}
+                  language={codeTab === "node" ? "javascript" : codeTab}
+                />
               </div>
 
               {/* Request params */}
               <div>
-                <p className="text-xs font-semibold text-[#0a0a0a] mb-2 uppercase tracking-wide">Request Body</p>
+                <p className="text-xs font-semibold text-[#0a0a0a] mb-2 uppercase tracking-wide">
+                  Request Body
+                </p>
                 <div className="rounded-xl border border-[#e0e0e0] overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-[#f5f5f5] border-b border-[#e0e0e0]">
                       <tr>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">Field</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">Type</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">Required</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">Description</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">
+                          Field
+                        </th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">
+                          Type
+                        </th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">
+                          Required
+                        </th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-[#6b6b6b]">
+                          Description
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f0f0f0] text-xs">
                       {[
-                        ['to', 'string', '✓', 'Recipient phone in E.164 format (e.g. +12025551234)'],
-                        ['agentId', 'string (UUID)', '✓', 'UUID of the VoiceOS agent to use'],
-                        ['from', 'string', '—', 'Caller ID override. Defaults to workspace default number.'],
-                        ['variables', 'object', '—', 'Key-value pairs injected into agent prompt at runtime'],
+                        [
+                          "to",
+                          "string",
+                          "✓",
+                          "Recipient phone in E.164 format (e.g. +12025551234)",
+                        ],
+                        [
+                          "agentId",
+                          "string (UUID)",
+                          "✓",
+                          "UUID of the VoiceOS agent to use",
+                        ],
+                        [
+                          "from",
+                          "string",
+                          "—",
+                          "Caller ID override. Defaults to workspace default number.",
+                        ],
+                        [
+                          "variables",
+                          "object",
+                          "—",
+                          "Key-value pairs injected into agent prompt at runtime",
+                        ],
                       ].map(([f, t, r, d]) => (
                         <tr key={f}>
-                          <td className="px-4 py-2.5 font-mono text-[#0a0a0a]">{f}</td>
+                          <td className="px-4 py-2.5 font-mono text-[#0a0a0a]">
+                            {f}
+                          </td>
                           <td className="px-4 py-2.5 text-[#6b6b6b]">{t}</td>
-                          <td className="px-4 py-2.5">{r === '✓' ? <Badge className="bg-[#0a0a0a] text-white text-[10px]">required</Badge> : <span className="text-[#a0a0a0]">optional</span>}</td>
+                          <td className="px-4 py-2.5">
+                            {r === "✓" ? (
+                              <Badge className="bg-[#0a0a0a] text-white text-[10px]">
+                                required
+                              </Badge>
+                            ) : (
+                              <span className="text-[#a0a0a0]">optional</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2.5 text-[#6b6b6b]">{d}</td>
                         </tr>
                       ))}
@@ -842,17 +1065,34 @@ def handle_webhook():
 
               {/* Responses */}
               <div>
-                <p className="text-xs font-semibold text-[#0a0a0a] mb-2 uppercase tracking-wide">Responses</p>
+                <p className="text-xs font-semibold text-[#0a0a0a] mb-2 uppercase tracking-wide">
+                  Responses
+                </p>
                 <div className="space-y-2">
                   {[
-                    { code: 200, desc: 'Call initiated. Returns call_id, room_name, status.' },
-                    { code: 400, desc: 'Invalid body — bad phone number format or missing agentId.' },
-                    { code: 401, desc: 'Missing or invalid API key.' },
-                    { code: 403, desc: 'Workspace suspended or minute limit reached.' },
-                    { code: 429, desc: 'Concurrent call limit or rate limit exceeded.' },
-                    { code: 502, desc: 'Twilio failed to initiate the call.' },
-                  ].map(r => (
-                    <div key={r.code} className="flex items-center gap-3 text-xs">
+                    {
+                      code: 200,
+                      desc: "Call initiated. Returns call_id, room_name, status.",
+                    },
+                    {
+                      code: 400,
+                      desc: "Invalid body — bad phone number format or missing agentId.",
+                    },
+                    { code: 401, desc: "Missing or invalid API key." },
+                    {
+                      code: 403,
+                      desc: "Workspace suspended or minute limit reached.",
+                    },
+                    {
+                      code: 429,
+                      desc: "Concurrent call limit or rate limit exceeded.",
+                    },
+                    { code: 502, desc: "Twilio failed to initiate the call." },
+                  ].map((r) => (
+                    <div
+                      key={r.code}
+                      className="flex items-center gap-3 text-xs"
+                    >
                       <StatusBadge code={r.code} />
                       <span className="text-[#6b6b6b]">{r.desc}</span>
                     </div>
@@ -866,7 +1106,9 @@ def handle_webhook():
           <div className="space-y-4 mb-8">
             <div className="flex items-center gap-2 mb-3">
               <Webhook className="h-4 w-4 text-[#0a0a0a]" />
-              <h2 className="text-base font-semibold text-[#0a0a0a]">Webhooks</h2>
+              <h2 className="text-base font-semibold text-[#0a0a0a]">
+                Webhooks
+              </h2>
             </div>
 
             <EndpointCard
@@ -875,7 +1117,10 @@ def handle_webhook():
               summary="List endpoints"
               description="Returns all webhook endpoints registered for your workspace. Secrets are never returned in list responses."
             >
-              <CodeBlock code={`curl https://app.voiceos.ai/api/v1/webhooks \\\n  -H "Authorization: Bearer ${displayKey}"`} language="curl" />
+              <CodeBlock
+                code={`curl https://app.voiceos.ai/api/v1/webhooks \\\n  -H "Authorization: Bearer ${displayKey}"`}
+                language="curl"
+              />
             </EndpointCard>
 
             <EndpointCard
@@ -886,17 +1131,22 @@ def handle_webhook():
             >
               <div>
                 <div className="flex gap-1 mb-2">
-                  {(['curl', 'node', 'python'] as const).map(lang => (
+                  {(["curl", "node", "python"] as const).map((lang) => (
                     <button
                       key={lang}
                       onClick={() => setCodeTab(lang)}
-                      className={`px-3 py-1 text-xs rounded font-medium transition-colors ${codeTab === lang ? 'bg-[#0a0a0a] text-white' : 'text-[#6b6b6b] hover:bg-[#f0f0f0]'}`}
+                      className={`px-3 py-1 text-xs rounded font-medium transition-colors ${codeTab === lang ? "bg-[#0a0a0a] text-white" : "text-[#6b6b6b] hover:bg-[#f0f0f0]"}`}
                     >
-                      {lang === 'node' ? 'Node.js' : lang.charAt(0).toUpperCase() + lang.slice(1)}
+                      {lang === "node"
+                        ? "Node.js"
+                        : lang.charAt(0).toUpperCase() + lang.slice(1)}
                     </button>
                   ))}
                 </div>
-                <CodeBlock code={codeExamples.webhook[codeTab] ?? ''} language={codeTab === 'node' ? 'javascript' : codeTab} />
+                <CodeBlock
+                  code={codeExamples.webhook[codeTab] ?? ""}
+                  language={codeTab === "node" ? "javascript" : codeTab}
+                />
               </div>
             </EndpointCard>
 
@@ -930,38 +1180,69 @@ def handle_webhook():
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <Download className="h-4 w-4 text-[#0a0a0a]" />
-                <CardTitle className="text-base">Webhook Signature Verification</CardTitle>
+                <CardTitle className="text-base">
+                  Webhook Signature Verification
+                </CardTitle>
               </div>
               <CardDescription>
-                Every delivery includes <code className="text-xs bg-[#f5f5f5] px-1 rounded font-mono">X-VoiceOS-Signature: t=&#123;ts&#125;,v1=&#123;hmac&#125;</code>.
-                Verify it to reject forged requests.
+                Every delivery includes{" "}
+                <code className="text-xs bg-[#f5f5f5] px-1 rounded font-mono">
+                  X-VoiceOS-Signature: t=&#123;ts&#125;,v1=&#123;hmac&#125;
+                </code>
+                . Verify it to reject forged requests.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-xl border border-[#e0e0e0] bg-[#f9f9f9] p-4 space-y-2">
-                <p className="text-xs font-semibold text-[#0a0a0a]">Algorithm</p>
+                <p className="text-xs font-semibold text-[#0a0a0a]">
+                  Algorithm
+                </p>
                 <ol className="text-xs text-[#6b6b6b] space-y-1 list-decimal list-inside">
-                  <li>Extract <code className="font-mono">t</code> and <code className="font-mono">v1</code> from the header.</li>
-                  <li>Reject if <code className="font-mono">t</code> is older than 5 minutes (replay protection).</li>
-                  <li>Concatenate: <code className="font-mono">&quot;&#123;t&#125;.&#123;rawBody&#125;&quot;</code></li>
-                  <li>Compute <code className="font-mono">HMAC-SHA256(secret, concatenated)</code></li>
-                  <li>Compare with <code className="font-mono">v1</code> using constant-time comparison.</li>
+                  <li>
+                    Extract <code className="font-mono">t</code> and{" "}
+                    <code className="font-mono">v1</code> from the header.
+                  </li>
+                  <li>
+                    Reject if <code className="font-mono">t</code> is older than
+                    5 minutes (replay protection).
+                  </li>
+                  <li>
+                    Concatenate:{" "}
+                    <code className="font-mono">
+                      &quot;&#123;t&#125;.&#123;rawBody&#125;&quot;
+                    </code>
+                  </li>
+                  <li>
+                    Compute{" "}
+                    <code className="font-mono">
+                      HMAC-SHA256(secret, concatenated)
+                    </code>
+                  </li>
+                  <li>
+                    Compare with <code className="font-mono">v1</code> using
+                    constant-time comparison.
+                  </li>
                 </ol>
               </div>
               <Separator />
               <div>
                 <div className="flex gap-1 mb-2">
-                  {(['curl', 'node', 'python'] as const).map(lang => (
+                  {(["curl", "node", "python"] as const).map((lang) => (
                     <button
                       key={lang}
                       onClick={() => setCodeTab(lang)}
-                      className={`px-3 py-1 text-xs rounded font-medium transition-colors ${codeTab === lang ? 'bg-[#0a0a0a] text-white' : 'text-[#6b6b6b] hover:bg-[#f0f0f0]'}`}
+                      className={`px-3 py-1 text-xs rounded font-medium transition-colors ${codeTab === lang ? "bg-[#0a0a0a] text-white" : "text-[#6b6b6b] hover:bg-[#f0f0f0]"}`}
                     >
-                      {lang === 'node' ? 'Node.js' : lang.charAt(0).toUpperCase() + lang.slice(1)}
+                      {lang === "node"
+                        ? "Node.js"
+                        : lang.charAt(0).toUpperCase() + lang.slice(1)}
                     </button>
                   ))}
                 </div>
-                <CodeBlock code={codeExamples.verify[codeTab] ?? ''} language={codeTab === 'node' ? 'javascript' : codeTab} />
+                <CodeBlock
+                  code={codeExamples.verify[codeTab] ?? ""}
+                  language={codeTab === "node" ? "javascript" : codeTab}
+                />
               </div>
             </CardContent>
           </Card>

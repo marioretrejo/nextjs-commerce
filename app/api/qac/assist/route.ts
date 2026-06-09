@@ -12,42 +12,42 @@
  * Target latency: < 500 ms (kept minimal: single fast Groq call, short prompt).
  */
 
-import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse } from 'next/server';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { NextResponse } from "next/server";
 
 // ─── Groq config ──────────────────────────────────────────────────────────────
 
-const GROQ_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
-const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AssistRequest {
-  transcript_chunk:        string;
+  transcript_chunk: string;
   full_transcript_so_far?: string;
-  call_id?:                string;
+  call_id?: string;
 }
 
 interface AssistAlert {
-  type:     'warning' | 'danger' | 'info' | 'opportunity';
-  message:  string;
-  action?:  string;
+  type: "warning" | "danger" | "info" | "opportunity";
+  message: string;
+  action?: string;
 }
 
 interface AssistResponse {
-  alerts:              AssistAlert[];
+  alerts: AssistAlert[];
   suggested_response?: string;
-  next_best_action?:   string;
-  compliance_risk:     'none' | 'low' | 'medium' | 'high';
-  sentiment:           'positive' | 'neutral' | 'negative';
+  next_best_action?: string;
+  compliance_risk: "none" | "low" | "medium" | "high";
+  sentiment: "positive" | "neutral" | "negative";
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const SAFE_DEFAULT: AssistResponse = {
-  alerts:          [],
-  compliance_risk: 'none',
-  sentiment:       'neutral',
+  alerts: [],
+  compliance_risk: "none",
+  sentiment: "neutral",
 };
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ const SAFE_DEFAULT: AssistResponse = {
 function buildAssistPrompt(chunk: string, context: string): string {
   const contextSection = context.trim()
     ? `PRIOR TRANSCRIPT (last 500 chars for context):\n${context.slice(-500)}\n\n`
-    : '';
+    : "";
 
   return `You are a real-time call center compliance and quality coach monitoring a live agent call.
 Respond ONLY with actionable JSON. Be fast and concise.
@@ -92,35 +92,43 @@ export async function POST(req: Request) {
   // ── Parse body ────────────────────────────────────────────────────────────
   let body: AssistRequest;
   try {
-    body = await req.json() as AssistRequest;
+    body = (await req.json()) as AssistRequest;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { transcript_chunk, full_transcript_so_far = '', call_id } = body;
+  const { transcript_chunk, full_transcript_so_far = "", call_id } = body;
 
   if (!transcript_chunk?.trim()) {
-    return NextResponse.json({ error: 'transcript_chunk is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: "transcript_chunk is required" },
+      { status: 400 },
+    );
   }
 
   // ── Optional workspace token validation ───────────────────────────────────
   // The client passes Authorization: Bearer <workspace_token> where the token
   // is the webhook_token from qac_integrations. This is a lightweight check to
   // prevent unauthenticated open use, not a full auth system.
-  const authHeader = req.headers.get('authorization') ?? '';
-  const workspaceToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const authHeader = req.headers.get("authorization") ?? "";
+  const workspaceToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
 
   if (workspaceToken) {
     try {
       const admin = createAdminClient();
       const { data: integration } = await admin
-        .from('qac_integrations')
-        .select('workspace_id, is_active')
-        .eq('webhook_token', workspaceToken)
+        .from("qac_integrations")
+        .select("workspace_id, is_active")
+        .eq("webhook_token", workspaceToken)
         .single();
 
       if (!integration || !(integration as { is_active: boolean }).is_active) {
-        return NextResponse.json({ error: 'Invalid or inactive workspace token' }, { status: 401 });
+        return NextResponse.json(
+          { error: "Invalid or inactive workspace token" },
+          { status: 401 },
+        );
       }
     } catch {
       // If admin client fails (e.g. missing env), fall through — don't block the agent
@@ -128,26 +136,32 @@ export async function POST(req: Request) {
   }
 
   // ── Groq call ─────────────────────────────────────────────────────────────
-  const groqKey = process.env['GROQ_API_KEY'];
+  const groqKey = process.env["GROQ_API_KEY"];
   if (!groqKey) {
     // Return safe default rather than failing the agent mid-call
     return NextResponse.json(SAFE_DEFAULT);
   }
 
-  const prompt = buildAssistPrompt(transcript_chunk.trim(), full_transcript_so_far);
+  const prompt = buildAssistPrompt(
+    transcript_chunk.trim(),
+    full_transcript_so_far,
+  );
 
   let result: AssistResponse;
 
   try {
     const res = await fetch(GROQ_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqKey}`,
+      },
       body: JSON.stringify({
-        model:           GROQ_MODEL,
-        messages:        [{ role: 'user', content: prompt }],
-        temperature:     0.1,
-        max_tokens:      512,
-        response_format: { type: 'json_object' },
+        model: GROQ_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+        max_tokens: 512,
+        response_format: { type: "json_object" },
       }),
       // Hard timeout for real-time use case — if Groq is slow, return safe default
       signal: AbortSignal.timeout(4500),
@@ -157,32 +171,45 @@ export async function POST(req: Request) {
       return NextResponse.json(SAFE_DEFAULT);
     }
 
-    const data = (await res.json()) as { choices: { message: { content: string } }[] };
-    const raw  = data.choices[0]?.message?.content ?? '{}';
+    const data = (await res.json()) as {
+      choices: { message: { content: string } }[];
+    };
+    const raw = data.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw) as AssistResponse;
 
     // ── Sanitize / validate output ─────────────────────────────────────────
-    const VALID_ALERT_TYPES   = new Set(['warning', 'danger', 'info', 'opportunity']);
-    const VALID_RISK_LEVELS   = new Set(['none', 'low', 'medium', 'high']);
-    const VALID_SENTIMENTS    = new Set(['positive', 'neutral', 'negative']);
+    const VALID_ALERT_TYPES = new Set([
+      "warning",
+      "danger",
+      "info",
+      "opportunity",
+    ]);
+    const VALID_RISK_LEVELS = new Set(["none", "low", "medium", "high"]);
+    const VALID_SENTIMENTS = new Set(["positive", "neutral", "negative"]);
 
     result = {
       alerts: (Array.isArray(parsed.alerts) ? parsed.alerts : [])
         .slice(0, 3)
-        .filter((a): a is AssistAlert => typeof a?.message === 'string')
-        .map(a => ({
-          type:    VALID_ALERT_TYPES.has(a.type) ? a.type : 'info',
+        .filter((a): a is AssistAlert => typeof a?.message === "string")
+        .map((a) => ({
+          type: VALID_ALERT_TYPES.has(a.type) ? a.type : "info",
           message: String(a.message).slice(0, 120),
           ...(a.action ? { action: String(a.action).slice(0, 100) } : {}),
         })),
       ...(parsed.suggested_response
-        ? { suggested_response: String(parsed.suggested_response).slice(0, 200) }
+        ? {
+            suggested_response: String(parsed.suggested_response).slice(0, 200),
+          }
         : {}),
       ...(parsed.next_best_action
         ? { next_best_action: String(parsed.next_best_action).slice(0, 150) }
         : {}),
-      compliance_risk: VALID_RISK_LEVELS.has(parsed.compliance_risk) ? parsed.compliance_risk : 'none',
-      sentiment:       VALID_SENTIMENTS.has(parsed.sentiment) ? parsed.sentiment : 'neutral',
+      compliance_risk: VALID_RISK_LEVELS.has(parsed.compliance_risk)
+        ? parsed.compliance_risk
+        : "none",
+      sentiment: VALID_SENTIMENTS.has(parsed.sentiment)
+        ? parsed.sentiment
+        : "neutral",
     };
   } catch {
     // AbortError (timeout) or parse error — return safe default to avoid blocking agent

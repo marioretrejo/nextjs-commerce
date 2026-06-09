@@ -1,28 +1,68 @@
-export type Plan = 'free' | 'pro' | 'scale';
-export type VoiceEngine = 'standard' | 'ultra_fast' | 'premium';
-export type AgentStatus = 'active' | 'paused';
-export type CampaignStatus = 'draft' | 'scheduled' | 'active' | 'paused' | 'completed';
-export type ContactStatus = 'pending' | 'calling' | 'converted' | 'no_answer' | 'invalid' | 'rejected' | 'voicemail' | 'max_attempts';
-export type CallOutcome = 'converted' | 'no_answer' | 'rejected' | 'transferred' | 'voicemail';
-export type CallSentiment = 'positive' | 'neutral' | 'negative';
-export type CallDirection = 'inbound' | 'outbound';
+export type Plan = "free" | "pro" | "scale";
+export type VoiceEngine = "standard" | "ultra_fast" | "premium";
+export type AgentStatus = "active" | "paused";
+export type CampaignStatus =
+  | "draft"
+  | "scheduled"
+  | "active"
+  | "paused"
+  | "completed";
+export type ContactStatus =
+  | "pending"
+  | "calling"
+  | "converted"
+  | "no_answer"
+  | "invalid"
+  | "rejected"
+  | "voicemail"
+  | "max_attempts";
+export type CallOutcome =
+  | "converted"
+  | "no_answer"
+  | "rejected"
+  | "transferred"
+  | "voicemail";
+export type CallSentiment = "positive" | "neutral" | "negative";
+export type CallDirection = "inbound" | "outbound";
 export type CallDisposition =
-  | 'meeting_booked'
-  | 'not_interested'
-  | 'voicemail'
-  | 'follow_up'
-  | 'callback_requested'
-  | 'completed'
-  | 'transferred'
-  | 'other';
-export type MemberRole = 'admin' | 'editor' | 'viewer';
-export type MemberStatus = 'active' | 'pending';
-export type PhoneStatus = 'available' | 'in_use' | 'suspended';
-export type DocType = 'pdf' | 'docx' | 'text' | 'url';
-export type DocStatus = 'processing' | 'ready' | 'error';
-export type IntegrationType = 'hubspot' | 'gohighlevel' | 'salesforce' | 'zapier' | 'make' | 'calendly' | 'google_calendar' | 'twilio' | 'telnyx' | 'webhook' | 'telegram' | 'n8n' | 'teams';
-export type IntegrationStatus = 'connected' | 'disconnected';
-export type NotificationType = 'minutes_80' | 'minutes_100' | 'campaign_completed' | 'contact_converted' | 'qa_alert' | 'team_invite' | 'payment_failed' | 'broadcast' | 'activity';
+  | "meeting_booked"
+  | "not_interested"
+  | "voicemail"
+  | "follow_up"
+  | "callback_requested"
+  | "completed"
+  | "transferred"
+  | "other";
+export type MemberRole = "admin" | "editor" | "viewer";
+export type MemberStatus = "active" | "pending";
+export type PhoneStatus = "available" | "in_use" | "suspended";
+export type DocType = "pdf" | "docx" | "text" | "url";
+export type DocStatus = "processing" | "ready" | "error";
+export type IntegrationType =
+  | "hubspot"
+  | "gohighlevel"
+  | "salesforce"
+  | "zapier"
+  | "make"
+  | "calendly"
+  | "google_calendar"
+  | "twilio"
+  | "telnyx"
+  | "webhook"
+  | "telegram"
+  | "n8n"
+  | "teams";
+export type IntegrationStatus = "connected" | "disconnected";
+export type NotificationType =
+  | "minutes_80"
+  | "minutes_100"
+  | "campaign_completed"
+  | "contact_converted"
+  | "qa_alert"
+  | "team_invite"
+  | "payment_failed"
+  | "broadcast"
+  | "activity";
 
 export interface User {
   id: string;
@@ -57,7 +97,7 @@ export interface Workspace {
   created_at: string;
   // Enterprise billing fields (migration 020)
   minute_cap: number | null;
-  billing_status: 'active' | 'suspended_for_nonpayment';
+  billing_status: "active" | "suspended_for_nonpayment";
   stripe_balance_cents: number;
   // Stripe subscription fields (migration 036)
   stripe_customer_id: string | null;
@@ -147,7 +187,7 @@ export interface Agent {
   branded_caller_id: string | null;
   transfer_enabled: boolean;
   transfer_number: string | null;
-  transfer_type: 'warm' | 'cold';
+  transfer_type: "warm" | "cold";
   transfer_condition: string | null;
   interruption_handling: boolean;
   noise_cancellation: boolean;
@@ -155,12 +195,27 @@ export interface Agent {
   dtmf_enabled: boolean;
   post_call_analysis_enabled: boolean;
   amd_enabled: boolean;
-  amd_action: 'hangup' | 'leave_voicemail' | null;
+  amd_action: "hangup" | "leave_voicemail" | null;
   response_delay_ms: number;
   speak_first: boolean;
-  ambient_sound: 'coffee-shop' | 'convention-hall' | 'summer-outdoor' | 'mountain-outdoor' | 'static-noise' | 'call-center' | null;
+  ambient_sound:
+    | "coffee-shop"
+    | "convention-hall"
+    | "summer-outdoor"
+    | "mountain-outdoor"
+    | "static-noise"
+    | "call-center"
+    | null;
   ambient_sound_volume: number;
-  voice_emotion: 'calm' | 'sympathetic' | 'happy' | 'sad' | 'angry' | 'fearful' | 'surprised' | null;
+  voice_emotion:
+    | "calm"
+    | "sympathetic"
+    | "happy"
+    | "sad"
+    | "angry"
+    | "fearful"
+    | "surprised"
+    | null;
   dynamic_variables: Record<string, string>;
   status: AgentStatus;
   retell_agent_id: string | null;
@@ -178,7 +233,7 @@ export interface PhoneNumber {
   number: string;
   country_code: string;
   country_name: string;
-  provider: 'twilio' | 'telnyx' | 'sip_trunk' | 'custom';
+  provider: "twilio" | "telnyx" | "sip_trunk" | "custom";
   agent_id: string | null;
   status: PhoneStatus;
   branded_name: string | null;
@@ -324,35 +379,35 @@ export interface BillingInvoice {
 }
 
 export interface KnowledgeBase {
-  id:           string;
+  id: string;
   workspace_id: string;
-  name:         string;
-  description:  string | null;
-  created_at:   string;
+  name: string;
+  description: string | null;
+  created_at: string;
 }
 
 export interface DocumentChunk {
-  id:           string;
-  kb_id:        string;
+  id: string;
+  kb_id: string;
   workspace_id: string;
-  source_name:  string;
-  chunk_index:  number;
-  content:      string;
-  created_at:   string;
+  source_name: string;
+  chunk_index: number;
+  content: string;
+  created_at: string;
 }
 
 export interface CustomVoice {
-  id:                string;
-  workspace_id:      string;
-  name:              string;
-  provider:          string;
+  id: string;
+  workspace_id: string;
+  name: string;
+  provider: string;
   provider_voice_id: string;
-  preview_url:       string | null;
-  language:          string;
-  gender:            string | null;
-  status:            'cloning' | 'ready' | 'error';
-  error_message:     string | null;
-  created_at:        string;
+  preview_url: string | null;
+  language: string;
+  gender: string | null;
+  status: "cloning" | "ready" | "error";
+  error_message: string | null;
+  created_at: string;
 }
 
 export interface ApiKey {
@@ -367,10 +422,16 @@ export interface ApiKey {
 
 // ─── SIP / Dialing strategy (migration 037) ───────────────────────────────────
 
-export type SipProvider = 'commpeak' | 'squaretalk' | 'telnyx' | 'vonage' | 'twilio' | 'custom';
-export type SipTrunkStatus = 'active' | 'testing' | 'error' | 'disabled';
+export type SipProvider =
+  | "commpeak"
+  | "squaretalk"
+  | "telnyx"
+  | "vonage"
+  | "twilio"
+  | "custom";
+export type SipTrunkStatus = "active" | "testing" | "error" | "disabled";
 
-export type SipProtocol = 'UDP' | 'TCP' | 'TLS' | 'TLS/SRTP';
+export type SipProtocol = "UDP" | "TCP" | "TLS" | "TLS/SRTP";
 
 export interface SipTrunk {
   id: string;
@@ -405,9 +466,9 @@ export interface SipTrunkNumber {
 }
 
 export type ScheduleWindow = {
-  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+  day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
   start: string; // "HH:MM" 24-hour
-  end: string;   // "HH:MM" 24-hour
+  end: string; // "HH:MM" 24-hour
 };
 
 export interface DialingSchedule {
@@ -422,15 +483,15 @@ export interface DialingSchedule {
 }
 
 export type ActionTrigger =
-  | 'pre_call'
-  | 'post_call'
-  | 'on_transfer'
-  | 'on_voicemail'
-  | 'on_converted'
-  | 'on_no_answer'
-  | 'on_error';
+  | "pre_call"
+  | "post_call"
+  | "on_transfer"
+  | "on_voicemail"
+  | "on_converted"
+  | "on_no_answer"
+  | "on_error";
 
-export type ActionType = 'webhook' | 'sms' | 'email' | 'crm_update';
+export type ActionType = "webhook" | "sms" | "email" | "crm_update";
 
 export interface CallAction {
   id: string;
@@ -445,21 +506,21 @@ export interface CallAction {
 }
 
 export type ScenarioType =
-  | 'voicemail_short'
-  | 'voicemail_long'
-  | 'bot_detected'
-  | 'disinterest'
-  | 'objection'
-  | 'no_response'
-  | 'human_requested';
+  | "voicemail_short"
+  | "voicemail_long"
+  | "bot_detected"
+  | "disinterest"
+  | "objection"
+  | "no_response"
+  | "human_requested";
 
 export type ScenarioActionType =
-  | 'hangup'
-  | 'leave_voicemail'
-  | 'navigate_ivr'
-  | 'transfer'
-  | 'retry_later'
-  | 'custom_response';
+  | "hangup"
+  | "leave_voicemail"
+  | "navigate_ivr"
+  | "transfer"
+  | "retry_later"
+  | "custom_response";
 
 export interface ScenarioHandlerRow {
   id: string;
@@ -473,8 +534,19 @@ export interface ScenarioHandlerRow {
   created_at: string;
 }
 
-export type AutomationTrigger = 'converted' | 'no_answer' | 'voicemail' | 'rejected' | 'transferred' | 'any';
-export type AutomationActionType = 'webhook' | 'tag_contact' | 'send_sms' | 'notify_team' | 'add_to_campaign';
+export type AutomationTrigger =
+  | "converted"
+  | "no_answer"
+  | "voicemail"
+  | "rejected"
+  | "transferred"
+  | "any";
+export type AutomationActionType =
+  | "webhook"
+  | "tag_contact"
+  | "send_sms"
+  | "notify_team"
+  | "add_to_campaign";
 
 export interface AutomationRule {
   id: string;
@@ -517,27 +589,117 @@ export interface ComplianceSettings {
 export type Database = {
   public: {
     Tables: {
-      users: { Row: User; Insert: Partial<User> & { id: string; email: string }; Update: Partial<User> };
-      workspaces: { Row: Workspace; Insert: Omit<Workspace, 'id' | 'created_at'>; Update: Partial<Workspace> };
-      workspace_members: { Row: WorkspaceMember; Insert: Omit<WorkspaceMember, 'id' | 'invited_at'>; Update: Partial<WorkspaceMember> };
-      agents: { Row: Agent; Insert: Omit<Agent, 'id' | 'created_at' | 'avg_qa_score' | 'total_calls'>; Update: Partial<Agent> };
-      phone_numbers: { Row: PhoneNumber; Insert: Omit<PhoneNumber, 'id' | 'created_at'>; Update: Partial<PhoneNumber> };
-      knowledge_documents: { Row: KnowledgeDocument; Insert: Omit<KnowledgeDocument, 'id' | 'created_at'>; Update: Partial<KnowledgeDocument> };
-      campaigns: { Row: Campaign; Insert: Omit<Campaign, 'id' | 'created_at' | 'total_contacts' | 'completed_contacts' | 'converted_contacts'>; Update: Partial<Campaign> };
-      campaign_contacts: { Row: CampaignContact; Insert: Omit<CampaignContact, 'id' | 'created_at'>; Update: Partial<CampaignContact> };
-      calls: { Row: Call; Insert: Omit<Call, 'id' | 'created_at'>; Update: Partial<Call> };
-      qa_criteria: { Row: QACriteria; Insert: Omit<QACriteria, 'id' | 'created_at'>; Update: Partial<QACriteria> };
-      integrations: { Row: Integration; Insert: Omit<Integration, 'id' | 'created_at'>; Update: Partial<Integration> };
-      notifications: { Row: Notification; Insert: Omit<Notification, 'id' | 'created_at'>; Update: Partial<Notification> };
-      billing_invoices: { Row: BillingInvoice; Insert: Omit<BillingInvoice, 'id' | 'created_at'>; Update: Partial<BillingInvoice> };
-      api_keys: { Row: ApiKey; Insert: Omit<ApiKey, 'id' | 'created_at'>; Update: Partial<ApiKey> };
-      campaign_templates: { Row: CampaignTemplate; Insert: Omit<CampaignTemplate, 'id' | 'created_at'>; Update: Partial<CampaignTemplate> };
+      users: {
+        Row: User;
+        Insert: Partial<User> & { id: string; email: string };
+        Update: Partial<User>;
+      };
+      workspaces: {
+        Row: Workspace;
+        Insert: Omit<Workspace, "id" | "created_at">;
+        Update: Partial<Workspace>;
+      };
+      workspace_members: {
+        Row: WorkspaceMember;
+        Insert: Omit<WorkspaceMember, "id" | "invited_at">;
+        Update: Partial<WorkspaceMember>;
+      };
+      agents: {
+        Row: Agent;
+        Insert: Omit<
+          Agent,
+          "id" | "created_at" | "avg_qa_score" | "total_calls"
+        >;
+        Update: Partial<Agent>;
+      };
+      phone_numbers: {
+        Row: PhoneNumber;
+        Insert: Omit<PhoneNumber, "id" | "created_at">;
+        Update: Partial<PhoneNumber>;
+      };
+      knowledge_documents: {
+        Row: KnowledgeDocument;
+        Insert: Omit<KnowledgeDocument, "id" | "created_at">;
+        Update: Partial<KnowledgeDocument>;
+      };
+      campaigns: {
+        Row: Campaign;
+        Insert: Omit<
+          Campaign,
+          | "id"
+          | "created_at"
+          | "total_contacts"
+          | "completed_contacts"
+          | "converted_contacts"
+        >;
+        Update: Partial<Campaign>;
+      };
+      campaign_contacts: {
+        Row: CampaignContact;
+        Insert: Omit<CampaignContact, "id" | "created_at">;
+        Update: Partial<CampaignContact>;
+      };
+      calls: {
+        Row: Call;
+        Insert: Omit<Call, "id" | "created_at">;
+        Update: Partial<Call>;
+      };
+      qa_criteria: {
+        Row: QACriteria;
+        Insert: Omit<QACriteria, "id" | "created_at">;
+        Update: Partial<QACriteria>;
+      };
+      integrations: {
+        Row: Integration;
+        Insert: Omit<Integration, "id" | "created_at">;
+        Update: Partial<Integration>;
+      };
+      notifications: {
+        Row: Notification;
+        Insert: Omit<Notification, "id" | "created_at">;
+        Update: Partial<Notification>;
+      };
+      billing_invoices: {
+        Row: BillingInvoice;
+        Insert: Omit<BillingInvoice, "id" | "created_at">;
+        Update: Partial<BillingInvoice>;
+      };
+      api_keys: {
+        Row: ApiKey;
+        Insert: Omit<ApiKey, "id" | "created_at">;
+        Update: Partial<ApiKey>;
+      };
+      campaign_templates: {
+        Row: CampaignTemplate;
+        Insert: Omit<CampaignTemplate, "id" | "created_at">;
+        Update: Partial<CampaignTemplate>;
+      };
       // Migration 037
-      sip_trunks: { Row: SipTrunk; Insert: Omit<SipTrunk, 'id' | 'created_at'>; Update: Partial<SipTrunk> };
-      sip_trunk_numbers: { Row: SipTrunkNumber; Insert: Omit<SipTrunkNumber, 'id' | 'created_at'>; Update: Partial<SipTrunkNumber> };
-      dialing_schedules: { Row: DialingSchedule; Insert: Omit<DialingSchedule, 'id' | 'created_at'>; Update: Partial<DialingSchedule> };
-      call_actions: { Row: CallAction; Insert: Omit<CallAction, 'id' | 'created_at'>; Update: Partial<CallAction> };
-      scenario_handlers: { Row: ScenarioHandlerRow; Insert: Omit<ScenarioHandlerRow, 'id' | 'created_at'>; Update: Partial<ScenarioHandlerRow> };
+      sip_trunks: {
+        Row: SipTrunk;
+        Insert: Omit<SipTrunk, "id" | "created_at">;
+        Update: Partial<SipTrunk>;
+      };
+      sip_trunk_numbers: {
+        Row: SipTrunkNumber;
+        Insert: Omit<SipTrunkNumber, "id" | "created_at">;
+        Update: Partial<SipTrunkNumber>;
+      };
+      dialing_schedules: {
+        Row: DialingSchedule;
+        Insert: Omit<DialingSchedule, "id" | "created_at">;
+        Update: Partial<DialingSchedule>;
+      };
+      call_actions: {
+        Row: CallAction;
+        Insert: Omit<CallAction, "id" | "created_at">;
+        Update: Partial<CallAction>;
+      };
+      scenario_handlers: {
+        Row: ScenarioHandlerRow;
+        Insert: Omit<ScenarioHandlerRow, "id" | "created_at">;
+        Update: Partial<ScenarioHandlerRow>;
+      };
     };
   };
 };

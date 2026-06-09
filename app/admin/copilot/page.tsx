@@ -1,12 +1,22 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
-  Bot, Save, Plus, Trash2, FileText, Sliders, Sparkles,
-  ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Info,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+  Bot,
+  Save,
+  Plus,
+  Trash2,
+  FileText,
+  Sliders,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  ToggleLeft,
+  ToggleRight,
+  Info,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 interface RagDoc {
   id: string; // client-side only
@@ -24,9 +34,12 @@ interface CopilotConfig {
 }
 
 const MODELS = [
-  { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile (default)' },
-  { value: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B Instant (faster)' },
-  { value: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B' },
+  {
+    value: "llama-3.3-70b-versatile",
+    label: "Llama 3.3 70B Versatile (default)",
+  },
+  { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (faster)" },
+  { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
 ];
 
 const DEFAULT_SYSTEM_PROMPT = `You are a friendly analytics copilot for VoiceOS, a voice-AI platform. You help workspace owners understand their data.
@@ -39,34 +52,36 @@ Rules:
 - Respond in the same language the user writes in (Spanish or English).`;
 
 export default function CopilotConfigPage() {
-  const [systemPrompt, setSystemPrompt]   = useState('');
-  const [ragDocs, setRagDocs]             = useState<RagDoc[]>([]);
-  const [model, setModel]                 = useState('llama-3.3-70b-versatile');
-  const [temperature, setTemperature]     = useState(0.3);
-  const [maxTokens, setMaxTokens]         = useState(1024);
-  const [enabled, setEnabled]             = useState(true);
-  const [saving, setSaving]               = useState(false);
-  const [loading, setLoading]             = useState(true);
-  const [expandedDoc, setExpandedDoc]     = useState<string | null>(null);
-  const [newDocTitle, setNewDocTitle]     = useState('');
-  const [newDocContent, setNewDocContent] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [ragDocs, setRagDocs] = useState<RagDoc[]>([]);
+  const [model, setModel] = useState("llama-3.3-70b-versatile");
+  const [temperature, setTemperature] = useState(0.3);
+  const [maxTokens, setMaxTokens] = useState(1024);
+  const [enabled, setEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
+  const [newDocTitle, setNewDocTitle] = useState("");
+  const [newDocContent, setNewDocContent] = useState("");
   const [showNewDocForm, setShowNewDocForm] = useState(false);
 
   useEffect(() => {
-    fetch('/api/admin/copilot-config')
+    fetch("/api/admin/copilot-config")
       .then((r) => r.json())
       .then((d: { config: CopilotConfig }) => {
         const c = d.config;
         setSystemPrompt(c.system_prompt || DEFAULT_SYSTEM_PROMPT);
-        setRagDocs((c.rag_documents ?? []).map((doc, i) => ({ ...doc, id: String(i) })));
-        setModel(c.model ?? 'llama-3.3-70b-versatile');
+        setRagDocs(
+          (c.rag_documents ?? []).map((doc, i) => ({ ...doc, id: String(i) })),
+        );
+        setModel(c.model ?? "llama-3.3-70b-versatile");
         setTemperature(c.temperature ?? 0.3);
         setMaxTokens(c.max_tokens ?? 1024);
         setEnabled(c.enabled ?? true);
       })
       .catch(() => {
         setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
-        toast.error('Failed to load config');
+        toast.error("Failed to load config");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -74,22 +89,25 @@ export default function CopilotConfigPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/copilot-config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/admin/copilot-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           system_prompt: systemPrompt,
-          rag_documents: ragDocs.map(({ title, content }) => ({ title, content })),
+          rag_documents: ragDocs.map(({ title, content }) => ({
+            title,
+            content,
+          })),
           model,
           temperature,
           max_tokens: maxTokens,
           enabled,
         }),
       });
-      if (!res.ok) throw new Error('Save failed');
-      toast.success('Copilot config saved — changes are live immediately');
+      if (!res.ok) throw new Error("Save failed");
+      toast.success("Copilot config saved — changes are live immediately");
     } catch {
-      toast.error('Failed to save config');
+      toast.error("Failed to save config");
     } finally {
       setSaving(false);
     }
@@ -97,7 +115,7 @@ export default function CopilotConfigPage() {
 
   function addDoc() {
     if (!newDocTitle.trim() || !newDocContent.trim()) {
-      toast.error('Both title and content are required');
+      toast.error("Both title and content are required");
       return;
     }
     const doc: RagDoc = {
@@ -106,8 +124,8 @@ export default function CopilotConfigPage() {
       content: newDocContent.trim(),
     };
     setRagDocs((prev) => [...prev, doc]);
-    setNewDocTitle('');
-    setNewDocContent('');
+    setNewDocTitle("");
+    setNewDocContent("");
     setShowNewDocForm(false);
     setExpandedDoc(doc.id);
   }
@@ -117,8 +135,10 @@ export default function CopilotConfigPage() {
     if (expandedDoc === id) setExpandedDoc(null);
   }
 
-  function updateDoc(id: string, field: 'title' | 'content', value: string) {
-    setRagDocs((prev) => prev.map((d) => d.id === id ? { ...d, [field]: value } : d));
+  function updateDoc(id: string, field: "title" | "content", value: string) {
+    setRagDocs((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
+    );
   }
 
   if (loading) {
@@ -128,7 +148,10 @@ export default function CopilotConfigPage() {
         <div className="h-4 w-72 bg-[#f0f0f0] rounded animate-pulse" />
         <div className="mt-8 space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-32 bg-[#f0f0f0] rounded-xl animate-pulse" />
+            <div
+              key={i}
+              className="h-32 bg-[#f0f0f0] rounded-xl animate-pulse"
+            />
           ))}
         </div>
       </div>
@@ -145,8 +168,8 @@ export default function CopilotConfigPage() {
             Copilot Config
           </h1>
           <p className="text-sm text-[#6b6b6b] mt-0.5">
-            Configure the Analytics Copilot AI — system prompt, knowledge base, and model settings.
-            Changes apply to all workspaces immediately.
+            Configure the Analytics Copilot AI — system prompt, knowledge base,
+            and model settings. Changes apply to all workspaces immediately.
           </p>
         </div>
 
@@ -155,14 +178,16 @@ export default function CopilotConfigPage() {
           onClick={() => setEnabled((v) => !v)}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors border ${
             enabled
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : 'bg-red-50 text-red-700 border-red-200'
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-red-50 text-red-700 border-red-200"
           }`}
         >
-          {enabled
-            ? <ToggleRight className="w-4 h-4" />
-            : <ToggleLeft className="w-4 h-4" />}
-          Copilot {enabled ? 'Enabled' : 'Disabled'}
+          {enabled ? (
+            <ToggleRight className="w-4 h-4" />
+          ) : (
+            <ToggleLeft className="w-4 h-4" />
+          )}
+          Copilot {enabled ? "Enabled" : "Disabled"}
         </button>
       </div>
 
@@ -173,9 +198,12 @@ export default function CopilotConfigPage() {
             <Bot className="h-4 w-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#0a0a0a]">System Prompt</p>
+            <p className="text-sm font-semibold text-[#0a0a0a]">
+              System Prompt
+            </p>
             <p className="text-xs text-[#9b9b9b]">
-              The AI's persona, rules, and base instructions. Injected at the start of every conversation.
+              The AI's persona, rules, and base instructions. Injected at the
+              start of every conversation.
             </p>
           </div>
         </div>
@@ -190,7 +218,8 @@ export default function CopilotConfigPage() {
           <div className="mt-2 flex items-center gap-1.5 text-xs text-[#9b9b9b]">
             <Info className="w-3 h-3 shrink-0" />
             <span>
-              The current date is injected automatically at runtime. RAG documents are appended below the system prompt.
+              The current date is injected automatically at runtime. RAG
+              documents are appended below the system prompt.
             </span>
           </div>
           <button
@@ -210,9 +239,12 @@ export default function CopilotConfigPage() {
               <FileText className="h-4 w-4 text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-[#0a0a0a]">Knowledge Base (RAG)</p>
+              <p className="text-sm font-semibold text-[#0a0a0a]">
+                Knowledge Base (RAG)
+              </p>
               <p className="text-xs text-[#9b9b9b]">
-                Documents injected as context. The AI will reference them in every response.
+                Documents injected as context. The AI will reference them in
+                every response.
               </p>
             </div>
           </div>
@@ -252,7 +284,11 @@ export default function CopilotConfigPage() {
                 size="sm"
                 variant="outline"
                 className="text-xs"
-                onClick={() => { setShowNewDocForm(false); setNewDocTitle(''); setNewDocContent(''); }}
+                onClick={() => {
+                  setShowNewDocForm(false);
+                  setNewDocTitle("");
+                  setNewDocContent("");
+                }}
               >
                 Cancel
               </Button>
@@ -265,7 +301,8 @@ export default function CopilotConfigPage() {
             <FileText className="w-8 h-8 text-[#e0e0e0] mb-2" />
             <p className="text-sm text-[#6b6b6b]">No documents yet</p>
             <p className="text-xs text-[#9b9b9b] mt-0.5">
-              Add FAQs, product info, pricing, or any context the AI should know.
+              Add FAQs, product info, pricing, or any context the AI should
+              know.
             </p>
           </div>
         ) : (
@@ -275,12 +312,16 @@ export default function CopilotConfigPage() {
                 <div className="flex items-center justify-between">
                   <button
                     className="flex items-center gap-2 text-sm font-medium text-[#0a0a0a] hover:text-[#404040] transition-colors text-left"
-                    onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
+                    onClick={() =>
+                      setExpandedDoc(expandedDoc === doc.id ? null : doc.id)
+                    }
                   >
-                    {expandedDoc === doc.id
-                      ? <ChevronUp className="w-3.5 h-3.5 shrink-0 text-[#9b9b9b]" />
-                      : <ChevronDown className="w-3.5 h-3.5 shrink-0 text-[#9b9b9b]" />}
-                    {doc.title || 'Untitled'}
+                    {expandedDoc === doc.id ? (
+                      <ChevronUp className="w-3.5 h-3.5 shrink-0 text-[#9b9b9b]" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0 text-[#9b9b9b]" />
+                    )}
+                    {doc.title || "Untitled"}
                     <span className="text-xs text-[#9b9b9b] font-normal ml-1">
                       ({doc.content.length.toLocaleString()} chars)
                     </span>
@@ -297,13 +338,17 @@ export default function CopilotConfigPage() {
                   <div className="mt-3 space-y-2">
                     <input
                       value={doc.title}
-                      onChange={(e) => updateDoc(doc.id, 'title', e.target.value)}
+                      onChange={(e) =>
+                        updateDoc(doc.id, "title", e.target.value)
+                      }
                       placeholder="Title"
                       className="w-full rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3 py-2 text-sm outline-none focus:border-[#0a0a0a] focus:bg-white"
                     />
                     <textarea
                       value={doc.content}
-                      onChange={(e) => updateDoc(doc.id, 'content', e.target.value)}
+                      onChange={(e) =>
+                        updateDoc(doc.id, "content", e.target.value)
+                      }
                       rows={8}
                       className="w-full rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3 py-2 text-sm font-mono leading-relaxed outline-none resize-y focus:border-[#0a0a0a] focus:bg-white"
                     />
@@ -322,9 +367,12 @@ export default function CopilotConfigPage() {
             <Sliders className="h-4 w-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#0a0a0a]">Model Settings</p>
+            <p className="text-sm font-semibold text-[#0a0a0a]">
+              Model Settings
+            </p>
             <p className="text-xs text-[#9b9b9b]">
-              Controls which Groq model is used and how deterministic the responses are.
+              Controls which Groq model is used and how deterministic the
+              responses are.
             </p>
           </div>
         </div>
@@ -339,11 +387,13 @@ export default function CopilotConfigPage() {
                   onClick={() => setModel(m.value)}
                   className={`rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
                     model === m.value
-                      ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white'
-                      : 'border-[#e5e5e5] text-[#404040] hover:border-[#0a0a0a]'
+                      ? "border-[#0a0a0a] bg-[#0a0a0a] text-white"
+                      : "border-[#e5e5e5] text-[#404040] hover:border-[#0a0a0a]"
                   }`}
                 >
-                  <span className="font-medium block leading-tight">{m.label}</span>
+                  <span className="font-medium block leading-tight">
+                    {m.label}
+                  </span>
                 </button>
               ))}
             </div>
@@ -377,7 +427,9 @@ export default function CopilotConfigPage() {
           {/* Max tokens */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-[#404040]">Max Tokens</label>
+              <label className="text-xs font-medium text-[#404040]">
+                Max Tokens
+              </label>
               <span className="text-xs font-mono text-[#0a0a0a] bg-[#f5f5f5] px-2 py-0.5 rounded-md">
                 {maxTokens.toLocaleString()}
               </span>
@@ -409,10 +461,12 @@ export default function CopilotConfigPage() {
           disabled={saving}
           className="gap-2 text-sm"
         >
-          {saving
-            ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            : <Save className="w-4 h-4" />}
-          {saving ? 'Saving…' : 'Save config'}
+          {saving ? (
+            <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          {saving ? "Saving…" : "Save config"}
         </Button>
       </div>
     </div>

@@ -1,19 +1,19 @@
-'use client';
+"use client";
 
-import { Handle, Position } from '@xyflow/react';
-import type { ReactNode } from 'react';
+import { Handle, Position } from "@xyflow/react";
+import type { ReactNode } from "react";
 
 interface NodeShellProps {
-  color:       string;
-  bgColor:     string;
-  icon:        ReactNode;
-  label:       string;
-  detail?:     string;
-  badge?:      string;
-  topHandle?:    boolean;
+  color: string;
+  bgColor: string;
+  icon: ReactNode;
+  label: string;
+  detail?: string;
+  badge?: string;
+  topHandle?: boolean;
   bottomHandle?: boolean;
-  leftHandle?:   boolean;
-  rightHandle?:  boolean;
+  leftHandle?: boolean;
+  rightHandle?: boolean;
   rightHandle2?: boolean;
 }
 
@@ -21,14 +21,22 @@ const handleStyle = (color: string) => ({
   width: 12,
   height: 12,
   border: `2px solid ${color}`,
-  background: '#fff',
+  background: "#fff",
   boxShadow: `0 0 0 2px ${color}22`,
 });
 
 export function NodeShell({
-  color, bgColor, icon, label, detail, badge,
-  topHandle = true, bottomHandle = true,
-  leftHandle = false, rightHandle = false, rightHandle2 = false,
+  color,
+  bgColor,
+  icon,
+  label,
+  detail,
+  badge,
+  topHandle = true,
+  bottomHandle = true,
+  leftHandle = false,
+  rightHandle = false,
+  rightHandle2 = false,
 }: NodeShellProps) {
   return (
     <div
@@ -39,10 +47,18 @@ export function NodeShell({
       }}
     >
       {topHandle && (
-        <Handle type="target" position={Position.Top} style={handleStyle(color)} />
+        <Handle
+          type="target"
+          position={Position.Top}
+          style={handleStyle(color)}
+        />
       )}
       {leftHandle && (
-        <Handle type="target" position={Position.Left} style={handleStyle(color)} />
+        <Handle
+          type="target"
+          position={Position.Left}
+          style={handleStyle(color)}
+        />
       )}
 
       {/* Colored header strip */}
@@ -52,7 +68,7 @@ export function NodeShell({
       >
         <div
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-          style={{ background: color, color: '#fff' }}
+          style={{ background: color, color: "#fff" }}
         >
           {icon}
         </div>
@@ -62,7 +78,7 @@ export function NodeShell({
         {badge && (
           <span
             className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: color, color: '#fff' }}
+            style={{ background: color, color: "#fff" }}
           >
             {badge}
           </span>
@@ -70,19 +86,36 @@ export function NodeShell({
       </div>
 
       {detail && (
-        <p className="px-4 py-2.5 text-xs leading-relaxed text-[#555] border-t border-dashed" style={{ borderColor: color + '33' }}>
+        <p
+          className="px-4 py-2.5 text-xs leading-relaxed text-[#555] border-t border-dashed"
+          style={{ borderColor: color + "33" }}
+        >
           {detail}
         </p>
       )}
 
       {bottomHandle && (
-        <Handle type="source" position={Position.Bottom} style={handleStyle(color)} />
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          style={handleStyle(color)}
+        />
       )}
       {rightHandle && (
-        <Handle type="source" position={Position.Right} id="yes" style={{ ...handleStyle(color), top: '40%' }} />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="yes"
+          style={{ ...handleStyle(color), top: "40%" }}
+        />
       )}
       {rightHandle2 && (
-        <Handle type="source" position={Position.Right} id="no" style={{ ...handleStyle('#ef4444'), top: '65%' }} />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="no"
+          style={{ ...handleStyle("#ef4444"), top: "65%" }}
+        />
       )}
     </div>
   );

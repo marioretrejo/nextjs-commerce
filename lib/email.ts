@@ -1,19 +1,19 @@
-import { Resend } from 'resend';
+import { Resend } from "resend";
 
 function getResend(): Resend | null {
-  const key = process.env['RESEND_API_KEY'];
+  const key = process.env["RESEND_API_KEY"];
   if (!key) return null;
   return new Resend(key);
 }
 
-const FROM = 'VoiceOS <noreply@voiceos.app>';
+const FROM = "VoiceOS <noreply@voiceos.app>";
 
 export async function sendTeamInvite({
   to,
   inviterName,
   workspaceName,
   inviteToken,
-  appUrl
+  appUrl,
 }: {
   to: string;
   inviterName: string;
@@ -45,7 +45,7 @@ export async function sendTeamInvite({
           If you didn't expect this invitation, you can ignore this email.
         </p>
       </div>
-    `
+    `,
   });
 }
 
@@ -53,7 +53,7 @@ export async function sendPaymentFailed({
   to,
   workspaceName,
   amount,
-  retryUrl
+  retryUrl,
 }: {
   to: string;
   workspaceName: string;
@@ -80,7 +80,7 @@ export async function sendPaymentFailed({
           Update payment method
         </a>
       </div>
-    `
+    `,
   });
 }
 
@@ -96,7 +96,7 @@ export async function sendWelcomeEmail({
   const resend = getResend();
   if (!resend) return;
 
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
+  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://voiceos.app";
 
   await resend.emails.send({
     from: FROM,
@@ -137,7 +137,7 @@ export async function sendQuotaWarning({
   const resend = getResend();
   if (!resend) return;
 
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
+  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://voiceos.app";
   const isExhausted = minutesLeft <= 0;
   const subject = isExhausted
     ? `Minute quota exhausted — ${workspaceName}`
@@ -149,16 +149,17 @@ export async function sendQuotaWarning({
     subject,
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#fff;color:#0a0a0a">
-        <h2 style="margin:0 0 8px">${isExhausted ? 'Quota exhausted' : `${pct}% quota used`}</h2>
+        <h2 style="margin:0 0 8px">${isExhausted ? "Quota exhausted" : `${pct}% quota used`}</h2>
         <p style="color:#6b6b6b;margin:0 0 16px">
-          ${isExhausted
-            ? `Your workspace <strong>${workspaceName}</strong> has used all its contracted minutes. Active campaigns have been paused.`
-            : `Your workspace <strong>${workspaceName}</strong> has used <strong>${pct}%</strong> of its minute quota. <strong>${minutesLeft.toLocaleString()} minutes</strong> remaining.`
+          ${
+            isExhausted
+              ? `Your workspace <strong>${workspaceName}</strong> has used all its contracted minutes. Active campaigns have been paused.`
+              : `Your workspace <strong>${workspaceName}</strong> has used <strong>${pct}%</strong> of its minute quota. <strong>${minutesLeft.toLocaleString()} minutes</strong> remaining.`
           }
         </p>
         <a href="${appUrl}/billing"
            style="display:inline-block;background:#0a0a0a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:500">
-          ${isExhausted ? 'Contact support' : 'View billing'}
+          ${isExhausted ? "Contact support" : "View billing"}
         </a>
       </div>
     `,
@@ -177,7 +178,7 @@ export async function sendTopUpReceipt({
   const resend = getResend();
   if (!resend) return;
 
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://voiceos.app';
+  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://voiceos.app";
 
   await resend.emails.send({
     from: FROM,
@@ -203,7 +204,7 @@ export async function sendCampaignComplete({
   to,
   campaignName,
   totalCalls,
-  converted
+  converted,
 }: {
   to: string;
   campaignName: string;
@@ -240,6 +241,6 @@ export async function sendCampaignComplete({
           </tr>
         </table>
       </div>
-    `
+    `,
   });
 }

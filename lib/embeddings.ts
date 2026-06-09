@@ -1,18 +1,20 @@
-const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMS  = 1536;
+const EMBEDDING_MODEL = "text-embedding-3-small";
+const EMBEDDING_DIMS = 1536;
 const MAX_INPUT_CHARS = 30_000; // ~8k tokens
 
-export async function generateEmbedding(text: string): Promise<number[] | null> {
-  const apiKey = process.env['OPENAI_API_KEY'];
+export async function generateEmbedding(
+  text: string,
+): Promise<number[] | null> {
+  const apiKey = process.env["OPENAI_API_KEY"];
   if (!apiKey) return null;
 
-  const input = text.slice(0, MAX_INPUT_CHARS).replace(/\n+/g, ' ').trim();
+  const input = text.slice(0, MAX_INPUT_CHARS).replace(/\n+/g, " ").trim();
   if (!input) return null;
 
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({ model: EMBEDDING_MODEL, input }),
@@ -29,9 +31,12 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
 export function chunkText(
   text: string,
   chunkSize = 1200,
-  overlap    = 150
+  overlap = 150,
 ): string[] {
-  const cleaned = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const cleaned = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   if (cleaned.length <= chunkSize) return [cleaned];
 
   const chunks: string[] = [];
@@ -40,8 +45,8 @@ export function chunkText(
     let end = start + chunkSize;
     // Break at paragraph or sentence boundary if possible
     if (end < cleaned.length) {
-      const paraBreak = cleaned.lastIndexOf('\n\n', end);
-      const sentBreak = cleaned.lastIndexOf('. ', end);
+      const paraBreak = cleaned.lastIndexOf("\n\n", end);
+      const sentBreak = cleaned.lastIndexOf(". ", end);
       if (paraBreak > start + overlap) end = paraBreak + 2;
       else if (sentBreak > start + overlap) end = sentBreak + 2;
     }

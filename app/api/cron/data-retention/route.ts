@@ -16,25 +16,25 @@
  *   - extracted_name, extracted_email: nulled
  *   - summary, extracted_interest, extracted_objections: nulled
  */
-import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse } from 'next/server';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { NextResponse } from "next/server";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min — may process large batches
 
 export async function GET(req: Request) {
   // Verify Vercel Cron secret
-  const authHeader = req.headers.get('Authorization');
-  if (authHeader !== `Bearer ${process.env['CRON_SECRET']}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader !== `Bearer ${process.env["CRON_SECRET"]}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const admin = createAdminClient();
 
   // Fetch all workspaces with their retention policy
   const { data: workspaces } = await admin
-    .from('workspaces')
-    .select('id, plan, transcript_retention_days');
+    .from("workspaces")
+    .select("id, plan, transcript_retention_days");
 
   if (!workspaces?.length) return NextResponse.json({ processed: 0 });
 
@@ -42,54 +42,67 @@ export async function GET(req: Request) {
   let totalObfuscated = 0;
 
   for (const ws of workspaces) {
-    const w = ws as { id: string; plan: string; transcript_retention_days: number | null };
+    const w = ws as {
+      id: string;
+      plan: string;
+      transcript_retention_days: number | null;
+    };
 
     // Default retention by plan if not explicitly set
-    const retentionDays = w.transcript_retention_days
-      ?? (w.plan === 'scale' ? 365 : w.plan === 'pro' ? 90 : 30);
+    const retentionDays =
+      w.transcript_retention_days ??
+      (w.plan === "scale" ? 365 : w.plan === "pro" ? 90 : 30);
 
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - retentionDays);
 
     // Find calls beyond the retention window that still have sensitive data
     const { data: expiredCalls } = await admin
-      .from('calls')
-      .select('id, recording_url')
-      .eq('workspace_id', w.id)
-      .lt('created_at', cutoff.toISOString())
-      .or('recording_url.not.is.null,transcript.not.is.null');
+      .from("calls")
+      .select("id, recording_url")
+      .eq("workspace_id", w.id)
+      .lt("created_at", cutoff.toISOString())
+      .or("recording_url.not.is.null,transcript.not.is.null");
 
     if (!expiredCalls?.length) continue;
 
     const callIds = expiredCalls.map((c: { id: string }) => c.id);
 
     // Delete recordings from Supabase Storage (if stored there)
-    for (const call of expiredCalls as { id: string; recording_url: string | null }[]) {
+    for (const call of expiredCalls as {
+      id: string;
+      recording_url: string | null;
+    }[]) {
       if (!call.recording_url) continue;
       try {
         // Extract storage path from URL if it's a Supabase Storage URL
         const url = new URL(call.recording_url);
-        const storagePath = url.pathname.replace(/^\/storage\/v1\/object\/public\/[^/]+\//, '');
+        const storagePath = url.pathname.replace(
+          /^\/storage\/v1\/object\/public\/[^/]+\//,
+          "",
+        );
         if (storagePath) {
-          await admin.storage.from('recordings').remove([storagePath]);
+          await admin.storage.from("recordings").remove([storagePath]);
           totalDeleted++;
         }
-      } catch { /* non-Supabase URL — skip */ }
+      } catch {
+        /* non-Supabase URL — skip */
+      }
     }
 
     // Obfuscate transcript + PII fields in bulk
     const { count } = await admin
-      .from('calls')
+      .from("calls")
       .update({
         recording_url: null,
-        transcript: '[Transcript removed for data retention compliance]',
+        transcript: "[Transcript removed for data retention compliance]",
         extracted_name: null,
         extracted_email: null,
         summary: null,
         extracted_interest: null,
         extracted_objections: null,
       })
-      .in('id', callIds);
+      .in("id", callIds);
 
     totalObfuscated += count ?? callIds.length;
   }

@@ -1,12 +1,12 @@
-import Stripe from 'stripe';
+import Stripe from "stripe";
 
 let _stripe: Stripe | null = null;
 
 export function getStripeClient(): Stripe {
   if (!_stripe) {
-    const key = process.env['STRIPE_SECRET_KEY'];
-    if (!key) throw new Error('STRIPE_SECRET_KEY is not configured');
-    _stripe = new Stripe(key, { apiVersion: '2025-02-24.acacia' });
+    const key = process.env["STRIPE_SECRET_KEY"];
+    if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
+    _stripe = new Stripe(key, { apiVersion: "2025-02-24.acacia" });
   }
   return _stripe;
 }
@@ -15,24 +15,24 @@ export function getStripeClient(): Stripe {
 export const stripe: Stripe = new Proxy({} as Stripe, {
   get(_t, prop) {
     return Reflect.get(getStripeClient(), prop);
-  }
+  },
 });
 
 export const PLANS = {
   pro: {
-    name: 'Pro',
+    name: "Pro",
     price: 9700,
-    interval: 'month' as const,
+    interval: "month" as const,
     agents: 5,
     minutes: 1000,
-    priceId: process.env['STRIPE_PRICE_PRO']!
+    priceId: process.env["STRIPE_PRICE_PRO"]!,
   },
   scale: {
-    name: 'Scale',
+    name: "Scale",
     price: 29700,
-    interval: 'month' as const,
+    interval: "month" as const,
     agents: Infinity,
     minutes: 5000,
-    priceId: process.env['STRIPE_PRICE_SCALE']!
-  }
+    priceId: process.env["STRIPE_PRICE_SCALE"]!,
+  },
 } as const;

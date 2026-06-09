@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -13,41 +13,81 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Avatar } from '@/components/ui/avatar';
-import type { WorkspaceMember, MemberRole, MemberStatus } from '@/lib/supabase/types';
-import { Users, Plus, Trash2, Mail, Shield, Eye, Pencil, Settings2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ROLE_WEIGHT, ALL_MODULES } from '@/lib/team/permissions';
+} from "@/components/ui/dialog";
+import { Avatar } from "@/components/ui/avatar";
+import type {
+  WorkspaceMember,
+  MemberRole,
+  MemberStatus,
+} from "@/lib/supabase/types";
+import {
+  Users,
+  Plus,
+  Trash2,
+  Mail,
+  Shield,
+  Eye,
+  Pencil,
+  Settings2,
+} from "lucide-react";
+import { format } from "date-fns";
+import { ROLE_WEIGHT, ALL_MODULES } from "@/lib/team/permissions";
 
 const MODULE_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard',
-  agents: 'Agents',
-  campaigns: 'Campaigns',
-  calls: 'Calls & Recordings',
-  analytics: 'Analytics',
-  knowledge: 'Knowledge Base',
-  quality: 'QA Scoring',
-  numbers: 'Phone Numbers',
-  compliance: 'Compliance',
-  integrations: 'Integrations',
-  team: 'Team',
-  billing: 'Billing',
-  settings: 'Settings',
-  developers: 'Developers',
+  dashboard: "Dashboard",
+  agents: "Agents",
+  campaigns: "Campaigns",
+  calls: "Calls & Recordings",
+  analytics: "Analytics",
+  knowledge: "Knowledge Base",
+  quality: "QA Scoring",
+  numbers: "Phone Numbers",
+  compliance: "Compliance",
+  integrations: "Integrations",
+  team: "Team",
+  billing: "Billing",
+  settings: "Settings",
+  developers: "Developers",
 };
 
 const ROLES: { value: MemberRole; label: string; description: string }[] = [
-  { value: 'admin',  label: 'Admin',  description: 'Full access including billing and settings.' },
-  { value: 'editor', label: 'Editor', description: 'Can manage agents, campaigns, and calls.' },
-  { value: 'viewer', label: 'Viewer', description: 'Read-only access to all content.' },
+  {
+    value: "admin",
+    label: "Admin",
+    description: "Full access including billing and settings.",
+  },
+  {
+    value: "editor",
+    label: "Editor",
+    description: "Can manage agents, campaigns, and calls.",
+  },
+  {
+    value: "viewer",
+    label: "Viewer",
+    description: "Read-only access to all content.",
+  },
 ];
 
 function roleBadge(role: MemberRole) {
-  const map: Record<MemberRole, { label: string; icon: React.ReactNode; className: string }> = {
-    admin:  { label: 'Admin',  icon: <Shield className="w-3 h-3" />,  className: 'bg-[#0a0a0a] text-white border-transparent' },
-    editor: { label: 'Editor', icon: <Pencil className="w-3 h-3" />, className: 'bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0]' },
-    viewer: { label: 'Viewer', icon: <Eye className="w-3 h-3" />,    className: 'border-[#e0e0e0] text-[#6b6b6b] bg-white' },
+  const map: Record<
+    MemberRole,
+    { label: string; icon: React.ReactNode; className: string }
+  > = {
+    admin: {
+      label: "Admin",
+      icon: <Shield className="w-3 h-3" />,
+      className: "bg-[#0a0a0a] text-white border-transparent",
+    },
+    editor: {
+      label: "Editor",
+      icon: <Pencil className="w-3 h-3" />,
+      className: "bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0]",
+    },
+    viewer: {
+      label: "Viewer",
+      icon: <Eye className="w-3 h-3" />,
+      className: "border-[#e0e0e0] text-[#6b6b6b] bg-white",
+    },
   };
   const s = map[role];
   return (
@@ -59,19 +99,31 @@ function roleBadge(role: MemberRole) {
 }
 
 function statusBadge(status: MemberStatus) {
-  if (status === 'active') {
-    return <Badge className="bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0] text-xs">Active</Badge>;
+  if (status === "active") {
+    return (
+      <Badge className="bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0] text-xs">
+        Active
+      </Badge>
+    );
   }
-  return <Badge className="border-[#e0e0e0] text-[#6b6b6b] bg-white text-xs">Pending</Badge>;
+  return (
+    <Badge className="border-[#e0e0e0] text-[#6b6b6b] bg-white text-xs">
+      Pending
+    </Badge>
+  );
 }
 
 function memberInitials(member: WorkspaceMember): string {
-  const name = member.user?.name ?? member.invite_email ?? 'U';
+  const name = member.user?.name ?? member.invite_email ?? "U";
   return name.slice(0, 2).toUpperCase();
 }
 
-interface WorkspaceIdResponse { workspace_id: string }
-interface TeamResponse { members: WorkspaceMember[] }
+interface WorkspaceIdResponse {
+  workspace_id: string;
+}
+interface TeamResponse {
+  members: WorkspaceMember[];
+}
 interface CurrentUserResponse {
   is_superadmin?: boolean;
   is_owner?: boolean;
@@ -82,27 +134,28 @@ export default function TeamPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<MemberRole>('editor');
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<MemberRole>("editor");
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [inviteError, setInviteError] = useState('');
-  const [workspaceId, setWorkspaceId] = useState('');
+  const [inviteError, setInviteError] = useState("");
+  const [workspaceId, setWorkspaceId] = useState("");
   const [currentUserWeight, setCurrentUserWeight] = useState<number>(0);
   const [isOwnerOrSuperadmin, setIsOwnerOrSuperadmin] = useState(false);
 
   // Permissions modal state
   const [permissionsOpen, setPermissionsOpen] = useState(false);
-  const [permissionsMember, setPermissionsMember] = useState<WorkspaceMember | null>(null);
+  const [permissionsMember, setPermissionsMember] =
+    useState<WorkspaceMember | null>(null);
   const [permModules, setPermModules] = useState<string[]>([]);
-  const [permRole, setPermRole] = useState<MemberRole>('editor');
+  const [permRole, setPermRole] = useState<MemberRole>("editor");
   const [savingPermissions, setSavingPermissions] = useState(false);
-  const [permissionsError, setPermissionsError] = useState('');
+  const [permissionsError, setPermissionsError] = useState("");
 
   useEffect(() => {
-    fetch('/api/admin/workspace-id')
+    fetch("/api/admin/workspace-id")
       .then((r) => r.json())
-      .then((d: WorkspaceIdResponse) => setWorkspaceId(d.workspace_id ?? ''))
+      .then((d: WorkspaceIdResponse) => setWorkspaceId(d.workspace_id ?? ""))
       .catch(() => setLoading(false));
   }, []);
 
@@ -110,11 +163,21 @@ export default function TeamPage() {
   useEffect(() => {
     if (!workspaceId) return;
     fetch(`/api/team/current-user-role?workspace_id=${workspaceId}`)
-      .then((r) => r.ok ? r.json() as Promise<CurrentUserResponse> : Promise.resolve({}))
+      .then((r) =>
+        r.ok ? (r.json() as Promise<CurrentUserResponse>) : Promise.resolve({}),
+      )
       .then((d: CurrentUserResponse) => {
-        if (d.is_superadmin) { setCurrentUserWeight(100); setIsOwnerOrSuperadmin(true); return; }
-        if (d.is_owner)      { setCurrentUserWeight(80);  setIsOwnerOrSuperadmin(true); return; }
-        const role = d.role ?? '';
+        if (d.is_superadmin) {
+          setCurrentUserWeight(100);
+          setIsOwnerOrSuperadmin(true);
+          return;
+        }
+        if (d.is_owner) {
+          setCurrentUserWeight(80);
+          setIsOwnerOrSuperadmin(true);
+          return;
+        }
+        const role = d.role ?? "";
         setCurrentUserWeight(ROLE_WEIGHT[role] ?? 0);
         setIsOwnerOrSuperadmin(false);
       })
@@ -126,38 +189,44 @@ export default function TeamPage() {
     setLoading(true);
     const res = await fetch(`/api/team?workspace_id=${workspaceId}`);
     if (res.ok) {
-      const d = await res.json() as TeamResponse;
+      const d = (await res.json()) as TeamResponse;
       setMembers(d.members ?? []);
     }
     setLoading(false);
   }, [workspaceId]);
 
-  useEffect(() => { if (workspaceId) fetchMembers(); }, [fetchMembers, workspaceId]);
+  useEffect(() => {
+    if (workspaceId) fetchMembers();
+  }, [fetchMembers, workspaceId]);
 
   async function inviteMember() {
     if (!inviteEmail.trim()) return;
-    setInviteError('');
+    setInviteError("");
     setInviting(true);
-    const res = await fetch('/api/team/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, workspace_id: workspaceId }),
+    const res = await fetch("/api/team/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        workspace_id: workspaceId,
+      }),
     });
     if (res.ok) {
       await fetchMembers();
       setInviteOpen(false);
-      setInviteEmail('');
-      setInviteRole('editor');
+      setInviteEmail("");
+      setInviteRole("editor");
     } else {
-      const err = await res.json() as { error?: string };
-      setInviteError(err.error ?? 'Failed to send invitation.');
+      const err = (await res.json()) as { error?: string };
+      setInviteError(err.error ?? "Failed to send invitation.");
     }
     setInviting(false);
   }
 
   async function removeMember(id: string) {
     setRemovingId(id);
-    await fetch(`/api/team/${id}`, { method: 'DELETE' });
+    await fetch(`/api/team/${id}`, { method: "DELETE" });
     await fetchMembers();
     setRemovingId(null);
   }
@@ -170,23 +239,23 @@ export default function TeamPage() {
     setPermissionsMember(member);
     setPermModules(member.visible_modules ?? [...ALL_MODULES]);
     setPermRole(member.role);
-    setPermissionsError('');
+    setPermissionsError("");
     setPermissionsOpen(true);
   }
 
   function toggleModule(mod: string) {
     setPermModules((prev) =>
-      prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod]
+      prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod],
     );
   }
 
   async function savePermissions(memberId: string) {
     setSavingPermissions(true);
-    setPermissionsError('');
+    setPermissionsError("");
     try {
       const res = await fetch(`/api/team/${memberId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: permRole, visible_modules: permModules }),
       });
       if (res.ok) {
@@ -194,11 +263,11 @@ export default function TeamPage() {
         setPermissionsOpen(false);
         setPermissionsMember(null);
       } else {
-        const err = await res.json() as { error?: string };
-        setPermissionsError(err.error ?? 'Failed to save permissions.');
+        const err = (await res.json()) as { error?: string };
+        setPermissionsError(err.error ?? "Failed to save permissions.");
       }
     } catch {
-      setPermissionsError('Network error. Please try again.');
+      setPermissionsError("Network error. Please try again.");
     }
     setSavingPermissions(false);
   }
@@ -208,10 +277,19 @@ export default function TeamPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Team</h1>
-          <p className="mt-1 text-sm text-[#6b6b6b]">Manage workspace members and their permissions.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">
+            Team
+          </h1>
+          <p className="mt-1 text-sm text-[#6b6b6b]">
+            Manage workspace members and their permissions.
+          </p>
         </div>
-        <Button onClick={() => { setInviteOpen(true); setInviteError(''); }}>
+        <Button
+          onClick={() => {
+            setInviteOpen(true);
+            setInviteError("");
+          }}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Invite Member
         </Button>
@@ -220,9 +298,21 @@ export default function TeamPage() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Total Members', value: members.length, icon: <Users className="w-4 h-4 text-[#6b6b6b]" /> },
-          { label: 'Active',        value: members.filter(m => m.status === 'active').length, icon: <Users className="w-4 h-4 text-[#6b6b6b]" /> },
-          { label: 'Pending',       value: members.filter(m => m.status === 'pending').length, icon: <Mail className="w-4 h-4 text-[#6b6b6b]" /> },
+          {
+            label: "Total Members",
+            value: members.length,
+            icon: <Users className="w-4 h-4 text-[#6b6b6b]" />,
+          },
+          {
+            label: "Active",
+            value: members.filter((m) => m.status === "active").length,
+            icon: <Users className="w-4 h-4 text-[#6b6b6b]" />,
+          },
+          {
+            label: "Pending",
+            value: members.filter((m) => m.status === "pending").length,
+            icon: <Mail className="w-4 h-4 text-[#6b6b6b]" />,
+          },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -253,8 +343,12 @@ export default function TeamPage() {
         ) : members.length === 0 ? (
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Users className="w-12 h-12 text-[#e0e0e0] mb-4" />
-            <p className="text-[#0a0a0a] font-medium mb-1">No team members yet</p>
-            <p className="text-sm text-[#6b6b6b] mb-4">Invite colleagues to collaborate on this workspace.</p>
+            <p className="text-[#0a0a0a] font-medium mb-1">
+              No team members yet
+            </p>
+            <p className="text-sm text-[#6b6b6b] mb-4">
+              Invite colleagues to collaborate on this workspace.
+            </p>
             <Button size="sm" onClick={() => setInviteOpen(true)}>
               <Plus className="w-4 h-4 mr-1" />
               Invite Member
@@ -283,20 +377,20 @@ export default function TeamPage() {
                     </Avatar>
                     <div className="min-w-0">
                       <p className="font-medium text-[#0a0a0a] truncate">
-                        {member.user?.name ?? member.invite_email ?? '—'}
+                        {member.user?.name ?? member.invite_email ?? "—"}
                       </p>
                       <p className="text-xs text-[#6b6b6b] truncate">
-                        {member.user?.email ?? member.invite_email ?? ''}
+                        {member.user?.email ?? member.invite_email ?? ""}
                       </p>
                     </div>
                     <span>{roleBadge(member.role)}</span>
                     <span>{statusBadge(member.status)}</span>
                     <span className="text-[#6b6b6b] text-xs">
                       {member.joined_at
-                        ? format(new Date(member.joined_at), 'MMM d, yyyy')
-                        : member.status === 'pending'
-                          ? `Invited ${format(new Date(member.invited_at), 'MMM d')}`
-                          : '—'}
+                        ? format(new Date(member.joined_at), "MMM d, yyyy")
+                        : member.status === "pending"
+                          ? `Invited ${format(new Date(member.invited_at), "MMM d")}`
+                          : "—"}
                     </span>
                     <span className="flex items-center gap-1 justify-end">
                       {isOwnerOrSuperadmin && (
@@ -350,7 +444,9 @@ export default function TeamPage() {
                 placeholder="colleague@company.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') inviteMember(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") inviteMember();
+                }}
               />
             </div>
 
@@ -363,11 +459,13 @@ export default function TeamPage() {
                 className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
               >
                 {ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
                 ))}
               </select>
               <p className="text-xs text-[#6b6b6b]">
-                {ROLES.find(r => r.value === inviteRole)?.description}
+                {ROLES.find((r) => r.value === inviteRole)?.description}
               </p>
             </div>
 
@@ -379,34 +477,44 @@ export default function TeamPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setInviteOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={inviteMember}
               disabled={inviting || !inviteEmail.trim()}
             >
-              {inviting ? 'Sending…' : 'Send Invitation'}
+              {inviting ? "Sending…" : "Send Invitation"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Permissions dialog */}
-      <Dialog open={permissionsOpen} onOpenChange={(open) => {
-        if (!open) { setPermissionsOpen(false); setPermissionsMember(null); }
-      }}>
+      <Dialog
+        open={permissionsOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPermissionsOpen(false);
+            setPermissionsMember(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Module Permissions</DialogTitle>
             <DialogDescription>
               {permissionsMember
-                ? `Choose which modules ${permissionsMember.user?.name ?? permissionsMember.invite_email ?? 'this member'} can access.`
-                : 'Choose which modules this member can access.'}
+                ? `Choose which modules ${permissionsMember.user?.name ?? permissionsMember.invite_email ?? "this member"} can access.`
+                : "Choose which modules this member can access."}
             </DialogDescription>
           </DialogHeader>
 
           {/* Role selector */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wider">Role</Label>
+            <Label className="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wider">
+              Role
+            </Label>
             <div className="grid grid-cols-3 gap-2">
               {ROLES.map((r) => {
                 const selected = permRole === r.value;
@@ -419,12 +527,16 @@ export default function TeamPage() {
                     onClick={() => canAssign && setPermRole(r.value)}
                     className={`rounded-lg border px-3 py-2.5 text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       selected
-                        ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white'
-                        : 'border-[#e0e0e0] hover:bg-[#f5f5f5] text-[#0a0a0a]'
+                        ? "border-[#0a0a0a] bg-[#0a0a0a] text-white"
+                        : "border-[#e0e0e0] hover:bg-[#f5f5f5] text-[#0a0a0a]"
                     }`}
                   >
                     <p className="text-xs font-semibold">{r.label}</p>
-                    <p className={`text-[10px] mt-0.5 ${selected ? 'text-white/70' : 'text-[#9b9b9b]'}`}>{r.description}</p>
+                    <p
+                      className={`text-[10px] mt-0.5 ${selected ? "text-white/70" : "text-[#9b9b9b]"}`}
+                    >
+                      {r.description}
+                    </p>
                   </button>
                 );
               })}
@@ -435,7 +547,9 @@ export default function TeamPage() {
 
           {/* Module permissions */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wider">Module Access</Label>
+            <Label className="text-xs font-semibold text-[#6b6b6b] uppercase tracking-wider">
+              Module Access
+            </Label>
             <div className="grid grid-cols-2 gap-2">
               {ALL_MODULES.map((mod) => {
                 const checked = permModules.includes(mod);
@@ -444,8 +558,8 @@ export default function TeamPage() {
                     key={mod}
                     className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
                       checked
-                        ? 'border-[#0a0a0a] bg-[#0a0a0a]/5'
-                        : 'border-[#e0e0e0] hover:bg-[#f5f5f5]'
+                        ? "border-[#0a0a0a] bg-[#0a0a0a]/5"
+                        : "border-[#e0e0e0] hover:bg-[#f5f5f5]"
                     }`}
                   >
                     <input
@@ -454,7 +568,9 @@ export default function TeamPage() {
                       onChange={() => toggleModule(mod)}
                       className="h-3.5 w-3.5 accent-[#0a0a0a]"
                     />
-                    <span className="text-sm text-[#0a0a0a]">{MODULE_LABELS[mod] ?? mod}</span>
+                    <span className="text-sm text-[#0a0a0a]">
+                      {MODULE_LABELS[mod] ?? mod}
+                    </span>
                   </label>
                 );
               })}
@@ -470,15 +586,20 @@ export default function TeamPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => { setPermissionsOpen(false); setPermissionsMember(null); }}
+              onClick={() => {
+                setPermissionsOpen(false);
+                setPermissionsMember(null);
+              }}
             >
               Cancel
             </Button>
             <Button
-              onClick={() => permissionsMember && savePermissions(permissionsMember.id)}
+              onClick={() =>
+                permissionsMember && savePermissions(permissionsMember.id)
+              }
               disabled={savingPermissions || !permissionsMember}
             >
-              {savingPermissions ? 'Saving…' : 'Save Permissions'}
+              {savingPermissions ? "Saving…" : "Save Permissions"}
             </Button>
           </DialogFooter>
         </DialogContent>

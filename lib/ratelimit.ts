@@ -8,21 +8,24 @@
  * Gracefully degrades (allows all requests) if Redis is not configured.
  */
 
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 // Singleton clients — created once and reused across Edge invocations
 let redis: Redis | null = null;
 let defaultRatelimit: Ratelimit | null = null;
 
 function getRedis(): Redis | null {
-  if (!process.env['UPSTASH_REDIS_REST_URL'] || !process.env['UPSTASH_REDIS_REST_TOKEN']) {
+  if (
+    !process.env["UPSTASH_REDIS_REST_URL"] ||
+    !process.env["UPSTASH_REDIS_REST_TOKEN"]
+  ) {
     return null;
   }
   if (!redis) {
     redis = new Redis({
-      url: process.env['UPSTASH_REDIS_REST_URL'],
-      token: process.env['UPSTASH_REDIS_REST_TOKEN'],
+      url: process.env["UPSTASH_REDIS_REST_URL"],
+      token: process.env["UPSTASH_REDIS_REST_TOKEN"],
     });
   }
   return redis;
@@ -35,8 +38,8 @@ function getDefaultRatelimit(): Ratelimit | null {
     defaultRatelimit = new Ratelimit({
       redis: r,
       // Token bucket: 10 tokens/s, burst up to 50
-      limiter: Ratelimit.tokenBucket(10, '1 s', 50),
-      prefix: 'voiceos:rl',
+      limiter: Ratelimit.tokenBucket(10, "1 s", 50),
+      prefix: "voiceos:rl",
     });
   }
   return defaultRatelimit;
@@ -56,7 +59,7 @@ export interface RateLimitResult {
  */
 export async function checkRateLimit(
   identifier: string,
-  customRps?: number
+  customRps?: number,
 ): Promise<RateLimitResult> {
   const r = getRedis();
 
@@ -71,8 +74,8 @@ export async function checkRateLimit(
     // Per-workspace custom limiter (not cached as singleton — acceptable for Enterprise minority)
     limiter = new Ratelimit({
       redis: r,
-      limiter: Ratelimit.tokenBucket(customRps, '1 s', customRps * 5),
-      prefix: 'voiceos:rl',
+      limiter: Ratelimit.tokenBucket(customRps, "1 s", customRps * 5),
+      prefix: "voiceos:rl",
     });
   } else {
     limiter = getDefaultRatelimit()!;
@@ -80,7 +83,9 @@ export async function checkRateLimit(
 
   const result = await limiter.limit(identifier);
 
-  const retryAfter = result.success ? undefined : Math.ceil((result.reset - Date.now()) / 1000);
+  const retryAfter = result.success
+    ? undefined
+    : Math.ceil((result.reset - Date.now()) / 1000);
 
   return {
     allowed: result.success,
@@ -112,7 +117,9 @@ export async function recordRejection(workspaceId: string): Promise<void> {
     }
     // Log to console so server logs capture it — admin dashboard reads Redis directly
     if (count === ABUSE_THRESHOLD) {
-      console.warn(`[ratelimit] ABUSE ALERT workspace=${workspaceId} rejections=${count} in last hour`);
+      console.warn(
+        `[ratelimit] ABUSE ALERT workspace=${workspaceId} rejections=${count} in last hour`,
+      );
     }
   } catch {
     // Non-fatal
@@ -138,18 +145,18 @@ export async function getRejectionCount(workspaceId: string): Promise<number> {
  * Read rejection counts for multiple workspaces in one pipeline.
  */
 export async function getBulkRejectionCounts(
-  workspaceIds: string[]
+  workspaceIds: string[],
 ): Promise<Record<string, number>> {
   const r = getRedis();
   if (!r || workspaceIds.length === 0) return {};
 
   try {
-    const keys = workspaceIds.map(id => `voiceos:abuse:${id}`);
+    const keys = workspaceIds.map((id) => `voiceos:abuse:${id}`);
     const pipeline = r.pipeline();
-    keys.forEach(k => pipeline.get(k));
+    keys.forEach((k) => pipeline.get(k));
     const results = await pipeline.exec<(number | null)[]>();
     return Object.fromEntries(
-      workspaceIds.map((id, i) => [id, (results[i] as number | null) ?? 0])
+      workspaceIds.map((id, i) => [id, (results[i] as number | null) ?? 0]),
     );
   } catch {
     return {};

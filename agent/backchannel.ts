@@ -9,7 +9,7 @@
  * hedge words so the caller layer can choose to suppress turn-end processing.
  */
 
-import type { voice } from '@livekit/agents';
+import type { voice } from "@livekit/agents";
 
 // Matches strings whose ENTIRE content is filler / hedge words (multi-word ok)
 const FILLER_RE =
@@ -21,17 +21,17 @@ export function isFillerOnly(text: string): boolean {
 
 /** Listening acknowledgments rotated in order to feel natural */
 const BACKCHANNEL_PHRASES = [
-  'Mhm.',
-  'I see.',
-  'Okay.',
-  'Got it.',
-  'Right.',
-  'Sure, go on.',
-  'I understand.',
-  'Uh-huh.',
+  "Mhm.",
+  "I see.",
+  "Okay.",
+  "Got it.",
+  "Right.",
+  "Sure, go on.",
+  "I understand.",
+  "Uh-huh.",
 ];
 
-type BCState = 'idle' | 'armed' | 'cooldown';
+type BCState = "idle" | "armed" | "cooldown";
 
 /**
  * Detects when the user has been speaking continuously for longer than
@@ -43,7 +43,7 @@ type BCState = 'idle' | 'armed' | 'cooldown';
  *   manager.destroy()    — on session Close
  */
 export class BackchannelManager {
-  private state: BCState = 'idle';
+  private state: BCState = "idle";
   private timer: ReturnType<typeof setTimeout> | null = null;
   private phraseIndex = 0;
 
@@ -56,8 +56,8 @@ export class BackchannelManager {
   ) {}
 
   onPartial(): void {
-    if (this.state === 'idle') {
-      this.state = 'armed';
+    if (this.state === "idle") {
+      this.state = "armed";
       this.timer = setTimeout(() => this.fire(), this.armDelayMs);
     }
   }
@@ -66,23 +66,31 @@ export class BackchannelManager {
     this.clearTimer();
     // Keep cooldown state if we already fired — don't reset immediately so
     // we don't fire again on the very next utterance.
-    if (this.state !== 'cooldown') this.state = 'idle';
+    if (this.state !== "cooldown") this.state = "idle";
   }
 
   private fire(): void {
     this.timer = null;
-    this.state = 'cooldown';
-    const phrase = BACKCHANNEL_PHRASES[this.phraseIndex++ % BACKCHANNEL_PHRASES.length]!;
+    this.state = "cooldown";
+    const phrase =
+      BACKCHANNEL_PHRASES[this.phraseIndex++ % BACKCHANNEL_PHRASES.length]!;
     // allowInterruptions: false — queued as a low-priority aside; won't cancel
     // the user's pending input or the current conversational turn.
     try {
       this.session.say(phrase, { allowInterruptions: false });
-    } catch { /* ignore — session may be closing */ }
-    this.timer = setTimeout(() => { this.state = 'idle'; }, this.cooldownMs);
+    } catch {
+      /* ignore — session may be closing */
+    }
+    this.timer = setTimeout(() => {
+      this.state = "idle";
+    }, this.cooldownMs);
   }
 
   private clearTimer(): void {
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
   }
 
   destroy(): void {

@@ -1,44 +1,67 @@
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import type { Agent } from '@/lib/supabase/types';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { Bot, ArrowLeft, Workflow } from 'lucide-react';
-import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { AgentEditForm } from './agent-edit-form';
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import type { Agent } from "@/lib/supabase/types";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { Bot, ArrowLeft, Workflow } from "lucide-react";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { AgentEditForm } from "./agent-edit-form";
 
-export default async function AgentEditPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AgentEditPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   // Try user-scoped client first; fall back to admin client on transient 406
   // (can occur when Next.js router cache invalidation races the auth token refresh)
-  let { data } = await supabase.from('agents').select('*').eq('id', id).single();
+  let { data } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("id", id)
+    .single();
   if (!data) {
     const admin = createAdminClient();
-    const { data: adminData } = await admin.from('agents').select('*').eq('id', id).single();
+    const { data: adminData } = await admin
+      .from("agents")
+      .select("*")
+      .eq("id", id)
+      .single();
     // Only use admin result if agent belongs to this user's workspace
     if (adminData) {
-      const { data: ws } = await supabase.from('workspaces').select('id').eq('owner_id', user.id).single();
-      data = (ws && (adminData as Record<string, unknown>)['workspace_id'] === ws.id) ? adminData : null;
+      const { data: ws } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("owner_id", user.id)
+        .single();
+      data =
+        ws && (adminData as Record<string, unknown>)["workspace_id"] === ws.id
+          ? adminData
+          : null;
     }
   }
   if (!data) notFound();
   const agent = data as Agent;
 
   const { data: phoneNumbers } = await supabase
-    .from('phone_numbers')
-    .select('id, number, status')
-    .eq('workspace_id', agent.workspace_id);
+    .from("phone_numbers")
+    .select("id, number, status")
+    .eq("workspace_id", agent.workspace_id);
 
   return (
     <div className="p-6 mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-4">
         <Link href="/agents">
-          <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
         </Link>
         <div className="flex items-center gap-3 flex-1">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f5f5f5]">
@@ -49,12 +72,18 @@ export default async function AgentEditPage({ params }: { params: Promise<{ id: 
             <p className="text-xs text-[#6b6b6b]">ID: {agent.id}</p>
           </div>
         </div>
-        <Badge variant={agent.status === 'active' ? 'default' : 'secondary'}>{agent.status}</Badge>
+        <Badge variant={agent.status === "active" ? "default" : "secondary"}>
+          {agent.status}
+        </Badge>
         <Link href={`/knowledge/${agent.id}`}>
-          <Button variant="outline" size="sm">Knowledge</Button>
+          <Button variant="outline" size="sm">
+            Knowledge
+          </Button>
         </Link>
         <Link href={`/agents/${agent.id}/flow`}>
-          <Button variant="outline" size="sm">Flow Builder</Button>
+          <Button variant="outline" size="sm">
+            Flow Builder
+          </Button>
         </Link>
         <Link href={`/agents/${agent.id}/workflow`}>
           <Button variant="outline" size="sm" className="gap-1.5">
@@ -63,14 +92,27 @@ export default async function AgentEditPage({ params }: { params: Promise<{ id: 
           </Button>
         </Link>
         <Link href={`/agents/${agent.id}/widget`}>
-          <Button variant="outline" size="sm">Widget</Button>
+          <Button variant="outline" size="sm">
+            Widget
+          </Button>
         </Link>
         <Link href={`/agents/${agent.id}/test`}>
-          <Button variant="secondary" size="sm">Test Call</Button>
+          <Button variant="secondary" size="sm">
+            Test Call
+          </Button>
         </Link>
       </div>
 
-      <AgentEditForm agent={agent} phoneNumbers={(phoneNumbers ?? []) as { id: string; number: string; status: string }[]} />
+      <AgentEditForm
+        agent={agent}
+        phoneNumbers={
+          (phoneNumbers ?? []) as {
+            id: string;
+            number: string;
+            status: string;
+          }[]
+        }
+      />
     </div>
   );
 }

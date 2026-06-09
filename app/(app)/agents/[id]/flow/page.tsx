@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -19,19 +19,19 @@ import {
   type Node,
   type Edge,
   type NodeProps,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   Brain,
@@ -48,9 +48,9 @@ import {
   Trash2,
   Webhook,
   Zap,
-} from 'lucide-react';
-import Link from 'next/link';
-import { toast } from 'sonner';
+} from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,13 +62,19 @@ interface FlowConfig {
   edges: Edge[];
 }
 
-interface StartNodeData extends Record<string, unknown> { label: string }
+interface StartNodeData extends Record<string, unknown> {
+  label: string;
+}
 interface AiStateData extends Record<string, unknown> {
   label: string;
   state_name: string;
   system_instructions: string;
 }
-interface Intent { id: string; label: string; description: string }
+interface Intent {
+  id: string;
+  label: string;
+  description: string;
+}
 interface SemanticRouterData extends Record<string, unknown> {
   label: string;
   description: string;
@@ -77,11 +83,17 @@ interface SemanticRouterData extends Record<string, unknown> {
 interface WebhookData extends Record<string, unknown> {
   label: string;
   url: string;
-  method: 'GET' | 'POST' | 'PUT';
+  method: "GET" | "POST" | "PUT";
   extract_variables: string;
 }
-interface TransferData extends Record<string, unknown> { label: string; transfer_number: string }
-interface EndCallData extends Record<string, unknown> { label: string; farewell: string }
+interface TransferData extends Record<string, unknown> {
+  label: string;
+  transfer_number: string;
+}
+interface EndCallData extends Record<string, unknown> {
+  label: string;
+  farewell: string;
+}
 
 // ---------------------------------------------------------------------------
 // Node components  (defined outside page to prevent React Flow remount)
@@ -95,7 +107,12 @@ function StartNode(_props: NodeProps) {
     >
       <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
       START
-      <Handle type="source" position={Position.Right} id="out" className="!h-3 !w-3 !bg-gray-400 !border-2 !border-white" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out"
+        className="!h-3 !w-3 !bg-gray-400 !border-2 !border-white"
+      />
     </div>
   );
 }
@@ -105,18 +122,31 @@ function AiStateNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
-        selected ? 'border-blue-500 shadow-blue-100 shadow-md' : 'border-blue-200'
+        selected
+          ? "border-blue-500 shadow-blue-100 shadow-md"
+          : "border-blue-200"
       }`}
       style={{ minWidth: 200, maxWidth: 260 }}
     >
-      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-blue-400 !border-2 !border-white" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        className="!h-3 !w-3 !bg-blue-400 !border-2 !border-white"
+      />
       <div className="flex items-center gap-2 rounded-t-xl bg-blue-50 px-3 py-2 border-b border-blue-100">
         <Brain className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">AI State</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-500">
+          AI State
+        </span>
       </div>
       <div className="px-3 py-2.5">
         <p className="text-sm font-semibold text-gray-900 leading-tight">
-          {d.state_name || <span className="text-gray-400 font-normal italic">Unnamed State</span>}
+          {d.state_name || (
+            <span className="text-gray-400 font-normal italic">
+              Unnamed State
+            </span>
+          )}
         </p>
         {d.system_instructions && (
           <p className="text-[11px] text-gray-500 mt-1 leading-snug line-clamp-2">
@@ -124,7 +154,12 @@ function AiStateNode({ data, selected }: NodeProps) {
           </p>
         )}
       </div>
-      <Handle type="source" position={Position.Right} id="out" className="!h-3 !w-3 !bg-blue-400 !border-2 !border-white" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out"
+        className="!h-3 !w-3 !bg-blue-400 !border-2 !border-white"
+      />
     </div>
   );
 }
@@ -135,28 +170,39 @@ function SemanticRouterNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
-        selected ? 'border-amber-500 shadow-amber-100 shadow-md' : 'border-amber-200'
+        selected
+          ? "border-amber-500 shadow-amber-100 shadow-md"
+          : "border-amber-200"
       }`}
       style={{ minWidth: 200, maxWidth: 280 }}
     >
-      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white"
+      />
       <div className="flex items-center gap-2 rounded-t-xl bg-amber-50 px-3 py-2 border-b border-amber-100">
         <GitBranch className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-500">Intent Router</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-500">
+          Intent Router
+        </span>
       </div>
       <div className="px-3 py-2.5 space-y-1">
         {d.description && (
-          <p className="text-[11px] text-gray-500 mb-2">{String(d.description)}</p>
+          <p className="text-[11px] text-gray-500 mb-2">
+            {String(d.description)}
+          </p>
         )}
         {intents.length === 0 ? (
-          <p className="text-xs text-amber-400 italic">Add intents in inspector →</p>
+          <p className="text-xs text-amber-400 italic">
+            Add intents in inspector →
+          </p>
         ) : (
           intents.map((intent, i) => (
             <div key={intent.id} className="flex items-center gap-2">
-              <span
-                className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200 truncate max-w-[140px]"
-              >
-                {intent.label || 'Intent'}
+              <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200 truncate max-w-[140px]">
+                {intent.label || "Intent"}
               </span>
               {/* Right-side source handle per intent, evenly distributed */}
               <Handle
@@ -170,7 +216,12 @@ function SemanticRouterNode({ data, selected }: NodeProps) {
           ))
         )}
         {intents.length === 0 && (
-          <Handle type="source" position={Position.Right} id="default" className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white" />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="default"
+            className="!h-3 !w-3 !bg-amber-400 !border-2 !border-white"
+          />
         )}
       </div>
     </div>
@@ -182,14 +233,23 @@ function WebhookNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
-        selected ? 'border-purple-500 shadow-purple-100 shadow-md' : 'border-purple-200'
+        selected
+          ? "border-purple-500 shadow-purple-100 shadow-md"
+          : "border-purple-200"
       }`}
       style={{ minWidth: 200, maxWidth: 260 }}
     >
-      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-purple-400 !border-2 !border-white" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        className="!h-3 !w-3 !bg-purple-400 !border-2 !border-white"
+      />
       <div className="flex items-center gap-2 rounded-t-xl bg-purple-50 px-3 py-2 border-b border-purple-100">
         <Zap className="h-3.5 w-3.5 text-purple-500 shrink-0" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-500">Webhook</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-500">
+          Webhook
+        </span>
         {d.method && (
           <span className="ml-auto rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-600">
             {d.method}
@@ -198,7 +258,9 @@ function WebhookNode({ data, selected }: NodeProps) {
       </div>
       <div className="px-3 py-2.5">
         {d.url ? (
-          <p className="text-[11px] text-gray-600 font-mono truncate">{String(d.url)}</p>
+          <p className="text-[11px] text-gray-600 font-mono truncate">
+            {String(d.url)}
+          </p>
         ) : (
           <p className="text-xs text-gray-400 italic">No URL set</p>
         )}
@@ -208,7 +270,12 @@ function WebhookNode({ data, selected }: NodeProps) {
           </p>
         )}
       </div>
-      <Handle type="source" position={Position.Right} id="out" className="!h-3 !w-3 !bg-purple-400 !border-2 !border-white" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out"
+        className="!h-3 !w-3 !bg-purple-400 !border-2 !border-white"
+      />
     </div>
   );
 }
@@ -218,18 +285,29 @@ function TransferNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
-        selected ? 'border-cyan-500 shadow-cyan-100 shadow-md' : 'border-cyan-200'
+        selected
+          ? "border-cyan-500 shadow-cyan-100 shadow-md"
+          : "border-cyan-200"
       }`}
       style={{ minWidth: 180, maxWidth: 240 }}
     >
-      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-cyan-400 !border-2 !border-white" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        className="!h-3 !w-3 !bg-cyan-400 !border-2 !border-white"
+      />
       <div className="flex items-center gap-2 rounded-t-xl bg-cyan-50 px-3 py-2 border-b border-cyan-100">
         <PhoneForwarded className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-500">Transfer</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-500">
+          Transfer
+        </span>
       </div>
       <div className="px-3 py-2.5">
         {d.transfer_number ? (
-          <p className="text-sm font-mono text-gray-800">{String(d.transfer_number)}</p>
+          <p className="text-sm font-mono text-gray-800">
+            {String(d.transfer_number)}
+          </p>
         ) : (
           <p className="text-xs text-gray-400 italic">No number set</p>
         )}
@@ -243,18 +321,27 @@ function EndCallNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`rounded-xl border-2 bg-white shadow-sm transition-shadow ${
-        selected ? 'border-red-500 shadow-red-100 shadow-md' : 'border-red-200'
+        selected ? "border-red-500 shadow-red-100 shadow-md" : "border-red-200"
       }`}
       style={{ minWidth: 160, maxWidth: 240 }}
     >
-      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-red-400 !border-2 !border-white" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        className="!h-3 !w-3 !bg-red-400 !border-2 !border-white"
+      />
       <div className="flex items-center gap-2 rounded-t-xl bg-red-50 px-3 py-2 border-b border-red-100">
         <PhoneOff className="h-3.5 w-3.5 text-red-500 shrink-0" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-red-500">End Call</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-red-500">
+          End Call
+        </span>
       </div>
       <div className="px-3 py-2.5">
         {d.farewell ? (
-          <p className="text-[11px] text-gray-600 line-clamp-2">{String(d.farewell)}</p>
+          <p className="text-[11px] text-gray-600 line-clamp-2">
+            {String(d.farewell)}
+          </p>
         ) : (
           <p className="text-xs text-gray-400 italic">No farewell</p>
         )}
@@ -277,83 +364,459 @@ const nodeTypes = {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_NODES: Node[] = [
-  { id: 'start', type: 'start_node', position: { x: 80, y: 200 }, data: { label: 'Start' }, deletable: false },
+  {
+    id: "start",
+    type: "start_node",
+    position: { x: 80, y: 200 },
+    data: { label: "Start" },
+    deletable: false,
+  },
 ];
 
 const defaultEdgeOptions = {
   animated: false,
-  style: { strokeWidth: 2, stroke: '#94a3b8' },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-  labelStyle: { fontSize: 10, fontWeight: 600, fill: '#6366f1' },
-  labelBgStyle: { fill: '#eef2ff', fillOpacity: 0.9 },
+  style: { strokeWidth: 2, stroke: "#94a3b8" },
+  markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
+  labelStyle: { fontSize: 10, fontWeight: 600, fill: "#6366f1" },
+  labelBgStyle: { fill: "#eef2ff", fillOpacity: 0.9 },
   labelBgPadding: [4, 3] as [number, number],
 };
 
-const TEMPLATES: Record<string, { label: string; description: string; nodes: Node[]; edges: Edge[] }> = {
+const TEMPLATES: Record<
+  string,
+  { label: string; description: string; nodes: Node[]; edges: Edge[] }
+> = {
   sales: {
-    label: 'Ventas Outbound',
-    description: 'Presentación → Calificación → Cierre o FIN',
+    label: "Ventas Outbound",
+    description: "Presentación → Calificación → Cierre o FIN",
     nodes: [
-      { id: 'start', type: 'start_node', position: { x: 40, y: 200 }, data: { label: 'Start' }, deletable: false },
-      { id: 'intro', type: 'ai_state', position: { x: 200, y: 160 }, data: { label: 'AI State', state_name: 'Presentación', system_instructions: 'Saluda al contacto, preséntate como {{agent_name}} de {{workspace_name}} y explica brevemente el motivo de la llamada. Sé amable y conciso.' } },
-      { id: 'route1', type: 'semantic_router', position: { x: 480, y: 140 }, data: { label: 'Router', description: '¿Qué quiere hacer el contacto?', intents: [{ id: 'i-interested', label: 'Interesado', description: 'El contacto muestra interés o quiere más información' }, { id: 'i-not-interested', label: 'No interesado', description: 'El contacto rechaza la oferta o no quiere continuar' }, { id: 'i-callback', label: 'Callback', description: 'El contacto pide que lo llamen después' }] } },
-      { id: 'qualified', type: 'ai_state', position: { x: 760, y: 60 }, data: { label: 'AI State', state_name: 'Cierre', system_instructions: 'El contacto está interesado. Recoge sus datos de contacto, confirma la cita o el siguiente paso, y agradece su tiempo.' } },
-      { id: 'objection', type: 'ai_state', position: { x: 760, y: 200 }, data: { label: 'AI State', state_name: 'Manejo de Objeción', system_instructions: 'El contacto no está interesado. Reconoce su posición, ofrece un beneficio específico y pregunta si podría reconsiderarlo.' } },
-      { id: 'end-ok', type: 'end_call_node', position: { x: 1020, y: 60 }, data: { label: 'End Call', farewell: 'Perfecto, quedamos en contacto. ¡Que tenga un buen día!' } },
-      { id: 'end-no', type: 'end_call_node', position: { x: 1020, y: 280 }, data: { label: 'End Call', farewell: 'Entendido, no le molesto más. Gracias por su tiempo, ¡que tenga un buen día!' } },
+      {
+        id: "start",
+        type: "start_node",
+        position: { x: 40, y: 200 },
+        data: { label: "Start" },
+        deletable: false,
+      },
+      {
+        id: "intro",
+        type: "ai_state",
+        position: { x: 200, y: 160 },
+        data: {
+          label: "AI State",
+          state_name: "Presentación",
+          system_instructions:
+            "Saluda al contacto, preséntate como {{agent_name}} de {{workspace_name}} y explica brevemente el motivo de la llamada. Sé amable y conciso.",
+        },
+      },
+      {
+        id: "route1",
+        type: "semantic_router",
+        position: { x: 480, y: 140 },
+        data: {
+          label: "Router",
+          description: "¿Qué quiere hacer el contacto?",
+          intents: [
+            {
+              id: "i-interested",
+              label: "Interesado",
+              description:
+                "El contacto muestra interés o quiere más información",
+            },
+            {
+              id: "i-not-interested",
+              label: "No interesado",
+              description:
+                "El contacto rechaza la oferta o no quiere continuar",
+            },
+            {
+              id: "i-callback",
+              label: "Callback",
+              description: "El contacto pide que lo llamen después",
+            },
+          ],
+        },
+      },
+      {
+        id: "qualified",
+        type: "ai_state",
+        position: { x: 760, y: 60 },
+        data: {
+          label: "AI State",
+          state_name: "Cierre",
+          system_instructions:
+            "El contacto está interesado. Recoge sus datos de contacto, confirma la cita o el siguiente paso, y agradece su tiempo.",
+        },
+      },
+      {
+        id: "objection",
+        type: "ai_state",
+        position: { x: 760, y: 200 },
+        data: {
+          label: "AI State",
+          state_name: "Manejo de Objeción",
+          system_instructions:
+            "El contacto no está interesado. Reconoce su posición, ofrece un beneficio específico y pregunta si podría reconsiderarlo.",
+        },
+      },
+      {
+        id: "end-ok",
+        type: "end_call_node",
+        position: { x: 1020, y: 60 },
+        data: {
+          label: "End Call",
+          farewell: "Perfecto, quedamos en contacto. ¡Que tenga un buen día!",
+        },
+      },
+      {
+        id: "end-no",
+        type: "end_call_node",
+        position: { x: 1020, y: 280 },
+        data: {
+          label: "End Call",
+          farewell:
+            "Entendido, no le molesto más. Gracias por su tiempo, ¡que tenga un buen día!",
+        },
+      },
     ],
     edges: [
-      { id: 'e1', source: 'start', target: 'intro', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e2', source: 'intro', target: 'route1', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e3', source: 'route1', target: 'qualified', sourceHandle: 'i-interested', label: 'Interesado', ...defaultEdgeOptions },
-      { id: 'e4', source: 'route1', target: 'objection', sourceHandle: 'i-not-interested', label: 'No interesado', ...defaultEdgeOptions },
-      { id: 'e5', source: 'route1', target: 'end-no', sourceHandle: 'i-callback', label: 'Callback', ...defaultEdgeOptions },
-      { id: 'e6', source: 'qualified', target: 'end-ok', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e7', source: 'objection', target: 'end-no', sourceHandle: 'out', ...defaultEdgeOptions },
+      {
+        id: "e1",
+        source: "start",
+        target: "intro",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e2",
+        source: "intro",
+        target: "route1",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e3",
+        source: "route1",
+        target: "qualified",
+        sourceHandle: "i-interested",
+        label: "Interesado",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e4",
+        source: "route1",
+        target: "objection",
+        sourceHandle: "i-not-interested",
+        label: "No interesado",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e5",
+        source: "route1",
+        target: "end-no",
+        sourceHandle: "i-callback",
+        label: "Callback",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e6",
+        source: "qualified",
+        target: "end-ok",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e7",
+        source: "objection",
+        target: "end-no",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
     ],
   },
   qualification: {
-    label: 'Calificación de Lead',
-    description: 'BANT → Webhook CRM → FIN',
+    label: "Calificación de Lead",
+    description: "BANT → Webhook CRM → FIN",
     nodes: [
-      { id: 'start', type: 'start_node', position: { x: 40, y: 180 }, data: { label: 'Start' }, deletable: false },
-      { id: 'greeting', type: 'ai_state', position: { x: 200, y: 140 }, data: { label: 'AI State', state_name: 'Saludo y Contexto', system_instructions: 'Saluda al contacto {{contact_name}}, confírmale que llamamos porque mostró interés y explica que harás unas preguntas rápidas para ver cómo podemos ayudar.' } },
-      { id: 'qualify', type: 'ai_state', position: { x: 440, y: 140 }, data: { label: 'AI State', state_name: 'Calificación BANT', system_instructions: 'Haz las siguientes preguntas de calificación:\n1. ¿Cuál es su presupuesto aproximado?\n2. ¿Tiene autoridad para tomar esta decisión?\n3. ¿Qué necesita resolver?\n4. ¿Cuál es su plazo?\n\nToma nota de las respuestas.' } },
-      { id: 'route1', type: 'semantic_router', position: { x: 680, y: 120 }, data: { label: 'Router', description: 'Resultado de calificación', intents: [{ id: 'i-qual', label: 'Calificado', description: 'Tiene presupuesto, autoridad, necesidad y urgencia' }, { id: 'i-notqual', label: 'No calificado', description: 'No cumple criterios BANT' }] } },
-      { id: 'crm', type: 'webhook_node', position: { x: 920, y: 60 }, data: { label: 'Webhook', url: 'https://your-crm.com/api/leads', method: 'POST', extract_variables: 'lead_id,next_steps' } },
-      { id: 'end-qual', type: 'end_call_node', position: { x: 1140, y: 60 }, data: { label: 'End Call', farewell: 'Perfecto, un asesor se pondrá en contacto con usted en las próximas 24 horas. ¡Gracias!' } },
-      { id: 'end-notqual', type: 'end_call_node', position: { x: 940, y: 260 }, data: { label: 'End Call', farewell: 'Gracias por su tiempo. Si en el futuro necesita nuestros servicios, no dude en contactarnos. ¡Hasta luego!' } },
+      {
+        id: "start",
+        type: "start_node",
+        position: { x: 40, y: 180 },
+        data: { label: "Start" },
+        deletable: false,
+      },
+      {
+        id: "greeting",
+        type: "ai_state",
+        position: { x: 200, y: 140 },
+        data: {
+          label: "AI State",
+          state_name: "Saludo y Contexto",
+          system_instructions:
+            "Saluda al contacto {{contact_name}}, confírmale que llamamos porque mostró interés y explica que harás unas preguntas rápidas para ver cómo podemos ayudar.",
+        },
+      },
+      {
+        id: "qualify",
+        type: "ai_state",
+        position: { x: 440, y: 140 },
+        data: {
+          label: "AI State",
+          state_name: "Calificación BANT",
+          system_instructions:
+            "Haz las siguientes preguntas de calificación:\n1. ¿Cuál es su presupuesto aproximado?\n2. ¿Tiene autoridad para tomar esta decisión?\n3. ¿Qué necesita resolver?\n4. ¿Cuál es su plazo?\n\nToma nota de las respuestas.",
+        },
+      },
+      {
+        id: "route1",
+        type: "semantic_router",
+        position: { x: 680, y: 120 },
+        data: {
+          label: "Router",
+          description: "Resultado de calificación",
+          intents: [
+            {
+              id: "i-qual",
+              label: "Calificado",
+              description: "Tiene presupuesto, autoridad, necesidad y urgencia",
+            },
+            {
+              id: "i-notqual",
+              label: "No calificado",
+              description: "No cumple criterios BANT",
+            },
+          ],
+        },
+      },
+      {
+        id: "crm",
+        type: "webhook_node",
+        position: { x: 920, y: 60 },
+        data: {
+          label: "Webhook",
+          url: "https://your-crm.com/api/leads",
+          method: "POST",
+          extract_variables: "lead_id,next_steps",
+        },
+      },
+      {
+        id: "end-qual",
+        type: "end_call_node",
+        position: { x: 1140, y: 60 },
+        data: {
+          label: "End Call",
+          farewell:
+            "Perfecto, un asesor se pondrá en contacto con usted en las próximas 24 horas. ¡Gracias!",
+        },
+      },
+      {
+        id: "end-notqual",
+        type: "end_call_node",
+        position: { x: 940, y: 260 },
+        data: {
+          label: "End Call",
+          farewell:
+            "Gracias por su tiempo. Si en el futuro necesita nuestros servicios, no dude en contactarnos. ¡Hasta luego!",
+        },
+      },
     ],
     edges: [
-      { id: 'e1', source: 'start', target: 'greeting', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e2', source: 'greeting', target: 'qualify', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e3', source: 'qualify', target: 'route1', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e4', source: 'route1', target: 'crm', sourceHandle: 'i-qual', label: 'Calificado', ...defaultEdgeOptions },
-      { id: 'e5', source: 'route1', target: 'end-notqual', sourceHandle: 'i-notqual', label: 'No calificado', ...defaultEdgeOptions },
-      { id: 'e6', source: 'crm', target: 'end-qual', sourceHandle: 'out', ...defaultEdgeOptions },
+      {
+        id: "e1",
+        source: "start",
+        target: "greeting",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e2",
+        source: "greeting",
+        target: "qualify",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e3",
+        source: "qualify",
+        target: "route1",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e4",
+        source: "route1",
+        target: "crm",
+        sourceHandle: "i-qual",
+        label: "Calificado",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e5",
+        source: "route1",
+        target: "end-notqual",
+        sourceHandle: "i-notqual",
+        label: "No calificado",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e6",
+        source: "crm",
+        target: "end-qual",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
     ],
   },
   support: {
-    label: 'Soporte Inbound',
-    description: 'Clasificación → Soporte técnico / Facturación / Humano',
+    label: "Soporte Inbound",
+    description: "Clasificación → Soporte técnico / Facturación / Humano",
     nodes: [
-      { id: 'start', type: 'start_node', position: { x: 40, y: 220 }, data: { label: 'Start' }, deletable: false },
-      { id: 'welcome', type: 'ai_state', position: { x: 200, y: 180 }, data: { label: 'AI State', state_name: 'Bienvenida', system_instructions: 'Saluda al contacto, identifícate como asistente de soporte y pregunta en qué puedes ayudar hoy.' } },
-      { id: 'classify', type: 'semantic_router', position: { x: 440, y: 160 }, data: { label: 'Router', description: 'Tipo de solicitud de soporte', intents: [{ id: 'i-tech', label: 'Soporte técnico', description: 'El usuario tiene un problema técnico con el producto' }, { id: 'i-billing', label: 'Facturación', description: 'El usuario tiene dudas sobre cobros, facturas o pagos' }, { id: 'i-human', label: 'Quiere humano', description: 'El usuario pide hablar con una persona' }] } },
-      { id: 'tech', type: 'ai_state', position: { x: 680, y: 60 }, data: { label: 'AI State', state_name: 'Soporte Técnico', system_instructions: 'Ayuda al usuario a resolver su problema técnico. Haz preguntas diagnósticas, ofrece pasos de solución. Si no puedes resolver en 3 intentos, ofrece transferir con un agente.' } },
-      { id: 'billing', type: 'ai_state', position: { x: 680, y: 220 }, data: { label: 'AI State', state_name: 'Facturación', system_instructions: 'Atiende la consulta de facturación. Responde preguntas sobre cobros, fechas de pago y facturas. Si necesita un ajuste o reembolso, toma los datos y escala.' } },
-      { id: 'transfer', type: 'transfer_node', position: { x: 680, y: 380 }, data: { label: 'Transfer', transfer_number: '+1800XXXXXXX' } },
-      { id: 'end-tech', type: 'end_call_node', position: { x: 920, y: 60 }, data: { label: 'End Call', farewell: '¿Hay algo más en lo que pueda ayudarle? Que tenga un excelente día.' } },
-      { id: 'end-billing', type: 'end_call_node', position: { x: 920, y: 220 }, data: { label: 'End Call', farewell: 'Listo, ya tomamos nota. ¿Puedo ayudarle con algo más?' } },
+      {
+        id: "start",
+        type: "start_node",
+        position: { x: 40, y: 220 },
+        data: { label: "Start" },
+        deletable: false,
+      },
+      {
+        id: "welcome",
+        type: "ai_state",
+        position: { x: 200, y: 180 },
+        data: {
+          label: "AI State",
+          state_name: "Bienvenida",
+          system_instructions:
+            "Saluda al contacto, identifícate como asistente de soporte y pregunta en qué puedes ayudar hoy.",
+        },
+      },
+      {
+        id: "classify",
+        type: "semantic_router",
+        position: { x: 440, y: 160 },
+        data: {
+          label: "Router",
+          description: "Tipo de solicitud de soporte",
+          intents: [
+            {
+              id: "i-tech",
+              label: "Soporte técnico",
+              description:
+                "El usuario tiene un problema técnico con el producto",
+            },
+            {
+              id: "i-billing",
+              label: "Facturación",
+              description:
+                "El usuario tiene dudas sobre cobros, facturas o pagos",
+            },
+            {
+              id: "i-human",
+              label: "Quiere humano",
+              description: "El usuario pide hablar con una persona",
+            },
+          ],
+        },
+      },
+      {
+        id: "tech",
+        type: "ai_state",
+        position: { x: 680, y: 60 },
+        data: {
+          label: "AI State",
+          state_name: "Soporte Técnico",
+          system_instructions:
+            "Ayuda al usuario a resolver su problema técnico. Haz preguntas diagnósticas, ofrece pasos de solución. Si no puedes resolver en 3 intentos, ofrece transferir con un agente.",
+        },
+      },
+      {
+        id: "billing",
+        type: "ai_state",
+        position: { x: 680, y: 220 },
+        data: {
+          label: "AI State",
+          state_name: "Facturación",
+          system_instructions:
+            "Atiende la consulta de facturación. Responde preguntas sobre cobros, fechas de pago y facturas. Si necesita un ajuste o reembolso, toma los datos y escala.",
+        },
+      },
+      {
+        id: "transfer",
+        type: "transfer_node",
+        position: { x: 680, y: 380 },
+        data: { label: "Transfer", transfer_number: "+1800XXXXXXX" },
+      },
+      {
+        id: "end-tech",
+        type: "end_call_node",
+        position: { x: 920, y: 60 },
+        data: {
+          label: "End Call",
+          farewell:
+            "¿Hay algo más en lo que pueda ayudarle? Que tenga un excelente día.",
+        },
+      },
+      {
+        id: "end-billing",
+        type: "end_call_node",
+        position: { x: 920, y: 220 },
+        data: {
+          label: "End Call",
+          farewell: "Listo, ya tomamos nota. ¿Puedo ayudarle con algo más?",
+        },
+      },
     ],
     edges: [
-      { id: 'e1', source: 'start', target: 'welcome', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e2', source: 'welcome', target: 'classify', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e3', source: 'classify', target: 'tech', sourceHandle: 'i-tech', label: 'Técnico', ...defaultEdgeOptions },
-      { id: 'e4', source: 'classify', target: 'billing', sourceHandle: 'i-billing', label: 'Facturación', ...defaultEdgeOptions },
-      { id: 'e5', source: 'classify', target: 'transfer', sourceHandle: 'i-human', label: 'Quiere humano', ...defaultEdgeOptions },
-      { id: 'e6', source: 'tech', target: 'end-tech', sourceHandle: 'out', ...defaultEdgeOptions },
-      { id: 'e7', source: 'billing', target: 'end-billing', sourceHandle: 'out', ...defaultEdgeOptions },
+      {
+        id: "e1",
+        source: "start",
+        target: "welcome",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e2",
+        source: "welcome",
+        target: "classify",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e3",
+        source: "classify",
+        target: "tech",
+        sourceHandle: "i-tech",
+        label: "Técnico",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e4",
+        source: "classify",
+        target: "billing",
+        sourceHandle: "i-billing",
+        label: "Facturación",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e5",
+        source: "classify",
+        target: "transfer",
+        sourceHandle: "i-human",
+        label: "Quiere humano",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e6",
+        source: "tech",
+        target: "end-tech",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
+      {
+        id: "e7",
+        source: "billing",
+        target: "end-billing",
+        sourceHandle: "out",
+        ...defaultEdgeOptions,
+      },
     ],
   },
 };
@@ -369,7 +832,7 @@ function FlowCanvas({ id }: { id: string }) {
   const [saving, setSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [generatePrompt, setGeneratePrompt] = useState('');
+  const [generatePrompt, setGeneratePrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const { fitView } = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -379,7 +842,10 @@ function FlowCanvas({ id }: { id: string }) {
   // Load saved flow_config
   useEffect(() => {
     fetch(`/api/agents/${id}/flow`)
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((d: { flow_config: FlowConfig | null }) => {
         if (d.flow_config?.nodes?.length) {
           setNodes(d.flow_config.nodes);
@@ -396,7 +862,7 @@ function FlowCanvas({ id }: { id: string }) {
       // Attach intent label to edge when connecting from a semantic_router
       const sourceNode = nodes.find((n) => n.id === connection.source);
       let label: string | undefined;
-      if (sourceNode?.type === 'semantic_router') {
+      if (sourceNode?.type === "semantic_router") {
         const d = sourceNode.data as SemanticRouterData;
         const intent = d.intents?.find((i) => i.id === connection.sourceHandle);
         if (intent?.label) label = intent.label;
@@ -408,31 +874,33 @@ function FlowCanvas({ id }: { id: string }) {
             ...defaultEdgeOptions,
             ...(label ? { label } : {}),
           },
-          eds
-        )
+          eds,
+        ),
       );
     },
-    [nodes, setEdges]
+    [nodes, setEdges],
   );
 
   // Keyboard delete for selected node
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      if (!selectedId || selectedId === 'start') return;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (!selectedId || selectedId === "start") return;
       deleteNode(selectedId);
     }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   function deleteNode(nodeId: string) {
-    if (nodeId === 'start') return;
+    if (nodeId === "start") return;
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setEdges((eds) =>
+      eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
+    );
     setSelectedId(null);
   }
 
@@ -443,8 +911,8 @@ function FlowCanvas({ id }: { id: string }) {
   function updateNode(nodeId: string, partialData: Record<string, unknown>) {
     setNodes((nds) =>
       nds.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, ...partialData } } : n
-      )
+        n.id === nodeId ? { ...n, data: { ...n.data, ...partialData } } : n,
+      ),
     );
     // Sync intent edge labels when Router intents change
     if (partialData.intents) {
@@ -455,7 +923,7 @@ function FlowCanvas({ id }: { id: string }) {
           const intent = intents.find((i) => i.id === e.sourceHandle);
           if (!intent) return e;
           return { ...e, label: intent.label || e.label };
-        })
+        }),
       );
     }
   }
@@ -466,19 +934,36 @@ function FlowCanvas({ id }: { id: string }) {
     const newId = `${node.type}-${Date.now()}`;
     setNodes((nds) => [
       ...nds,
-      { ...node, id: newId, position: { x: node.position.x + 40, y: node.position.y + 40 }, selected: false },
+      {
+        ...node,
+        id: newId,
+        position: { x: node.position.x + 40, y: node.position.y + 40 },
+        selected: false,
+      },
     ]);
-    toast.success('Node duplicated');
+    toast.success("Node duplicated");
   }
 
-  function addNode(type: 'ai_state' | 'semantic_router' | 'webhook_node' | 'transfer_node' | 'end_call_node') {
+  function addNode(
+    type:
+      | "ai_state"
+      | "semantic_router"
+      | "webhook_node"
+      | "transfer_node"
+      | "end_call_node",
+  ) {
     const newId = `${type}-${Date.now()}`;
     const defaults: Record<string, Record<string, unknown>> = {
-      ai_state:         { label: 'AI State', state_name: '', system_instructions: '' },
-      semantic_router:  { label: 'Router', description: '', intents: [] },
-      webhook_node:     { label: 'Webhook', url: '', method: 'POST', extract_variables: '' },
-      transfer_node:    { label: 'Transfer', transfer_number: '' },
-      end_call_node:    { label: 'End Call', farewell: '' },
+      ai_state: { label: "AI State", state_name: "", system_instructions: "" },
+      semantic_router: { label: "Router", description: "", intents: [] },
+      webhook_node: {
+        label: "Webhook",
+        url: "",
+        method: "POST",
+        extract_variables: "",
+      },
+      transfer_node: { label: "Transfer", transfer_number: "" },
+      end_call_node: { label: "End Call", farewell: "" },
     };
     setNodes((nds) => [
       ...nds,
@@ -513,41 +998,48 @@ function FlowCanvas({ id }: { id: string }) {
     setSaving(true);
     try {
       const r = await fetch(`/api/agents/${id}/flow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flow_config: { version: 2, nodes, edges } satisfies FlowConfig }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flow_config: { version: 2, nodes, edges } satisfies FlowConfig,
+        }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      toast.success('Flow saved');
+      toast.success("Flow saved");
     } catch {
-      toast.error('Failed to save flow');
+      toast.error("Failed to save flow");
     }
     setSaving(false);
   }
 
   async function generateFlow() {
     const desc = generatePrompt.trim();
-    if (!desc) { toast.error('Describe el flujo que quieres generar'); return; }
+    if (!desc) {
+      toast.error("Describe el flujo que quieres generar");
+      return;
+    }
     setGenerating(true);
     try {
       const r = await fetch(`/api/agents/${id}/flow/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: desc }),
       });
       if (!r.ok) {
-        const e = await r.json().catch(() => ({ error: 'Error desconocido' }));
+        const e = await r.json().catch(() => ({ error: "Error desconocido" }));
         throw new Error(e.error ?? `HTTP ${r.status}`);
       }
-      const d = await r.json() as { flow: FlowConfig };
+      const d = (await r.json()) as { flow: FlowConfig };
       setNodes(d.flow.nodes as Node[]);
       setEdges(d.flow.edges as Edge[]);
       setSelectedId(null);
       setTimeout(() => fitView({ padding: 0.15, duration: 600 }), 80);
-      toast.success('¡Flujo generado! Revisa y ajusta los nodos.');
-      setGeneratePrompt('');
+      toast.success("¡Flujo generado! Revisa y ajusta los nodos.");
+      setGeneratePrompt("");
     } catch (err) {
-      toast.error(`Generación fallida — ${err instanceof Error ? err.message : 'intenta de nuevo'}`);
+      toast.error(
+        `Generación fallida — ${err instanceof Error ? err.message : "intenta de nuevo"}`,
+      );
     }
     setGenerating(false);
   }
@@ -560,7 +1052,7 @@ function FlowCanvas({ id }: { id: string }) {
     );
   }
 
-  const nonStartNodes = nodes.filter((n) => n.id !== 'start');
+  const nonStartNodes = nodes.filter((n) => n.id !== "start");
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gray-50">
@@ -573,9 +1065,12 @@ function FlowCanvas({ id }: { id: string }) {
             </Button>
           </Link>
           <div className="h-4 w-px bg-gray-200" />
-          <span className="text-sm font-semibold text-gray-900">AI State Machine</span>
+          <span className="text-sm font-semibold text-gray-900">
+            AI State Machine
+          </span>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
-            {nonStartNodes.length} node{nonStartNodes.length !== 1 ? 's' : ''} · {edges.length} edge{edges.length !== 1 ? 's' : ''}
+            {nonStartNodes.length} node{nonStartNodes.length !== 1 ? "s" : ""} ·{" "}
+            {edges.length} edge{edges.length !== 1 ? "s" : ""}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -583,13 +1078,19 @@ function FlowCanvas({ id }: { id: string }) {
             size="sm"
             variant="outline"
             className="h-8 text-xs"
-            onClick={() => { fitView({ padding: 0.1, duration: 400 }); }}
+            onClick={() => {
+              fitView({ padding: 0.1, duration: 400 });
+            }}
           >
             <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
             Fit
           </Button>
           <Button size="sm" onClick={save} disabled={saving} className="h-8">
-            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+            {saving ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-1.5 h-4 w-4" />
+            )}
             Save Flow
           </Button>
         </div>
@@ -603,8 +1104,10 @@ function FlowCanvas({ id }: { id: string }) {
             type="text"
             value={generatePrompt}
             onChange={(e) => setGeneratePrompt(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !generating) generateFlow(); }}
-            placeholder="Describe tu flujo… ej. &quot;Calificación outbound: preguntar empresa, cargo y necesidad, si está calificado agendar demo, si no cerrar amigablemente&quot;"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !generating) generateFlow();
+            }}
+            placeholder='Describe tu flujo… ej. "Calificación outbound: preguntar empresa, cargo y necesidad, si está calificado agendar demo, si no cerrar amigablemente"'
             className="flex-1 rounded-lg border border-violet-200 bg-white/80 px-3 py-1.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent"
             disabled={generating}
           />
@@ -614,10 +1117,17 @@ function FlowCanvas({ id }: { id: string }) {
             disabled={generating || !generatePrompt.trim()}
             className="h-8 bg-violet-600 hover:bg-violet-700 text-white shrink-0"
           >
-            {generating
-              ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Generando…</>
-              : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar</>
-            }
+            {generating ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Generando…
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Generar
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -631,8 +1141,12 @@ function FlowCanvas({ id }: { id: string }) {
               onClick={() => setShowTemplates((v) => !v)}
               className="mb-3 flex w-full items-center justify-between rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-left hover:bg-indigo-100 transition-colors"
             >
-              <span className="text-xs font-semibold text-indigo-700">Quick Templates</span>
-              <span className="text-[10px] text-indigo-400">{showTemplates ? '▲' : '▼'}</span>
+              <span className="text-xs font-semibold text-indigo-700">
+                Quick Templates
+              </span>
+              <span className="text-[10px] text-indigo-400">
+                {showTemplates ? "▲" : "▼"}
+              </span>
             </button>
 
             {showTemplates && (
@@ -643,8 +1157,12 @@ function FlowCanvas({ id }: { id: string }) {
                     onClick={() => loadTemplate(key)}
                     className="w-full rounded-lg border border-gray-100 bg-gray-50 p-2 text-left hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
                   >
-                    <p className="text-xs font-medium text-gray-800">{t.label}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{t.description}</p>
+                    <p className="text-xs font-medium text-gray-800">
+                      {t.label}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {t.description}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -654,18 +1172,56 @@ function FlowCanvas({ id }: { id: string }) {
               Add Node
             </p>
 
-            <PaletteButton label="AI State" description="Objetivo + instrucciones LLM" color="blue" icon={<Brain className="h-3.5 w-3.5" />} onClick={() => addNode('ai_state')} />
-            <PaletteButton label="Intent Router" description="Ramifica por intención" color="amber" icon={<GitBranch className="h-3.5 w-3.5" />} onClick={() => addNode('semantic_router')} />
-            <PaletteButton label="Webhook" description="Llama una API HTTP" color="purple" icon={<Zap className="h-3.5 w-3.5" />} onClick={() => addNode('webhook_node')} />
-            <PaletteButton label="Transfer" description="Transfiere a humano" color="cyan" icon={<PhoneForwarded className="h-3.5 w-3.5" />} onClick={() => addNode('transfer_node')} />
-            <PaletteButton label="End Call" description="Termina la conversación" color="red" icon={<PhoneOff className="h-3.5 w-3.5" />} onClick={() => addNode('end_call_node')} />
+            <PaletteButton
+              label="AI State"
+              description="Objetivo + instrucciones LLM"
+              color="blue"
+              icon={<Brain className="h-3.5 w-3.5" />}
+              onClick={() => addNode("ai_state")}
+            />
+            <PaletteButton
+              label="Intent Router"
+              description="Ramifica por intención"
+              color="amber"
+              icon={<GitBranch className="h-3.5 w-3.5" />}
+              onClick={() => addNode("semantic_router")}
+            />
+            <PaletteButton
+              label="Webhook"
+              description="Llama una API HTTP"
+              color="purple"
+              icon={<Zap className="h-3.5 w-3.5" />}
+              onClick={() => addNode("webhook_node")}
+            />
+            <PaletteButton
+              label="Transfer"
+              description="Transfiere a humano"
+              color="cyan"
+              icon={<PhoneForwarded className="h-3.5 w-3.5" />}
+              onClick={() => addNode("transfer_node")}
+            />
+            <PaletteButton
+              label="End Call"
+              description="Termina la conversación"
+              color="red"
+              icon={<PhoneOff className="h-3.5 w-3.5" />}
+              onClick={() => addNode("end_call_node")}
+            />
           </div>
 
           <div className="shrink-0 border-t border-gray-100 p-3 space-y-1">
-            <p className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Tips</p>
-            <p className="text-[10px] text-gray-400">• Click nodo → editar en panel derecho</p>
-            <p className="text-[10px] text-gray-400">• Arrastra handle → conectar</p>
-            <p className="text-[10px] text-gray-400">• Seleccionar + Delete → borrar</p>
+            <p className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">
+              Tips
+            </p>
+            <p className="text-[10px] text-gray-400">
+              • Click nodo → editar en panel derecho
+            </p>
+            <p className="text-[10px] text-gray-400">
+              • Arrastra handle → conectar
+            </p>
+            <p className="text-[10px] text-gray-400">
+              • Seleccionar + Delete → borrar
+            </p>
             <button
               onClick={resetCanvas}
               className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50 hover:text-red-500 transition-colors"
@@ -702,23 +1258,27 @@ function FlowCanvas({ id }: { id: string }) {
               pannable
               nodeColor={(n) => {
                 const colors: Record<string, string> = {
-                  start_node: '#1f2937', ai_state: '#3b82f6',
-                  semantic_router: '#f59e0b', webhook_node: '#8b5cf6',
-                  transfer_node: '#06b6d4', end_call_node: '#ef4444',
+                  start_node: "#1f2937",
+                  ai_state: "#3b82f6",
+                  semantic_router: "#f59e0b",
+                  webhook_node: "#8b5cf6",
+                  transfer_node: "#06b6d4",
+                  end_call_node: "#ef4444",
                 };
-                return colors[n.type ?? ''] ?? '#94a3b8';
+                return colors[n.type ?? ""] ?? "#94a3b8";
               }}
             />
             <Panel position="bottom-center">
               <p className="rounded-full border border-gray-200 bg-white/90 backdrop-blur px-3 py-1 text-[10px] text-gray-400 shadow-sm">
-                Doble click en edge para eliminarlo · Delete/Backspace para borrar nodo seleccionado
+                Doble click en edge para eliminarlo · Delete/Backspace para
+                borrar nodo seleccionado
               </p>
             </Panel>
           </ReactFlow>
         </div>
 
         {/* Right inspector */}
-        {selectedNode && selectedNode.id !== 'start' && (
+        {selectedNode && selectedNode.id !== "start" && (
           <aside className="w-80 shrink-0 overflow-y-auto border-l border-gray-200 bg-white">
             <InspectorPanel
               node={selectedNode}
@@ -737,7 +1297,11 @@ function FlowCanvas({ id }: { id: string }) {
 // Page wrapper with ReactFlowProvider (required for useReactFlow hook)
 // ---------------------------------------------------------------------------
 
-export default function FlowBuilderPage({ params }: { params: Promise<{ id: string }> }) {
+export default function FlowBuilderPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
   return (
     <ReactFlowProvider>
@@ -750,20 +1314,56 @@ export default function FlowBuilderPage({ params }: { params: Promise<{ id: stri
 // Palette button
 // ---------------------------------------------------------------------------
 
-type PaletteColor = 'blue' | 'amber' | 'purple' | 'cyan' | 'red';
+type PaletteColor = "blue" | "amber" | "purple" | "cyan" | "red";
 
-const paletteMap: Record<PaletteColor, { dot: string; label: string; hover: string; icon: string }> = {
-  blue:   { dot: 'bg-blue-400',   label: 'text-blue-700',   hover: 'hover:border-blue-300 hover:bg-blue-50',   icon: 'text-blue-500'   },
-  amber:  { dot: 'bg-amber-400',  label: 'text-amber-700',  hover: 'hover:border-amber-300 hover:bg-amber-50',  icon: 'text-amber-500'  },
-  purple: { dot: 'bg-purple-400', label: 'text-purple-700', hover: 'hover:border-purple-300 hover:bg-purple-50', icon: 'text-purple-500' },
-  cyan:   { dot: 'bg-cyan-400',   label: 'text-cyan-700',   hover: 'hover:border-cyan-300 hover:bg-cyan-50',   icon: 'text-cyan-500'   },
-  red:    { dot: 'bg-red-400',    label: 'text-red-700',    hover: 'hover:border-red-300 hover:bg-red-50',     icon: 'text-red-500'    },
+const paletteMap: Record<
+  PaletteColor,
+  { dot: string; label: string; hover: string; icon: string }
+> = {
+  blue: {
+    dot: "bg-blue-400",
+    label: "text-blue-700",
+    hover: "hover:border-blue-300 hover:bg-blue-50",
+    icon: "text-blue-500",
+  },
+  amber: {
+    dot: "bg-amber-400",
+    label: "text-amber-700",
+    hover: "hover:border-amber-300 hover:bg-amber-50",
+    icon: "text-amber-500",
+  },
+  purple: {
+    dot: "bg-purple-400",
+    label: "text-purple-700",
+    hover: "hover:border-purple-300 hover:bg-purple-50",
+    icon: "text-purple-500",
+  },
+  cyan: {
+    dot: "bg-cyan-400",
+    label: "text-cyan-700",
+    hover: "hover:border-cyan-300 hover:bg-cyan-50",
+    icon: "text-cyan-500",
+  },
+  red: {
+    dot: "bg-red-400",
+    label: "text-red-700",
+    hover: "hover:border-red-300 hover:bg-red-50",
+    icon: "text-red-500",
+  },
 };
 
 function PaletteButton({
-  label, description, color, icon, onClick,
+  label,
+  description,
+  color,
+  icon,
+  onClick,
 }: {
-  label: string; description: string; color: PaletteColor; icon: React.ReactNode; onClick: () => void;
+  label: string;
+  description: string;
+  color: PaletteColor;
+  icon: React.ReactNode;
+  onClick: () => void;
 }) {
   const c = paletteMap[color];
   return (
@@ -785,16 +1385,42 @@ function PaletteButton({
 // Inspector panel
 // ---------------------------------------------------------------------------
 
-const typeLabels: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  ai_state:         { label: 'AI State', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: <Brain className="h-3.5 w-3.5" /> },
-  semantic_router:  { label: 'Intent Router', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: <GitBranch className="h-3.5 w-3.5" /> },
-  webhook_node:     { label: 'Webhook', color: 'text-purple-600 bg-purple-50 border-purple-200', icon: <Zap className="h-3.5 w-3.5" /> },
-  transfer_node:    { label: 'Transfer', color: 'text-cyan-600 bg-cyan-50 border-cyan-200', icon: <PhoneForwarded className="h-3.5 w-3.5" /> },
-  end_call_node:    { label: 'End Call', color: 'text-red-600 bg-red-50 border-red-200', icon: <PhoneOff className="h-3.5 w-3.5" /> },
+const typeLabels: Record<
+  string,
+  { label: string; color: string; icon: React.ReactNode }
+> = {
+  ai_state: {
+    label: "AI State",
+    color: "text-blue-600 bg-blue-50 border-blue-200",
+    icon: <Brain className="h-3.5 w-3.5" />,
+  },
+  semantic_router: {
+    label: "Intent Router",
+    color: "text-amber-600 bg-amber-50 border-amber-200",
+    icon: <GitBranch className="h-3.5 w-3.5" />,
+  },
+  webhook_node: {
+    label: "Webhook",
+    color: "text-purple-600 bg-purple-50 border-purple-200",
+    icon: <Zap className="h-3.5 w-3.5" />,
+  },
+  transfer_node: {
+    label: "Transfer",
+    color: "text-cyan-600 bg-cyan-50 border-cyan-200",
+    icon: <PhoneForwarded className="h-3.5 w-3.5" />,
+  },
+  end_call_node: {
+    label: "End Call",
+    color: "text-red-600 bg-red-50 border-red-200",
+    icon: <PhoneOff className="h-3.5 w-3.5" />,
+  },
 };
 
 function InspectorPanel({
-  node, updateNode, onDelete, onDuplicate,
+  node,
+  updateNode,
+  onDelete,
+  onDuplicate,
 }: {
   node: Node;
   updateNode: (id: string, partial: Record<string, unknown>) => void;
@@ -802,7 +1428,11 @@ function InspectorPanel({
   onDuplicate: () => void;
 }) {
   const type = node.type as string;
-  const meta = typeLabels[type] ?? { label: type, color: 'text-gray-600 bg-gray-50 border-gray-200', icon: null };
+  const meta = typeLabels[type] ?? {
+    label: type,
+    color: "text-gray-600 bg-gray-50 border-gray-200",
+    icon: null,
+  };
 
   function patch(partial: Record<string, unknown>) {
     updateNode(node.id, partial);
@@ -811,7 +1441,9 @@ function InspectorPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Inspector header */}
-      <div className={`flex items-center justify-between border-b px-4 py-3 ${meta.color}`}>
+      <div
+        className={`flex items-center justify-between border-b px-4 py-3 ${meta.color}`}
+      >
         <div className="flex items-center gap-2">
           {meta.icon}
           <span className="text-sm font-semibold">{meta.label}</span>
@@ -836,11 +1468,24 @@ function InspectorPanel({
 
       {/* Inspector body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {type === 'ai_state' && <AiStateInspector data={node.data as AiStateData} patch={patch} />}
-        {type === 'semantic_router' && <SemanticRouterInspector data={node.data as SemanticRouterData} patch={patch} />}
-        {type === 'webhook_node' && <WebhookInspector data={node.data as WebhookData} patch={patch} />}
-        {type === 'transfer_node' && <TransferInspector data={node.data as TransferData} patch={patch} />}
-        {type === 'end_call_node' && <EndCallInspector data={node.data as EndCallData} patch={patch} />}
+        {type === "ai_state" && (
+          <AiStateInspector data={node.data as AiStateData} patch={patch} />
+        )}
+        {type === "semantic_router" && (
+          <SemanticRouterInspector
+            data={node.data as SemanticRouterData}
+            patch={patch}
+          />
+        )}
+        {type === "webhook_node" && (
+          <WebhookInspector data={node.data as WebhookData} patch={patch} />
+        )}
+        {type === "transfer_node" && (
+          <TransferInspector data={node.data as TransferData} patch={patch} />
+        )}
+        {type === "end_call_node" && (
+          <EndCallInspector data={node.data as EndCallData} patch={patch} />
+        )}
       </div>
     </div>
   );
@@ -850,7 +1495,13 @@ function InspectorPanel({
 // Per-type inspector sub-components
 // ---------------------------------------------------------------------------
 
-function AiStateInspector({ data, patch }: { data: AiStateData; patch: (p: Record<string, unknown>) => void }) {
+function AiStateInspector({
+  data,
+  patch,
+}: {
+  data: AiStateData;
+  patch: (p: Record<string, unknown>) => void;
+}) {
   return (
     <>
       <div className="space-y-1.5">
@@ -873,36 +1524,64 @@ function AiStateInspector({ data, patch }: { data: AiStateData; patch: (p: Recor
         />
       </div>
       <div className="rounded-lg bg-gray-50 border border-gray-100 p-3">
-        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Variables disponibles</p>
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Variables disponibles
+        </p>
         <div className="flex flex-wrap gap-1">
-          {['{{contact_name}}', '{{contact_phone}}', '{{agent_name}}', '{{workspace_name}}'].map((v) => (
+          {[
+            "{{contact_name}}",
+            "{{contact_phone}}",
+            "{{agent_name}}",
+            "{{workspace_name}}",
+          ].map((v) => (
             <code
               key={v}
               className="rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[10px] text-indigo-600 cursor-pointer hover:bg-indigo-50"
-              onClick={() => patch({ system_instructions: (data.system_instructions || '') + v })}
+              onClick={() =>
+                patch({
+                  system_instructions: (data.system_instructions || "") + v,
+                })
+              }
               title="Click to insert"
             >
               {v}
             </code>
           ))}
         </div>
-        <p className="text-[9px] text-gray-400 mt-1.5">Click para insertar en las instrucciones</p>
+        <p className="text-[9px] text-gray-400 mt-1.5">
+          Click para insertar en las instrucciones
+        </p>
       </div>
     </>
   );
 }
 
-function SemanticRouterInspector({ data, patch }: { data: SemanticRouterData; patch: (p: Record<string, unknown>) => void }) {
+function SemanticRouterInspector({
+  data,
+  patch,
+}: {
+  data: SemanticRouterData;
+  patch: (p: Record<string, unknown>) => void;
+}) {
   const intents: Intent[] = Array.isArray(data.intents) ? data.intents : [];
 
   function addIntent() {
-    patch({ intents: [...intents, { id: crypto.randomUUID(), label: '', description: '' }] });
+    patch({
+      intents: [
+        ...intents,
+        { id: crypto.randomUUID(), label: "", description: "" },
+      ],
+    });
   }
   function removeIntent(intentId: string) {
     patch({ intents: intents.filter((i) => i.id !== intentId) });
   }
   function updateIntent(intentId: string, field: keyof Intent, value: string) {
-    patch({ intents: intents.map((i) => i.id === intentId ? { ...i, [field]: value } : i) });
+    patch({
+      intents: intents.map((i) =>
+        i.id === intentId ? { ...i, [field]: value } : i,
+      ),
+    });
   }
 
   return (
@@ -919,33 +1598,68 @@ function SemanticRouterInspector({ data, patch }: { data: SemanticRouterData; pa
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs font-medium">Intents ({intents.length})</Label>
-          <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={addIntent}>
+          <Label className="text-xs font-medium">
+            Intents ({intents.length})
+          </Label>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={addIntent}
+          >
             <Plus className="mr-1 h-3 w-3" /> Añadir
           </Button>
         </div>
 
         {intents.length === 0 && (
           <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-3 text-center">
-            <p className="text-[11px] text-amber-600">Sin intents. Cada intent crea un handle de salida en el nodo.</p>
+            <p className="text-[11px] text-amber-600">
+              Sin intents. Cada intent crea un handle de salida en el nodo.
+            </p>
           </div>
         )}
 
         {intents.map((intent, idx) => (
-          <div key={intent.id} className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5">
+          <div
+            key={intent.id}
+            className="rounded-lg border border-gray-100 bg-gray-50 p-2.5 space-y-1.5"
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-medium text-amber-500 uppercase tracking-wide">Intent {idx + 1}</span>
-              <button onClick={() => removeIntent(intent.id)} className="text-gray-300 hover:text-red-400 transition-colors">
+              <span className="text-[10px] font-medium text-amber-500 uppercase tracking-wide">
+                Intent {idx + 1}
+              </span>
+              <button
+                onClick={() => removeIntent(intent.id)}
+                className="text-gray-300 hover:text-red-400 transition-colors"
+              >
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] text-gray-500">Label (se muestra en el edge)</Label>
-              <Input value={intent.label} onChange={(e) => updateIntent(intent.id, 'label', e.target.value)} placeholder="e.g. Interesado" className="h-7 text-xs" />
+              <Label className="text-[10px] text-gray-500">
+                Label (se muestra en el edge)
+              </Label>
+              <Input
+                value={intent.label}
+                onChange={(e) =>
+                  updateIntent(intent.id, "label", e.target.value)
+                }
+                placeholder="e.g. Interesado"
+                className="h-7 text-xs"
+              />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] text-gray-500">Descripción (para el LLM)</Label>
-              <Input value={intent.description} onChange={(e) => updateIntent(intent.id, 'description', e.target.value)} placeholder="Cuando el contacto expresa interés…" className="h-7 text-xs" />
+              <Label className="text-[10px] text-gray-500">
+                Descripción (para el LLM)
+              </Label>
+              <Input
+                value={intent.description}
+                onChange={(e) =>
+                  updateIntent(intent.id, "description", e.target.value)
+                }
+                placeholder="Cuando el contacto expresa interés…"
+                className="h-7 text-xs"
+              />
             </div>
           </div>
         ))}
@@ -954,17 +1668,30 @@ function SemanticRouterInspector({ data, patch }: { data: SemanticRouterData; pa
   );
 }
 
-function WebhookInspector({ data, patch }: { data: WebhookData; patch: (p: Record<string, unknown>) => void }) {
+function WebhookInspector({
+  data,
+  patch,
+}: {
+  data: WebhookData;
+  patch: (p: Record<string, unknown>) => void;
+}) {
   return (
     <>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium">URL</Label>
-        <Input value={data.url} onChange={(e) => patch({ url: e.target.value })} placeholder="https://api.example.com/endpoint" className="h-8 text-sm font-mono" />
+        <Input
+          value={data.url}
+          onChange={(e) => patch({ url: e.target.value })}
+          placeholder="https://api.example.com/endpoint"
+          className="h-8 text-sm font-mono"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium">Método HTTP</Label>
         <Select value={data.method} onValueChange={(v) => patch({ method: v })}>
-          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="GET">GET</SelectItem>
             <SelectItem value="POST">POST</SelectItem>
@@ -974,29 +1701,63 @@ function WebhookInspector({ data, patch }: { data: WebhookData; patch: (p: Recor
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium">Variables a extraer</Label>
-        <Input value={data.extract_variables} onChange={(e) => patch({ extract_variables: e.target.value })} placeholder="price,availability,lead_id" className="h-8 text-sm font-mono" />
-        <p className="text-[10px] text-gray-400">Nombres separados por coma del JSON de respuesta</p>
+        <Input
+          value={data.extract_variables}
+          onChange={(e) => patch({ extract_variables: e.target.value })}
+          placeholder="price,availability,lead_id"
+          className="h-8 text-sm font-mono"
+        />
+        <p className="text-[10px] text-gray-400">
+          Nombres separados por coma del JSON de respuesta
+        </p>
       </div>
     </>
   );
 }
 
-function TransferInspector({ data, patch }: { data: TransferData; patch: (p: Record<string, unknown>) => void }) {
+function TransferInspector({
+  data,
+  patch,
+}: {
+  data: TransferData;
+  patch: (p: Record<string, unknown>) => void;
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs font-medium">Número de transferencia</Label>
-      <Input value={data.transfer_number} onChange={(e) => patch({ transfer_number: e.target.value })} placeholder="+1234567890" className="h-8 text-sm font-mono" />
-      <p className="text-[10px] text-gray-400">Formato E.164. La llamada se transfiere a este número via SIP REFER.</p>
+      <Input
+        value={data.transfer_number}
+        onChange={(e) => patch({ transfer_number: e.target.value })}
+        placeholder="+1234567890"
+        className="h-8 text-sm font-mono"
+      />
+      <p className="text-[10px] text-gray-400">
+        Formato E.164. La llamada se transfiere a este número via SIP REFER.
+      </p>
     </div>
   );
 }
 
-function EndCallInspector({ data, patch }: { data: EndCallData; patch: (p: Record<string, unknown>) => void }) {
+function EndCallInspector({
+  data,
+  patch,
+}: {
+  data: EndCallData;
+  patch: (p: Record<string, unknown>) => void;
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs font-medium">Mensaje de despedida</Label>
-      <Textarea rows={3} value={data.farewell} onChange={(e) => patch({ farewell: e.target.value })} placeholder="Gracias por su tiempo, ¡que tenga un buen día!" className="text-sm resize-none" />
-      <p className="text-[10px] text-gray-400">Opcional. El agente lo dirá antes de colgar.</p>
+      <Textarea
+        rows={3}
+        value={data.farewell}
+        onChange={(e) => patch({ farewell: e.target.value })}
+        placeholder="Gracias por su tiempo, ¡que tenga un buen día!"
+        className="text-sm resize-none"
+      />
+      <p className="text-[10px] text-gray-400">
+        Opcional. El agente lo dirá antes de colgar.
+      </p>
     </div>
   );
 }

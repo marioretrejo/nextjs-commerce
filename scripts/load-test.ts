@@ -21,12 +21,12 @@
  *   - Per-connection timing JSON lines to stdout
  *   - Summary: p50/p95/p99 latency, error count, throughput
  */
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { AccessToken } from 'livekit-server-sdk';
-import * as dotenv from 'dotenv';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { AccessToken } from "livekit-server-sdk";
+import * as dotenv from "dotenv";
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -36,18 +36,20 @@ const getArg = (flag: string, def: string) => {
   return i !== -1 && args[i + 1] ? args[i + 1]! : def;
 };
 
-const AGENT_ID     = getArg('--agent', '');
-const CONCURRENCY  = parseInt(getArg('--concurrency', '10'), 10);
-const WAV_PATH     = getArg('--wav', 'scripts/fixtures/silence-5s.wav');
-const DURATION_S   = parseInt(getArg('--duration', '30'), 10); // max call duration
+const AGENT_ID = getArg("--agent", "");
+const CONCURRENCY = parseInt(getArg("--concurrency", "10"), 10);
+const WAV_PATH = getArg("--wav", "scripts/fixtures/silence-5s.wav");
+const DURATION_S = parseInt(getArg("--duration", "30"), 10); // max call duration
 
-const LIVEKIT_URL    = process.env['LIVEKIT_URL'] ?? '';
-const LIVEKIT_KEY    = process.env['LIVEKIT_API_KEY'] ?? '';
-const LIVEKIT_SECRET = process.env['LIVEKIT_API_SECRET'] ?? '';
-const APP_URL        = process.env['NEXT_PUBLIC_APP_URL'] ?? 'http://localhost:3000';
+const LIVEKIT_URL = process.env["LIVEKIT_URL"] ?? "";
+const LIVEKIT_KEY = process.env["LIVEKIT_API_KEY"] ?? "";
+const LIVEKIT_SECRET = process.env["LIVEKIT_API_SECRET"] ?? "";
+const APP_URL = process.env["NEXT_PUBLIC_APP_URL"] ?? "http://localhost:3000";
 
 if (!AGENT_ID) {
-  console.error('Usage: npx tsx scripts/load-test.ts --agent <agentId> [--concurrency 10] [--wav path.wav]');
+  console.error(
+    "Usage: npx tsx scripts/load-test.ts --agent <agentId> [--concurrency 10] [--wav path.wav]",
+  );
   process.exit(1);
 }
 
@@ -57,9 +59,14 @@ async function mintToken(roomName: string, identity: string): Promise<string> {
   const at = new AccessToken(LIVEKIT_KEY, LIVEKIT_SECRET, {
     identity,
     name: `LoadTest-${identity}`,
-    ttl: '10m',
+    ttl: "10m",
   });
-  at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+  at.addGrant({
+    roomJoin: true,
+    room: roomName,
+    canPublish: true,
+    canSubscribe: true,
+  });
   return at.toJwt();
 }
 
@@ -86,13 +93,15 @@ async function simulateCaller(callerId: number): Promise<CallResult> {
     // Dynamic import of LiveKit client (browser-compatible SDK)
     // In a Node.js load test, use @livekit/rtc-node instead
     // For now, log the test parameters and simulate timing
-    console.log(JSON.stringify({
-      type: 'caller.start',
-      callerId,
-      roomName,
-      wsUrl: LIVEKIT_URL,
-      token: token.slice(0, 20) + '...',
-    }));
+    console.log(
+      JSON.stringify({
+        type: "caller.start",
+        callerId,
+        roomName,
+        wsUrl: LIVEKIT_URL,
+        token: token.slice(0, 20) + "...",
+      }),
+    );
 
     // Simulate connection time (replace with real LiveKit client in full test)
     await new Promise((r) => setTimeout(r, 100 + Math.random() * 200));
@@ -108,25 +117,33 @@ async function simulateCaller(callerId: number): Promise<CallResult> {
     return { callerId, roomName, connectMs, firstSpeechMs, error };
   } catch (err) {
     error = String(err);
-    return { callerId, roomName, connectMs: Date.now() - t0, firstSpeechMs, error };
+    return {
+      callerId,
+      roomName,
+      connectMs: Date.now() - t0,
+      firstSpeechMs,
+      error,
+    };
   }
 }
 
 // ─── Run ──────────────────────────────────────────────────────────────────────
 
 async function run() {
-  console.log(JSON.stringify({
-    type: 'load_test.start',
-    agent_id: AGENT_ID,
-    concurrency: CONCURRENCY,
-    duration_s: DURATION_S,
-    wav: WAV_PATH,
-    livekit_url: LIVEKIT_URL,
-    app_url: APP_URL,
-  }));
+  console.log(
+    JSON.stringify({
+      type: "load_test.start",
+      agent_id: AGENT_ID,
+      concurrency: CONCURRENCY,
+      duration_s: DURATION_S,
+      wav: WAV_PATH,
+      livekit_url: LIVEKIT_URL,
+      app_url: APP_URL,
+    }),
+  );
 
   const results = await Promise.all(
-    Array.from({ length: CONCURRENCY }, (_, i) => simulateCaller(i + 1))
+    Array.from({ length: CONCURRENCY }, (_, i) => simulateCaller(i + 1)),
   );
 
   const successful = results.filter((r) => !r.error);
@@ -140,23 +157,29 @@ async function run() {
   const p = (arr: number[], pct: number) =>
     arr[Math.floor(arr.length * pct)] ?? null;
 
-  console.log(JSON.stringify({
-    type: 'load_test.summary',
-    total: CONCURRENCY,
-    successful: successful.length,
-    failed: failed.length,
-    connect_time: {
-      p50: p(connectTimes, 0.5),
-      p95: p(connectTimes, 0.95),
-      p99: p(connectTimes, 0.99),
-    },
-    first_speech_ms: {
-      p50: p(speechTimes, 0.5),
-      p95: p(speechTimes, 0.95),
-      p99: p(speechTimes, 0.99),
-    },
-    errors: failed.map((r) => ({ callerId: r.callerId, error: r.error })),
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        type: "load_test.summary",
+        total: CONCURRENCY,
+        successful: successful.length,
+        failed: failed.length,
+        connect_time: {
+          p50: p(connectTimes, 0.5),
+          p95: p(connectTimes, 0.95),
+          p99: p(connectTimes, 0.99),
+        },
+        first_speech_ms: {
+          p50: p(speechTimes, 0.5),
+          p95: p(speechTimes, 0.95),
+          p99: p(speechTimes, 0.99),
+        },
+        errors: failed.map((r) => ({ callerId: r.callerId, error: r.error })),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 run().catch(console.error);

@@ -19,7 +19,7 @@
  *
  * Falls back to built-in platform defaults if no config is found.
  */
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 export interface PronunciationConfig {
   /** Deepgram keyword boosts: [term, intensity 0–10] */
@@ -33,18 +33,18 @@ export interface PronunciationConfig {
 /** Platform-level defaults — always active regardless of agent config. */
 const PLATFORM_DEFAULTS: PronunciationConfig = {
   deepgramKeywords: [
-    ['VoiceOS', 1.5],
-    ['Groq', 1.2],
-    ['Cartesia', 1.2],
-    ['LiveKit', 1.2],
-    ['Deepgram', 1.2],
+    ["VoiceOS", 1.5],
+    ["Groq", 1.2],
+    ["Cartesia", 1.2],
+    ["LiveKit", 1.2],
+    ["Deepgram", 1.2],
   ],
-  deepgramKeyterms: ['VoiceOS'],
+  deepgramKeyterms: ["VoiceOS"],
   ttsMap: {
-    'VoiceOS':  'Voice O S',
-    'LiveKit':  'Live Kit',
-    'Deepgram': 'Deep gram',
-    'Groq':     'Groh k',
+    VoiceOS: "Voice O S",
+    LiveKit: "Live Kit",
+    Deepgram: "Deep gram",
+    Groq: "Groh k",
   },
 };
 
@@ -56,24 +56,29 @@ const PLATFORM_DEFAULTS: PronunciationConfig = {
 export async function loadPronunciationConfig(
   agentId: string | null,
   supabaseUrl: string,
-  supabaseKey: string
+  supabaseKey: string,
 ): Promise<PronunciationConfig> {
   if (!agentId) return PLATFORM_DEFAULTS;
 
   try {
-    const db = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+    const db = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false },
+    });
     const { data } = await db
-      .from('agents')
-      .select('widget_config')
-      .eq('id', agentId)
+      .from("agents")
+      .select("widget_config")
+      .eq("id", agentId)
       .single();
 
-    const cfg = (data as { widget_config?: Record<string, unknown> } | null)?.widget_config;
-    const p = cfg?.['pronunciation'] as {
-      keywords?: [string, number][];
-      keyterms?: string[];
-      tts_map?: Record<string, string>;
-    } | undefined;
+    const cfg = (data as { widget_config?: Record<string, unknown> } | null)
+      ?.widget_config;
+    const p = cfg?.["pronunciation"] as
+      | {
+          keywords?: [string, number][];
+          keyterms?: string[];
+          tts_map?: Record<string, string>;
+        }
+      | undefined;
 
     if (!p) return PLATFORM_DEFAULTS;
 

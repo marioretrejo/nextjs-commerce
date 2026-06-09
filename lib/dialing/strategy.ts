@@ -8,8 +8,8 @@
  *
  * Used by /api/calls/dial and /api/v1/calls/outbound before placing a call.
  */
-import { createAdminClient } from '@/lib/supabase/admin';
-import { parsePhoneNumber } from 'libphonenumber-js';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { parsePhoneNumber } from "libphonenumber-js";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -27,9 +27,9 @@ export interface SipTrunk {
 }
 
 export interface ScheduleWindow {
-  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+  day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
   start: string; // "HH:MM" 24-hour
-  end: string;   // "HH:MM" 24-hour
+  end: string; // "HH:MM" 24-hour
 }
 
 export interface DialConfig {
@@ -49,7 +49,7 @@ export interface DialConfig {
 function extractAreaCode(e164: string): string | null {
   try {
     const parsed = parsePhoneNumber(e164);
-    if (!['US', 'CA'].includes(parsed.country ?? '')) return null;
+    if (!["US", "CA"].includes(parsed.country ?? "")) return null;
     return String(parsed.nationalNumber).slice(0, 3);
   } catch {
     return null;
@@ -58,7 +58,11 @@ function extractAreaCode(e164: string): string | null {
 
 /** Extract ISO 3166-1 alpha-2 country from E.164 */
 function extractCountry(e164: string): string | null {
-  try { return parsePhoneNumber(e164).country ?? null; } catch { return null; }
+  try {
+    return parsePhoneNumber(e164).country ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -69,31 +73,36 @@ function extractCountry(e164: string): string | null {
  *
  * If `windows` is empty the call is considered always allowed.
  */
-export function isWithinSchedule(windows: ScheduleWindow[], timezone: string): boolean {
+export function isWithinSchedule(
+  windows: ScheduleWindow[],
+  timezone: string,
+): boolean {
   if (!windows.length) return true;
 
   const now = new Date();
-  const fmt = new Intl.DateTimeFormat('en-US', {
+  const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
-    weekday: 'short',
-    hour:    '2-digit',
-    minute:  '2-digit',
-    hour12:  false,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 
-  const parts    = fmt.formatToParts(now);
-  const weekday  = (parts.find(p => p.type === 'weekday')?.value ?? '').toLowerCase().slice(0, 3);
-  const hourStr  = parts.find(p => p.type === 'hour')?.value   ?? '00';
-  const minStr   = parts.find(p => p.type === 'minute')?.value ?? '00';
+  const parts = fmt.formatToParts(now);
+  const weekday = (parts.find((p) => p.type === "weekday")?.value ?? "")
+    .toLowerCase()
+    .slice(0, 3);
+  const hourStr = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minStr = parts.find((p) => p.type === "minute")?.value ?? "00";
   // Intl hour12:false can return "24" for midnight — normalise to "00"
-  const hour     = parseInt(hourStr === '24' ? '0' : hourStr, 10);
-  const minute   = parseInt(minStr, 10);
-  const nowMins  = hour * 60 + minute;
+  const hour = parseInt(hourStr === "24" ? "0" : hourStr, 10);
+  const minute = parseInt(minStr, 10);
+  const nowMins = hour * 60 + minute;
 
-  return windows.some(w => {
+  return windows.some((w) => {
     if (w.day !== weekday) return false;
-    const [sh = 9, sm = 0] = w.start.split(':').map(Number);
-    const [eh = 18, em = 0] = w.end.split(':').map(Number);
+    const [sh = 9, sm = 0] = w.start.split(":").map(Number);
+    const [eh = 18, em = 0] = w.end.split(":").map(Number);
     return nowMins >= sh * 60 + sm && nowMins < eh * 60 + em;
   });
 }
@@ -112,25 +121,29 @@ export async function pickCallerNumber(
   workspaceId: string,
   destination: string,
 ): Promise<string | null> {
-  const destArea    = extractAreaCode(destination);
+  const destArea = extractAreaCode(destination);
   const destCountry = extractCountry(destination);
 
   // ── 1. sip_trunk_numbers (new table) ────────────────────────────────────
   const { data: trunkNums } = await admin
-    .from('sip_trunk_numbers')
-    .select('number, area_code, country_code')
-    .eq('workspace_id', workspaceId)
-    .order('is_primary', { ascending: false });
+    .from("sip_trunk_numbers")
+    .select("number, area_code, country_code")
+    .eq("workspace_id", workspaceId)
+    .order("is_primary", { ascending: false });
 
-  type TrunkNum = { number: string; area_code: string | null; country_code: string };
+  type TrunkNum = {
+    number: string;
+    area_code: string | null;
+    country_code: string;
+  };
   if (trunkNums?.length) {
     const nums = trunkNums as TrunkNum[];
     if (destArea) {
-      const hit = nums.find(n => n.area_code === destArea);
+      const hit = nums.find((n) => n.area_code === destArea);
       if (hit) return hit.number;
     }
     if (destCountry) {
-      const hit = nums.find(n => n.country_code === destCountry);
+      const hit = nums.find((n) => n.country_code === destCountry);
       if (hit) return hit.number;
     }
     return nums[0]!.number;
@@ -138,16 +151,16 @@ export async function pickCallerNumber(
 
   // ── 2. Legacy phone_numbers table ──────────────────────────────────────
   const { data: legacyNums } = await admin
-    .from('phone_numbers')
-    .select('number, country_code')
-    .eq('workspace_id', workspaceId)
-    .eq('status', 'available');
+    .from("phone_numbers")
+    .select("number, country_code")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "available");
 
   type LegacyNum = { number: string; country_code: string };
   if (legacyNums?.length) {
     const nums = legacyNums as LegacyNum[];
     if (destCountry) {
-      const hit = nums.find(n => n.country_code === destCountry);
+      const hit = nums.find((n) => n.country_code === destCountry);
       if (hit) return hit.number;
     }
     return nums[0]!.number;
@@ -173,37 +186,45 @@ export async function resolveDialConfig(
 ): Promise<DialConfig> {
   const [trunkRes, scheduleRes, callerNumber] = await Promise.all([
     admin
-      .from('sip_trunks')
-      .select('id, name, provider, sip_host, username, password, livekit_trunk_id, priority')
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'active')
-      .order('priority', { ascending: false })
+      .from("sip_trunks")
+      .select(
+        "id, name, provider, sip_host, username, password, livekit_trunk_id, priority",
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active")
+      .order("priority", { ascending: false })
       .limit(1)
       .maybeSingle(),
 
     // Agent-specific schedule first; fall back to workspace default
     admin
-      .from('dialing_schedules')
-      .select('windows, timezone')
-      .eq('workspace_id', workspaceId)
+      .from("dialing_schedules")
+      .select("windows, timezone")
+      .eq("workspace_id", workspaceId)
       .or(`agent_id.eq.${agentId},is_default.eq.true`)
-      .order('is_default', { ascending: true })
+      .order("is_default", { ascending: true })
       .limit(1)
       .maybeSingle(),
 
     pickCallerNumber(admin, workspaceId, destination),
   ]);
 
-  const trunk    = trunkRes.data    as SipTrunk | null;
-  const schedule = scheduleRes.data as { windows: ScheduleWindow[]; timezone: string } | null;
+  const trunk = trunkRes.data as SipTrunk | null;
+  const schedule = scheduleRes.data as {
+    windows: ScheduleWindow[];
+    timezone: string;
+  } | null;
 
   return {
     trunk,
     callerNumber,
     withinSchedule: schedule
-      ? isWithinSchedule(schedule.windows as ScheduleWindow[], schedule.timezone)
+      ? isWithinSchedule(
+          schedule.windows as ScheduleWindow[],
+          schedule.timezone,
+        )
       : true,
-    scheduleTimezone: schedule?.timezone ?? 'UTC',
+    scheduleTimezone: schedule?.timezone ?? "UTC",
   };
 }
 
@@ -217,8 +238,9 @@ export function cacheLivekitTrunkId(
   livekitTrunkId: string,
 ): void {
   void Promise.resolve(
-    admin.from('sip_trunks')
+    admin
+      .from("sip_trunks")
       .update({ livekit_trunk_id: livekitTrunkId })
-      .eq('id', trunkId)
+      .eq("id", trunkId),
   ).catch(() => null);
 }

@@ -1,11 +1,11 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { createAdminClient } from '@/lib/supabase/admin';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { BroadcastForm } from '@/components/admin/BroadcastForm';
-import type { User, Workspace, Plan } from '@/lib/supabase/types';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { BroadcastForm } from "@/components/admin/BroadcastForm";
+import type { User, Workspace, Plan } from "@/lib/supabase/types";
 import {
   Users,
   DollarSign,
@@ -13,10 +13,10 @@ import {
   Clock,
   BarChart2,
   ChevronRight,
-} from 'lucide-react';
-import Link from 'next/link';
-import { format } from 'date-fns';
-import { AdminLiveCallsTable } from './AdminLiveCallsTable';
+} from "lucide-react";
+import Link from "next/link";
+import { format } from "date-fns";
+import { AdminLiveCallsTable } from "./AdminLiveCallsTable";
 
 interface PlanStats {
   plan: Plan;
@@ -25,11 +25,10 @@ interface PlanStats {
 }
 
 const PLAN_PRICES: Record<Plan, number> = {
-  free:  0,
-  pro:   79,
+  free: 0,
+  pro: 79,
   scale: 299,
 };
-
 
 export default async function AdminPage() {
   const supabase = createAdminClient();
@@ -41,25 +40,57 @@ export default async function AdminPage() {
     { data: todayCallsData },
     { data: monthCallsData },
   ] = await Promise.all([
-    supabase.from('users').select('*').order('created_at', { ascending: false }).limit(10),
-    supabase.from('workspaces').select('plan, minutes_used, is_suspended'),
-    supabase.from('users').select('id', { count: 'exact', head: true }),
-    supabase.from('calls').select('duration_seconds').gte('created_at', (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })()),
-    supabase.from('calls').select('duration_seconds').gte('created_at', (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.toISOString(); })()),
+    supabase
+      .from("users")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase.from("workspaces").select("plan, minutes_used, is_suspended"),
+    supabase.from("users").select("id", { count: "exact", head: true }),
+    supabase
+      .from("calls")
+      .select("duration_seconds")
+      .gte(
+        "created_at",
+        (() => {
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          return d.toISOString();
+        })(),
+      ),
+    supabase
+      .from("calls")
+      .select("duration_seconds")
+      .gte(
+        "created_at",
+        (() => {
+          const d = new Date();
+          d.setDate(1);
+          d.setHours(0, 0, 0, 0);
+          return d.toISOString();
+        })(),
+      ),
   ]);
 
   const recentUsers = (usersData as User[]) ?? [];
-  const workspaces = (workspacesData as Pick<Workspace, 'plan' | 'minutes_used'>[]) ?? [];
+  const workspaces =
+    (workspacesData as Pick<Workspace, "plan" | "minutes_used">[]) ?? [];
   const todayCalls = (todayCallsData as { duration_seconds: number }[]) ?? [];
   const monthCalls = (monthCallsData as { duration_seconds: number }[]) ?? [];
 
-  const planStats: PlanStats[] = (['free', 'pro', 'scale'] as Plan[]).map((plan) => {
-    const ws = workspaces.filter(w => w.plan === plan);
-    return { plan, count: ws.length, mrr: ws.length * PLAN_PRICES[plan] };
-  });
+  const planStats: PlanStats[] = (["free", "pro", "scale"] as Plan[]).map(
+    (plan) => {
+      const ws = workspaces.filter((w) => w.plan === plan);
+      return { plan, count: ws.length, mrr: ws.length * PLAN_PRICES[plan] };
+    },
+  );
   const totalMRR = planStats.reduce((s, p) => s + p.mrr, 0);
-  const minutesToday = Math.round(todayCalls.reduce((s, c) => s + c.duration_seconds, 0) / 60);
-  const minutesMonth = Math.round(monthCalls.reduce((s, c) => s + c.duration_seconds, 0) / 60);
+  const minutesToday = Math.round(
+    todayCalls.reduce((s, c) => s + c.duration_seconds, 0) / 60,
+  );
+  const minutesMonth = Math.round(
+    monthCalls.reduce((s, c) => s + c.duration_seconds, 0) / 60,
+  );
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -67,7 +98,8 @@ export default async function AdminPage() {
       <div>
         <h1 className="text-xl font-bold text-[#0a0a0a]">Platform Overview</h1>
         <p className="text-sm text-[#6b6b6b] mt-0.5">
-          {format(new Date(), 'EEEE, MMMM d, yyyy')} · Real-time platform metrics
+          {format(new Date(), "EEEE, MMMM d, yyyy")} · Real-time platform
+          metrics
         </p>
       </div>
 
@@ -75,25 +107,25 @@ export default async function AdminPage() {
       <div className="grid grid-cols-4 gap-4">
         {[
           {
-            label: 'Total Users',
+            label: "Total Users",
             value: (totalUsersCount ?? 0).toLocaleString(),
             icon: <Users className="w-5 h-5 text-[#6b6b6b]" />,
             sub: `${recentUsers.length} new recently`,
           },
           {
-            label: 'Monthly MRR',
+            label: "Monthly MRR",
             value: `$${totalMRR.toLocaleString()}`,
             icon: <DollarSign className="w-5 h-5 text-[#6b6b6b]" />,
             sub: `${workspaces.length} workspaces`,
           },
           {
-            label: 'Minutes Today',
+            label: "Minutes Today",
             value: minutesToday.toLocaleString(),
             icon: <Clock className="w-5 h-5 text-[#6b6b6b]" />,
             sub: `${todayCalls.length} calls`,
           },
           {
-            label: 'Minutes This Month',
+            label: "Minutes This Month",
             value: minutesMonth.toLocaleString(),
             icon: <Phone className="w-5 h-5 text-[#6b6b6b]" />,
             sub: `${monthCalls.length} calls`,
@@ -136,16 +168,19 @@ export default async function AdminPage() {
             <CardContent>
               <div className="space-y-3">
                 {planStats.map((p) => {
-                  const pct = workspaces.length > 0 ? (p.count / workspaces.length) * 100 : 0;
+                  const pct =
+                    workspaces.length > 0
+                      ? (p.count / workspaces.length) * 100
+                      : 0;
                   return (
                     <div key={p.plan} className="flex items-center gap-4">
                       <Badge
                         className={
-                          p.plan === 'scale'
-                            ? 'bg-[#0a0a0a] text-white border-transparent w-14 justify-center text-xs'
-                            : p.plan === 'pro'
-                              ? 'bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0] w-14 justify-center text-xs'
-                              : 'border-[#e0e0e0] text-[#6b6b6b] bg-white w-14 justify-center text-xs'
+                          p.plan === "scale"
+                            ? "bg-[#0a0a0a] text-white border-transparent w-14 justify-center text-xs"
+                            : p.plan === "pro"
+                              ? "bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0] w-14 justify-center text-xs"
+                              : "border-[#e0e0e0] text-[#6b6b6b] bg-white w-14 justify-center text-xs"
                         }
                       >
                         {p.plan.charAt(0).toUpperCase() + p.plan.slice(1)}
@@ -189,7 +224,10 @@ export default async function AdminPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="grid grid-cols-[1fr_1fr_80px_1fr] gap-3 px-5 py-3 border-t border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
-                <span>Name</span><span>Email</span><span>Plan</span><span>Joined</span>
+                <span>Name</span>
+                <span>Email</span>
+                <span>Plan</span>
+                <span>Joined</span>
               </div>
               <div className="divide-y divide-[#e0e0e0]">
                 {recentUsers.slice(0, 8).map((user) => (
@@ -197,23 +235,27 @@ export default async function AdminPage() {
                     key={user.id}
                     className="grid grid-cols-[1fr_1fr_80px_1fr] gap-3 px-5 py-3 text-sm items-center hover:bg-[#f5f5f5]"
                   >
-                    <span className="font-medium text-[#0a0a0a] truncate">{user.name ?? '—'}</span>
-                    <span className="text-[#6b6b6b] truncate text-xs">{user.email}</span>
+                    <span className="font-medium text-[#0a0a0a] truncate">
+                      {user.name ?? "—"}
+                    </span>
+                    <span className="text-[#6b6b6b] truncate text-xs">
+                      {user.email}
+                    </span>
                     <span>
                       <Badge
                         className={
-                          user.plan === 'scale'
-                            ? 'bg-[#0a0a0a] text-white border-transparent text-xs'
-                            : user.plan === 'pro'
-                              ? 'bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0] text-xs'
-                              : 'border-[#e0e0e0] text-[#6b6b6b] bg-white text-xs'
+                          user.plan === "scale"
+                            ? "bg-[#0a0a0a] text-white border-transparent text-xs"
+                            : user.plan === "pro"
+                              ? "bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0] text-xs"
+                              : "border-[#e0e0e0] text-[#6b6b6b] bg-white text-xs"
                         }
                       >
                         {user.plan}
                       </Badge>
                     </span>
                     <span className="text-[#6b6b6b] text-xs">
-                      {format(new Date(user.created_at), 'MMM d, yyyy')}
+                      {format(new Date(user.created_at), "MMM d, yyyy")}
                     </span>
                   </div>
                 ))}
@@ -232,9 +274,21 @@ export default async function AdminPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {[
-                { href: '/admin/workspaces', label: 'Manage Workspaces', icon: <Users className="w-4 h-4" /> },
-                { href: '/admin/billing',    label: 'Billing Audits',    icon: <DollarSign className="w-4 h-4" /> },
-                { href: '/admin/metrics',    label: 'Platform Metrics',  icon: <BarChart2 className="w-4 h-4" /> },
+                {
+                  href: "/admin/workspaces",
+                  label: "Manage Workspaces",
+                  icon: <Users className="w-4 h-4" />,
+                },
+                {
+                  href: "/admin/billing",
+                  label: "Billing Audits",
+                  icon: <DollarSign className="w-4 h-4" />,
+                },
+                {
+                  href: "/admin/metrics",
+                  label: "Platform Metrics",
+                  icon: <BarChart2 className="w-4 h-4" />,
+                },
               ].map((link) => (
                 <Link
                   key={link.href}

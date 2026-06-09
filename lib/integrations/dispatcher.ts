@@ -37,16 +37,16 @@ interface IntegrationRow {
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
 function formatDisposition(d: string | null): string {
-  if (!d) return 'Unknown';
+  if (!d) return "Unknown";
   const labels: Record<string, string> = {
-    meeting_booked:     '✅ Meeting Booked',
-    completed:          '✅ Completed',
-    follow_up:          '🔄 Follow Up',
-    callback_requested: '📅 Callback Requested',
-    not_interested:     '❌ Not Interested',
-    voicemail:          '📵 Voicemail',
-    transferred:        '↗️ Transferred',
-    other:              '⚪ Other',
+    meeting_booked: "✅ Meeting Booked",
+    completed: "✅ Completed",
+    follow_up: "🔄 Follow Up",
+    callback_requested: "📅 Callback Requested",
+    not_interested: "❌ Not Interested",
+    voicemail: "📵 Voicemail",
+    transferred: "↗️ Transferred",
+    other: "⚪ Other",
   };
   return labels[d] ?? d;
 }
@@ -59,67 +59,86 @@ function formatDuration(seconds: number): string {
 }
 
 function buildNotificationText(p: PostCallPayload): string {
-  const contact = p.contact_name ?? p.contact_phone ?? 'Unknown Contact';
+  const contact = p.contact_name ?? p.contact_phone ?? "Unknown Contact";
   const lines = [
     `📞 *Call Ended* — ${contact}`,
     `📊 Status: ${formatDisposition(p.disposition)}`,
     `⏱️ Duration: ${formatDuration(p.duration_seconds)}`,
   ];
   if (p.summary) {
-    lines.push('', `📝 *Summary:*`);
+    lines.push("", `📝 *Summary:*`);
     // Strip bullet characters and add as individual lines
-    p.summary.split('\n').filter(Boolean).forEach(l => lines.push(l.replace(/^•\s*/, '• ')));
+    p.summary
+      .split("\n")
+      .filter(Boolean)
+      .forEach((l) => lines.push(l.replace(/^•\s*/, "• ")));
   }
-  if (p.extracted_name)     lines.push(``, `👤 Contact: ${p.extracted_name}`);
-  if (p.extracted_email)    lines.push(`📧 Email: ${p.extracted_email}`);
+  if (p.extracted_name) lines.push(``, `👤 Contact: ${p.extracted_name}`);
+  if (p.extracted_email) lines.push(`📧 Email: ${p.extracted_email}`);
   if (p.extracted_interest) lines.push(`💡 Interest: ${p.extracted_interest}`);
-  if (p.extracted_objections) lines.push(`⚠️ Objection: ${p.extracted_objections}`);
-  return lines.join('\n');
+  if (p.extracted_objections)
+    lines.push(`⚠️ Objection: ${p.extracted_objections}`);
+  return lines.join("\n");
 }
 
 // ── Integration handlers ──────────────────────────────────────────────────────
 
-async function fireTelegram(creds: Record<string, string>, p: PostCallPayload): Promise<void> {
+async function fireTelegram(
+  creds: Record<string, string>,
+  p: PostCallPayload,
+): Promise<void> {
   const { bot_token, chat_id } = creds;
   if (!bot_token || !chat_id) return;
 
   const text = buildNotificationText(p);
   await fetch(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id, text, parse_mode: 'Markdown' }),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id, text, parse_mode: "Markdown" }),
   });
 }
 
-async function fireTeams(webhookUrl: string, p: PostCallPayload): Promise<void> {
+async function fireTeams(
+  webhookUrl: string,
+  p: PostCallPayload,
+): Promise<void> {
   if (!webhookUrl) return;
 
-  const contact = p.contact_name ?? p.contact_phone ?? 'Unknown Contact';
+  const contact = p.contact_name ?? p.contact_phone ?? "Unknown Contact";
   const body = {
-    '@type': 'MessageCard',
-    '@context': 'http://schema.org/extensions',
-    themeColor: p.disposition === 'meeting_booked' || p.disposition === 'completed' ? '00b050' : 'e81123',
+    "@type": "MessageCard",
+    "@context": "http://schema.org/extensions",
+    themeColor:
+      p.disposition === "meeting_booked" || p.disposition === "completed"
+        ? "00b050"
+        : "e81123",
     summary: `Call ended with ${contact}`,
     sections: [
       {
         activityTitle: `📞 Call Ended — ${contact}`,
         activitySubtitle: `${formatDisposition(p.disposition)} · ${formatDuration(p.duration_seconds)}`,
         facts: [
-          { name: 'Disposition', value: formatDisposition(p.disposition) },
-          { name: 'Duration',    value: formatDuration(p.duration_seconds) },
-          { name: 'Sentiment',   value: p.sentiment ?? '—' },
-          ...(p.extracted_name  ? [{ name: 'Contact Name',  value: p.extracted_name }]  : []),
-          ...(p.extracted_email ? [{ name: 'Contact Email', value: p.extracted_email }] : []),
-          ...(p.extracted_interest ? [{ name: 'Interest', value: p.extracted_interest }] : []),
+          { name: "Disposition", value: formatDisposition(p.disposition) },
+          { name: "Duration", value: formatDuration(p.duration_seconds) },
+          { name: "Sentiment", value: p.sentiment ?? "—" },
+          ...(p.extracted_name
+            ? [{ name: "Contact Name", value: p.extracted_name }]
+            : []),
+          ...(p.extracted_email
+            ? [{ name: "Contact Email", value: p.extracted_email }]
+            : []),
+          ...(p.extracted_interest
+            ? [{ name: "Interest", value: p.extracted_interest }]
+            : []),
         ],
-        ...(p.summary ? { text: p.summary.replace(/^•\s*/gm, '• ') } : {}),
+        ...(p.summary ? { text: p.summary.replace(/^•\s*/gm, "• ") } : {}),
       },
     ],
   };
 
   await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
@@ -128,49 +147,52 @@ async function fireN8n(webhookUrl: string, p: PostCallPayload): Promise<void> {
   if (!webhookUrl) return;
 
   await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      event: 'call.analyzed',
+      event: "call.analyzed",
       timestamp: new Date().toISOString(),
       call: {
-        id:               p.call_id,
-        workspace_id:     p.workspace_id,
-        agent_id:         p.agent_id,
-        contact_name:     p.contact_name,
-        contact_phone:    p.contact_phone,
-        direction:        p.direction,
+        id: p.call_id,
+        workspace_id: p.workspace_id,
+        agent_id: p.agent_id,
+        contact_name: p.contact_name,
+        contact_phone: p.contact_phone,
+        direction: p.direction,
         duration_seconds: p.duration_seconds,
-        disposition:      p.disposition,
-        summary:          p.summary,
-        sentiment:        p.sentiment,
-        transcript:       p.transcript,
-        extracted_data:   p.extracted_data,
-        extracted_name:   p.extracted_name,
-        extracted_email:  p.extracted_email,
-        extracted_interest:   p.extracted_interest,
+        disposition: p.disposition,
+        summary: p.summary,
+        sentiment: p.sentiment,
+        transcript: p.transcript,
+        extracted_data: p.extracted_data,
+        extracted_name: p.extracted_name,
+        extracted_email: p.extracted_email,
+        extracted_interest: p.extracted_interest,
         extracted_objections: p.extracted_objections,
-        created_at:       p.created_at,
+        created_at: p.created_at,
       },
     }),
   });
 }
 
-async function fireGoogleCalendar(creds: Record<string, string>, p: PostCallPayload): Promise<void> {
+async function fireGoogleCalendar(
+  creds: Record<string, string>,
+  p: PostCallPayload,
+): Promise<void> {
   // Only fires when disposition is meeting_booked and we have an OAuth refresh token
-  if (p.disposition !== 'meeting_booked') return;
+  if (p.disposition !== "meeting_booked") return;
   const { refresh_token, client_id, client_secret } = creds;
   if (!refresh_token || !client_id || !client_secret) return;
 
   // Exchange refresh token for access token
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id,
       client_secret,
       refresh_token,
-      grant_type: 'refresh_token',
+      grant_type: "refresh_token",
     }),
   });
   if (!tokenRes.ok) return;
@@ -179,30 +201,36 @@ async function fireGoogleCalendar(creds: Record<string, string>, p: PostCallPayl
   if (!accessToken) return;
 
   // Use meeting_date extracted by LLM if present and valid; fall back to 24h from now
-  const rawDate = p.extracted_data?.['meeting_date'] as string | null | undefined;
+  const rawDate = p.extracted_data?.["meeting_date"] as
+    | string
+    | null
+    | undefined;
   let start = rawDate ? new Date(rawDate) : null;
   if (!start || isNaN(start.getTime()) || start < new Date()) {
     start = new Date(Date.now() + 24 * 60 * 60 * 1000);
   }
-  const end   = new Date(start.getTime() + 60 * 60 * 1000); // 1h meeting
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // 1h meeting
 
-  const contact = p.contact_name ?? p.contact_phone ?? 'Contact';
+  const contact = p.contact_name ?? p.contact_phone ?? "Contact";
   const event = {
     summary: `Meeting with ${contact}`,
     description: p.summary ?? `Follow-up from VoiceOS call (${p.call_id})`,
     start: { dateTime: start.toISOString() },
-    end:   { dateTime: end.toISOString() },
+    end: { dateTime: end.toISOString() },
     attendees: p.extracted_email ? [{ email: p.extracted_email }] : [],
   };
 
-  await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
+  await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(event),
     },
-    body: JSON.stringify(event),
-  });
+  );
 }
 
 async function fireCustomWebhook(
@@ -214,37 +242,44 @@ async function fireCustomWebhook(
 
   // Determine which events apply to this analyzed call
   const toFire: string[] = [];
-  if (webhookEvents.includes('call.completed')) toFire.push('call.completed');
-  if (webhookEvents.includes('call.converted') && p.disposition === 'meeting_booked') {
-    toFire.push('call.converted');
+  if (webhookEvents.includes("call.completed")) toFire.push("call.completed");
+  if (
+    webhookEvents.includes("call.converted") &&
+    p.disposition === "meeting_booked"
+  ) {
+    toFire.push("call.converted");
   }
   if (!toFire.length) return;
 
   const callPayload = {
-    id:               p.call_id,
-    workspace_id:     p.workspace_id,
-    agent_id:         p.agent_id,
-    contact_name:     p.contact_name,
-    contact_phone:    p.contact_phone,
-    direction:        p.direction,
+    id: p.call_id,
+    workspace_id: p.workspace_id,
+    agent_id: p.agent_id,
+    contact_name: p.contact_name,
+    contact_phone: p.contact_phone,
+    direction: p.direction,
     duration_seconds: p.duration_seconds,
-    disposition:      p.disposition,
-    summary:          p.summary,
-    sentiment:        p.sentiment,
-    transcript:       p.transcript,
-    extracted_data:   p.extracted_data,
-    extracted_name:   p.extracted_name,
-    extracted_email:  p.extracted_email,
-    extracted_interest:   p.extracted_interest,
+    disposition: p.disposition,
+    summary: p.summary,
+    sentiment: p.sentiment,
+    transcript: p.transcript,
+    extracted_data: p.extracted_data,
+    extracted_name: p.extracted_name,
+    extracted_email: p.extracted_email,
+    extracted_interest: p.extracted_interest,
     extracted_objections: p.extracted_objections,
-    created_at:       p.created_at,
+    created_at: p.created_at,
   };
 
   for (const event of toFire) {
     await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event, timestamp: new Date().toISOString(), call: callPayload }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event,
+        timestamp: new Date().toISOString(),
+        call: callPayload,
+      }),
     });
   }
 }
@@ -255,8 +290,8 @@ export async function dispatchPostCallEvents(
   workspaceId: string,
   payload: PostCallPayload,
 ): Promise<void> {
-  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-  const supabaseKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+  const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
+  const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
   if (!supabaseUrl || !supabaseKey) return;
 
   // Fetch all active integrations for this workspace
@@ -282,24 +317,26 @@ export async function dispatchPostCallEvents(
 
   for (const integration of integrations) {
     const creds = (integration.credentials ?? {}) as Record<string, string>;
-    const webhookUrl = integration.webhook_url ?? creds['webhook_url'] ?? '';
+    const webhookUrl = integration.webhook_url ?? creds["webhook_url"] ?? "";
 
     switch (integration.type) {
-      case 'telegram':
+      case "telegram":
         handlers.push(fireTelegram(creds, payload).catch(() => null));
         break;
-      case 'teams':
+      case "teams":
         handlers.push(fireTeams(webhookUrl, payload).catch(() => null));
         break;
-      case 'n8n':
+      case "n8n":
         handlers.push(fireN8n(webhookUrl, payload).catch(() => null));
         break;
-      case 'google_calendar':
+      case "google_calendar":
         handlers.push(fireGoogleCalendar(creds, payload).catch(() => null));
         break;
-      case 'webhook': {
+      case "webhook": {
         const events = (integration.webhook_events ?? []) as string[];
-        handlers.push(fireCustomWebhook(webhookUrl, events, payload).catch(() => null));
+        handlers.push(
+          fireCustomWebhook(webhookUrl, events, payload).catch(() => null),
+        );
         break;
       }
     }

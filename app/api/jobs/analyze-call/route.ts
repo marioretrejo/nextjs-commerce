@@ -8,23 +8,23 @@
  *
  * Security: protected by INTERNAL_API_SECRET header.
  */
-import { createAdminClient } from '@/lib/supabase/admin';
-import { dispatchPostCallEvents } from '@/lib/integrations/dispatcher';
-import { NextResponse } from 'next/server';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchPostCallEvents } from "@/lib/integrations/dispatcher";
+import { NextResponse } from "next/server";
 
 type CallDisposition =
-  | 'meeting_booked'
-  | 'not_interested'
-  | 'voicemail'
-  | 'follow_up'
-  | 'callback_requested'
-  | 'completed'
-  | 'transferred'
-  | 'other';
+  | "meeting_booked"
+  | "not_interested"
+  | "voicemail"
+  | "follow_up"
+  | "callback_requested"
+  | "completed"
+  | "transferred"
+  | "other";
 
 interface AnalysisResult {
   summary: string[];
-  sentiment: 'positive' | 'neutral' | 'negative';
+  sentiment: "positive" | "neutral" | "negative";
   disposition: CallDisposition;
   intent: string;
   extracted_name: string | null;
@@ -40,8 +40,14 @@ interface QAResult {
 }
 
 const VALID_DISPOSITIONS = new Set<CallDisposition>([
-  'meeting_booked', 'not_interested', 'voicemail',
-  'follow_up', 'callback_requested', 'completed', 'transferred', 'other',
+  "meeting_booked",
+  "not_interested",
+  "voicemail",
+  "follow_up",
+  "callback_requested",
+  "completed",
+  "transferred",
+  "other",
 ]);
 
 const EXTRACTION_PROMPT = `You are a call analysis expert. Analyze the following voice call transcript and return a JSON object with EXACTLY these fields:
@@ -76,14 +82,18 @@ TRANSCRIPT:
 
 type AnalysisResponse = AnalysisResult & { _tokensUsed: number | null };
 
-interface QACriterion { name: string; description: string | null; weight: number }
+interface QACriterion {
+  name: string;
+  description: string | null;
+  weight: number;
+}
 
 async function runQAScoring(
   transcript: string,
   systemPrompt: string | null,
   criteria: QACriterion[],
 ): Promise<QAResult | null> {
-  const groqKey = process.env['GROQ_API_KEY'];
+  const groqKey = process.env["GROQ_API_KEY"];
   if (!groqKey) return null;
 
   // Build the scoring section: prefer explicit criteria over raw system prompt
@@ -91,12 +101,13 @@ async function runQAScoring(
   if (criteria.length > 0) {
     const totalWeight = criteria.reduce((s, c) => s + c.weight, 0) || 1;
     scoringSection = `SCORING CRITERIA (weighted — score each criterion proportionally to its weight):
-${criteria.map(c => `- ${c.name} (${Math.round((c.weight / totalWeight) * 100)}% of score): ${c.description ?? ''}`).join('\n')}`;
+${criteria.map((c) => `- ${c.name} (${Math.round((c.weight / totalWeight) * 100)}% of score): ${c.description ?? ""}`).join("\n")}`;
   } else if (systemPrompt) {
     scoringSection = `AGENT INSTRUCTIONS (score how closely the agent followed these):
 ${systemPrompt.slice(0, 1500)}`;
   } else {
-    scoringSection = 'SCORING: Evaluate overall call quality, professionalism, and helpfulness.';
+    scoringSection =
+      "SCORING: Evaluate overall call quality, professionalism, and helpfulness.";
   }
 
   const prompt = `You are a QA evaluator for AI voice agents.
@@ -112,23 +123,30 @@ Return ONLY a JSON object with:
 
 Respond with ONLY the raw JSON.`;
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${groqKey}`,
+    },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-      messages: [{ role: 'user', content: prompt }],
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
       max_tokens: 200,
-      response_format: { type: 'json_object' },
+      response_format: { type: "json_object" },
     }),
   });
 
   if (!res.ok) return null;
   try {
-    const data = (await res.json()) as { choices: { message: { content: string } }[] };
-    const result = JSON.parse(data.choices[0]?.message?.content ?? '{}') as QAResult;
-    if (typeof result.score !== 'number') return null;
+    const data = (await res.json()) as {
+      choices: { message: { content: string } }[];
+    };
+    const result = JSON.parse(
+      data.choices[0]?.message?.content ?? "{}",
+    ) as QAResult;
+    if (typeof result.score !== "number") return null;
     result.score = Math.max(0, Math.min(100, Math.round(result.score)));
     return result;
   } catch {
@@ -136,19 +154,26 @@ Respond with ONLY the raw JSON.`;
   }
 }
 
-async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | null> {
-  const groqKey = process.env['GROQ_API_KEY'];
+async function runGroqAnalysis(
+  transcript: string,
+): Promise<AnalysisResponse | null> {
+  const groqKey = process.env["GROQ_API_KEY"];
   if (!groqKey) return null;
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${groqKey}`,
+    },
     body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-      messages: [{ role: 'user', content: `${EXTRACTION_PROMPT}${transcript}` }],
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      messages: [
+        { role: "user", content: `${EXTRACTION_PROMPT}${transcript}` },
+      ],
       temperature: 0.1,
       max_tokens: 768,
-      response_format: { type: 'json_object' },
+      response_format: { type: "json_object" },
     }),
   });
 
@@ -160,9 +185,13 @@ async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | n
   };
 
   try {
-    const result = JSON.parse(data.choices[0]?.message?.content ?? '{}') as AnalysisResult;
-    if (!VALID_DISPOSITIONS.has(result.disposition)) result.disposition = 'other';
-    if (result.extracted_data && typeof result.extracted_data !== 'object') result.extracted_data = null;
+    const result = JSON.parse(
+      data.choices[0]?.message?.content ?? "{}",
+    ) as AnalysisResult;
+    if (!VALID_DISPOSITIONS.has(result.disposition))
+      result.disposition = "other";
+    if (result.extracted_data && typeof result.extracted_data !== "object")
+      result.extracted_data = null;
     return { ...result, _tokensUsed: data.usage?.total_tokens ?? null };
   } catch {
     return null;
@@ -170,13 +199,14 @@ async function runGroqAnalysis(transcript: string): Promise<AnalysisResponse | n
 }
 
 export async function POST(req: Request) {
-  const secret = req.headers.get('x-internal-secret');
-  if (secret !== process.env['INTERNAL_API_SECRET']) {
-    return new NextResponse('Unauthorized', { status: 401 });
+  const secret = req.headers.get("x-internal-secret");
+  if (secret !== process.env["INTERNAL_API_SECRET"]) {
+    return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const { room_name } = await req.json() as { room_name: string };
-  if (!room_name) return NextResponse.json({ error: 'room_name required' }, { status: 400 });
+  const { room_name } = (await req.json()) as { room_name: string };
+  if (!room_name)
+    return NextResponse.json({ error: "room_name required" }, { status: 400 });
 
   const admin = createAdminClient();
 
@@ -203,86 +233,117 @@ export async function POST(req: Request) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 2000 * attempt));
 
     const { data } = await admin
-      .from('calls')
-      .select('id, workspace_id, agent_id, contact_name, contact_phone, direction, duration_seconds, transcript, created_at')
-      .eq('retell_call_id', room_name)
+      .from("calls")
+      .select(
+        "id, workspace_id, agent_id, contact_name, contact_phone, direction, duration_seconds, transcript, created_at",
+      )
+      .eq("retell_call_id", room_name)
       .single();
 
     const row = data as unknown as CallRow | null;
-    if (row?.transcript) { callRecord = row; break; }
+    if (row?.transcript) {
+      callRecord = row;
+      break;
+    }
     callRecord = row;
   }
 
   if (!callRecord) {
-    return NextResponse.json({ error: 'Call record not found', room_name }, { status: 404 });
+    return NextResponse.json(
+      { error: "Call record not found", room_name },
+      { status: 404 },
+    );
   }
 
   if (!callRecord.transcript || callRecord.transcript.length < 50) {
-    console.warn('analyze-call: no transcript after 4 attempts', { room_name });
-    return NextResponse.json({ skipped: true, reason: 'Transcript too short for analysis' });
+    console.warn("analyze-call: no transcript after 4 attempts", { room_name });
+    return NextResponse.json({
+      skipped: true,
+      reason: "Transcript too short for analysis",
+    });
   }
 
   const [analysis, agentData, criteriaRows] = await Promise.all([
     runGroqAnalysis(callRecord.transcript),
     callRecord.agent_id
-      ? admin.from('agents').select('system_prompt').eq('id', callRecord.agent_id).single()
-          .then(r => (r.data as unknown as AgentRow | null))
+      ? admin
+          .from("agents")
+          .select("system_prompt")
+          .eq("id", callRecord.agent_id)
+          .single()
+          .then((r) => r.data as unknown as AgentRow | null)
       : Promise.resolve(null),
     callRecord.agent_id
-      ? admin.from('qa_criteria').select('name, description, weight').eq('agent_id', callRecord.agent_id)
-          .order('created_at').then(r => (r.data as QACriterion[] | null) ?? [])
+      ? admin
+          .from("qa_criteria")
+          .select("name, description, weight")
+          .eq("agent_id", callRecord.agent_id)
+          .order("created_at")
+          .then((r) => (r.data as QACriterion[] | null) ?? [])
       : Promise.resolve([]),
   ]);
 
   if (!analysis) {
-    return NextResponse.json({ error: 'Analysis failed — Groq unavailable' }, { status: 502 });
+    return NextResponse.json(
+      { error: "Analysis failed — Groq unavailable" },
+      { status: 502 },
+    );
   }
 
   const summaryText = Array.isArray(analysis.summary)
-    ? analysis.summary.join('\n• ').replace(/^/, '• ')
-    : String(analysis.summary ?? '');
+    ? analysis.summary.join("\n• ").replace(/^/, "• ")
+    : String(analysis.summary ?? "");
 
   // Step 1: core fields — exist in schema from migration 001
   const { error } = await admin
-    .from('calls')
+    .from("calls")
     .update({
-      summary:              summaryText,
-      sentiment:            analysis.sentiment ?? null,
-      extracted_name:       analysis.extracted_name ?? null,
-      extracted_email:      analysis.extracted_email ?? null,
-      extracted_interest:   analysis.extracted_interest ?? null,
+      summary: summaryText,
+      sentiment: analysis.sentiment ?? null,
+      extracted_name: analysis.extracted_name ?? null,
+      extracted_email: analysis.extracted_email ?? null,
+      extracted_interest: analysis.extracted_interest ?? null,
       extracted_objections: analysis.extracted_objections ?? null,
-      task_completed:       analysis.disposition === 'meeting_booked' || analysis.sentiment === 'positive',
+      task_completed:
+        analysis.disposition === "meeting_booked" ||
+        analysis.sentiment === "positive",
     })
-    .eq('id', callRecord.id);
+    .eq("id", callRecord.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Step 2: extended columns from later migrations
   await admin
-    .from('calls')
+    .from("calls")
     .update({
-      disposition:    analysis.disposition ?? 'other',
-      tokens_used:    analysis._tokensUsed ?? null,
+      disposition: analysis.disposition ?? "other",
+      tokens_used: analysis._tokensUsed ?? null,
       extracted_data: analysis.extracted_data ?? null,
     })
-    .eq('id', callRecord.id)
+    .eq("id", callRecord.id)
     .then(({ error: e }) => {
-      if (e) console.warn('[analyze-call] extended update failed:', e.message);
+      if (e) console.warn("[analyze-call] extended update failed:", e.message);
     });
 
   // Step 3: Auto-QA — score transcript using explicit criteria (preferred) or system prompt
   const systemPrompt = agentData?.system_prompt ?? null;
-  const hasScoringBasis = (criteriaRows as QACriterion[]).length > 0 || (systemPrompt && systemPrompt.length > 20);
+  const hasScoringBasis =
+    (criteriaRows as QACriterion[]).length > 0 ||
+    (systemPrompt && systemPrompt.length > 20);
   if (hasScoringBasis) {
-    const qa = await runQAScoring(callRecord.transcript, systemPrompt, criteriaRows as QACriterion[]);
+    const qa = await runQAScoring(
+      callRecord.transcript,
+      systemPrompt,
+      criteriaRows as QACriterion[],
+    );
     if (qa) {
       await admin
-        .from('calls')
+        .from("calls")
         .update({ qa_score: qa.score, qa_feedback: qa.feedback })
-        .eq('id', callRecord.id)
+        .eq("id", callRecord.id)
         .then(({ error: e }) => {
-          if (e) console.warn('[analyze-call] qa update failed:', e.message);
+          if (e) console.warn("[analyze-call] qa update failed:", e.message);
         });
     }
   }
@@ -290,30 +351,30 @@ export async function POST(req: Request) {
   // Step 4: fire integration dispatchers (Telegram, Teams, n8n, Google Calendar)
   // Non-blocking — dispatch runs in background, never delays the HTTP response
   dispatchPostCallEvents(callRecord.workspace_id, {
-    call_id:              callRecord.id,
-    workspace_id:         callRecord.workspace_id,
-    agent_id:             callRecord.agent_id,
-    contact_name:         callRecord.contact_name,
-    contact_phone:        callRecord.contact_phone,
-    direction:            callRecord.direction,
-    duration_seconds:     callRecord.duration_seconds,
-    disposition:          analysis.disposition,
-    summary:              summaryText,
-    sentiment:            analysis.sentiment,
-    transcript:           callRecord.transcript,
-    extracted_data:       analysis.extracted_data ?? null,
-    extracted_name:       analysis.extracted_name ?? null,
-    extracted_email:      analysis.extracted_email ?? null,
-    extracted_interest:   analysis.extracted_interest ?? null,
+    call_id: callRecord.id,
+    workspace_id: callRecord.workspace_id,
+    agent_id: callRecord.agent_id,
+    contact_name: callRecord.contact_name,
+    contact_phone: callRecord.contact_phone,
+    direction: callRecord.direction,
+    duration_seconds: callRecord.duration_seconds,
+    disposition: analysis.disposition,
+    summary: summaryText,
+    sentiment: analysis.sentiment,
+    transcript: callRecord.transcript,
+    extracted_data: analysis.extracted_data ?? null,
+    extracted_name: analysis.extracted_name ?? null,
+    extracted_email: analysis.extracted_email ?? null,
+    extracted_interest: analysis.extracted_interest ?? null,
     extracted_objections: analysis.extracted_objections ?? null,
-    created_at:           callRecord.created_at,
+    created_at: callRecord.created_at,
   }).catch(() => null);
 
   return NextResponse.json({
-    analyzed:    true,
-    call_id:     callRecord.id,
-    sentiment:   analysis.sentiment,
+    analyzed: true,
+    call_id: callRecord.id,
+    sentiment: analysis.sentiment,
     disposition: analysis.disposition,
-    intent:      analysis.intent,
+    intent: analysis.intent,
   });
 }

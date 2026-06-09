@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
 // Isolated admin layout — no shared app header/nav/copilot widgets
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
 import {
   Activity,
   BarChart2,
@@ -14,19 +14,19 @@ import {
   Settings,
   Shield,
   Sparkles,
-} from 'lucide-react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const NAV = [
-  { href: '/admin',             label: 'Overview',      icon: LayoutDashboard, exact: true },
-  { href: '/admin/activity',    label: 'User Activity',  icon: Activity },
-  { href: '/admin/workspaces',  label: 'Workspaces',    icon: Building2 },
-  { href: '/admin/billing',     label: 'Billing Audits',icon: CreditCard },
-  { href: '/admin/metrics',     label: 'Metrics',       icon: BarChart2 },
-  { href: '/admin/calculator',  label: 'Unit Economics',  icon: Calculator },
-  { href: '/admin/copilot',     label: 'Copilot Config',  icon: Sparkles },
-  { href: '/admin/settings',    label: 'Global Settings', icon: Settings },
+  { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
+  { href: "/admin/activity", label: "User Activity", icon: Activity },
+  { href: "/admin/workspaces", label: "Workspaces", icon: Building2 },
+  { href: "/admin/billing", label: "Billing Audits", icon: CreditCard },
+  { href: "/admin/metrics", label: "Metrics", icon: BarChart2 },
+  { href: "/admin/calculator", label: "Unit Economics", icon: Calculator },
+  { href: "/admin/copilot", label: "Copilot Config", icon: Sparkles },
+  { href: "/admin/settings", label: "Global Settings", icon: Settings },
 ];
 
 function AdminSidebar() {
@@ -49,10 +49,10 @@ function AdminSidebar() {
               key={href}
               href={href}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 active
-                  ? 'bg-white/15 text-white'
-                  : 'text-white/50 hover:bg-white/8 hover:text-white/90'
+                  ? "bg-white/15 text-white"
+                  : "text-white/50 hover:bg-white/8 hover:text-white/90",
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -83,13 +83,15 @@ function AdminSidebar() {
   );
 }
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <div className="min-h-screen bg-[#f4f4f5]">
       <AdminSidebar />
-      <div className="ml-56">
-        {children}
-      </div>
+      <div className="ml-56">{children}</div>
     </div>
   );
 }

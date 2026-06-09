@@ -1,23 +1,29 @@
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, Workflow } from 'lucide-react';
-import Link from 'next/link';
-import type { Agent } from '@/lib/supabase/types';
-import { WorkflowClientWrapper } from './WorkflowClientWrapper';
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft, Workflow } from "lucide-react";
+import Link from "next/link";
+import type { Agent } from "@/lib/supabase/types";
+import { WorkflowClientWrapper } from "./WorkflowClientWrapper";
 
-export default async function AgentWorkflowPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AgentWorkflowPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const admin = createAdminClient();
-  const { data } = await admin.from('agents').select('*').eq('id', id).single();
+  const { data } = await admin.from("agents").select("*").eq("id", id).single();
   if (!data) notFound();
   const agent = data as Agent;
 
-  const initial = (agent as unknown as Record<string, unknown>)['workflow'] as
+  const initial = (agent as unknown as Record<string, unknown>)["workflow"] as
     | { nodes: unknown[]; edges: unknown[] }
     | undefined;
 
@@ -35,9 +41,12 @@ export default async function AgentWorkflowPage({ params }: { params: Promise<{ 
           <Workflow className="h-4 w-4 text-[#8b5cf6]" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-[#1a1a1a]">{agent.name} — Workflow Builder</h1>
+          <h1 className="text-sm font-semibold text-[#1a1a1a]">
+            {agent.name} — Workflow Builder
+          </h1>
           <p className="text-xs text-[#a0a0a0]">
-            Design your agent&apos;s conversation flow visually, or generate one with AI
+            Design your agent&apos;s conversation flow visually, or generate one
+            with AI
           </p>
         </div>
       </div>

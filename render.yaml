@@ -39,7 +39,7 @@ services:
       - key: CARTESIA_API_KEY
         sync: false
       - key: OPENAI_API_KEY
-        sync: false          # Used for LLM fallback, TTS fallback, and RAG embeddings
+        sync: false # Used for LLM fallback, TTS fallback, and RAG embeddings
 
       # ── Supabase (required) ───────────────────────────────────────────────────
       - key: NEXT_PUBLIC_SUPABASE_URL
@@ -49,7 +49,7 @@ services:
 
       # ── Optional ─────────────────────────────────────────────────────────────
       - key: SUPPORT_TRANSFER_NUMBER
-        sync: false          # E.164 fallback transfer number, e.g. +12125550100
+        sync: false # E.164 fallback transfer number, e.g. +12125550100
 
       # ── Runtime ──────────────────────────────────────────────────────────────
       - key: NODE_ENV

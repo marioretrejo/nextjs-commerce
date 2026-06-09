@@ -2,11 +2,11 @@
  * POST /api/agents/[id]/flow/generate
  * Generates a ReactFlow config from a natural-language description using Claude.
  */
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const client = new Anthropic();
@@ -46,61 +46,97 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: agentId } = await params;
   const { data: agent } = await supabase
-    .from('agents').select('id').eq('id', agentId).single();
-  if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+    .from("agents")
+    .select("id")
+    .eq("id", agentId)
+    .single();
+  if (!agent)
+    return NextResponse.json({ error: "Agent not found" }, { status: 404 });
 
   let body: { description?: string };
-  try { body = await req.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const description = body.description?.trim();
-  if (!description) return NextResponse.json({ error: '"description" is required' }, { status: 400 });
-  if (description.length > 2000) return NextResponse.json({ error: 'Description too long (max 2000 chars)' }, { status: 400 });
+  if (!description)
+    return NextResponse.json(
+      { error: '"description" is required' },
+      { status: 400 },
+    );
+  if (description.length > 2000)
+    return NextResponse.json(
+      { error: "Description too long (max 2000 chars)" },
+      { status: 400 },
+    );
 
   try {
     const message = await client.messages.create({
-      model: 'claude-opus-4-8',
+      model: "claude-opus-4-8",
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [
         {
-          role: 'user',
+          role: "user",
           content: `Generate a complete conversation flow for this voice agent workflow:\n\n${description}\n\nRemember: output ONLY the JSON object with "nodes" and "edges" arrays, nothing else.`,
         },
       ],
     });
 
     const firstBlock = message.content[0];
-    const rawText = firstBlock?.type === 'text' ? firstBlock.text : '';
+    const rawText = firstBlock?.type === "text" ? firstBlock.text : "";
 
     // Extract JSON even if model wrapped it in backticks
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('generate-flow: no JSON in response', rawText.slice(0, 200));
-      return NextResponse.json({ error: 'Model did not return valid JSON' }, { status: 500 });
+      console.error(
+        "generate-flow: no JSON in response",
+        rawText.slice(0, 200),
+      );
+      return NextResponse.json(
+        { error: "Model did not return valid JSON" },
+        { status: 500 },
+      );
     }
 
-    const flowData = JSON.parse(jsonMatch[0]) as { nodes: unknown[]; edges: unknown[] };
+    const flowData = JSON.parse(jsonMatch[0]) as {
+      nodes: unknown[];
+      edges: unknown[];
+    };
 
     if (!Array.isArray(flowData.nodes) || !Array.isArray(flowData.edges)) {
-      return NextResponse.json({ error: 'Invalid flow structure from model' }, { status: 500 });
+      return NextResponse.json(
+        { error: "Invalid flow structure from model" },
+        { status: 500 },
+      );
     }
 
     // Ensure start node is present
-    const hasStart = flowData.nodes.some((n: unknown) => (n as { id: string }).id === 'start');
+    const hasStart = flowData.nodes.some(
+      (n: unknown) => (n as { id: string }).id === "start",
+    );
     if (!hasStart) {
-      return NextResponse.json({ error: 'Generated flow missing start node' }, { status: 500 });
+      return NextResponse.json(
+        { error: "Generated flow missing start node" },
+        { status: 500 },
+      );
     }
 
-    return NextResponse.json({ flow: { version: 2, nodes: flowData.nodes, edges: flowData.edges } });
+    return NextResponse.json({
+      flow: { version: 2, nodes: flowData.nodes, edges: flowData.edges },
+    });
   } catch (err) {
-    console.error('generate-flow error:', err);
-    return NextResponse.json({ error: 'Generation failed' }, { status: 500 });
+    console.error("generate-flow error:", err);
+    return NextResponse.json({ error: "Generation failed" }, { status: 500 });
   }
 }

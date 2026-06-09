@@ -1,54 +1,79 @@
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
-import { retell } from '@/lib/retell/client';
-import { checkMinuteLimit, minuteLimitBlockedResponse } from '@/lib/checkMinuteLimit';
-import type { Agent, Campaign, CampaignContact } from '@/lib/supabase/types';
-import { NextResponse } from 'next/server';
-import { notifyWorkspace } from '@/lib/notifications/activity';
-import { writeAuditLog } from '@/lib/admin-audit';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { retell } from "@/lib/retell/client";
+import {
+  checkMinuteLimit,
+  minuteLimitBlockedResponse,
+} from "@/lib/checkMinuteLimit";
+import type { Agent, Campaign, CampaignContact } from "@/lib/supabase/types";
+import { NextResponse } from "next/server";
+import { notifyWorkspace } from "@/lib/notifications/activity";
+import { writeAuditLog } from "@/lib/admin-audit";
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // RLS on user client verifies campaign belongs to user's workspace
-  const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', id).single();
-  if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (!campaign)
+    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
   const c = campaign as Campaign;
 
   // Bulletproof minute limit enforcement gate
   const limitCheck = await checkMinuteLimit(c.workspace_id);
   if (!limitCheck.allowed) {
-    return NextResponse.json(minuteLimitBlockedResponse(limitCheck), { status: 402 });
+    return NextResponse.json(minuteLimitBlockedResponse(limitCheck), {
+      status: 402,
+    });
   }
 
   // Get agent
-  const { data: agentData } = await supabase.from('agents').select('*').eq('id', c.agent_id ?? '').single();
-  if (!agentData) return NextResponse.json({ error: 'Agent not found' }, { status: 400 });
+  const { data: agentData } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("id", c.agent_id ?? "")
+    .single();
+  if (!agentData)
+    return NextResponse.json({ error: "Agent not found" }, { status: 400 });
   const agent = agentData as Agent;
 
   // Get pending contacts
   const { data: contacts } = await supabase
-    .from('campaign_contacts')
-    .select('*')
-    .eq('campaign_id', id)
-    .eq('status', 'pending')
+    .from("campaign_contacts")
+    .select("*")
+    .eq("campaign_id", id)
+    .eq("status", "pending")
     .limit(1000);
 
   if (!contacts || contacts.length === 0) {
-    return NextResponse.json({ error: 'No pending contacts' }, { status: 400 });
+    return NextResponse.json({ error: "No pending contacts" }, { status: 400 });
   }
 
-  const fromNumber = process.env['TWILIO_PHONE_NUMBER'];
-  if (!fromNumber) return NextResponse.json({ error: 'No Twilio number configured' }, { status: 500 });
+  const fromNumber = process.env["TWILIO_PHONE_NUMBER"];
+  if (!fromNumber)
+    return NextResponse.json(
+      { error: "No Twilio number configured" },
+      { status: 500 },
+    );
 
   const admin = createAdminClient();
 
   // Launch batch via Retell
-  if (agent.retell_agent_id && process.env['RETELL_API_KEY']) {
+  if (agent.retell_agent_id && process.env["RETELL_API_KEY"]) {
     try {
       const tasks = (contacts as CampaignContact[]).map((contact) => ({
         from_number: fromNumber,
@@ -58,53 +83,68 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           campaign_id: id,
           contact_id: contact.id,
           contact_name: contact.name,
-          to_number: contact.phone
+          to_number: contact.phone,
         },
-        retell_llm_dynamic_variables: contact.variables as Record<string, string>
+        retell_llm_dynamic_variables: contact.variables as Record<
+          string,
+          string
+        >,
       }));
 
       const batch = await retell.batchCall({
         from_number: fromNumber,
         tasks,
         name: c.name,
-        max_concurrent_calls: c.max_concurrency
+        max_concurrent_calls: c.max_concurrency,
       });
 
-      await admin.from('campaigns').update({
-        status: 'active',
-        retell_batch_call_id: batch.batch_call_id
-      }).eq('id', id);
+      await admin
+        .from("campaigns")
+        .update({
+          status: "active",
+          retell_batch_call_id: batch.batch_call_id,
+        })
+        .eq("id", id);
 
       void notifyWorkspace({
         workspaceId: c.workspace_id,
-        title: 'Campaign launched',
+        title: "Campaign launched",
         message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
         link: `/campaigns/${id}`,
       });
       void writeAuditLog({
-        actorId: user.id, actorType: 'user', action: 'campaign.launch',
-        targetType: 'campaign', targetId: id,
+        actorId: user.id,
+        actorType: "user",
+        action: "campaign.launch",
+        targetType: "campaign",
+        targetId: id,
         workspaceId: c.workspace_id,
         metadata: { campaign_name: c.name, contacts: contacts.length },
       });
 
-      return NextResponse.json({ batch_call_id: batch.batch_call_id, contacts: contacts.length });
+      return NextResponse.json({
+        batch_call_id: batch.batch_call_id,
+        contacts: contacts.length,
+      });
     } catch (e) {
       return NextResponse.json({ error: String(e) }, { status: 500 });
     }
   }
 
   // Fallback: mark as active
-  await admin.from('campaigns').update({ status: 'active' }).eq('id', id);
+  await admin.from("campaigns").update({ status: "active" }).eq("id", id);
   void notifyWorkspace({
     workspaceId: c.workspace_id,
-    title: 'Campaign launched',
+    title: "Campaign launched",
     message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
     link: `/campaigns/${id}`,
   });
   void writeAuditLog({
-    actorId: user.id, actorType: 'user', action: 'campaign.launch',
-    targetType: 'campaign', targetId: id,
+    actorId: user.id,
+    actorType: "user",
+    action: "campaign.launch",
+    targetType: "campaign",
+    targetId: id,
     workspaceId: c.workspace_id,
     metadata: { campaign_name: c.name, contacts: contacts.length },
   });

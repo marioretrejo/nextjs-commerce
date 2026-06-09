@@ -12,9 +12,9 @@
  *  2. Phone number registration — numbers belonging to this trunk are displayed
  *     in /numbers grouped under the provider name.
  */
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
 
 interface SipCredentials {
   provider_name: string;
@@ -28,94 +28,133 @@ interface SipCredentials {
 
 export async function GET() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: ws } = await supabase.from('workspaces').select('id').eq('owner_id', user.id).single();
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("owner_id", user.id)
+    .single();
   if (!ws) return NextResponse.json({ connected: false });
 
   const admin = createAdminClient();
   const { data } = await admin
-    .from('integrations')
-    .select('id, status, credentials')
-    .eq('workspace_id', ws.id)
-    .eq('type', 'sip_trunk')
+    .from("integrations")
+    .select("id, status, credentials")
+    .eq("workspace_id", ws.id)
+    .eq("type", "sip_trunk")
     .maybeSingle();
 
   if (!data) return NextResponse.json({ connected: false });
 
   const creds = data.credentials as SipCredentials | null;
   return NextResponse.json({
-    connected: data.status === 'connected',
+    connected: data.status === "connected",
     provider_name: creds?.provider_name ?? null,
     // Mask: show first 3 chars + ellipsis of username; never expose password
-    username_hint: creds?.username
-      ? creds.username.slice(0, 3) + '…'
-      : null,
+    username_hint: creds?.username ? creds.username.slice(0, 3) + "…" : null,
     sip_host: creds?.sip_host ?? null,
   });
 }
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json() as {
+  const body = (await req.json()) as {
     provider_name?: string;
     sip_host?: string;
     username?: string;
     password?: string;
   };
 
-  if (!body.provider_name?.trim()) return NextResponse.json({ error: 'provider_name is required' }, { status: 400 });
-  if (!body.sip_host?.trim())      return NextResponse.json({ error: 'sip_host is required' }, { status: 400 });
-  if (!body.username?.trim())      return NextResponse.json({ error: 'username is required' }, { status: 400 });
-  if (!body.password?.trim())      return NextResponse.json({ error: 'password is required' }, { status: 400 });
+  if (!body.provider_name?.trim())
+    return NextResponse.json(
+      { error: "provider_name is required" },
+      { status: 400 },
+    );
+  if (!body.sip_host?.trim())
+    return NextResponse.json(
+      { error: "sip_host is required" },
+      { status: 400 },
+    );
+  if (!body.username?.trim())
+    return NextResponse.json(
+      { error: "username is required" },
+      { status: 400 },
+    );
+  if (!body.password?.trim())
+    return NextResponse.json(
+      { error: "password is required" },
+      { status: 400 },
+    );
 
-  const { data: ws } = await supabase.from('workspaces').select('id').eq('owner_id', user.id).single();
-  if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("owner_id", user.id)
+    .single();
+  if (!ws)
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
   const admin = createAdminClient();
 
   // Invalidate any cached LiveKit trunk ID so the next call regenerates it
   // with the new credentials.
-  const { error } = await admin
-    .from('integrations')
-    .upsert(
-      {
-        workspace_id: ws.id,
-        type: 'sip_trunk',
-        status: 'connected',
-        credentials: {
-          provider_name: body.provider_name.trim(),
-          sip_host:      body.sip_host.trim(),
-          username:      body.username.trim(),
-          password:      body.password.trim(),
-          // livekit_trunk_id intentionally omitted — reset on credential change
-        } satisfies Omit<SipCredentials, 'livekit_trunk_id'>,
-      },
-      { onConflict: 'workspace_id,type' }
-    );
+  const { error } = await admin.from("integrations").upsert(
+    {
+      workspace_id: ws.id,
+      type: "sip_trunk",
+      status: "connected",
+      credentials: {
+        provider_name: body.provider_name.trim(),
+        sip_host: body.sip_host.trim(),
+        username: body.username.trim(),
+        password: body.password.trim(),
+        // livekit_trunk_id intentionally omitted — reset on credential change
+      } satisfies Omit<SipCredentials, "livekit_trunk_id">,
+    },
+    { onConflict: "workspace_id,type" },
+  );
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ connected: true, provider_name: body.provider_name.trim() });
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({
+    connected: true,
+    provider_name: body.provider_name.trim(),
+  });
 }
 
 export async function DELETE() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: ws } = await supabase.from('workspaces').select('id').eq('owner_id', user.id).single();
-  if (!ws) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("owner_id", user.id)
+    .single();
+  if (!ws)
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
   const admin = createAdminClient();
   await admin
-    .from('integrations')
-    .update({ status: 'disconnected' })
-    .eq('workspace_id', ws.id)
-    .eq('type', 'sip_trunk');
+    .from("integrations")
+    .update({ status: "disconnected" })
+    .eq("workspace_id", ws.id)
+    .eq("type", "sip_trunk");
 
   return NextResponse.json({ connected: false });
 }

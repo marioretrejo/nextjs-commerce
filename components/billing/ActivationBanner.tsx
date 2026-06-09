@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { AlertTriangle, CreditCard, X } from 'lucide-react';
-import { TopUpModal } from './TopUpModal';
+import { useState } from "react";
+import { AlertTriangle, CreditCard, X } from "lucide-react";
+import { TopUpModal } from "./TopUpModal";
 
 interface Props {
   workspaceId: string;
@@ -19,8 +19,8 @@ export function ActivationBanner({ workspaceId }: Props) {
       <div className="w-full bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-3">
         <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
         <p className="flex-1 text-sm text-amber-800">
-          <span className="font-semibold">Your account is inactive.</span>{' '}
-          Add credit to activate your AI agents and start making calls.
+          <span className="font-semibold">Your account is inactive.</span> Add
+          credit to activate your AI agents and start making calls.
         </p>
         <button
           onClick={() => setOpen(true)}
@@ -37,7 +37,11 @@ export function ActivationBanner({ workspaceId }: Props) {
           <X className="h-4 w-4" />
         </button>
       </div>
-      <TopUpModal open={open} onClose={() => setOpen(false)} workspaceId={workspaceId} />
+      <TopUpModal
+        open={open}
+        onClose={() => setOpen(false)}
+        workspaceId={workspaceId}
+      />
     </>
   );
 }

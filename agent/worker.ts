@@ -8,14 +8,14 @@
 //
 // For local TypeScript development (live reload via tsx):
 //   pnpm agent
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Dynamic import() works in CJS; top-level await does NOT — hence the .catch()
 // instead of await. The process stays alive because worker.mjs starts servers.
-import(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'worker.js')).catch(
-  (err: Error) => {
-    process.stderr.write(`[worker-launcher] ${err.stack ?? err.message}\n`);
-    process.exit(1);
-  },
-);
+import(
+  resolve(dirname(fileURLToPath(import.meta.url)), "..", "dist", "worker.js")
+).catch((err: Error) => {
+  process.stderr.write(`[worker-launcher] ${err.stack ?? err.message}\n`);
+  process.exit(1);
+});

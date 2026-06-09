@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import '@livekit/components-styles';
-import type { AgentState } from '@livekit/components-react';
+import "@livekit/components-styles";
+import type { AgentState } from "@livekit/components-react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -11,18 +11,34 @@ import {
   useVoiceAssistant,
   useTranscriptions,
   BarVisualizer,
-} from '@livekit/components-react';
-import { ConnectionState } from 'livekit-client';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Mic, MicOff, Phone, PhoneOff, Bot, Lock, CreditCard } from 'lucide-react';
-import Link from 'next/link';
-import { use, useState, useCallback, useEffect } from 'react';
-import { toast } from 'sonner';
-import { TopUpModal } from '@/components/billing/TopUpModal';
+} from "@livekit/components-react";
+import { ConnectionState } from "livekit-client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ArrowLeft,
+  Loader2,
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  Bot,
+  Lock,
+  CreditCard,
+} from "lucide-react";
+import Link from "next/link";
+import { use, useState, useCallback, useEffect } from "react";
+import { toast } from "sonner";
+import { TopUpModal } from "@/components/billing/TopUpModal";
 
 // --- Inner room UI ---
-function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () => void }) {
+function CallControls({
+  onEnd,
+  onTimeout,
+}: {
+  onEnd: () => void;
+  onTimeout: () => void;
+}) {
   const connectionState = useConnectionState();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -49,32 +65,40 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
   }, [localParticipant, isMuted]);
 
   const stateLabel: Partial<Record<AgentState, string>> = {
-    disconnected: 'Disconnected',
-    connecting: 'Connecting…',
-    initializing: 'Initializing…',
-    listening: 'Listening',
-    thinking: 'Thinking…',
-    speaking: 'Speaking',
-    idle: 'Ready',
-    failed: 'Failed',
+    disconnected: "Disconnected",
+    connecting: "Connecting…",
+    initializing: "Initializing…",
+    listening: "Listening",
+    thinking: "Thinking…",
+    speaking: "Speaking",
+    idle: "Ready",
+    failed: "Failed",
   };
 
   // Merge agent TTS segments + all text stream segments into a unified timeline
-  type TranscriptLine = { id: string; speaker: 'agent' | 'user'; text: string; final: boolean; ts: number };
-  const agentLines: TranscriptLine[] = agentTranscriptions.map(s => ({
+  type TranscriptLine = {
+    id: string;
+    speaker: "agent" | "user";
+    text: string;
+    final: boolean;
+    ts: number;
+  };
+  const agentLines: TranscriptLine[] = agentTranscriptions.map((s) => ({
     id: `agent-${s.id}`,
-    speaker: 'agent',
+    speaker: "agent",
     text: s.text,
     final: s.final ?? true,
     ts: s.firstReceivedTime ?? 0,
   }));
   // Text streams that are NOT from the agent cover user STT
-  const agentIdentity = agentJoined ? remoteParticipants[0]?.identity ?? '' : '';
+  const agentIdentity = agentJoined
+    ? (remoteParticipants[0]?.identity ?? "")
+    : "";
   const userLines: TranscriptLine[] = transcriptions
-    .filter(s => s.participantInfo.identity !== agentIdentity)
+    .filter((s) => s.participantInfo.identity !== agentIdentity)
     .map((s, i) => ({
       id: `user-${i}-${s.streamInfo?.id ?? i}`,
-      speaker: 'user',
+      speaker: "user",
       text: s.text,
       final: true,
       ts: s.streamInfo?.timestamp ?? 0,
@@ -95,7 +119,7 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
         ) : (
           <div className="flex items-center gap-2 text-[#6b6b6b] text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
-            {isConnected ? 'Waiting for agent…' : 'Connecting…'}
+            {isConnected ? "Waiting for agent…" : "Connecting…"}
           </div>
         )}
       </div>
@@ -119,8 +143,12 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
           <PhoneOff className="mr-2 h-4 w-4" /> End Call
         </Button>
         <Button variant="secondary" onClick={toggleMic}>
-          {isMuted ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-          {isMuted ? 'Unmute' : 'Mute'}
+          {isMuted ? (
+            <MicOff className="mr-2 h-4 w-4" />
+          ) : (
+            <Mic className="mr-2 h-4 w-4" />
+          )}
+          {isMuted ? "Unmute" : "Mute"}
         </Button>
       </div>
 
@@ -128,7 +156,9 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
       {isConnected && (
         <div className="rounded-lg border border-[#e0e0e0] overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 border-b border-[#e0e0e0] bg-[#fafafa]">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6b6b6b]">Live Transcript</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6b6b6b]">
+              Live Transcript
+            </span>
             {agentJoined && (
               <span className="flex items-center gap-1 text-[10px] text-green-600">
                 <span className="relative flex h-1.5 w-1.5">
@@ -141,18 +171,24 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
           </div>
           <div className="max-h-48 overflow-y-auto divide-y divide-[#f5f5f5] bg-white">
             {allLines.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-[#b0b0b0] italic">Esperando transcripción…</p>
+              <p className="px-4 py-3 text-xs text-[#b0b0b0] italic">
+                Esperando transcripción…
+              </p>
             ) : (
-              allLines.map(line => (
+              allLines.map((line) => (
                 <div
                   key={line.id}
-                  className={`flex gap-2.5 px-3 py-2.5 ${line.speaker === 'agent' ? '' : 'flex-row-reverse'}`}
+                  className={`flex gap-2.5 px-3 py-2.5 ${line.speaker === "agent" ? "" : "flex-row-reverse"}`}
                 >
-                  <div className={`h-5 w-5 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold mt-0.5
-                    ${line.speaker === 'agent' ? 'bg-[#0a0a0a] text-white' : 'bg-[#e0e0e0] text-[#6b6b6b]'}`}>
-                    {line.speaker === 'agent' ? 'A' : 'U'}
+                  <div
+                    className={`h-5 w-5 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold mt-0.5
+                    ${line.speaker === "agent" ? "bg-[#0a0a0a] text-white" : "bg-[#e0e0e0] text-[#6b6b6b]"}`}
+                  >
+                    {line.speaker === "agent" ? "A" : "U"}
                   </div>
-                  <p className={`text-xs leading-relaxed max-w-[85%] ${!line.final ? 'text-[#a0a0a0] italic' : 'text-[#1a1a1a]'} ${line.speaker === 'user' ? 'text-right' : ''}`}>
+                  <p
+                    className={`text-xs leading-relaxed max-w-[85%] ${!line.final ? "text-[#a0a0a0] italic" : "text-[#1a1a1a]"} ${line.speaker === "user" ? "text-right" : ""}`}
+                  >
                     {line.text}
                   </p>
                 </div>
@@ -166,69 +202,101 @@ function CallControls({ onEnd, onTimeout }: { onEnd: () => void; onTimeout: () =
 }
 
 // --- Main page ---
-export default function TestAgentPage({ params }: { params: Promise<{ id: string }> }) {
+export default function TestAgentPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
-  const [token, setToken]         = useState<string | null>(null);
-  const [wsUrl, setWsUrl]         = useState<string | null>(null);
-  const [agentName, setAgentName] = useState('Agent');
-  const [workspaceId, setWorkspaceId] = useState<string>('');
+  const [token, setToken] = useState<string | null>(null);
+  const [wsUrl, setWsUrl] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState("Agent");
+  const [workspaceId, setWorkspaceId] = useState<string>("");
   const [connecting, setConnecting] = useState(false);
   const [livekitUnavailable, setLivekitUnavailable] = useState(false);
   const [connectFailed, setConnectFailed] = useState(false);
 
   // Billing state — fetched client-side so we don't need SSR props
-  const [balanceCents, setBalanceCents]   = useState<number | null>(null);
-  const [minuteCap, setMinuteCap]         = useState<number | null | undefined>(undefined);
-  const [topUpOpen, setTopUpOpen]         = useState(false);
+  const [balanceCents, setBalanceCents] = useState<number | null>(null);
+  const [minuteCap, setMinuteCap] = useState<number | null | undefined>(
+    undefined,
+  );
+  const [topUpOpen, setTopUpOpen] = useState(false);
 
   // Determine if the workspace has funds to make a call
   const isEnterprise = minuteCap !== null && minuteCap !== undefined;
-  const hasBalance   = isEnterprise || (balanceCents !== null && balanceCents > 0);
+  const hasBalance =
+    isEnterprise || (balanceCents !== null && balanceCents > 0);
   const billingLoaded = balanceCents !== null || isEnterprise;
 
   useEffect(() => {
-    fetch('/api/billing/balance')
-      .then(r => r.json())
-      .then((d: { balance_cents?: number; minute_cap?: number | null; workspace_id?: string }) => {
-        setBalanceCents(d.balance_cents ?? 0);
-        setMinuteCap(d.minute_cap ?? null);
-        setWorkspaceId(d.workspace_id ?? '');
-      })
-      .catch(() => { setBalanceCents(0); setMinuteCap(null); });
+    fetch("/api/billing/balance")
+      .then((r) => r.json())
+      .then(
+        (d: {
+          balance_cents?: number;
+          minute_cap?: number | null;
+          workspace_id?: string;
+        }) => {
+          setBalanceCents(d.balance_cents ?? 0);
+          setMinuteCap(d.minute_cap ?? null);
+          setWorkspaceId(d.workspace_id ?? "");
+        },
+      )
+      .catch(() => {
+        setBalanceCents(0);
+        setMinuteCap(null);
+      });
   }, []);
 
   async function startCall() {
-    if (!hasBalance) { setTopUpOpen(true); return; }
+    if (!hasBalance) {
+      setTopUpOpen(true);
+      return;
+    }
     setConnecting(true);
     try {
-      const res = await fetch('/api/livekit/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/livekit/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agentId: id }),
       });
       if (!res.ok) {
-        let errMsg = 'Call setup failed — please try again.';
+        let errMsg = "Call setup failed — please try again.";
         try {
-          const body = await res.json() as { error?: string };
+          const body = (await res.json()) as { error?: string };
           if (body.error) errMsg = body.error;
-        } catch { /* response was not JSON (e.g. gateway timeout) */ }
-        if (errMsg === 'LiveKit not configured') { setLivekitUnavailable(true); return; }
+        } catch {
+          /* response was not JSON (e.g. gateway timeout) */
+        }
+        if (errMsg === "LiveKit not configured") {
+          setLivekitUnavailable(true);
+          return;
+        }
         throw new Error(errMsg);
       }
-      const data = await res.json() as { token: string; wsUrl: string; agentName: string };
+      const data = (await res.json()) as {
+        token: string;
+        wsUrl: string;
+        agentName: string;
+      };
 
       // Validate response fields before passing to LiveKit — prevents the
       // "SyntaxError: The string did not match the expected pattern" that
       // iOS Safari throws when LiveKitRoom receives an undefined/invalid URL.
-      if (!data.wsUrl || !data.wsUrl.startsWith('wss://')) {
-        throw new Error('Call setup failed — invalid server URL returned. Please try again.');
+      if (!data.wsUrl || !data.wsUrl.startsWith("wss://")) {
+        throw new Error(
+          "Call setup failed — invalid server URL returned. Please try again.",
+        );
       }
       if (!data.token) {
-        throw new Error('Call setup failed — no token returned. Please try again.');
+        throw new Error(
+          "Call setup failed — no token returned. Please try again.",
+        );
       }
 
       setWsUrl(data.wsUrl);
-      setAgentName(data.agentName ?? 'Agent');
+      setAgentName(data.agentName ?? "Agent");
       setToken(data.token);
     } catch (e) {
       toast.error(String(e));
@@ -237,7 +305,11 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
     }
   }
 
-  function endCall() { setToken(null); setWsUrl(null); setConnectFailed(false); }
+  function endCall() {
+    setToken(null);
+    setWsUrl(null);
+    setConnectFailed(false);
+  }
 
   function handleConnectTimeout() {
     endCall();
@@ -248,7 +320,9 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
     <div className="p-6 mx-auto max-w-2xl space-y-6">
       <div className="flex items-center gap-4">
         <Link href={`/agents/${id}`}>
-          <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
         </Link>
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5" />
@@ -267,19 +341,31 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
 
           {/* Balance indicator */}
           {billingLoaded && !isEnterprise && (
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
-              hasBalance ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-            }`}>
-              {hasBalance
-                ? <>✓ Balance: ${((balanceCents ?? 0) / 100).toFixed(2)} — calling will consume credit</>
-                : <><Lock className="h-3.5 w-3.5 shrink-0" /> No credit — add balance to enable test calls</>
-              }
+            <div
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                hasBalance
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : "bg-amber-50 text-amber-700 border border-amber-200"
+              }`}
+            >
+              {hasBalance ? (
+                <>
+                  ✓ Balance: ${((balanceCents ?? 0) / 100).toFixed(2)} — calling
+                  will consume credit
+                </>
+              ) : (
+                <>
+                  <Lock className="h-3.5 w-3.5 shrink-0" /> No credit — add
+                  balance to enable test calls
+                </>
+              )}
             </div>
           )}
 
           {livekitUnavailable && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              Browser calls are not yet enabled for this account. Contact support to activate this feature.
+              Browser calls are not yet enabled for this account. Contact
+              support to activate this feature.
             </div>
           )}
 
@@ -287,9 +373,19 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 space-y-2">
               <p className="font-medium">No se pudo conectar con el agente.</p>
               <p className="text-xs text-red-600">
-                El servidor de voz no respondió a tiempo. Verifica que el worker de VoiceOS esté activo en Render y que <code className="font-mono">LIVEKIT_URL</code> esté correctamente configurado en Vercel.
+                El servidor de voz no respondió a tiempo. Verifica que el worker
+                de VoiceOS esté activo en Render y que{" "}
+                <code className="font-mono">LIVEKIT_URL</code> esté
+                correctamente configurado en Vercel.
               </p>
-              <Button size="sm" variant="outline" onClick={() => { setConnectFailed(false); startCall(); }}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setConnectFailed(false);
+                  startCall();
+                }}
+              >
                 <Phone className="mr-2 h-3.5 w-3.5" /> Reintentar
               </Button>
             </div>
@@ -297,10 +393,21 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
 
           {!token || !wsUrl ? (
             !connectFailed && (hasBalance || !billingLoaded) ? (
-              <Button onClick={startCall} disabled={connecting || !billingLoaded || livekitUnavailable}>
-                {connecting
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting…</>
-                  : <><Phone className="mr-2 h-4 w-4" />Start Call</>}
+              <Button
+                onClick={startCall}
+                disabled={connecting || !billingLoaded || livekitUnavailable}
+              >
+                {connecting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Connecting…
+                  </>
+                ) : (
+                  <>
+                    <Phone className="mr-2 h-4 w-4" />
+                    Start Call
+                  </>
+                )}
               </Button>
             ) : !connectFailed ? (
               // Locked state — no balance
@@ -312,7 +419,9 @@ export default function TestAgentPage({ params }: { params: Promise<{ id: string
                 >
                   <Lock className="mr-2 h-4 w-4 text-amber-500" />
                   Start Call
-                  <span className="ml-2 text-[10px] text-amber-600 font-normal">(No Credit)</span>
+                  <span className="ml-2 text-[10px] text-amber-600 font-normal">
+                    (No Credit)
+                  </span>
                 </Button>
                 <Button
                   variant="default"

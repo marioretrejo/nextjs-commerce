@@ -16,53 +16,72 @@
  *    Format: sip:<project-id>.sip.livekit.cloud
  *    See: https://docs.livekit.io/cloud/sip/
  */
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
-import { SipClient } from 'livekit-server-sdk';
-import { NextResponse } from 'next/server';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { SipClient } from "livekit-server-sdk";
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { agentId, phoneNumber, trunkId } = await req.json() as {
+  const { agentId, phoneNumber, trunkId } = (await req.json()) as {
     agentId: string;
-    phoneNumber: string;  // E.164 format: "+12025551234"
-    trunkId: string;      // LiveKit SIP Trunk ID (from dashboard or GET /api/sip)
+    phoneNumber: string; // E.164 format: "+12025551234"
+    trunkId: string; // LiveKit SIP Trunk ID (from dashboard or GET /api/sip)
   };
 
   if (!agentId || !phoneNumber || !trunkId) {
-    return NextResponse.json({ error: 'agentId, phoneNumber, and trunkId required' }, { status: 400 });
+    return NextResponse.json(
+      { error: "agentId, phoneNumber, and trunkId required" },
+      { status: 400 },
+    );
   }
 
-  const apiKey = process.env['LIVEKIT_API_KEY'];
-  const apiSecret = process.env['LIVEKIT_API_SECRET'];
-  const wsUrl = process.env['LIVEKIT_URL'];
+  const apiKey = process.env["LIVEKIT_API_KEY"];
+  const apiSecret = process.env["LIVEKIT_API_SECRET"];
+  const wsUrl = process.env["LIVEKIT_URL"];
   if (!apiKey || !apiSecret || !wsUrl) {
-    return NextResponse.json({ error: 'LiveKit not configured' }, { status: 500 });
+    return NextResponse.json(
+      { error: "LiveKit not configured" },
+      { status: 500 },
+    );
   }
 
   // Verify the agent belongs to this user's workspace
   const admin = createAdminClient();
   const { data: agent } = await admin
-    .from('agents')
-    .select('id, name, workspace_id, system_prompt, voice_id, first_message, voice_emotion, flow_json, transfer_number')
-    .eq('id', agentId)
+    .from("agents")
+    .select(
+      "id, name, workspace_id, system_prompt, voice_id, first_message, voice_emotion, flow_json, transfer_number",
+    )
+    .eq("id", agentId)
     .single();
 
-  if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+  if (!agent)
+    return NextResponse.json({ error: "Agent not found" }, { status: 404 });
 
-  const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+  const httpUrl = wsUrl
+    .replace("wss://", "https://")
+    .replace("ws://", "http://");
   const sipClient = new SipClient(httpUrl, apiKey, apiSecret);
 
   // Create a dispatch rule: when a call arrives at `phoneNumber`, dispatch to
   // a new room prefixed "sip-agent-{agentId}" with the agent's metadata embedded.
   const roomPrefix = `sip-agent-${agentId}`;
   const agentTyped = agent as {
-    name: string; system_prompt: string | null; first_message: string | null;
-    voice_id: string | null; voice_emotion: string | null; workspace_id: string;
-    flow_json: unknown | null; transfer_number: string | null;
+    name: string;
+    system_prompt: string | null;
+    first_message: string | null;
+    voice_id: string | null;
+    voice_emotion: string | null;
+    workspace_id: string;
+    flow_json: unknown | null;
+    transfer_number: string | null;
   };
   const metadata = JSON.stringify({
     agent_id: agentId,
@@ -74,26 +93,26 @@ export async function POST(req: Request) {
     workspace_id: agentTyped.workspace_id,
     flow_json: agentTyped.flow_json ?? null,
     transfer_number: agentTyped.transfer_number ?? null,
-    source: 'sip',
+    source: "sip",
   });
 
   // Each inbound call gets its own room (type: 'individual') prefixed by agentId
   const dispatchRule = await sipClient.createSipDispatchRule(
-    { type: 'individual', roomPrefix },
+    { type: "individual", roomPrefix },
     {
       trunkIds: [trunkId],
       name: `VoiceOS Agent: ${(agent as { name: string }).name} (${phoneNumber})`,
       metadata,
       // roomConfig passes the agent metadata into every room this rule creates
-    }
+    },
   );
 
   // Store the dispatch rule ID on the phone number record so we can delete it later
   await admin
-    .from('phone_numbers')
+    .from("phone_numbers")
     .update({ agent_id: agentId })
-    .eq('number', phoneNumber)
-    .eq('workspace_id', (agent as { workspace_id: string }).workspace_id);
+    .eq("number", phoneNumber)
+    .eq("workspace_id", (agent as { workspace_id: string }).workspace_id);
 
   return NextResponse.json({
     success: true,
@@ -106,22 +125,33 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { dispatchRuleId } = await req.json() as { dispatchRuleId: string };
+  const { dispatchRuleId } = (await req.json()) as { dispatchRuleId: string };
   if (!dispatchRuleId) {
-    return NextResponse.json({ error: 'dispatchRuleId required' }, { status: 400 });
+    return NextResponse.json(
+      { error: "dispatchRuleId required" },
+      { status: 400 },
+    );
   }
 
-  const apiKey = process.env['LIVEKIT_API_KEY'];
-  const apiSecret = process.env['LIVEKIT_API_SECRET'];
-  const wsUrl = process.env['LIVEKIT_URL'];
+  const apiKey = process.env["LIVEKIT_API_KEY"];
+  const apiSecret = process.env["LIVEKIT_API_SECRET"];
+  const wsUrl = process.env["LIVEKIT_URL"];
   if (!apiKey || !apiSecret || !wsUrl) {
-    return NextResponse.json({ error: 'LiveKit not configured' }, { status: 500 });
+    return NextResponse.json(
+      { error: "LiveKit not configured" },
+      { status: 500 },
+    );
   }
 
-  const httpUrl = wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+  const httpUrl = wsUrl
+    .replace("wss://", "https://")
+    .replace("ws://", "http://");
   const sipClient = new SipClient(httpUrl, apiKey, apiSecret);
   await sipClient.deleteSipDispatchRule(dispatchRuleId);
 

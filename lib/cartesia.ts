@@ -1,22 +1,22 @@
-const CARTESIA_BASE    = 'https://api.cartesia.ai';
-const CARTESIA_VERSION = '2024-06-10';
+const CARTESIA_BASE = "https://api.cartesia.ai";
+const CARTESIA_VERSION = "2024-06-10";
 
 function cartesiaHeaders(extra?: Record<string, string>) {
   return {
-    'X-API-Key':        process.env['CARTESIA_API_KEY'] ?? '',
-    'Cartesia-Version': CARTESIA_VERSION,
+    "X-API-Key": process.env["CARTESIA_API_KEY"] ?? "",
+    "Cartesia-Version": CARTESIA_VERSION,
     ...extra,
   };
 }
 
 export interface CartesiaVoice {
-  id:          string;
-  name:        string;
-  language:    string;
-  is_public:   boolean;
+  id: string;
+  name: string;
+  language: string;
+  is_public: boolean;
   description: string | null;
-  tags?:       string[];
-  embedding?:  number[];
+  tags?: string[];
+  embedding?: number[];
 }
 
 export async function getCartesiaVoices(): Promise<CartesiaVoice[]> {
@@ -24,7 +24,9 @@ export async function getCartesiaVoices(): Promise<CartesiaVoice[]> {
     headers: cartesiaHeaders(),
   });
   if (!response.ok) return [];
-  const data = await response.json() as CartesiaVoice[] | { voices?: CartesiaVoice[] };
+  const data = (await response.json()) as
+    | CartesiaVoice[]
+    | { voices?: CartesiaVoice[] };
   // API may return array directly or wrapped in { voices: [] }
   return Array.isArray(data) ? data : (data.voices ?? []);
 }
@@ -36,28 +38,29 @@ export async function getCartesiaVoices(): Promise<CartesiaVoice[]> {
  */
 export async function cloneCartesiaVoice({
   name,
-  language = 'en',
-  mode     = 'similarity',
+  language = "en",
+  mode = "similarity",
   file,
   transcript,
 }: {
-  name:        string;
-  language?:   string;
-  mode?:       'similarity' | 'reconstruction';
-  file:        File;
+  name: string;
+  language?: string;
+  mode?: "similarity" | "reconstruction";
+  file: File;
   transcript?: string;
 }): Promise<{ id: string; name: string }> {
   const form = new FormData();
-  form.append('clip',     file);
-  form.append('name',     name);
-  form.append('language', language);
-  form.append('mode',     mode);
-  if (transcript && mode === 'reconstruction') form.append('transcript', transcript);
+  form.append("clip", file);
+  form.append("name", name);
+  form.append("language", language);
+  form.append("mode", mode);
+  if (transcript && mode === "reconstruction")
+    form.append("transcript", transcript);
 
   const res = await fetch(`${CARTESIA_BASE}/voices/clone`, {
-    method:  'POST',
+    method: "POST",
     headers: cartesiaHeaders(), // no Content-Type — let browser set multipart boundary
-    body:    form,
+    body: form,
   });
 
   if (!res.ok) {
@@ -70,7 +73,7 @@ export async function cloneCartesiaVoice({
 
 export async function deleteCartesiaVoice(voiceId: string): Promise<void> {
   const res = await fetch(`${CARTESIA_BASE}/voices/${voiceId}`, {
-    method:  'DELETE',
+    method: "DELETE",
     headers: cartesiaHeaders(),
   });
   // 404 is fine — voice may already be gone
@@ -83,7 +86,7 @@ export async function deleteCartesiaVoice(voiceId: string): Promise<void> {
 export async function createCartesiaTTSStream({
   text,
   voiceId,
-  language = 'es',
+  language = "es",
   speed = 1.0,
 }: {
   text: string;
@@ -91,18 +94,22 @@ export async function createCartesiaTTSStream({
   language?: string;
   speed?: number;
 }) {
-  return fetch('https://api.cartesia.ai/tts/sse', {
-    method: 'POST',
+  return fetch("https://api.cartesia.ai/tts/sse", {
+    method: "POST",
     headers: {
-      'X-API-Key': process.env['CARTESIA_API_KEY'] ?? '',
-      'Cartesia-Version': '2024-06-10',
-      'Content-Type': 'application/json',
+      "X-API-Key": process.env["CARTESIA_API_KEY"] ?? "",
+      "Cartesia-Version": "2024-06-10",
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model_id: 'sonic-3',
+      model_id: "sonic-3",
       transcript: text,
-      voice: { mode: 'id', id: voiceId },
-      output_format: { container: 'raw', encoding: 'pcm_f32le', sample_rate: 44100 },
+      voice: { mode: "id", id: voiceId },
+      output_format: {
+        container: "raw",
+        encoding: "pcm_f32le",
+        sample_rate: 44100,
+      },
       language,
       speed,
     }),
@@ -110,7 +117,7 @@ export async function createCartesiaTTSStream({
 }
 
 export const VOICE_ENGINE_MAP: Record<string, string> = {
-  standard:   'sonic-3',
-  ultra_fast: 'sonic-3',
-  premium:    'sonic-3',
+  standard: "sonic-3",
+  ultra_fast: "sonic-3",
+  premium: "sonic-3",
 };

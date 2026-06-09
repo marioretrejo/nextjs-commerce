@@ -94,7 +94,9 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Error" },
-                "example": { "error": "\"to\" must be a valid E.164 phone number." }
+                "example": {
+                  "error": "\"to\" must be a valid E.164 phone number."
+                }
               }
             }
           },
@@ -113,8 +115,14 @@
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Error" },
                 "examples": {
-                  "suspended": { "value": { "error": "Workspace is suspended." } },
-                  "limit": { "value": { "error": "Minute limit reached. Upgrade your plan." } }
+                  "suspended": {
+                    "value": { "error": "Workspace is suspended." }
+                  },
+                  "limit": {
+                    "value": {
+                      "error": "Minute limit reached. Upgrade your plan."
+                    }
+                  }
                 }
               }
             }
@@ -142,7 +150,10 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Error" },
-                "example": { "error": "Concurrent call limit reached.", "code": "CONCURRENT_LIMIT" }
+                "example": {
+                  "error": "Concurrent call limit reached.",
+                  "code": "CONCURRENT_LIMIT"
+                }
               }
             }
           },
@@ -174,7 +185,9 @@
                   "properties": {
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/WebhookEndpoint" }
+                      "items": {
+                        "$ref": "#/components/schemas/WebhookEndpoint"
+                      }
                     }
                   }
                 }
@@ -183,7 +196,11 @@
           },
           "401": {
             "description": "Unauthorized.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
           }
         }
       },
@@ -234,11 +251,19 @@
           },
           "400": {
             "description": "Invalid URL or events.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
           }
         }
       }
@@ -248,9 +273,7 @@
         "operationId": "getWebhookEndpoint",
         "summary": "Get a webhook endpoint",
         "tags": ["Webhooks"],
-        "parameters": [
-          { "$ref": "#/components/parameters/webhookId" }
-        ],
+        "parameters": [{ "$ref": "#/components/parameters/webhookId" }],
         "responses": {
           "200": {
             "description": "Webhook endpoint details.",
@@ -260,17 +283,29 @@
               }
             }
           },
-          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+          "401": {
+            "description": "Unauthorized.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
         }
       },
       "patch": {
         "operationId": "updateWebhookEndpoint",
         "summary": "Update a webhook endpoint",
         "tags": ["Webhooks"],
-        "parameters": [
-          { "$ref": "#/components/parameters/webhookId" }
-        ],
+        "parameters": [{ "$ref": "#/components/parameters/webhookId" }],
         "requestBody": {
           "content": {
             "application/json": {
@@ -278,7 +313,10 @@
                 "type": "object",
                 "properties": {
                   "url": { "type": "string", "format": "uri" },
-                  "events": { "type": "array", "items": { "$ref": "#/components/schemas/WebhookEvent" } },
+                  "events": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/WebhookEvent" }
+                  },
                   "description": { "type": "string" },
                   "is_active": { "type": "boolean" }
                 }
@@ -287,22 +325,65 @@
           }
         },
         "responses": {
-          "200": { "description": "Updated endpoint.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WebhookEndpoint" } } } },
-          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+          "200": {
+            "description": "Updated endpoint.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WebhookEndpoint" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
         }
       },
       "delete": {
         "operationId": "deleteWebhookEndpoint",
         "summary": "Delete a webhook endpoint",
         "tags": ["Webhooks"],
-        "parameters": [
-          { "$ref": "#/components/parameters/webhookId" }
-        ],
+        "parameters": [{ "$ref": "#/components/parameters/webhookId" }],
         "responses": {
-          "200": { "description": "Endpoint deleted.", "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "boolean" } } } } } },
-          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+          "200": {
+            "description": "Endpoint deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "deleted": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
         }
       }
     }
@@ -389,17 +470,37 @@
         "type": "object",
         "properties": {
           "id": { "type": "string", "format": "uuid" },
-          "url": { "type": "string", "format": "uri", "example": "https://your-server.com/webhooks/voiceos" },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://your-server.com/webhooks/voiceos"
+          },
           "events": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/WebhookEvent" },
             "example": ["call.completed", "call.failed"]
           },
-          "description": { "type": "string", "nullable": true, "example": "Production CRM sync" },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Production CRM sync"
+          },
           "is_active": { "type": "boolean", "example": true },
-          "last_delivery_at": { "type": "string", "format": "date-time", "nullable": true },
-          "last_delivery_status": { "type": "string", "enum": ["success", "failed"], "nullable": true },
-          "last_delivery_status_code": { "type": "integer", "nullable": true, "example": 200 },
+          "last_delivery_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_delivery_status": {
+            "type": "string",
+            "enum": ["success", "failed"],
+            "nullable": true
+          },
+          "last_delivery_status_code": {
+            "type": "integer",
+            "nullable": true,
+            "example": 200
+          },
           "created_at": { "type": "string", "format": "date-time" },
           "updated_at": { "type": "string", "format": "date-time" }
         }
@@ -429,7 +530,13 @@
       },
       "WebhookEvent": {
         "type": "string",
-        "enum": ["call.completed", "call.started", "call.failed", "campaign.run_complete", "*"],
+        "enum": [
+          "call.completed",
+          "call.started",
+          "call.failed",
+          "campaign.run_complete",
+          "*"
+        ],
         "description": "- `call.completed` — Fired when a call ends. Includes transcript, recording URL, and AI analysis.\n- `call.started` — Fired when a room is created and the call begins dialing.\n- `call.failed` — Fired when Twilio or LiveKit reports a failure.\n- `campaign.run_complete` — Fired when a campaign batch finishes processing.\n- `*` — Wildcard: receive all events."
       },
       "CallCompletedPayload": {
@@ -437,7 +544,10 @@
         "description": "Payload sent to your webhook URL for `call.completed` events.",
         "properties": {
           "event": { "type": "string", "example": "call.completed" },
-          "call_id": { "type": "string", "example": "agent-3a1b2c4d-1716000000000" },
+          "call_id": {
+            "type": "string",
+            "example": "agent-3a1b2c4d-1716000000000"
+          },
           "workspace_id": { "type": "string", "format": "uuid" },
           "agent_id": { "type": "string", "format": "uuid" },
           "direction": { "type": "string", "enum": ["inbound", "outbound"] },
@@ -457,16 +567,30 @@
               }
             }
           },
-          "recording_url": { "type": "string", "format": "uri", "nullable": true },
-          "analysis_result": { "type": "object", "nullable": true, "description": "AI-generated call analysis, sentiment, outcomes, etc." },
+          "recording_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "analysis_result": {
+            "type": "object",
+            "nullable": true,
+            "description": "AI-generated call analysis, sentiment, outcomes, etc."
+          },
           "timestamp": { "type": "string", "format": "date-time" }
         }
       },
       "Error": {
         "type": "object",
         "properties": {
-          "error": { "type": "string", "description": "Human-readable error message." },
-          "code": { "type": "string", "description": "Machine-readable error code (present on some errors)." }
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message."
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code (present on some errors)."
+          }
         },
         "required": ["error"]
       }

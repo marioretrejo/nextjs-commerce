@@ -1,22 +1,22 @@
-'use client';
-import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+"use client";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 const MODULE_PATHS: Record<string, string[]> = {
-  dashboard:    ['/dashboard'],
-  agents:       ['/agents', '/voice-studio'],
-  campaigns:    ['/campaigns'],
-  calls:        ['/calls'],
-  analytics:    ['/analytics'],
-  knowledge:    ['/knowledge'],
-  quality:      ['/quality'],
-  numbers:      ['/numbers'],
-  compliance:   ['/compliance'],
-  integrations: ['/integrations'],
-  team:         ['/team'],
-  billing:      ['/billing'],
-  settings:     ['/settings'],
-  developers:   ['/developers'],
+  dashboard: ["/dashboard"],
+  agents: ["/agents", "/voice-studio"],
+  campaigns: ["/campaigns"],
+  calls: ["/calls"],
+  analytics: ["/analytics"],
+  knowledge: ["/knowledge"],
+  quality: ["/quality"],
+  numbers: ["/numbers"],
+  compliance: ["/compliance"],
+  integrations: ["/integrations"],
+  team: ["/team"],
+  billing: ["/billing"],
+  settings: ["/settings"],
+  developers: ["/developers"],
 };
 
 export function RouteGuard({ visibleModules }: { visibleModules?: string[] }) {
@@ -26,9 +26,9 @@ export function RouteGuard({ visibleModules }: { visibleModules?: string[] }) {
   useEffect(() => {
     if (!visibleModules) return; // show all
     for (const [mod, paths] of Object.entries(MODULE_PATHS)) {
-      if (paths.some(p => pathname.startsWith(p))) {
+      if (paths.some((p) => pathname.startsWith(p))) {
         if (!visibleModules.includes(mod)) {
-          router.replace('/dashboard');
+          router.replace("/dashboard");
           return;
         }
       }

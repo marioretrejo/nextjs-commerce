@@ -1,36 +1,46 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Send, Loader2, Bot, ChevronDown, Sparkles, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  X,
+  Send,
+  Loader2,
+  Bot,
+  ChevronDown,
+  Sparkles,
+  AlertCircle,
+} from "lucide-react";
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   error?: boolean;
 }
 
 const QUICK_PROMPTS = [
-  '¿Cuántas llamadas esta semana?',
-  'Mejor agente del mes',
-  '¿Cuál es la duración promedio?',
-  'Tasa de éxito del mes',
+  "¿Cuántas llamadas esta semana?",
+  "Mejor agente del mes",
+  "¿Cuál es la duración promedio?",
+  "Tasa de éxito del mes",
 ];
 
 function isRawError(text: string): boolean {
-  return text.startsWith('Error:') && text.includes('"error"') && text.includes('{');
+  return (
+    text.startsWith("Error:") && text.includes('"error"') && text.includes("{")
+  );
 }
 
 function safeFallback(): string {
-  return 'Ocurrió un error inesperado. Por favor intenta de nuevo.';
+  return "Ocurrió un error inesperado. Por favor intenta de nuevo.";
 }
 
 export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
-  const [open, setOpen]         = useState(false);
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput]       = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   void workspaceId;
 
@@ -39,44 +49,51 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
   }, [open]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const send = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || loading) return;
+  const send = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || loading) return;
 
-    const userMsg: Message = { role: 'user', content: trimmed };
-    const next = [...messages, userMsg];
-    setMessages(next);
-    setInput('');
-    setLoading(true);
+      const userMsg: Message = { role: "user", content: trimmed };
+      const next = [...messages, userMsg];
+      setMessages(next);
+      setInput("");
+      setLoading(true);
 
-    try {
-      const res  = await fetch('/api/copilot', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          messages: next.map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+      try {
+        const res = await fetch("/api/copilot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: next.map((m) => ({ role: m.role, content: m.content })),
+          }),
+        });
 
-      const data = await res.json() as { reply?: string; error?: string };
-      let content = data.reply ?? data.error ?? '';
+        const data = (await res.json()) as { reply?: string; error?: string };
+        let content = data.reply ?? data.error ?? "";
 
-      // Never show raw JSON errors to the user
-      if (!content || isRawError(content)) content = safeFallback();
+        // Never show raw JSON errors to the user
+        if (!content || isRawError(content)) content = safeFallback();
 
-      setMessages((prev) => [...prev, { role: 'assistant', content }]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Sin conexión. Verifica tu red e intenta de nuevo.', error: true },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, [messages, loading]);
+        setMessages((prev) => [...prev, { role: "assistant", content }]);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Sin conexión. Verifica tu red e intenta de nuevo.",
+            error: true,
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [messages, loading],
+  );
 
   const unreadCount = 0; // reserved for future badge
 
@@ -87,15 +104,17 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-label="Analytics Copilot"
         className={[
-          'fixed bottom-20 right-6 z-50 flex h-14 w-14 items-center justify-center',
-          'rounded-full bg-[#0a0a0a] text-white shadow-2xl',
-          'transition-all duration-200 hover:scale-105 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]',
-          'md:bottom-8 md:right-8',
-        ].join(' ')}
+          "fixed bottom-20 right-6 z-50 flex h-14 w-14 items-center justify-center",
+          "rounded-full bg-[#0a0a0a] text-white shadow-2xl",
+          "transition-all duration-200 hover:scale-105 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]",
+          "md:bottom-8 md:right-8",
+        ].join(" ")}
       >
-        {open
-          ? <ChevronDown className="h-5 w-5" />
-          : <Sparkles className="h-5 w-5" />}
+        {open ? (
+          <ChevronDown className="h-5 w-5" />
+        ) : (
+          <Sparkles className="h-5 w-5" />
+        )}
         {!open && unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold">
             {unreadCount}
@@ -107,11 +126,11 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
       {open && (
         <div
           className={[
-            'fixed bottom-36 right-6 z-50 flex flex-col overflow-hidden',
-            'h-[520px] w-[360px] md:bottom-28 md:right-8 md:w-[400px]',
-            'rounded-2xl border border-[#e5e5e5] bg-white shadow-2xl',
-          ].join(' ')}
-          style={{ animation: 'copilot-in 0.18s ease-out' }}
+            "fixed bottom-36 right-6 z-50 flex flex-col overflow-hidden",
+            "h-[520px] w-[360px] md:bottom-28 md:right-8 md:w-[400px]",
+            "rounded-2xl border border-[#e5e5e5] bg-white shadow-2xl",
+          ].join(" ")}
+          style={{ animation: "copilot-in 0.18s ease-out" }}
         >
           {/* Header */}
           <div className="flex shrink-0 items-center gap-3 bg-[#0a0a0a] px-4 py-3">
@@ -119,8 +138,12 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
               <Bot className="h-4 w-4 text-white" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold leading-none text-white">Analytics Copilot</p>
-              <p className="mt-0.5 text-xs text-white/50">datos en tiempo real</p>
+              <p className="text-sm font-semibold leading-none text-white">
+                Analytics Copilot
+              </p>
+              <p className="mt-0.5 text-xs text-white/50">
+                datos en tiempo real
+              </p>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -137,7 +160,9 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#f5f5f5]">
                   <Bot className="h-6 w-6 text-[#a0a0a0]" />
                 </div>
-                <p className="text-sm font-medium text-[#1a1a1a]">Hola, soy tu copiloto</p>
+                <p className="text-sm font-medium text-[#1a1a1a]">
+                  Hola, soy tu copiloto
+                </p>
                 <p className="mt-1 text-xs text-[#a0a0a0]">
                   Pregúntame sobre tus métricas, llamadas o campañas
                 </p>
@@ -156,23 +181,30 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
             )}
 
             {messages.map((m, i) => (
-              <div key={i} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {m.role === 'assistant' && (
-                  <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${m.error ? 'bg-red-100' : 'bg-[#0a0a0a]'}`}>
-                    {m.error
-                      ? <AlertCircle className="h-3 w-3 text-red-500" />
-                      : <Bot className="h-3 w-3 text-white" />}
+              <div
+                key={i}
+                className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {m.role === "assistant" && (
+                  <div
+                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${m.error ? "bg-red-100" : "bg-[#0a0a0a]"}`}
+                  >
+                    {m.error ? (
+                      <AlertCircle className="h-3 w-3 text-red-500" />
+                    ) : (
+                      <Bot className="h-3 w-3 text-white" />
+                    )}
                   </div>
                 )}
                 <div
                   className={[
-                    'max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap',
-                    m.role === 'user'
-                      ? 'rounded-br-sm bg-[#0a0a0a] text-white'
+                    "max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap",
+                    m.role === "user"
+                      ? "rounded-br-sm bg-[#0a0a0a] text-white"
                       : m.error
-                        ? 'rounded-bl-sm bg-red-50 text-red-700'
-                        : 'rounded-bl-sm bg-[#f5f5f5] text-[#1a1a1a]',
-                  ].join(' ')}
+                        ? "rounded-bl-sm bg-red-50 text-red-700"
+                        : "rounded-bl-sm bg-[#f5f5f5] text-[#1a1a1a]",
+                  ].join(" ")}
                 >
                   {m.content}
                 </div>
@@ -202,7 +234,10 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
           {/* Input */}
           <div className="shrink-0 border-t border-[#f0f0f0] p-3">
             <form
-              onSubmit={(e) => { e.preventDefault(); send(input); }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                send(input);
+              }}
               className="flex items-center gap-2"
             >
               <input
@@ -218,9 +253,11 @@ export function AnalyticsCopilot({ workspaceId }: { workspaceId: string }) {
                 disabled={!input.trim() || loading}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#0a0a0a] text-white transition-opacity disabled:opacity-40"
               >
-                {loading
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Send className="h-4 w-4" />}
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
             </form>
           </div>

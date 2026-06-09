@@ -1,7 +1,10 @@
-import { NextResponse } from 'next/server';
-import { z, type ZodSchema } from 'zod';
+import { NextResponse } from "next/server";
+import { z, type ZodSchema } from "zod";
 
-type RouteHandler = (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
+type RouteHandler = (
+  req: Request,
+  ctx: { params: Promise<Record<string, string>> },
+) => Promise<Response>;
 
 /**
  * Wraps a Next.js App Router handler so that any unhandled exception always
@@ -15,7 +18,7 @@ export function withHandler(handler: RouteHandler): RouteHandler {
     try {
       return await handler(req, ctx);
     } catch (err) {
-      console.error('[api] Unhandled error:', err);
+      console.error("[api] Unhandled error:", err);
       const message = err instanceof Error ? err.message : String(err);
       return NextResponse.json({ error: message }, { status: 500 });
     }
@@ -30,12 +33,15 @@ export function apiError(message: string, status: number): NextResponse {
   return NextResponse.json({ error: message }, { status });
 }
 
-export function parseBody<T>(schema: ZodSchema<T>, data: unknown):
-  | { success: true; data: T }
-  | { success: false; response: NextResponse } {
+export function parseBody<T>(
+  schema: ZodSchema<T>,
+  data: unknown,
+): { success: true; data: T } | { success: false; response: NextResponse } {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const message = result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
+    const message = result.error.errors
+      .map((e) => `${e.path.join(".")}: ${e.message}`)
+      .join("; ");
     return { success: false, response: apiError(message, 400) };
   }
   return { success: true, data: result.data };

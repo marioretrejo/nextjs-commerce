@@ -5,12 +5,12 @@
  * Accepts { agentId, to, variables? } and initiates a Twilio/LiveKit call.
  * Reuses the same logic as /api/v1/calls/outbound but uses Supabase session.
  */
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { RoomServiceClient, SipClient } from 'livekit-server-sdk';
-import { getRegionalHttpUrl } from '@/lib/livekit/edge';
-import { resolveDialConfig, cacheLivekitTrunkId } from '@/lib/dialing/strategy';
-import { NextResponse } from 'next/server';
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { RoomServiceClient, SipClient } from "livekit-server-sdk";
+import { getRegionalHttpUrl } from "@/lib/livekit/edge";
+import { resolveDialConfig, cacheLivekitTrunkId } from "@/lib/dialing/strategy";
+import { NextResponse } from "next/server";
 
 // ── SIP Egress helpers ───────────────────────────────────────────────────────
 // When a workspace has an active 'sip_trunk' integration we dial through
@@ -52,7 +52,11 @@ async function dialViaSipEgress(params: {
   apiSecret: string;
   httpUrl: string;
 }): Promise<{ participantSid: string; trunkId: string }> {
-  const sipClient = new SipClient(params.httpUrl, params.apiKey, params.apiSecret);
+  const sipClient = new SipClient(
+    params.httpUrl,
+    params.apiKey,
+    params.apiSecret,
+  );
 
   // Resolve or create the LiveKit outbound trunk for this workspace
   let trunkId = params.creds.livekit_trunk_id;
@@ -62,19 +66,22 @@ async function dialViaSipEgress(params: {
       params.creds.sip_host,
       [params.from],
       {
-        transport:    0, // SIP_TRANSPORT_AUTO
+        transport: 0, // SIP_TRANSPORT_AUTO
         authUsername: params.creds.username,
         authPassword: params.creds.password,
-      }
+      },
     );
     trunkId = trunk.sipTrunkId;
     // Cache trunk ID into legacy integrations table (new sip_trunks path caches separately)
     if (params.integrationId) {
       void params.admin
-        .from('integrations')
+        .from("integrations")
         .update({ credentials: { ...params.creds, livekit_trunk_id: trunkId } })
-        .eq('id', params.integrationId)
-        .then(() => null, () => null);
+        .eq("id", params.integrationId)
+        .then(
+          () => null,
+          () => null,
+        );
     }
   }
 
@@ -84,82 +91,141 @@ async function dialViaSipEgress(params: {
     params.roomName,
     {
       participantIdentity: `sip-${params.to}`,
-      participantName:     params.to,
-      waitUntilAnswered:   false,
-      playRingtone:        false,
-    }
+      participantName: params.to,
+      waitUntilAnswered: false,
+      playRingtone: false,
+    },
   );
 
-  return { participantSid: participant.participantId ?? '', trunkId };
+  return { participantSid: participant.participantId ?? "", trunkId };
 }
 // ── End SIP Egress helpers ───────────────────────────────────────────────────
 
-export const dynamic = 'force-dynamic';
-
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: {
     agentId?: string;
     to?: string;
     variables?: Record<string, unknown>;
     amd_enabled?: boolean;
-    amd_action?: 'hangup' | 'leave_voicemail';
+    amd_action?: "hangup" | "leave_voicemail";
     max_duration_min?: number;
     ringing_timeout_sec?: number;
     caller_id?: string;
   };
-  try { body = await req.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 });
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
   const {
-    agentId, to, variables = {},
+    agentId,
+    to,
+    variables = {},
     amd_enabled = false,
-    amd_action = 'hangup',
+    amd_action = "hangup",
     max_duration_min,
     ringing_timeout_sec,
     caller_id: requestedCallerId,
   } = body;
   if (!to || !/^\+[1-9]\d{6,14}$/.test(to)) {
-    return NextResponse.json({ error: '"to" must be a valid E.164 phone number.' }, { status: 400 });
+    return NextResponse.json(
+      { error: '"to" must be a valid E.164 phone number.' },
+      { status: 400 },
+    );
   }
-  if (!agentId) return NextResponse.json({ error: '"agentId" is required.' }, { status: 400 });
+  if (!agentId)
+    return NextResponse.json(
+      { error: '"agentId" is required.' },
+      { status: 400 },
+    );
 
   const admin = createAdminClient();
   const [{ data: ws }, { data: agentRow }] = await Promise.all([
     admin
-      .from('workspaces')
-      .select('id, is_suspended, minutes_used, minutes_limit, active_calls, concurrent_calls_limit')
-      .eq('owner_id', user.id)
+      .from("workspaces")
+      .select(
+        "id, is_suspended, minutes_used, minutes_limit, active_calls, concurrent_calls_limit",
+      )
+      .eq("owner_id", user.id)
       .single(),
-    admin.from('agents').select('id, name, system_prompt, first_message, voice_id, voice_emotion, flow_json, flow_config, transfer_number').eq('id', agentId).single(),
+    admin
+      .from("agents")
+      .select(
+        "id, name, system_prompt, first_message, voice_id, voice_emotion, flow_json, flow_config, transfer_number",
+      )
+      .eq("id", agentId)
+      .single(),
   ]);
 
-  const workspace = ws as { id: string; is_suspended: boolean; minutes_used: number; minutes_limit: number } | null;
-  if (!workspace) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
-  if (!agentRow)  return NextResponse.json({ error: 'Agent not found.' }, { status: 404 });
+  const workspace = ws as {
+    id: string;
+    is_suspended: boolean;
+    minutes_used: number;
+    minutes_limit: number;
+  } | null;
+  if (!workspace)
+    return NextResponse.json(
+      { error: "Workspace not found." },
+      { status: 404 },
+    );
+  if (!agentRow)
+    return NextResponse.json({ error: "Agent not found." }, { status: 404 });
 
-  if (workspace.is_suspended) return NextResponse.json({ error: 'Workspace is suspended.' }, { status: 403 });
+  if (workspace.is_suspended)
+    return NextResponse.json(
+      { error: "Workspace is suspended." },
+      { status: 403 },
+    );
   if (Number(workspace.minutes_used) >= Number(workspace.minutes_limit)) {
-    return NextResponse.json({ error: 'Minute limit reached.' }, { status: 403 });
+    return NextResponse.json(
+      { error: "Minute limit reached." },
+      { status: 403 },
+    );
   }
 
   // ── Early dialer check — fail before claiming a slot or creating a room ──
   const [{ data: sipCheck }, { data: phoneCheck }] = await Promise.all([
-    admin.from('integrations').select('id').eq('workspace_id', workspace.id).eq('type', 'sip_trunk').eq('status', 'connected').limit(1).maybeSingle(),
-    admin.from('phone_numbers').select('number').eq('workspace_id', workspace.id).eq('status', 'available').limit(1).maybeSingle(),
+    admin
+      .from("integrations")
+      .select("id")
+      .eq("workspace_id", workspace.id)
+      .eq("type", "sip_trunk")
+      .eq("status", "connected")
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("phone_numbers")
+      .select("number")
+      .eq("workspace_id", workspace.id)
+      .eq("status", "available")
+      .limit(1)
+      .maybeSingle(),
   ]);
-  const hasSip       = !!sipCheck;
-  const hasNumber    = !!(phoneCheck as { number: string } | null)?.number;
-  const hasTwilioEnv = !!(process.env['TWILIO_ACCOUNT_SID'] && process.env['TWILIO_AUTH_TOKEN'] && process.env['TWILIO_PHONE_NUMBER']);
+  const hasSip = !!sipCheck;
+  const hasNumber = !!(phoneCheck as { number: string } | null)?.number;
+  const hasTwilioEnv = !!(
+    process.env["TWILIO_ACCOUNT_SID"] &&
+    process.env["TWILIO_AUTH_TOKEN"] &&
+    process.env["TWILIO_PHONE_NUMBER"]
+  );
   if (!hasSip && !hasNumber && !hasTwilioEnv) {
-    return NextResponse.json({
-      error: 'No dialer configured. Add a phone number in /numbers or connect a SIP trunk in /integrations.',
-    }, { status: 503 });
+    return NextResponse.json(
+      {
+        error:
+          "No dialer configured. Add a phone number in /numbers or connect a SIP trunk in /integrations.",
+      },
+      { status: 503 },
+    );
   }
 
   // Auto-heal: reset stale slots for this workspace before trying to claim one.
@@ -167,24 +233,52 @@ export async function POST(req: Request) {
   // slots from crashed/timed-out agent sessions — safe to release.
   const staleThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   try {
-    await admin.from('workspaces').update({ active_calls: 0 })
-      .eq('id', workspace.id).gt('active_calls', 0)
-      .or(`active_calls_last_claimed_at.is.null,active_calls_last_claimed_at.lt.${staleThreshold}`);
-  } catch { /* non-fatal */ }
-
-  const { data: claimed } = await admin.rpc('try_claim_call_slot', { p_workspace_id: workspace.id });
-  if (!claimed) return NextResponse.json({ error: 'Concurrent call limit reached.', code: 'CONCURRENT_LIMIT' }, { status: 429 });
-
-  const apiKey    = process.env['LIVEKIT_API_KEY'];
-  const apiSecret = process.env['LIVEKIT_API_SECRET'];
-  const httpUrl   = getRegionalHttpUrl();
-
-  if (!apiKey || !apiSecret || !httpUrl) {
-    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-    return NextResponse.json({ error: 'LiveKit not configured.' }, { status: 500 });
+    await admin
+      .from("workspaces")
+      .update({ active_calls: 0 })
+      .eq("id", workspace.id)
+      .gt("active_calls", 0)
+      .or(
+        `active_calls_last_claimed_at.is.null,active_calls_last_claimed_at.lt.${staleThreshold}`,
+      );
+  } catch {
+    /* non-fatal */
   }
 
-  const agent = agentRow as { id: string; name: string; system_prompt: string | null; first_message: string | null; voice_id: string | null; voice_emotion: string | null; flow_json: unknown | null; flow_config: unknown | null; transfer_number: string | null };
+  const { data: claimed } = await admin.rpc("try_claim_call_slot", {
+    p_workspace_id: workspace.id,
+  });
+  if (!claimed)
+    return NextResponse.json(
+      { error: "Concurrent call limit reached.", code: "CONCURRENT_LIMIT" },
+      { status: 429 },
+    );
+
+  const apiKey = process.env["LIVEKIT_API_KEY"];
+  const apiSecret = process.env["LIVEKIT_API_SECRET"];
+  const httpUrl = getRegionalHttpUrl();
+
+  if (!apiKey || !apiSecret || !httpUrl) {
+    await Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+    ).catch(() => null);
+    return NextResponse.json(
+      { error: "LiveKit not configured." },
+      { status: 500 },
+    );
+  }
+
+  const agent = agentRow as {
+    id: string;
+    name: string;
+    system_prompt: string | null;
+    first_message: string | null;
+    voice_id: string | null;
+    voice_emotion: string | null;
+    flow_json: unknown | null;
+    flow_config: unknown | null;
+    transfer_number: string | null;
+  };
   const roomName = `agent-${agentId}-${Date.now()}`;
 
   const maxDurationSec = max_duration_min ? max_duration_min * 60 : 600;
@@ -194,19 +288,29 @@ export async function POST(req: Request) {
       name: roomName,
       metadata: JSON.stringify({
         agent_id: agentId,
-        agent_name: agent.name, system_prompt: agent.system_prompt,
-        first_message: agent.first_message, voice_id: agent.voice_id,
-        voice_emotion: agent.voice_emotion, workspace_id: workspace.id,
-        call_direction: 'outbound', dynamic_variables: variables, recipient_number: to,
-        flow_json:   agent.flow_json   ?? null,
+        agent_name: agent.name,
+        system_prompt: agent.system_prompt,
+        first_message: agent.first_message,
+        voice_id: agent.voice_id,
+        voice_emotion: agent.voice_emotion,
+        workspace_id: workspace.id,
+        call_direction: "outbound",
+        dynamic_variables: variables,
+        recipient_number: to,
+        flow_json: agent.flow_json ?? null,
         flow_config: agent.flow_config ?? null,
         transfer_number: agent.transfer_number ?? null,
       }),
       departureTimeout: maxDurationSec,
     });
   } catch (err) {
-    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-    return NextResponse.json({ error: 'Failed to create room.' }, { status: 500 });
+    await Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+    ).catch(() => null);
+    return NextResponse.json(
+      { error: "Failed to create room." },
+      { status: 500 },
+    );
   }
 
   // ── Dialing strategy: area-code local presence + SIP trunk selection ────
@@ -214,59 +318,79 @@ export async function POST(req: Request) {
 
   // Respect caller schedule unless explicitly overridden by API consumer
   if (!dialCfg.withinSchedule) {
-    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-    return NextResponse.json({
-      error: `Outside calling hours for timezone ${dialCfg.scheduleTimezone}.`,
-      code: 'OUTSIDE_SCHEDULE',
-    }, { status: 403 });
+    await Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+    ).catch(() => null);
+    return NextResponse.json(
+      {
+        error: `Outside calling hours for timezone ${dialCfg.scheduleTimezone}.`,
+        code: "OUTSIDE_SCHEDULE",
+      },
+      { status: 403 },
+    );
   }
 
   // Prefer explicit caller_id if it's owned by this workspace, else strategy result
-  let callerId = dialCfg.callerNumber ?? '';
+  let callerId = dialCfg.callerNumber ?? "";
   if (requestedCallerId) {
     const { data: ownedNumber } = await admin
-      .from('phone_numbers')
-      .select('number')
-      .eq('workspace_id', workspace.id)
-      .eq('number', requestedCallerId)
-      .eq('status', 'available')
+      .from("phone_numbers")
+      .select("number")
+      .eq("workspace_id", workspace.id)
+      .eq("number", requestedCallerId)
+      .eq("status", "available")
       .maybeSingle();
     if (ownedNumber) callerId = (ownedNumber as { number: string }).number;
   }
 
-  if (!callerId) callerId = process.env['TWILIO_PHONE_NUMBER'] ?? '';
+  if (!callerId) callerId = process.env["TWILIO_PHONE_NUMBER"] ?? "";
 
   // ── SIP Egress via sip_trunks table (preferred) ──────────────────────────
   if (dialCfg.trunk) {
     const trunk = dialCfg.trunk;
     if (!callerId) {
-      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-      return NextResponse.json({ error: 'No caller ID configured. Add a phone number in /numbers.' }, { status: 503 });
+      await Promise.resolve(
+        admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+      ).catch(() => null);
+      return NextResponse.json(
+        { error: "No caller ID configured. Add a phone number in /numbers." },
+        { status: 503 },
+      );
     }
     const creds: SipTrunkCredentials = {
-      provider_name:     trunk.provider,
-      sip_host:          trunk.sip_host,
-      username:          trunk.username,
-      password:          trunk.password,
-      livekit_trunk_id:  trunk.livekit_trunk_id ?? undefined,
+      provider_name: trunk.provider,
+      sip_host: trunk.sip_host,
+      username: trunk.username,
+      password: trunk.password,
+      livekit_trunk_id: trunk.livekit_trunk_id ?? undefined,
     };
     try {
       const { participantSid, trunkId } = await dialViaSipEgress({
-        admin, workspaceId: workspace.id, creds,
+        admin,
+        workspaceId: workspace.id,
+        creds,
         integrationId: trunk.id,
-        to, from: callerId, roomName,
-        apiKey, apiSecret, httpUrl,
+        to,
+        from: callerId,
+        roomName,
+        apiKey,
+        apiSecret,
+        httpUrl,
       });
       // Cache LiveKit trunk ID so next call skips creation
       if (!trunk.livekit_trunk_id) {
         cacheLivekitTrunkId(admin, trunk.id, trunkId);
       }
-      await admin.from('calls').insert({
-        workspace_id: workspace.id, agent_id: agentId,
-        retell_call_id: roomName, direction: 'outbound',
-        contact_phone: to, status: 'dialing', cost_usd: 0,
+      await admin.from("calls").insert({
+        workspace_id: workspace.id,
+        agent_id: agentId,
+        retell_call_id: roomName,
+        direction: "outbound",
+        contact_phone: to,
+        status: "dialing",
+        cost_usd: 0,
         routing_data: {
-          method: 'livekit_sip_egress',
+          method: "livekit_sip_egress",
           sip_provider: trunk.provider,
           sip_trunk_id: trunk.id,
           livekit_trunk_id: trunkId,
@@ -274,113 +398,162 @@ export async function POST(req: Request) {
         },
       });
       return NextResponse.json({
-        call_id: roomName, room_name: roomName,
-        method: 'livekit_sip_egress',
+        call_id: roomName,
+        room_name: roomName,
+        method: "livekit_sip_egress",
         sip_provider: trunk.provider,
-        status: 'dialing',
+        status: "dialing",
       });
     } catch (err) {
-      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-      return NextResponse.json({ error: `SIP egress error: ${String(err)}` }, { status: 502 });
+      await Promise.resolve(
+        admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+      ).catch(() => null);
+      return NextResponse.json(
+        { error: `SIP egress error: ${String(err)}` },
+        { status: 502 },
+      );
     }
   }
 
   // ── Fallback: legacy integrations table SIP trunk ─────────────────────────
   const { data: sipIntegration } = await admin
-    .from('integrations')
-    .select('id, credentials')
-    .eq('workspace_id', workspace.id)
-    .eq('type', 'sip_trunk')
-    .eq('status', 'connected')
+    .from("integrations")
+    .select("id, credentials")
+    .eq("workspace_id", workspace.id)
+    .eq("type", "sip_trunk")
+    .eq("status", "connected")
     .maybeSingle();
 
   if (sipIntegration) {
     const creds = sipIntegration.credentials as SipTrunkCredentials;
     if (!callerId) {
-      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-      return NextResponse.json({ error: 'No caller ID configured. Add a phone number in /numbers.' }, { status: 503 });
+      await Promise.resolve(
+        admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+      ).catch(() => null);
+      return NextResponse.json(
+        { error: "No caller ID configured. Add a phone number in /numbers." },
+        { status: 503 },
+      );
     }
     try {
       const { participantSid, trunkId } = await dialViaSipEgress({
-        admin, workspaceId: workspace.id, creds,
+        admin,
+        workspaceId: workspace.id,
+        creds,
         integrationId: sipIntegration.id as string,
-        to, from: callerId, roomName,
-        apiKey, apiSecret, httpUrl,
+        to,
+        from: callerId,
+        roomName,
+        apiKey,
+        apiSecret,
+        httpUrl,
       });
-      await admin.from('calls').insert({
-        workspace_id: workspace.id, agent_id: agentId,
-        retell_call_id: roomName, direction: 'outbound',
-        contact_phone: to, status: 'dialing', cost_usd: 0,
+      await admin.from("calls").insert({
+        workspace_id: workspace.id,
+        agent_id: agentId,
+        retell_call_id: roomName,
+        direction: "outbound",
+        contact_phone: to,
+        status: "dialing",
+        cost_usd: 0,
         routing_data: {
-          method: 'livekit_sip_egress',
+          method: "livekit_sip_egress",
           sip_provider: creds.provider_name,
           livekit_trunk_id: trunkId,
           livekit_participant_sid: participantSid,
         },
       });
       return NextResponse.json({
-        call_id: roomName, room_name: roomName,
-        method: 'livekit_sip_egress',
+        call_id: roomName,
+        room_name: roomName,
+        method: "livekit_sip_egress",
         sip_provider: creds.provider_name,
-        status: 'dialing',
+        status: "dialing",
       });
     } catch (err) {
-      await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-      return NextResponse.json({ error: `SIP egress error: ${String(err)}` }, { status: 502 });
+      await Promise.resolve(
+        admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+      ).catch(() => null);
+      return NextResponse.json(
+        { error: `SIP egress error: ${String(err)}` },
+        { status: 502 },
+      );
     }
   }
 
   // ── Twilio TwiML fallback ────────────────────────────────────────────────
-  const twilioSid   = process.env['TWILIO_ACCOUNT_SID'];
-  const twilioToken = process.env['TWILIO_AUTH_TOKEN'];
-  const appUrl      = process.env['NEXT_PUBLIC_APP_URL'] ?? '';
-  const livekitSipHost = process.env['LIVEKIT_SIP_HOST'] ?? 'sip.livekit.run';
+  const twilioSid = process.env["TWILIO_ACCOUNT_SID"];
+  const twilioToken = process.env["TWILIO_AUTH_TOKEN"];
+  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
+  const livekitSipHost = process.env["LIVEKIT_SIP_HOST"] ?? "sip.livekit.run";
 
   if (!twilioSid || !twilioToken || !callerId) {
-    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-    return NextResponse.json({ error: 'No dialer configured. Connect a SIP trunk or Twilio in Settings.' }, { status: 503 });
+    await Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+    ).catch(() => null);
+    return NextResponse.json(
+      {
+        error:
+          "No dialer configured. Connect a SIP trunk or Twilio in Settings.",
+      },
+      { status: 503 },
+    );
   }
 
   const twimlCallbackUrl = `${appUrl}/api/v1/outbound/twiml?room=${encodeURIComponent(roomName)}&host=${encodeURIComponent(livekitSipHost)}`;
 
   const twilioParams = new URLSearchParams({
-    To: to, From: callerId,
+    To: to,
+    From: callerId,
     Url: twimlCallbackUrl,
     StatusCallback: `${appUrl}/api/webhooks/twilio/status`,
-    StatusCallbackMethod: 'POST',
-    StatusCallbackEvent: 'completed failed busy no-answer canceled',
+    StatusCallbackMethod: "POST",
+    StatusCallbackEvent: "completed failed busy no-answer canceled",
   });
-  if (ringing_timeout_sec) twilioParams.set('Timeout', String(ringing_timeout_sec));
-  if (max_duration_min) twilioParams.set('TimeLimit', String(maxDurationSec));
+  if (ringing_timeout_sec)
+    twilioParams.set("Timeout", String(ringing_timeout_sec));
+  if (max_duration_min) twilioParams.set("TimeLimit", String(maxDurationSec));
   if (amd_enabled) {
-    twilioParams.set('MachineDetection', 'Enable');
-    twilioParams.set('MachineDetectionTimeout', '30');
+    twilioParams.set("MachineDetection", "Enable");
+    twilioParams.set("MachineDetectionTimeout", "30");
   }
 
   let twilioCallSid: string;
   try {
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: twilioParams.toString(),
       },
-      body: twilioParams.toString(),
-    });
+    );
     if (!res.ok) throw new Error(`Twilio ${res.status}: ${await res.text()}`);
-    const r = await res.json() as { sid: string };
+    const r = (await res.json()) as { sid: string };
     twilioCallSid = r.sid;
   } catch (err) {
-    await Promise.resolve(admin.rpc('release_call_slot', { p_workspace_id: workspace.id })).catch(() => null);
-    return NextResponse.json({ error: `Twilio error: ${String(err)}` }, { status: 502 });
+    await Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+    ).catch(() => null);
+    return NextResponse.json(
+      { error: `Twilio error: ${String(err)}` },
+      { status: 502 },
+    );
   }
 
-  await admin.from('calls').insert({
-    workspace_id: workspace.id, agent_id: agentId,
-    retell_call_id: roomName, direction: 'outbound',
-    contact_phone: to, status: 'dialing', cost_usd: 0,
+  await admin.from("calls").insert({
+    workspace_id: workspace.id,
+    agent_id: agentId,
+    retell_call_id: roomName,
+    direction: "outbound",
+    contact_phone: to,
+    status: "dialing",
+    cost_usd: 0,
     routing_data: {
-      method: 'twilio_twiml',
+      method: "twilio_twiml",
       twilio_call_sid: twilioCallSid,
       amd_action: amd_enabled ? amd_action : null,
       max_duration_min: max_duration_min ?? null,
@@ -389,7 +562,9 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({
-    call_id: roomName, room_name: roomName,
-    twilio_call_sid: twilioCallSid, status: 'dialing',
+    call_id: roomName,
+    room_name: roomName,
+    twilio_call_sid: twilioCallSid,
+    status: "dialing",
   });
 }

@@ -1,9 +1,9 @@
-import { createAdminClient } from '@/lib/supabase/admin';
-import { deliverWebhook } from '@/lib/webhooks/deliver';
-import { updateWorkspaceMinutes } from '@/lib/updateWorkspaceMinutes';
-import { executeAutomationRule } from '@/lib/automation/execute';
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { deliverWebhook } from "@/lib/webhooks/deliver";
+import { updateWorkspaceMinutes } from "@/lib/updateWorkspaceMinutes";
+import { executeAutomationRule } from "@/lib/automation/execute";
+import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 interface RetellCallEndedEvent {
   event: string;
@@ -28,37 +28,48 @@ interface RetellCallEndedEvent {
   };
 }
 
-function verifySignature(body: string, signature: string, secret: string): boolean {
-  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(`sha256=${expected}`), Buffer.from(signature));
+function verifySignature(
+  body: string,
+  signature: string,
+  secret: string,
+): boolean {
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(body)
+    .digest("hex");
+  return crypto.timingSafeEqual(
+    Buffer.from(`sha256=${expected}`),
+    Buffer.from(signature),
+  );
 }
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const signature = req.headers.get('x-retell-signature') ?? '';
-  const secret = process.env['RETELL_WEBHOOK_SECRET'];
+  const signature = req.headers.get("x-retell-signature") ?? "";
+  const secret = process.env["RETELL_WEBHOOK_SECRET"];
 
-  if (!secret) return new NextResponse('Webhook secret not configured', { status: 500 });
-  if (!signature) return new NextResponse('Missing signature', { status: 401 });
+  if (!secret)
+    return new NextResponse("Webhook secret not configured", { status: 500 });
+  if (!signature) return new NextResponse("Missing signature", { status: 401 });
   const valid = verifySignature(body, signature, secret);
-  if (!valid) return new NextResponse('Invalid signature', { status: 401 });
+  if (!valid) return new NextResponse("Invalid signature", { status: 401 });
 
   const event = JSON.parse(body) as RetellCallEndedEvent;
   const admin = createAdminClient();
 
-  if (event.event === 'call_ended' || event.event === 'call_analyzed') {
+  if (event.event === "call_ended" || event.event === "call_analyzed") {
     const call = event.call;
     const durationSeconds = Math.round((call.duration_ms ?? 0) / 1000);
 
     // Find agent by retell_agent_id
     const { data: agent } = await admin
-      .from('agents')
-      .select('id, workspace_id')
-      .eq('retell_agent_id', call.agent_id)
+      .from("agents")
+      .select("id, workspace_id")
+      .eq("retell_agent_id", call.agent_id)
       .single();
 
     if (!agent) {
-      console.warn('No agent found for retell_agent_id:', call.agent_id);
+      console.warn("No agent found for retell_agent_id:", call.agent_id);
       return NextResponse.json({ ok: true });
     }
 
@@ -67,62 +78,80 @@ export async function POST(req: Request) {
     const customData = analysis?.custom_analysis_data ?? {};
 
     let outcome: string | null = null;
-    if (analysis?.in_voicemail) outcome = 'voicemail';
-    else if (call.call_status === 'error') outcome = 'no_answer';
-    else if (analysis?.call_successful) outcome = 'converted';
-    else outcome = 'no_answer';
+    if (analysis?.in_voicemail) outcome = "voicemail";
+    else if (call.call_status === "error") outcome = "no_answer";
+    else if (analysis?.call_successful) outcome = "converted";
+    else outcome = "no_answer";
 
     let sentiment: string | null = null;
     const s = analysis?.user_sentiment?.toLowerCase();
-    if (s?.includes('positive')) sentiment = 'positive';
-    else if (s?.includes('negative')) sentiment = 'negative';
-    else sentiment = 'neutral';
+    if (s?.includes("positive")) sentiment = "positive";
+    else if (s?.includes("negative")) sentiment = "negative";
+    else sentiment = "neutral";
 
     // Insert call record
-    const { data: insertedCall } = await admin.from('calls').insert({
-      workspace_id: agentRow.workspace_id,
-      agent_id: agentRow.id,
-      campaign_id: (call.metadata?.['campaign_id'] as string | null) ?? null,
-      contact_name: (call.metadata?.['contact_name'] as string | null) ?? null,
-      contact_phone: (call.metadata?.['to_number'] as string | null) ?? null,
-      direction: 'outbound',
-      duration_seconds: durationSeconds,
-      status: call.call_status,
-      outcome,
-      sentiment,
-      transcript: call.transcript,
-      recording_url: call.recording_url ?? null,
-      summary: analysis?.call_summary ?? null,
-      task_completed: analysis?.call_successful ?? false,
-      extracted_name: customData['name'] as string | null ?? null,
-      extracted_email: customData['email'] as string | null ?? null,
-      extracted_interest: customData['interest'] as string | null ?? null,
-      extracted_objections: customData['objections'] as string | null ?? null,
-      retell_call_id: call.call_id,
-      cost_usd: (durationSeconds / 60) * 0.05
-    }).select().single();
+    const { data: insertedCall } = await admin
+      .from("calls")
+      .insert({
+        workspace_id: agentRow.workspace_id,
+        agent_id: agentRow.id,
+        campaign_id: (call.metadata?.["campaign_id"] as string | null) ?? null,
+        contact_name:
+          (call.metadata?.["contact_name"] as string | null) ?? null,
+        contact_phone: (call.metadata?.["to_number"] as string | null) ?? null,
+        direction: "outbound",
+        duration_seconds: durationSeconds,
+        status: call.call_status,
+        outcome,
+        sentiment,
+        transcript: call.transcript,
+        recording_url: call.recording_url ?? null,
+        summary: analysis?.call_summary ?? null,
+        task_completed: analysis?.call_successful ?? false,
+        extracted_name: (customData["name"] as string | null) ?? null,
+        extracted_email: (customData["email"] as string | null) ?? null,
+        extracted_interest: (customData["interest"] as string | null) ?? null,
+        extracted_objections:
+          (customData["objections"] as string | null) ?? null,
+        retell_call_id: call.call_id,
+        cost_usd: (durationSeconds / 60) * 0.05,
+      })
+      .select()
+      .single();
 
     // Atomic minute update + threshold enforcement (fire-and-forget)
-    updateWorkspaceMinutes(agentRow.workspace_id, durationSeconds).catch(console.error);
+    updateWorkspaceMinutes(agentRow.workspace_id, durationSeconds).catch(
+      console.error,
+    );
 
     // Update campaign contact if applicable
-    const campaignId = call.metadata?.['campaign_id'] as string | null;
-    const contactId = call.metadata?.['contact_id'] as string | null;
+    const campaignId = call.metadata?.["campaign_id"] as string | null;
+    const contactId = call.metadata?.["contact_id"] as string | null;
     if (campaignId && contactId) {
-      await admin.from('campaign_contacts')
-        .update({ status: outcome === 'converted' ? 'converted' : 'no_answer', last_called_at: new Date().toISOString() })
-        .eq('id', contactId);
+      await admin
+        .from("campaign_contacts")
+        .update({
+          status: outcome === "converted" ? "converted" : "no_answer",
+          last_called_at: new Date().toISOString(),
+        })
+        .eq("id", contactId);
     }
 
     // Trigger QA scoring async (fire-and-forget)
-    if (call.transcript && process.env['ANTHROPIC_API_KEY']) {
-      fetch(`${process.env['NEXT_PUBLIC_APP_URL']}/api/qa/score`, {
-        method: 'POST',
+    if (call.transcript && process.env["ANTHROPIC_API_KEY"]) {
+      fetch(`${process.env["NEXT_PUBLIC_APP_URL"]}/api/qa/score`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          ...(process.env['INTERNAL_API_SECRET'] ? { 'x-internal-token': process.env['INTERNAL_API_SECRET'] } : {})
+          "Content-Type": "application/json",
+          ...(process.env["INTERNAL_API_SECRET"]
+            ? { "x-internal-token": process.env["INTERNAL_API_SECRET"] }
+            : {}),
         },
-        body: JSON.stringify({ retell_call_id: call.call_id, agent_id: agentRow.id, workspace_id: agentRow.workspace_id })
+        body: JSON.stringify({
+          retell_call_id: call.call_id,
+          agent_id: agentRow.id,
+          workspace_id: agentRow.workspace_id,
+        }),
       }).catch(console.error);
     }
 
@@ -135,35 +164,48 @@ export async function POST(req: Request) {
       duration_seconds: durationSeconds,
       campaign_id: campaignId,
     };
-    deliverWebhook(agentRow.workspace_id, 'call.completed', callPayload).catch(console.error);
-    if (outcome === 'converted') {
-      deliverWebhook(agentRow.workspace_id, 'call.converted', { ...callPayload, contact: insertedCall }).catch(console.error);
+    deliverWebhook(agentRow.workspace_id, "call.completed", callPayload).catch(
+      console.error,
+    );
+    if (outcome === "converted") {
+      deliverWebhook(agentRow.workspace_id, "call.converted", {
+        ...callPayload,
+        contact: insertedCall,
+      }).catch(console.error);
     }
 
     // Execute automation rules matching this call outcome (fire-and-forget)
     const callRecord = {
       id: (insertedCall as { id?: string } | null)?.id,
       retell_call_id: call.call_id,
-      contact_phone: (call.metadata?.['to_number'] as string | null) ?? null,
+      contact_phone: (call.metadata?.["to_number"] as string | null) ?? null,
       campaign_id: campaignId,
       outcome,
       sentiment,
-      duration_seconds: durationSeconds
+      duration_seconds: durationSeconds,
     };
     Promise.resolve(
       admin
-        .from('automation_rules')
-        .select('*')
-        .eq('workspace_id', agentRow.workspace_id)
-        .eq('agent_id', agentRow.id)
-        .eq('enabled', true)
-        .in('trigger_outcome', [outcome ?? 'no_answer', 'any'])
-    ).then(({ data: rules }) => {
-      if (!rules?.length) return;
-      return Promise.all(rules.map((rule) =>
-        executeAutomationRule(rule as Parameters<typeof executeAutomationRule>[0], callRecord, admin)
-      ));
-    }).catch(console.error);
+        .from("automation_rules")
+        .select("*")
+        .eq("workspace_id", agentRow.workspace_id)
+        .eq("agent_id", agentRow.id)
+        .eq("enabled", true)
+        .in("trigger_outcome", [outcome ?? "no_answer", "any"]),
+    )
+      .then(({ data: rules }) => {
+        if (!rules?.length) return;
+        return Promise.all(
+          rules.map((rule) =>
+            executeAutomationRule(
+              rule as Parameters<typeof executeAutomationRule>[0],
+              callRecord,
+              admin,
+            ),
+          ),
+        );
+      })
+      .catch(console.error);
   }
 
   return NextResponse.json({ ok: true });

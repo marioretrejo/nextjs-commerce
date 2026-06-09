@@ -1,20 +1,20 @@
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
-import { sanitizeAgentForClient } from '@/lib/sanitize';
-import type { Agent } from '@/lib/supabase/types';
-import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
-import { apiError, apiOk, parseBody } from '@/lib/api';
-import { notifyWorkspace } from '@/lib/notifications/activity';
-import { writeAuditLog } from '@/lib/admin-audit';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { sanitizeAgentForClient } from "@/lib/sanitize";
+import type { Agent } from "@/lib/supabase/types";
+import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { apiError, apiOk, parseBody } from "@/lib/api";
+import { notifyWorkspace } from "@/lib/notifications/activity";
+import { writeAuditLog } from "@/lib/admin-audit";
 
 const CreateAgentSchema = z.object({
   workspace_id: z.string().uuid(),
   name: z.string().min(1).max(100).optional(),
   language: z.string().optional(),
   auto_language_detection: z.boolean().optional(),
-  voice_engine: z.enum(['standard', 'ultra_fast', 'premium']).optional(),
+  voice_engine: z.enum(["standard", "ultra_fast", "premium"]).optional(),
   voice_id: z.string().optional(),
   voice_name: z.string().optional(),
   emotional_speed: z.number().min(0.5).max(2).optional(),
@@ -35,64 +35,83 @@ const CreateAgentSchema = z.object({
   branded_caller_id: z.string().optional(),
   transfer_enabled: z.boolean().optional(),
   transfer_number: z.string().optional(),
-  transfer_type: z.enum(['warm', 'cold']).optional(),
+  transfer_type: z.enum(["warm", "cold"]).optional(),
   transfer_condition: z.string().optional(),
   interruption_handling: z.boolean().optional(),
   noise_cancellation: z.boolean().optional(),
   ivr_mode: z.boolean().optional(),
   dtmf_enabled: z.boolean().optional(),
   post_call_analysis_enabled: z.boolean().optional(),
-  voice_emotion: z.enum(['calm','sympathetic','happy','sad','angry','fearful','surprised']).nullable().optional(),
+  voice_emotion: z
+    .enum([
+      "calm",
+      "sympathetic",
+      "happy",
+      "sad",
+      "angry",
+      "fearful",
+      "surprised",
+    ])
+    .nullable()
+    .optional(),
   dynamic_variables: z.record(z.unknown()).optional(),
 });
 
 export async function GET(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const admin = createAdminClient();
     const { searchParams } = new URL(req.url);
-    let workspaceId = searchParams.get('workspace_id');
+    let workspaceId = searchParams.get("workspace_id");
 
     if (!workspaceId) {
       const { data: ws, error: wsErr } = await admin
-        .from('workspaces')
-        .select('id')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: true })
+        .from("workspaces")
+        .select("id")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
       if (wsErr) {
-        console.error('[agents] GET workspace error:', wsErr);
-        return apiError('Internal server error', 500);
+        console.error("[agents] GET workspace error:", wsErr);
+        return apiError("Internal server error", 500);
       }
       if (!ws) return apiOk([]);
       workspaceId = (ws as { id: string }).id;
     }
 
     const { data, error } = await admin
-      .from('agents')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: false });
+      .from("agents")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error('[agents] GET error:', error);
-      return apiError('Internal server error', 500);
+      console.error("[agents] GET error:", error);
+      return apiError("Internal server error", 500);
     }
-    return apiOk(((data ?? []) as Record<string, unknown>[]).map(sanitizeAgentForClient));
+    return apiOk(
+      ((data ?? []) as Record<string, unknown>[]).map(sanitizeAgentForClient),
+    );
   } catch (err) {
-    console.error('[agents] GET unhandled:', err);
-    return apiError('Internal server error', 500);
+    console.error("[agents] GET unhandled:", err);
+    return apiError("Internal server error", 500);
   }
 }
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = parseBody(CreateAgentSchema, await req.json());
   if (!parsed.success) return parsed.response;
@@ -101,27 +120,34 @@ export async function POST(req: Request) {
 
   // Check plan limits
   const { count } = await supabase
-    .from('agents')
-    .select('*', { count: 'exact', head: true })
-    .eq('workspace_id', workspace_id);
+    .from("agents")
+    .select("*", { count: "exact", head: true })
+    .eq("workspace_id", workspace_id);
 
-  const { data: ws } = await supabase.from('workspaces').select('plan').eq('id', workspace_id).single();
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("plan")
+    .eq("id", workspace_id)
+    .single();
   const limits: Record<string, number> = { free: 1, pro: 5, scale: Infinity };
-  const plan = (ws as { plan: string } | null)?.plan ?? 'free';
+  const plan = (ws as { plan: string } | null)?.plan ?? "free";
   if ((count ?? 0) >= (limits[plan] ?? 1)) {
-    return NextResponse.json({ error: 'Agent limit reached for your plan' }, { status: 403 });
+    return NextResponse.json(
+      { error: "Agent limit reached for your plan" },
+      { status: 403 },
+    );
   }
 
   const admin = createAdminClient();
 
   const { data: agent, error: dbErr } = await admin
-    .from('agents')
+    .from("agents")
     .insert({
       workspace_id,
-      name: body.name ?? 'New Agent',
-      language: body.language ?? 'en-US',
+      name: body.name ?? "New Agent",
+      language: body.language ?? "en-US",
       auto_language_detection: body.auto_language_detection ?? false,
-      voice_engine: body.voice_engine ?? 'standard',
+      voice_engine: body.voice_engine ?? "standard",
       voice_id: body.voice_id,
       voice_name: body.voice_name,
       emotional_speed: body.emotional_speed ?? 1.0,
@@ -132,17 +158,17 @@ export async function POST(req: Request) {
       system_prompt: body.system_prompt,
       first_message: body.first_message,
       voicemail_message: body.voicemail_message,
-      schedule_days: body.schedule_days ?? ['mon','tue','wed','thu','fri'],
-      schedule_start_time: body.schedule_start_time ?? '09:00',
-      schedule_end_time: body.schedule_end_time ?? '18:00',
-      timezone: body.timezone ?? 'America/New_York',
+      schedule_days: body.schedule_days ?? ["mon", "tue", "wed", "thu", "fri"],
+      schedule_start_time: body.schedule_start_time ?? "09:00",
+      schedule_end_time: body.schedule_end_time ?? "18:00",
+      timezone: body.timezone ?? "America/New_York",
       max_attempts: body.max_attempts ?? 3,
       retry_interval_minutes: body.retry_interval_minutes ?? 60,
       phone_number_id: body.phone_number_id || null,
       branded_caller_id: body.branded_caller_id,
       transfer_enabled: body.transfer_enabled ?? false,
       transfer_number: body.transfer_number,
-      transfer_type: body.transfer_type ?? 'warm',
+      transfer_type: body.transfer_type ?? "warm",
       transfer_condition: body.transfer_condition,
       interruption_handling: body.interruption_handling ?? true,
       noise_cancellation: body.noise_cancellation ?? true,
@@ -151,33 +177,43 @@ export async function POST(req: Request) {
       post_call_analysis_enabled: body.post_call_analysis_enabled ?? true,
       voice_emotion: body.voice_emotion ?? null,
       dynamic_variables: body.dynamic_variables ?? {},
-      status: 'active'
+      status: "active",
     })
     .select()
     .single();
 
   if (dbErr) {
-    console.error('[agents] POST insert error:', dbErr);
-    return apiError('Internal server error', 500);
+    console.error("[agents] POST insert error:", dbErr);
+    return apiError("Internal server error", 500);
   }
-  if (!agent) return apiError('Insert failed', 500);
+  if (!agent) return apiError("Insert failed", 500);
 
-  revalidatePath('/agents');
+  revalidatePath("/agents");
 
-  const a = agent as unknown as { id: string; name: string; workspace_id: string };
+  const a = agent as unknown as {
+    id: string;
+    name: string;
+    workspace_id: string;
+  };
   void notifyWorkspace({
     workspaceId: a.workspace_id,
-    title: 'Agent created',
+    title: "Agent created",
     message: `Agent "${a.name}" was created.`,
     link: `/agents/${a.id}`,
     actorName: (user as { email?: string }).email ?? undefined,
   });
   void writeAuditLog({
-    actorId: user.id, actorType: 'user', action: 'agent.create',
-    targetType: 'agent', targetId: a.id,
+    actorId: user.id,
+    actorType: "user",
+    action: "agent.create",
+    targetType: "agent",
+    targetId: a.id,
     workspaceId: a.workspace_id,
     metadata: { agent_name: a.name },
   });
 
-  return apiOk(sanitizeAgentForClient(agent as unknown as Record<string, unknown>), 201);
+  return apiOk(
+    sanitizeAgentForClient(agent as unknown as Record<string, unknown>),
+    201,
+  );
 }

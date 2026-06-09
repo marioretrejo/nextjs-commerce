@@ -14,17 +14,19 @@
  * Must be awaited BEFORE cli.runApp() so the DB is reconciled before the
  * worker starts accepting new LiveKit sessions.
  */
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 export async function runStartupCleanup(): Promise<void> {
-  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-  const supabaseKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
-  const lkUrl       = process.env['LIVEKIT_URL'] ?? '';
-  const lkKey       = process.env['LIVEKIT_API_KEY'];
-  const lkSecret    = process.env['LIVEKIT_API_SECRET'];
+  const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
+  const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const lkUrl = process.env["LIVEKIT_URL"] ?? "";
+  const lkKey = process.env["LIVEKIT_API_KEY"];
+  const lkSecret = process.env["LIVEKIT_API_SECRET"];
 
   if (!supabaseUrl || !supabaseKey) {
-    console.log('[startup-cleanup] Skipping — Supabase env vars not configured');
+    console.log(
+      "[startup-cleanup] Skipping — Supabase env vars not configured",
+    );
     return;
   }
 
@@ -34,46 +36,56 @@ export async function runStartupCleanup(): Promise<void> {
 
   // ── Step 1: find all DB-active calls ──────────────────────────────────────
   const { data: activeCalls, error } = await supabase
-    .from('calls')
-    .select('id, retell_call_id, workspace_id, status')
-    .in('status', ['in_progress', 'dialing']);
+    .from("calls")
+    .select("id, retell_call_id, workspace_id, status")
+    .in("status", ["in_progress", "dialing"]);
 
   if (error) {
-    console.error('[startup-cleanup] DB query failed:', error.message);
+    console.error("[startup-cleanup] DB query failed:", error.message);
     return;
   }
 
   if (!activeCalls?.length) {
-    console.log('[startup-cleanup] No active calls in DB — nothing to reconcile');
+    console.log(
+      "[startup-cleanup] No active calls in DB — nothing to reconcile",
+    );
     return;
   }
 
-  console.log(`[startup-cleanup] Found ${activeCalls.length} DB-active call(s) — verifying against LiveKit`);
+  console.log(
+    `[startup-cleanup] Found ${activeCalls.length} DB-active call(s) — verifying against LiveKit`,
+  );
 
   // ── Step 2: fetch live rooms from LiveKit (10 s timeout) ─────────────────
-  const liveRooms    = new Set<string>();
-  let   lkReachable  = false;
+  const liveRooms = new Set<string>();
+  let lkReachable = false;
 
   if (lkUrl && lkKey && lkSecret) {
     try {
-      const httpUrl = lkUrl.replace('wss://', 'https://').replace('ws://', 'http://');
-      const { RoomServiceClient } = await import('livekit-server-sdk');
+      const httpUrl = lkUrl
+        .replace("wss://", "https://")
+        .replace("ws://", "http://");
+      const { RoomServiceClient } = await import("livekit-server-sdk");
       const roomSvc = new RoomServiceClient(httpUrl, lkKey, lkSecret);
       const rooms = await Promise.race([
         roomSvc.listRooms(),
         new Promise<never>((_, rej) =>
-          setTimeout(() => rej(new Error('listRooms timeout')), 10_000)
+          setTimeout(() => rej(new Error("listRooms timeout")), 10_000),
         ),
       ]);
       for (const r of rooms) if (r.name) liveRooms.add(r.name);
       lkReachable = true;
-      console.log(`[startup-cleanup] LiveKit reports ${liveRooms.size} live room(s)`);
+      console.log(
+        `[startup-cleanup] LiveKit reports ${liveRooms.size} live room(s)`,
+      );
     } catch (err) {
-      console.error('[startup-cleanup] LiveKit unreachable:', String(err));
+      console.error("[startup-cleanup] LiveKit unreachable:", String(err));
       // Fall through with lkReachable = false
     }
   } else {
-    console.log('[startup-cleanup] LiveKit env vars not set — treating all active calls as zombies');
+    console.log(
+      "[startup-cleanup] LiveKit env vars not set — treating all active calls as zombies",
+    );
   }
 
   // ── Step 3: cross-reference and clean up zombies ──────────────────────────
@@ -85,8 +97,8 @@ export async function runStartupCleanup(): Promise<void> {
   let cleaned = 0;
 
   for (const call of activeCalls) {
-    const roomName     = (call.retell_call_id as string | null) ?? '';
-    const workspaceId  = call.workspace_id as string | null;
+    const roomName = (call.retell_call_id as string | null) ?? "";
+    const workspaceId = call.workspace_id as string | null;
 
     const isZombie = lkReachable
       ? !!roomName && !liveRooms.has(roomName)
@@ -95,32 +107,38 @@ export async function runStartupCleanup(): Promise<void> {
     if (!isZombie) continue;
 
     console.log(
-      `[startup-cleanup] Zombie → id=${call.id} room=${roomName || '(null)'} ` +
-      `workspace=${workspaceId ?? 'unknown'} prev_status=${call.status}`
+      `[startup-cleanup] Zombie → id=${call.id} room=${roomName || "(null)"} ` +
+        `workspace=${workspaceId ?? "unknown"} prev_status=${call.status}`,
     );
 
     // Mark call completed with cleanup audit trail
     const { error: updateErr } = await supabase
-      .from('calls')
+      .from("calls")
       .update({
-        status:        'completed',
+        status: "completed",
         extracted_data: {
-          _cleanup_reason: 'ZOMBIE_CLEANUP_AUTO',
-          _cleaned_at:     cleanedAt,
+          _cleanup_reason: "ZOMBIE_CLEANUP_AUTO",
+          _cleaned_at: cleanedAt,
         },
       })
-      .eq('id', call.id);
+      .eq("id", call.id);
 
     if (updateErr) {
-      console.error(`[startup-cleanup] Update failed for call ${call.id}:`, updateErr.message);
+      console.error(
+        `[startup-cleanup] Update failed for call ${call.id}:`,
+        updateErr.message,
+      );
       continue;
     }
 
     // Release call slot so concurrent-call counter reflects reality
     if (workspaceId) {
       await supabase
-        .rpc('release_call_slot', { p_workspace_id: workspaceId })
-        .then(() => null, () => null);
+        .rpc("release_call_slot", { p_workspace_id: workspaceId })
+        .then(
+          () => null,
+          () => null,
+        );
     }
 
     cleaned++;
@@ -128,7 +146,7 @@ export async function runStartupCleanup(): Promise<void> {
 
   console.log(
     `[startup-cleanup] Reconciliation complete — ` +
-    `${cleaned} zombie(s) cleaned, ` +
-    `${activeCalls.length - cleaned} call(s) confirmed live`
+      `${cleaned} zombie(s) cleaned, ` +
+      `${activeCalls.length - cleaned} call(s) confirmed live`,
   );
 }

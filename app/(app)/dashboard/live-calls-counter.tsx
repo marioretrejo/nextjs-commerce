@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { createClient } from '@/lib/supabase/client';
-import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
 
 export function LiveCallsCounter({ workspaceId }: { workspaceId: string }) {
   const [count, setCount] = useState(0);
@@ -13,11 +13,11 @@ export function LiveCallsCounter({ workspaceId }: { workspaceId: string }) {
     async function fetchLive() {
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const { count } = await supabase
-        .from('calls')
-        .select('*', { count: 'exact', head: true })
-        .eq('workspace_id', workspaceId)
-        .eq('status', 'in_progress')
-        .gte('created_at', fiveMinAgo);
+        .from("calls")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("status", "in_progress")
+        .gte("created_at", fiveMinAgo);
       setCount(count ?? 0);
     }
 
@@ -27,12 +27,16 @@ export function LiveCallsCounter({ workspaceId }: { workspaceId: string }) {
     // Realtime subscription
     const channel = supabase
       .channel(`live-calls-${workspaceId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'calls',
-        filter: `workspace_id=eq.${workspaceId}`
-      }, () => fetchLive())
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "calls",
+          filter: `workspace_id=eq.${workspaceId}`,
+        },
+        () => fetchLive(),
+      )
       .subscribe();
 
     return () => {

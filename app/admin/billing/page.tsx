@@ -1,12 +1,12 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
-import { AlertTriangle, DollarSign, TrendingUp } from 'lucide-react';
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
+import { AlertTriangle, DollarSign, TrendingUp } from "lucide-react";
 
 interface WorkspaceEvent {
   id: string;
@@ -19,47 +19,66 @@ interface WorkspaceEvent {
 
 export default async function AdminBillingPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const admin = createAdminClient();
-  const { data: me } = await admin.from('users').select('is_superadmin').eq('id', user.id).single();
-  if (!(me as { is_superadmin: boolean } | null)?.is_superadmin) redirect('/dashboard');
+  const { data: me } = await admin
+    .from("users")
+    .select("is_superadmin")
+    .eq("id", user.id)
+    .single();
+  if (!(me as { is_superadmin: boolean } | null)?.is_superadmin)
+    redirect("/dashboard");
 
   // Limit breach events
   const { data: limitEvents } = await admin
-    .from('workspace_events')
-    .select('id, workspace_id, event_type, details, created_at')
-    .eq('event_type', 'limit_reached')
-    .order('created_at', { ascending: false })
+    .from("workspace_events")
+    .select("id, workspace_id, event_type, details, created_at")
+    .eq("event_type", "limit_reached")
+    .order("created_at", { ascending: false })
     .limit(50);
 
   // Workspace names for limit events
-  const wsIds = [...new Set((limitEvents ?? []).map((e) => (e as { workspace_id: string }).workspace_id))];
+  const wsIds = [
+    ...new Set(
+      (limitEvents ?? []).map(
+        (e) => (e as { workspace_id: string }).workspace_id,
+      ),
+    ),
+  ];
   const { data: wsNames } = wsIds.length
-    ? await admin.from('workspaces').select('id, name').in('id', wsIds)
+    ? await admin.from("workspaces").select("id, name").in("id", wsIds)
     : { data: [] };
-  const wsNameMap = Object.fromEntries((wsNames ?? []).map((w) => [w.id, w.name]));
+  const wsNameMap = Object.fromEntries(
+    (wsNames ?? []).map((w) => [w.id, w.name]),
+  );
 
   // Provider costs for COGS computation
-  const { data: providerCosts } = await admin
-    .from('provider_costs')
-    .select('*')
-    .eq('label', 'default')
-    .single() as { data: Record<string, number> | null };
+  const { data: providerCosts } = (await admin
+    .from("provider_costs")
+    .select("*")
+    .eq("label", "default")
+    .single()) as { data: Record<string, number> | null };
 
   const pc = {
-    twilio_outbound_per_min: Number(providerCosts?.['twilio_outbound_per_min'] ?? 0.0140),
-    stt_per_min:             Number(providerCosts?.['stt_per_min']             ?? 0.0077),
-    llm_per_1k_tokens:       Number(providerCosts?.['llm_per_1k_tokens']       ?? 0.000225),
-    tts_per_1k_chars:        Number(providerCosts?.['tts_per_1k_chars']        ?? 0.0500),
+    twilio_outbound_per_min: Number(
+      providerCosts?.["twilio_outbound_per_min"] ?? 0.014,
+    ),
+    stt_per_min: Number(providerCosts?.["stt_per_min"] ?? 0.0077),
+    llm_per_1k_tokens: Number(providerCosts?.["llm_per_1k_tokens"] ?? 0.000225),
+    tts_per_1k_chars: Number(providerCosts?.["tts_per_1k_chars"] ?? 0.05),
   };
 
   // Recent calls with cost + tokens
   const { data: recentCalls } = await admin
-    .from('calls')
-    .select('id, workspace_id, agent_id, direction, duration_seconds, status, cost_usd, tokens_used, created_at')
-    .order('created_at', { ascending: false })
+    .from("calls")
+    .select(
+      "id, workspace_id, agent_id, direction, duration_seconds, status, cost_usd, tokens_used, created_at",
+    )
+    .order("created_at", { ascending: false })
     .limit(30);
 
   // Platform-wide totals this month
@@ -68,40 +87,47 @@ export default async function AdminBillingPage() {
   monthStart.setHours(0, 0, 0, 0);
 
   const { data: monthCalls } = await admin
-    .from('calls')
-    .select('duration_seconds, cost_usd')
-    .gte('created_at', monthStart.toISOString());
+    .from("calls")
+    .select("duration_seconds, cost_usd")
+    .gte("created_at", monthStart.toISOString());
 
-  const monthMinutes = Math.round((monthCalls ?? []).reduce((s, c) => s + (c.duration_seconds ?? 0), 0) / 60);
-  const monthCost = (monthCalls ?? []).reduce((s, c) => s + Number(c.cost_usd ?? 0), 0);
+  const monthMinutes = Math.round(
+    (monthCalls ?? []).reduce((s, c) => s + (c.duration_seconds ?? 0), 0) / 60,
+  );
+  const monthCost = (monthCalls ?? []).reduce(
+    (s, c) => s + Number(c.cost_usd ?? 0),
+    0,
+  );
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
       <div>
         <h1 className="text-xl font-bold text-[#0a0a0a]">Billing Audits</h1>
-        <p className="text-sm text-[#6b6b6b] mt-0.5">Limit breaches, call costs, and usage anomalies</p>
+        <p className="text-sm text-[#6b6b6b] mt-0.5">
+          Limit breaches, call costs, and usage anomalies
+        </p>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         {[
           {
-            label: 'Limit Breaches (all time)',
+            label: "Limit Breaches (all time)",
             value: (limitEvents ?? []).length,
             icon: <AlertTriangle className="w-5 h-5 text-red-500" />,
-            sub: 'workspaces that hit their minute cap',
+            sub: "workspaces that hit their minute cap",
           },
           {
-            label: 'Minutes This Month',
+            label: "Minutes This Month",
             value: monthMinutes.toLocaleString(),
             icon: <TrendingUp className="w-5 h-5 text-[#6b6b6b]" />,
             sub: `${(monthCalls ?? []).length} calls`,
           },
           {
-            label: 'API Cost This Month',
+            label: "API Cost This Month",
             value: `$${monthCost.toFixed(2)}`,
             icon: <DollarSign className="w-5 h-5 text-[#6b6b6b]" />,
-            sub: 'aggregated provider cost',
+            sub: "aggregated provider cost",
           },
         ].map((m) => (
           <Card key={m.label} className="bg-white border-[#e5e5e5]">
@@ -128,25 +154,35 @@ export default async function AdminBillingPage() {
           </CardHeader>
           <CardContent className="p-0">
             {(limitEvents ?? []).length === 0 ? (
-              <p className="px-5 py-8 text-sm text-[#a0a0a0] text-center">No limit breaches recorded.</p>
+              <p className="px-5 py-8 text-sm text-[#a0a0a0] text-center">
+                No limit breaches recorded.
+              </p>
             ) : (
               <div className="divide-y divide-[#f0f0f0]">
                 {(limitEvents ?? []).map((ev) => {
                   const e = ev as WorkspaceEvent;
-                  const d = e.details as { new_minutes_used?: number; minutes_limit?: number; duration_minutes?: number };
+                  const d = e.details as {
+                    new_minutes_used?: number;
+                    minutes_limit?: number;
+                    duration_minutes?: number;
+                  };
                   return (
                     <div key={e.id} className="px-5 py-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium text-[#0a0a0a]">
-                          {wsNameMap[e.workspace_id] ?? e.workspace_id.slice(0, 8)}
+                          {wsNameMap[e.workspace_id] ??
+                            e.workspace_id.slice(0, 8)}
                         </span>
                         <span className="text-xs text-[#a0a0a0]">
-                          {format(new Date(e.created_at), 'MMM d, HH:mm')}
+                          {format(new Date(e.created_at), "MMM d, HH:mm")}
                         </span>
                       </div>
                       <p className="text-xs text-[#6b6b6b]">
-                        Used {d.new_minutes_used?.toFixed(1)} / {d.minutes_limit} min
-                        {d.duration_minutes ? ` · +${d.duration_minutes.toFixed(1)} min call` : ''}
+                        Used {d.new_minutes_used?.toFixed(1)} /{" "}
+                        {d.minutes_limit} min
+                        {d.duration_minutes
+                          ? ` · +${d.duration_minutes.toFixed(1)} min call`
+                          : ""}
                       </p>
                     </div>
                   );
@@ -159,47 +195,80 @@ export default async function AdminBillingPage() {
         {/* Recent calls — with COGS + gross profit */}
         <Card className="bg-white border-[#e5e5e5]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Calls — Unit Economics</CardTitle>
+            <CardTitle className="text-base">
+              Recent Calls — Unit Economics
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="grid grid-cols-[1fr_44px_64px_64px_80px] gap-2 px-5 py-3 border-t border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
-              <span>Workspace</span><span>Min</span><span>Real Cost</span><span>Gross $</span><span>Status</span>
+              <span>Workspace</span>
+              <span>Min</span>
+              <span>Real Cost</span>
+              <span>Gross $</span>
+              <span>Status</span>
             </div>
             <div className="divide-y divide-[#f0f0f0]">
               {(recentCalls ?? []).map((c) => {
-                const call = c as { id: string; workspace_id: string; duration_seconds: number; status: string; cost_usd: number; tokens_used: number | null; created_at: string };
+                const call = c as {
+                  id: string;
+                  workspace_id: string;
+                  duration_seconds: number;
+                  status: string;
+                  cost_usd: number;
+                  tokens_used: number | null;
+                  created_at: string;
+                };
                 const durMin = call.duration_seconds / 60;
                 // COGS: telephony + STT + LLM + TTS (estimating 800 chars/min for TTS)
                 const cogs =
                   pc.twilio_outbound_per_min * durMin +
-                  pc.stt_per_min             * durMin +
-                  pc.llm_per_1k_tokens       * ((call.tokens_used ?? 0) / 1000) +
-                  pc.tts_per_1k_chars        * (800 * durMin / 1000);
-                const revenue   = Number(call.cost_usd ?? 0); // USD
-                const gross     = revenue - cogs;
+                  pc.stt_per_min * durMin +
+                  pc.llm_per_1k_tokens * ((call.tokens_used ?? 0) / 1000) +
+                  pc.tts_per_1k_chars * ((800 * durMin) / 1000);
+                const revenue = Number(call.cost_usd ?? 0); // USD
+                const gross = revenue - cogs;
                 const fmtUSD = (v: number) => {
-                  if (v === 0) return '$0.00';
+                  if (v === 0) return "$0.00";
                   if (Math.abs(v) < 0.001) return `$${v.toFixed(5)}`;
-                  if (Math.abs(v) < 0.01)  return `$${v.toFixed(4)}`;
-                  if (Math.abs(v) < 1)     return `$${v.toFixed(3)}`;
+                  if (Math.abs(v) < 0.01) return `$${v.toFixed(4)}`;
+                  if (Math.abs(v) < 1) return `$${v.toFixed(3)}`;
                   return `$${v.toFixed(2)}`;
                 };
                 const statusVariant =
-                  call.status === 'completed' ? 'secondary' :
-                  call.status === 'dialing'   ? 'outline'   : 'destructive';
+                  call.status === "completed"
+                    ? "secondary"
+                    : call.status === "dialing"
+                      ? "outline"
+                      : "destructive";
                 return (
-                  <div key={call.id} className="grid grid-cols-[1fr_44px_64px_64px_80px] gap-2 px-5 py-2.5 text-sm items-center hover:bg-[#f9f9f9]">
+                  <div
+                    key={call.id}
+                    className="grid grid-cols-[1fr_44px_64px_64px_80px] gap-2 px-5 py-2.5 text-sm items-center hover:bg-[#f9f9f9]"
+                  >
                     <div>
-                      <p className="text-xs font-mono text-[#6b6b6b] truncate">{call.workspace_id.slice(0, 8)}…</p>
-                      <p className="text-[11px] text-[#a0a0a0]">{format(new Date(call.created_at), 'MMM d, HH:mm')}</p>
+                      <p className="text-xs font-mono text-[#6b6b6b] truncate">
+                        {call.workspace_id.slice(0, 8)}…
+                      </p>
+                      <p className="text-[11px] text-[#a0a0a0]">
+                        {format(new Date(call.created_at), "MMM d, HH:mm")}
+                      </p>
                     </div>
-                    <span className="text-xs text-[#0a0a0a]">{durMin.toFixed(1)}</span>
-                    <span className="text-xs text-red-600 font-mono">{fmtUSD(cogs)}</span>
-                    <span className={`text-xs font-mono font-medium ${gross >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="text-xs text-[#0a0a0a]">
+                      {durMin.toFixed(1)}
+                    </span>
+                    <span className="text-xs text-red-600 font-mono">
+                      {fmtUSD(cogs)}
+                    </span>
+                    <span
+                      className={`text-xs font-mono font-medium ${gross >= 0 ? "text-green-600" : "text-red-600"}`}
+                    >
                       {fmtUSD(gross)}
                     </span>
-                    <Badge variant={statusVariant} className="text-[10px] justify-center capitalize">
-                      {call.status ?? '—'}
+                    <Badge
+                      variant={statusVariant}
+                      className="text-[10px] justify-center capitalize"
+                    >
+                      {call.status ?? "—"}
                     </Badge>
                   </div>
                 );

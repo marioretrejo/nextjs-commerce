@@ -12,40 +12,45 @@
  *   - Internal requests (x-workspace-id + x-internal-secret headers)
  */
 
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse } from 'next/server';
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { NextResponse } from "next/server";
 
 // ─── Groq helper ──────────────────────────────────────────────────────────────
 
-const GROQ_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
-const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 async function groqJSON<T>(
   prompt: string,
   maxTokens = 1024,
   temperature = 0.1,
 ): Promise<T | null> {
-  const key = process.env['GROQ_API_KEY'];
+  const key = process.env["GROQ_API_KEY"];
   if (!key) return null;
 
   try {
     const res = await fetch(GROQ_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
       body: JSON.stringify({
-        model:           GROQ_MODEL,
-        messages:        [{ role: 'user', content: prompt }],
+        model: GROQ_MODEL,
+        messages: [{ role: "user", content: prompt }],
         temperature,
-        max_tokens:      maxTokens,
-        response_format: { type: 'json_object' },
+        max_tokens: maxTokens,
+        response_format: { type: "json_object" },
       }),
     });
 
     if (!res.ok) return null;
 
-    const data = (await res.json()) as { choices: { message: { content: string } }[] };
-    const raw  = data.choices[0]?.message?.content ?? '{}';
+    const data = (await res.json()) as {
+      choices: { message: { content: string } }[];
+    };
+    const raw = data.choices[0]?.message?.content ?? "{}";
     return JSON.parse(raw) as T;
   } catch {
     return null;
@@ -60,12 +65,18 @@ function clamp(n: unknown, lo = 0, hi = 100): number {
 
 interface ComplianceResult {
   violations: Array<{
-    type:                'promise' | 'misleading' | 'unauthorized_claim' | 'missing_disclosure' | 'prohibited_word' | 'risk_statement';
-    severity:            'low' | 'medium' | 'high' | 'critical';
-    timestamp_s:         number | null;
-    snippet:             string;
-    regulation:          string | null;
-    explanation:         string;
+    type:
+      | "promise"
+      | "misleading"
+      | "unauthorized_claim"
+      | "missing_disclosure"
+      | "prohibited_word"
+      | "risk_statement";
+    severity: "low" | "medium" | "high" | "critical";
+    timestamp_s: number | null;
+    snippet: string;
+    regulation: string | null;
+    explanation: string;
     suggested_correction: string;
   }>;
   score: number; // 0-100 higher = better (few / no violations)
@@ -73,56 +84,69 @@ interface ComplianceResult {
 
 interface SalesResult {
   objection_handling: number;
-  closing_ability:    number;
-  discovery_quality:  number;
-  overall:            number;
-  key_sales_moments:  string[];
+  closing_ability: number;
+  discovery_quality: number;
+  overall: number;
+  key_sales_moments: string[];
 }
 
 interface SoftSkillsResult {
-  empathy:           number;
-  active_listening:  number;
-  professionalism:   number;
-  tone:              'positive' | 'neutral' | 'negative';
-  overall:           number;
+  empathy: number;
+  active_listening: number;
+  professionalism: number;
+  tone: "positive" | "neutral" | "negative";
+  overall: number;
 }
 
 interface ConversationResult {
-  engagement:          number;
-  flow:                number;
+  engagement: number;
+  flow: number;
   interruptions_count: number;
-  dead_air_count:      number;
-  overall:             number;
+  dead_air_count: number;
+  overall: number;
 }
 
 interface SummaryResult {
-  summary:            string;
-  customer_intent:    string;
-  outcome:            string;
-  objections:         string[];
-  key_moments:        string[];
-  sentiment_timeline: Array<{ at_percent: number; sentiment: 'positive' | 'neutral' | 'negative'; note: string }>;
-  overall_sentiment:  'positive' | 'neutral' | 'negative';
+  summary: string;
+  customer_intent: string;
+  outcome: string;
+  objections: string[];
+  key_moments: string[];
+  sentiment_timeline: Array<{
+    at_percent: number;
+    sentiment: "positive" | "neutral" | "negative";
+    note: string;
+  }>;
+  overall_sentiment: "positive" | "neutral" | "negative";
 }
 
 interface CoachingResult {
-  strengths:            string[];
-  weaknesses:           string[];
-  opportunities:        string[];
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
   recommended_training: string[];
-  coaching_plan:        string;
-  priority_score:       number;
+  coaching_plan: string;
+  priority_score: number;
 }
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
 function buildCompliancePrompt(transcript: string, rules: QACRule[]): string {
-  const rulesSection = rules.length > 0
-    ? rules
-        .filter(r => r.category === 'compliance' || r.category === 'disclosure' || r.category === 'prohibited')
-        .map((r, i) => `${i + 1}. [${r.severity.toUpperCase()}] "${r.name}"${r.regulation ? ` — ${r.regulation}` : ''}: ${r.description}`)
-        .join('\n') || 'Apply universal call-center compliance standards.'
-    : 'Apply universal call-center compliance standards (FDCPA, TCPA, GDPR, FTC, HIPAA as relevant).';
+  const rulesSection =
+    rules.length > 0
+      ? rules
+          .filter(
+            (r) =>
+              r.category === "compliance" ||
+              r.category === "disclosure" ||
+              r.category === "prohibited",
+          )
+          .map(
+            (r, i) =>
+              `${i + 1}. [${r.severity.toUpperCase()}] "${r.name}"${r.regulation ? ` — ${r.regulation}` : ""}: ${r.description}`,
+          )
+          .join("\n") || "Apply universal call-center compliance standards."
+      : "Apply universal call-center compliance standards (FDCPA, TCPA, GDPR, FTC, HIPAA as relevant).";
 
   return `You are a compliance expert auditor for a call center. Analyze the transcript for regulatory violations.
 
@@ -256,10 +280,15 @@ DIMENSION SCORES:
 - Conversation: ${conversation.overall}/100
 
 TOP COMPLIANCE VIOLATIONS:
-${compliance.violations.slice(0, 3).map(v => `- [${v.severity}] ${v.type}: ${v.explanation}`).join('\n') || 'None'}
+${
+  compliance.violations
+    .slice(0, 3)
+    .map((v) => `- [${v.severity}] ${v.type}: ${v.explanation}`)
+    .join("\n") || "None"
+}
 
 KEY SALES MOMENTS:
-${sales.key_sales_moments.slice(0, 3).join('\n') || 'None identified'}
+${sales.key_sales_moments.slice(0, 3).join("\n") || "None identified"}
 
 SOFT SKILL OBSERVATIONS:
 - Empathy: ${softSkills.empathy}/100, Active Listening: ${softSkills.active_listening}/100, Professionalism: ${softSkills.professionalism}/100
@@ -287,58 +316,135 @@ Respond with ONLY raw JSON.`;
 // ─── Rule type ────────────────────────────────────────────────────────────────
 
 interface QACRule {
-  name:        string;
+  name: string;
   description: string;
-  category:    string;
-  severity:    string;
-  regulation:  string | null;
+  category: string;
+  severity: string;
+  regulation: string | null;
 }
 
 // ─── Defaults (used when a parallel call fails) ───────────────────────────────
 
-const defaultCompliance  = (): ComplianceResult  => ({ violations: [], score: 70 });
-const defaultSales       = (): SalesResult        => ({ objection_handling: 70, closing_ability: 70, discovery_quality: 70, overall: 70, key_sales_moments: [] });
-const defaultSoftSkills  = (): SoftSkillsResult   => ({ empathy: 70, active_listening: 70, professionalism: 70, tone: 'neutral', overall: 70 });
-const defaultConversation = (): ConversationResult => ({ engagement: 70, flow: 70, interruptions_count: 0, dead_air_count: 0, overall: 70 });
-const defaultSummary     = (): SummaryResult      => ({ summary: 'Analysis unavailable.', customer_intent: 'Unknown', outcome: 'other', objections: [], key_moments: [], sentiment_timeline: [], overall_sentiment: 'neutral' });
-const defaultCoaching    = (): CoachingResult     => ({ strengths: [], weaknesses: [], opportunities: [], recommended_training: [], coaching_plan: 'Coaching unavailable.', priority_score: 0 });
+const defaultCompliance = (): ComplianceResult => ({
+  violations: [],
+  score: 70,
+});
+const defaultSales = (): SalesResult => ({
+  objection_handling: 70,
+  closing_ability: 70,
+  discovery_quality: 70,
+  overall: 70,
+  key_sales_moments: [],
+});
+const defaultSoftSkills = (): SoftSkillsResult => ({
+  empathy: 70,
+  active_listening: 70,
+  professionalism: 70,
+  tone: "neutral",
+  overall: 70,
+});
+const defaultConversation = (): ConversationResult => ({
+  engagement: 70,
+  flow: 70,
+  interruptions_count: 0,
+  dead_air_count: 0,
+  overall: 70,
+});
+const defaultSummary = (): SummaryResult => ({
+  summary: "Analysis unavailable.",
+  customer_intent: "Unknown",
+  outcome: "other",
+  objections: [],
+  key_moments: [],
+  sentiment_timeline: [],
+  overall_sentiment: "neutral",
+});
+const defaultCoaching = (): CoachingResult => ({
+  strengths: [],
+  weaknesses: [],
+  opportunities: [],
+  recommended_training: [],
+  coaching_plan: "Coaching unavailable.",
+  priority_score: 0,
+});
 
 // ─── Score calculation ────────────────────────────────────────────────────────
 
-function calcOverallScore(c: number, s: number, sk: number, cv: number): number {
-  return Math.round(c * 0.40 + s * 0.25 + sk * 0.20 + cv * 0.15);
+function calcOverallScore(
+  c: number,
+  s: number,
+  sk: number,
+  cv: number,
+): number {
+  return Math.round(c * 0.4 + s * 0.25 + sk * 0.2 + cv * 0.15);
 }
 
-function calcRiskLevel(overall: number): 'critical' | 'high' | 'medium' | 'low' {
-  if (overall < 50) return 'critical';
-  if (overall < 65) return 'high';
-  if (overall < 80) return 'medium';
-  return 'low';
+function calcRiskLevel(
+  overall: number,
+): "critical" | "high" | "medium" | "low" {
+  if (overall < 50) return "critical";
+  if (overall < 65) return "high";
+  if (overall < 80) return "medium";
+  return "low";
 }
 
 // ─── Workspace resolver ───────────────────────────────────────────────────────
 
-async function resolveWorkspaceId(req: Request): Promise<{ workspaceId: string; userId: string | null } | null> {
+async function resolveWorkspaceId(
+  req: Request,
+): Promise<{ workspaceId: string; userId: string | null } | null> {
   // Internal request path (webhooks, background jobs)
-  const internalSecret = req.headers.get('x-internal-secret');
-  const headerWsId     = req.headers.get('x-workspace-id');
+  const internalSecret = req.headers.get("x-internal-secret");
+  const headerWsId = req.headers.get("x-workspace-id");
 
-  if (internalSecret && headerWsId) {
-    if (internalSecret !== process.env['INTERNAL_API_SECRET']) return null;
+  if (internalSecret !== null && headerWsId) {
+    const configuredSecret = process.env["INTERNAL_API_SECRET"];
+
+    // Fail closed: if the secret is not configured or too short, deny all internal requests.
+    // This prevents vacuous equality (empty === empty) and forces proper configuration.
+    if (!configuredSecret || configuredSecret.trim().length < 16) {
+      console.error(
+        "[qac/analyze] INTERNAL_API_SECRET is not configured or too short — internal auth disabled",
+      );
+      return null;
+    }
+
+    // Reject empty/missing bearer tokens without leaking timing information
+    if (!internalSecret || internalSecret.length === 0) {
+      console.warn("[qac/analyze] Internal request with empty secret rejected");
+      return null;
+    }
+
+    // Timing-safe comparison prevents secret enumeration via response-time analysis
+    const { timingSafeEqual } = await import("node:crypto");
+    const configBuf = Buffer.from(configuredSecret, "utf8");
+    const providedBuf = Buffer.from(internalSecret, "utf8");
+
+    // Length mismatch is fine to reveal (constant-time comparison is meaningless here)
+    if (
+      configBuf.length !== providedBuf.length ||
+      !timingSafeEqual(configBuf, providedBuf)
+    ) {
+      console.warn("[qac/analyze] Invalid internal secret — access denied");
+      return null;
+    }
+
     return { workspaceId: headerWsId, userId: null };
   }
 
   // Authenticated user path
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return null;
 
     const admin = createAdminClient();
     const { data } = await admin
-      .from('workspaces')
-      .select('id')
-      .eq('owner_id', user.id)
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", user.id)
       .single();
 
     if (!data) return null;
@@ -359,7 +465,7 @@ export async function POST(
 
   const auth = await resolveWorkspaceId(req);
   if (!auth) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { workspaceId, userId } = auth;
 
@@ -367,10 +473,10 @@ export async function POST(
 
   // ── Verify interaction belongs to this workspace ───────────────────────────
   const { data: intRaw } = await admin
-    .from('qac_interactions')
-    .select('id, workspace_id, transcript, status, agent_id, agent_name')
-    .eq('id', id)
-    .eq('workspace_id', workspaceId)
+    .from("qac_interactions")
+    .select("id, workspace_id, transcript, status, agent_id, agent_name")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
     .single();
 
   type InteractionRow = {
@@ -384,89 +490,104 @@ export async function POST(
   const interaction = intRaw as InteractionRow | null;
 
   if (!interaction) {
-    return NextResponse.json({ error: 'Interaction not found' }, { status: 404 });
+    return NextResponse.json(
+      { error: "Interaction not found" },
+      { status: 404 },
+    );
   }
   // ── Atomic lock: only succeed if status is NOT already 'analyzing' ─────────
   const { data: lockData } = await admin
-    .from('qac_interactions')
-    .update({ status: 'analyzing' })
-    .eq('id', id)
-    .neq('status', 'analyzing')
-    .select('id')
+    .from("qac_interactions")
+    .update({ status: "analyzing" })
+    .eq("id", id)
+    .neq("status", "analyzing")
+    .select("id")
     .maybeSingle();
 
   if (!lockData) {
-    return NextResponse.json({ error: 'Analysis already in progress' }, { status: 409 });
+    return NextResponse.json(
+      { error: "Analysis already in progress" },
+      { status: 409 },
+    );
   }
 
   // Write audit log entry (fire-and-forget)
   void (async () => {
-    const { error: auditErr } = await admin.from('qac_audit_logs').insert({
+    const { error: auditErr } = await admin.from("qac_audit_logs").insert({
       workspace_id: workspaceId,
-      user_id:      userId ?? null,
-      action:       'analyze',
-      entity_type:  'interaction',
-      entity_id:    id,
-      details:      { triggered_by: userId ? 'user' : 'internal' },
+      user_id: userId ?? null,
+      action: "analyze",
+      entity_type: "interaction",
+      entity_id: id,
+      details: { triggered_by: userId ? "user" : "internal" },
     });
-    if (auditErr) console.error('[qac-analyze] Audit log insert failed:', auditErr.message);
+    if (auditErr)
+      console.error("[qac-analyze] Audit log insert failed:", auditErr.message);
   })();
 
   // ── Fetch active QA rules for this workspace ───────────────────────────────
   const { data: rulesData } = await admin
-    .from('qac_rules')
-    .select('name, description, category, severity, regulation')
-    .eq('workspace_id', workspaceId)
-    .eq('is_active', true);
+    .from("qac_rules")
+    .select("name, description, category, severity, regulation")
+    .eq("workspace_id", workspaceId)
+    .eq("is_active", true);
 
   const rules = (rulesData ?? []) as QACRule[];
   const transcript = interaction.transcript;
 
   // ── 5 parallel Groq calls ─────────────────────────────────────────────────
-  const [
-    complianceRaw,
-    salesRaw,
-    softSkillsRaw,
-    conversationRaw,
-    summaryRaw,
-  ] = await Promise.all([
-    groqJSON<ComplianceResult>(buildCompliancePrompt(transcript, rules), 1500),
-    groqJSON<SalesResult>(buildSalesPrompt(transcript), 1024),
-    groqJSON<SoftSkillsResult>(buildSoftSkillsPrompt(transcript), 800),
-    groqJSON<ConversationResult>(buildConversationPrompt(transcript), 800),
-    groqJSON<SummaryResult>(buildSummaryPrompt(transcript), 1500),
-  ]);
+  const [complianceRaw, salesRaw, softSkillsRaw, conversationRaw, summaryRaw] =
+    await Promise.all([
+      groqJSON<ComplianceResult>(
+        buildCompliancePrompt(transcript, rules),
+        1500,
+      ),
+      groqJSON<SalesResult>(buildSalesPrompt(transcript), 1024),
+      groqJSON<SoftSkillsResult>(buildSoftSkillsPrompt(transcript), 800),
+      groqJSON<ConversationResult>(buildConversationPrompt(transcript), 800),
+      groqJSON<SummaryResult>(buildSummaryPrompt(transcript), 1500),
+    ]);
 
   // Apply defaults for any failed calls
-  const compliance:   ComplianceResult   = complianceRaw  ?? defaultCompliance();
-  const sales:        SalesResult        = salesRaw        ?? defaultSales();
-  const softSkills:   SoftSkillsResult   = softSkillsRaw   ?? defaultSoftSkills();
-  const conversation: ConversationResult = conversationRaw ?? defaultConversation();
-  const summary:      SummaryResult      = summaryRaw      ?? defaultSummary();
+  const compliance: ComplianceResult = complianceRaw ?? defaultCompliance();
+  const sales: SalesResult = salesRaw ?? defaultSales();
+  const softSkills: SoftSkillsResult = softSkillsRaw ?? defaultSoftSkills();
+  const conversation: ConversationResult =
+    conversationRaw ?? defaultConversation();
+  const summary: SummaryResult = summaryRaw ?? defaultSummary();
 
   // Sanitize all numeric scores
-  compliance.score          = clamp(compliance.score);
-  sales.overall             = clamp(sales.overall);
-  sales.objection_handling  = clamp(sales.objection_handling);
-  sales.closing_ability     = clamp(sales.closing_ability);
-  sales.discovery_quality   = clamp(sales.discovery_quality);
-  softSkills.overall        = clamp(softSkills.overall);
-  softSkills.empathy        = clamp(softSkills.empathy);
+  compliance.score = clamp(compliance.score);
+  sales.overall = clamp(sales.overall);
+  sales.objection_handling = clamp(sales.objection_handling);
+  sales.closing_ability = clamp(sales.closing_ability);
+  sales.discovery_quality = clamp(sales.discovery_quality);
+  softSkills.overall = clamp(softSkills.overall);
+  softSkills.empathy = clamp(softSkills.empathy);
   softSkills.active_listening = clamp(softSkills.active_listening);
-  softSkills.professionalism  = clamp(softSkills.professionalism);
-  conversation.overall      = clamp(conversation.overall);
-  conversation.engagement   = clamp(conversation.engagement);
-  conversation.flow         = clamp(conversation.flow);
-  conversation.interruptions_count = Math.max(0, Math.round(Number(conversation.interruptions_count) || 0));
-  conversation.dead_air_count      = Math.max(0, Math.round(Number(conversation.dead_air_count) || 0));
+  softSkills.professionalism = clamp(softSkills.professionalism);
+  conversation.overall = clamp(conversation.overall);
+  conversation.engagement = clamp(conversation.engagement);
+  conversation.flow = clamp(conversation.flow);
+  conversation.interruptions_count = Math.max(
+    0,
+    Math.round(Number(conversation.interruptions_count) || 0),
+  );
+  conversation.dead_air_count = Math.max(
+    0,
+    Math.round(Number(conversation.dead_air_count) || 0),
+  );
 
   if (!Array.isArray(compliance.violations)) compliance.violations = [];
   if (!Array.isArray(sales.key_sales_moments)) sales.key_sales_moments = [];
-  if (!['positive', 'neutral', 'negative'].includes(softSkills.tone)) softSkills.tone = 'neutral';
+  if (!["positive", "neutral", "negative"].includes(softSkills.tone))
+    softSkills.tone = "neutral";
   if (!Array.isArray(summary.objections)) summary.objections = [];
   if (!Array.isArray(summary.key_moments)) summary.key_moments = [];
-  if (!Array.isArray(summary.sentiment_timeline)) summary.sentiment_timeline = [];
-  if (!['positive', 'neutral', 'negative'].includes(summary.overall_sentiment)) summary.overall_sentiment = 'neutral';
+  if (!Array.isArray(summary.sentiment_timeline))
+    summary.sentiment_timeline = [];
+  if (!["positive", "neutral", "negative"].includes(summary.overall_sentiment))
+    summary.overall_sentiment = "neutral";
 
   const overallScore = calcOverallScore(
     compliance.score,
@@ -478,7 +599,15 @@ export async function POST(
 
   // ── Sequential coaching call (uses all 5 results) ─────────────────────────
   const coachingRaw = await groqJSON<CoachingResult>(
-    buildCoachingPrompt(transcript, compliance, sales, softSkills, conversation, summary, overallScore),
+    buildCoachingPrompt(
+      transcript,
+      compliance,
+      sales,
+      softSkills,
+      conversation,
+      summary,
+      overallScore,
+    ),
     1500,
   );
   const coaching: CoachingResult = coachingRaw ?? defaultCoaching();
@@ -486,118 +615,143 @@ export async function POST(
   if (!Array.isArray(coaching.strengths)) coaching.strengths = [];
   if (!Array.isArray(coaching.weaknesses)) coaching.weaknesses = [];
   if (!Array.isArray(coaching.opportunities)) coaching.opportunities = [];
-  if (!Array.isArray(coaching.recommended_training)) coaching.recommended_training = [];
+  if (!Array.isArray(coaching.recommended_training))
+    coaching.recommended_training = [];
   coaching.priority_score = clamp(coaching.priority_score);
 
   // ── Persist evaluation ────────────────────────────────────────────────────
   // Build legacy criteria_scores for backward compat with existing queries
   const criteriaScores = {
-    opening:            Math.round((conversation.engagement + softSkills.professionalism) / 2),
-    compliance:         compliance.score,
+    opening: Math.round(
+      (conversation.engagement + softSkills.professionalism) / 2,
+    ),
+    compliance: compliance.score,
     objection_handling: sales.objection_handling,
-    closing:            sales.closing_ability,
-    empathy:            softSkills.empathy,
+    closing: sales.closing_ability,
+    empathy: softSkills.empathy,
   };
 
   const { data: evalData, error: evalErr } = await admin
-    .from('qac_evaluations')
+    .from("qac_evaluations")
     .insert({
-      workspace_id:        workspaceId,
-      interaction_id:      id,
-      overall_score:       overallScore,
-      risk_score:          100 - overallScore, // inverse: higher risk_score = worse
-      tone:                softSkills.tone === 'positive' ? 'friendly'
-                         : softSkills.tone === 'negative' ? 'unprofessional'
-                         : 'neutral',
-      summary:             summary.summary,
-      criteria_scores:     criteriaScores,
-      rules_applied:       rules.length,
+      workspace_id: workspaceId,
+      interaction_id: id,
+      overall_score: overallScore,
+      risk_score: 100 - overallScore, // inverse: higher risk_score = worse
+      tone:
+        softSkills.tone === "positive"
+          ? "friendly"
+          : softSkills.tone === "negative"
+            ? "unprofessional"
+            : "neutral",
+      summary: summary.summary,
+      criteria_scores: criteriaScores,
+      rules_applied: rules.length,
       // new enterprise columns
-      compliance_score:    compliance.score,
-      sales_score:         sales.overall,
-      soft_skills_score:   softSkills.overall,
-      conversation_score:  conversation.overall,
-      coaching_summary:    coaching.coaching_plan,
-      strengths:           coaching.strengths,
-      weaknesses:          coaching.weaknesses,
-      opportunities:       coaching.opportunities,
+      compliance_score: compliance.score,
+      sales_score: sales.overall,
+      soft_skills_score: softSkills.overall,
+      conversation_score: conversation.overall,
+      coaching_summary: coaching.coaching_plan,
+      strengths: coaching.strengths,
+      weaknesses: coaching.weaknesses,
+      opportunities: coaching.opportunities,
       recommended_training: coaching.recommended_training,
-      sentiment_timeline:  summary.sentiment_timeline,
-      key_moments:         summary.key_moments,
-      customer_intent:     summary.customer_intent,
-      call_outcome:        summary.outcome,
-      objections:          summary.objections,
+      sentiment_timeline: summary.sentiment_timeline,
+      key_moments: summary.key_moments,
+      customer_intent: summary.customer_intent,
+      call_outcome: summary.outcome,
+      objections: summary.objections,
     })
-    .select('id')
+    .select("id")
     .single();
 
   if (evalErr || !evalData) {
-    await admin.from('qac_interactions').update({ status: 'failed' }).eq('id', id);
-    return NextResponse.json({ error: 'Failed to save evaluation' }, { status: 500 });
+    await admin
+      .from("qac_interactions")
+      .update({ status: "failed" })
+      .eq("id", id);
+    return NextResponse.json(
+      { error: "Failed to save evaluation" },
+      { status: 500 },
+    );
   }
 
   const evalId = (evalData as { id: string }).id;
 
   // ── Save compliance flags ─────────────────────────────────────────────────
   const VALID_VIOLATION_TYPES = new Set([
-    'promise', 'misleading', 'unauthorized_claim',
-    'missing_disclosure', 'prohibited_word', 'risk_statement',
+    "promise",
+    "misleading",
+    "unauthorized_claim",
+    "missing_disclosure",
+    "prohibited_word",
+    "risk_statement",
   ]);
-  const VALID_SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
+  const VALID_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
 
   if (compliance.violations.length > 0) {
-    const { error: flagErr } = await admin.from('qac_flags').insert(
-      compliance.violations.map(v => ({
-        evaluation_id:       evalId,
-        workspace_id:        workspaceId,
-        category:            'compliance' as const,
-        severity:            VALID_SEVERITIES.has(v.severity) ? v.severity : 'medium',
-        label:               v.explanation?.slice(0, 120) ?? 'Compliance violation',
+    const { error: flagErr } = await admin.from("qac_flags").insert(
+      compliance.violations.map((v) => ({
+        evaluation_id: evalId,
+        workspace_id: workspaceId,
+        category: "compliance" as const,
+        severity: VALID_SEVERITIES.has(v.severity) ? v.severity : "medium",
+        label: v.explanation?.slice(0, 120) ?? "Compliance violation",
         transcript_fragment: v.snippet?.slice(0, 500) ?? null,
-        regulation:          v.regulation ?? null,
-        coaching_note:       v.suggested_correction ?? null,
-        timestamp_s:         v.timestamp_s ?? null,
-        violation_type:      VALID_VIOLATION_TYPES.has(v.type) ? v.type : null,
+        regulation: v.regulation ?? null,
+        coaching_note: v.suggested_correction ?? null,
+        timestamp_s: v.timestamp_s ?? null,
+        violation_type: VALID_VIOLATION_TYPES.has(v.type) ? v.type : null,
         suggested_correction: v.suggested_correction ?? null,
       })),
     );
-    if (flagErr) console.error('[qac-analyze] Flag insert failed:', flagErr.message);
+    if (flagErr)
+      console.error("[qac-analyze] Flag insert failed:", flagErr.message);
   }
 
   // ── Update interaction status + risk_level + overall_sentiment ────────────
-  const { error: statusErr } = await admin.from('qac_interactions').update({
-    status:           'analyzed',
-    risk_level:       riskLevel,
-    overall_sentiment: summary.overall_sentiment,
-    outcome:          summary.outcome,
-  }).eq('id', id);
-  if (statusErr) console.error('[qac-analyze] Status update failed:', statusErr.message);
+  const { error: statusErr } = await admin
+    .from("qac_interactions")
+    .update({
+      status: "analyzed",
+      risk_level: riskLevel,
+      overall_sentiment: summary.overall_sentiment,
+      outcome: summary.outcome,
+    })
+    .eq("id", id);
+  if (statusErr)
+    console.error("[qac-analyze] Status update failed:", statusErr.message);
 
   // ── Save coaching report ──────────────────────────────────────────────────
-  const { error: coachErr } = await admin.from('qac_coaching_reports').insert({
-    workspace_id:        workspaceId,
-    interaction_id:      id,
-    agent_id:            interaction.agent_id ?? null,
-    strengths:           coaching.strengths,
-    weaknesses:          coaching.weaknesses,
-    opportunities:       coaching.opportunities,
+  const { error: coachErr } = await admin.from("qac_coaching_reports").insert({
+    workspace_id: workspaceId,
+    interaction_id: id,
+    agent_id: interaction.agent_id ?? null,
+    strengths: coaching.strengths,
+    weaknesses: coaching.weaknesses,
+    opportunities: coaching.opportunities,
     recommended_training: coaching.recommended_training,
-    coaching_plan:       coaching.coaching_plan,
-    priority_score:      coaching.priority_score,
+    coaching_plan: coaching.coaching_plan,
+    priority_score: coaching.priority_score,
   });
-  if (coachErr) console.error('[qac-analyze] Coaching report insert failed:', coachErr.message);
+  if (coachErr)
+    console.error(
+      "[qac-analyze] Coaching report insert failed:",
+      coachErr.message,
+    );
 
   return NextResponse.json({
-    ok:                 true,
-    evaluation_id:      evalId,
-    overall_score:      overallScore,
-    risk_level:         riskLevel,
-    compliance_score:   compliance.score,
-    sales_score:        sales.overall,
-    soft_skills_score:  softSkills.overall,
+    ok: true,
+    evaluation_id: evalId,
+    overall_score: overallScore,
+    risk_level: riskLevel,
+    compliance_score: compliance.score,
+    sales_score: sales.overall,
+    soft_skills_score: softSkills.overall,
     conversation_score: conversation.overall,
-    violations:         compliance.violations.length,
-    sentiment:          summary.overall_sentiment,
-    coaching_priority:  coaching.priority_score,
+    violations: compliance.violations.length,
+    sentiment: summary.overall_sentiment,
+    coaching_priority: coaching.priority_score,
   });
 }

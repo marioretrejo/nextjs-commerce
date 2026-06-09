@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Radio, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Radio, RefreshCw } from "lucide-react";
 
 interface LiveRoom {
   name: string;
@@ -33,9 +33,9 @@ export function AdminLiveCallsTable() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/live-rooms');
+      const res = await fetch("/api/admin/live-rooms");
       if (!res.ok) return;
-      const data = await res.json() as LiveRoomsResponse;
+      const data = (await res.json()) as LiveRoomsResponse;
       setRooms(data.rooms ?? []);
       setLastRefresh(new Date());
     } catch {
@@ -66,10 +66,11 @@ export function AdminLiveCallsTable() {
             )}
           </CardTitle>
           <div className="flex items-center gap-2 text-xs text-[#a0a0a0]">
-            {loading
-              ? <RefreshCw className="h-3 w-3 animate-spin" />
-              : <span>Updated {lastRefresh.toLocaleTimeString()}</span>
-            }
+            {loading ? (
+              <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+              <span>Updated {lastRefresh.toLocaleTimeString()}</span>
+            )}
             <button
               onClick={refresh}
               className="rounded p-1 hover:bg-[#f5f5f5] transition-colors"
@@ -83,7 +84,7 @@ export function AdminLiveCallsTable() {
       <CardContent className="p-0">
         {rooms.length === 0 ? (
           <div className="py-10 text-center text-sm text-[#a0a0a0]">
-            {loading ? 'Loading…' : 'No active calls right now'}
+            {loading ? "Loading…" : "No active calls right now"}
           </div>
         ) : (
           <>
@@ -101,9 +102,11 @@ export function AdminLiveCallsTable() {
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-[#0a0a0a] truncate">
-                      {room.metadata?.agent_name ?? 'Agent'}
+                      {room.metadata?.agent_name ?? "Agent"}
                     </p>
-                    <p className="text-xs text-[#a0a0a0] truncate font-mono">{room.name}</p>
+                    <p className="text-xs text-[#a0a0a0] truncate font-mono">
+                      {room.name}
+                    </p>
                   </div>
                   <div>
                     <Badge variant="secondary" className="text-xs">
@@ -114,7 +117,7 @@ export function AdminLiveCallsTable() {
                     {elapsed(room.creationTime)}
                   </span>
                   <span className="text-[#6b6b6b] text-xs font-mono truncate">
-                    {room.metadata?.workspace_id?.slice(0, 8) ?? '—'}…
+                    {room.metadata?.workspace_id?.slice(0, 8) ?? "—"}…
                   </span>
                 </div>
               ))}

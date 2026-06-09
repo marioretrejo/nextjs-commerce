@@ -1,25 +1,25 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Mic,
   Plus,
@@ -34,108 +34,140 @@ import {
   Wand2,
   Search,
   X,
-} from 'lucide-react';
-import { toast } from 'sonner';
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface CustomVoice {
-  id:                string;
-  name:              string;
-  provider:          string;
+  id: string;
+  name: string;
+  provider: string;
   provider_voice_id: string;
-  preview_url:       string | null;
-  language:          string;
-  gender:            string | null;
-  status:            'cloning' | 'ready' | 'error';
-  error_message:     string | null;
-  created_at:        string;
+  preview_url: string | null;
+  language: string;
+  gender: string | null;
+  status: "cloning" | "ready" | "error";
+  error_message: string | null;
+  created_at: string;
 }
 
 // Also show built-in Cartesia voices from /api/voices
 interface BuiltInVoice {
-  voice_id:    string;
-  name:        string;
-  provider:    string;
+  voice_id: string;
+  name: string;
+  provider: string;
   preview_url: string;
   description?: string;
-  language?:   string;
-  tags?:       string[];
+  language?: string;
+  tags?: string[];
   labels: {
     gender: string;
     accent: string;
-    age:    string;
+    age: string;
   };
 }
 
 // ── Voice filter taxonomy ─────────────────────────────────────────────────────
 const VOICE_FILTERS = [
-  { id: 'female',         label: 'Femenino',      re: /\b(female|woman|mujer|femenin)/i },
-  { id: 'male',           label: 'Masculino',     re: /\b(male(?!vol)|man\b|hombre|masculin)/i },
-  { id: 'latino',         label: 'Latino',        re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i },
-  { id: 'conversational', label: 'Conversacional',re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i },
-  { id: 'narrative',      label: 'Narrativa',     re: /\b(narrat|storytell|audiobook|story\b)/i },
-  { id: 'professional',   label: 'Profesional',   re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i },
+  { id: "female", label: "Femenino", re: /\b(female|woman|mujer|femenin)/i },
+  {
+    id: "male",
+    label: "Masculino",
+    re: /\b(male(?!vol)|man\b|hombre|masculin)/i,
+  },
+  {
+    id: "latino",
+    label: "Latino",
+    re: /\b(latin|spanish|hispano|latam|español|colombia|mexic|venezuel|argentin|chil|perua)/i,
+  },
+  {
+    id: "conversational",
+    label: "Conversacional",
+    re: /\b(conversation|casual|natural|everyday|friendly|amigable|chat)/i,
+  },
+  {
+    id: "narrative",
+    label: "Narrativa",
+    re: /\b(narrat|storytell|audiobook|story\b)/i,
+  },
+  {
+    id: "professional",
+    label: "Profesional",
+    re: /\b(profes|formal|business|corporate|executiv|ejecutiv)/i,
+  },
 ] as const;
-type VoiceFilterId = typeof VOICE_FILTERS[number]['id'];
+type VoiceFilterId = (typeof VOICE_FILTERS)[number]["id"];
 
 function voiceMatchesFilter(v: BuiltInVoice, filterId: VoiceFilterId): boolean {
-  const haystack = [v.name, v.description ?? '', ...(v.tags ?? []), v.labels?.gender ?? '', v.labels?.accent ?? '', v.language ?? ''].join(' ');
-  return VOICE_FILTERS.find(f => f.id === filterId)!.re.test(haystack);
+  const haystack = [
+    v.name,
+    v.description ?? "",
+    ...(v.tags ?? []),
+    v.labels?.gender ?? "",
+    v.labels?.accent ?? "",
+    v.language ?? "",
+  ].join(" ");
+  return VOICE_FILTERS.find((f) => f.id === filterId)!.re.test(haystack);
 }
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
-  ready:   <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
-  cloning: <Loader2      className="h-3.5 w-3.5 text-blue-500 animate-spin" />,
-  error:   <AlertCircle  className="h-3.5 w-3.5 text-red-500" />,
+  ready: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
+  cloning: <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />,
+  error: <AlertCircle className="h-3.5 w-3.5 text-red-500" />,
 };
 
 export default function VoiceStudioPage() {
-  const [customVoices,  setCustomVoices]  = useState<CustomVoice[]>([]);
+  const [customVoices, setCustomVoices] = useState<CustomVoice[]>([]);
   const [builtInVoices, setBuiltInVoices] = useState<BuiltInVoice[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [cloneOpen,     setCloneOpen]     = useState(false);
-  const [deletingId,    setDeletingId]    = useState<string | null>(null);
-  const [playingUrl,      setPlayingUrl]      = useState<string | null>(null);
-  const [loadingPreview,  setLoadingPreview]  = useState<string | null>(null);
-  const [voiceSearch,     setVoiceSearch]     = useState('');
-  const [activeFilters,   setActiveFilters]   = useState<VoiceFilterId[]>([]);
-  const audioRef    = useRef<HTMLAudioElement | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
+  const [voiceSearch, setVoiceSearch] = useState("");
+  const [activeFilters, setActiveFilters] = useState<VoiceFilterId[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlsRef = useRef<string[]>([]);
 
   // Clone form state
-  const [cloneName,    setCloneName]    = useState('');
-  const [cloneGender,  setCloneGender]  = useState<string>('neutral');
-  const [cloneLang,    setCloneLang]    = useState('en');
-  const [cloneMode,    setCloneMode]    = useState<'similarity' | 'reconstruction'>('similarity');
-  const [cloneFile,    setCloneFile]    = useState<File | null>(null);
-  const [cloning,      setCloning]      = useState(false);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneGender, setCloneGender] = useState<string>("neutral");
+  const [cloneLang, setCloneLang] = useState("en");
+  const [cloneMode, setCloneMode] = useState<"similarity" | "reconstruction">(
+    "similarity",
+  );
+  const [cloneFile, setCloneFile] = useState<File | null>(null);
+  const [cloning, setCloning] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     const [customRes, builtRes] = await Promise.all([
-      fetch('/api/voices/clone'),
-      fetch('/api/voices'),
+      fetch("/api/voices/clone"),
+      fetch("/api/voices"),
     ]);
-    if (customRes.ok)  setCustomVoices(await customRes.json() as CustomVoice[]);
+    if (customRes.ok)
+      setCustomVoices((await customRes.json()) as CustomVoice[]);
     if (builtRes.ok) {
-      const d = await builtRes.json() as { voices: BuiltInVoice[] };
+      const d = (await builtRes.json()) as { voices: BuiltInVoice[] };
       setBuiltInVoices(d.voices ?? []);
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Poll for cloning voices
   useEffect(() => {
-    const hasCloning = customVoices.some((v) => v.status === 'cloning');
+    const hasCloning = customVoices.some((v) => v.status === "cloning");
     if (!hasCloning) return;
     const id = setInterval(async () => {
-      const res = await fetch('/api/voices/clone');
+      const res = await fetch("/api/voices/clone");
       if (res.ok) {
-        const updated = await res.json() as CustomVoice[];
+        const updated = (await res.json()) as CustomVoice[];
         setCustomVoices(updated);
-        if (!updated.some((v) => v.status === 'cloning')) clearInterval(id);
+        if (!updated.some((v) => v.status === "cloning")) clearInterval(id);
       }
     }, 4000);
     return () => clearInterval(id);
@@ -143,38 +175,51 @@ export default function VoiceStudioPage() {
 
   function stopAudio() {
     audioRef.current?.pause();
-    if (audioRef.current) audioRef.current.src = '';
+    if (audioRef.current) audioRef.current.src = "";
     setPlayingUrl(null);
   }
 
   function togglePreview(url: string | null) {
     if (!url) return;
-    if (playingUrl === url) { stopAudio(); return; }
+    if (playingUrl === url) {
+      stopAudio();
+      return;
+    }
     stopAudio();
     const audio = new Audio(url);
     audioRef.current = audio;
     audio.onended = () => setPlayingUrl(null);
     setPlayingUrl(url);
     audio.play().catch(() => {
-      toast.error('No se pudo reproducir el audio.');
+      toast.error("No se pudo reproducir el audio.");
       setPlayingUrl(null);
     });
   }
 
   async function playBuiltInVoice(voice: BuiltInVoice) {
     const key = `builtin:${voice.voice_id}`;
-    if (playingUrl === key) { stopAudio(); return; }
+    if (playingUrl === key) {
+      stopAudio();
+      return;
+    }
     stopAudio();
     setLoadingPreview(voice.voice_id);
     try {
-      const res = await fetch('/api/voices/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice_id: voice.voice_id, language: voice.language || 'en' }),
+      const res = await fetch("/api/voices/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voice_id: voice.voice_id,
+          language: voice.language || "en",
+        }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Error al generar preview' })) as { error?: string };
-        toast.error(err.error ?? 'No se pudo generar el preview');
+        const err = (await res
+          .json()
+          .catch(() => ({ error: "Error al generar preview" }))) as {
+          error?: string;
+        };
+        toast.error(err.error ?? "No se pudo generar el preview");
         return;
       }
       const blob = await res.blob();
@@ -182,14 +227,17 @@ export default function VoiceStudioPage() {
       blobUrlsRef.current.push(blobUrl);
       const audio = new Audio(blobUrl);
       audioRef.current = audio;
-      audio.onended = () => { setPlayingUrl(null); URL.revokeObjectURL(blobUrl); };
+      audio.onended = () => {
+        setPlayingUrl(null);
+        URL.revokeObjectURL(blobUrl);
+      };
       setPlayingUrl(key);
       audio.play().catch(() => {
-        toast.error('No se pudo reproducir el audio.');
+        toast.error("No se pudo reproducir el audio.");
         setPlayingUrl(null);
       });
     } catch {
-      toast.error('Fallo al generar preview. Verifica la API key de Cartesia.');
+      toast.error("Fallo al generar preview. Verifica la API key de Cartesia.");
     } finally {
       setLoadingPreview(null);
     }
@@ -197,43 +245,55 @@ export default function VoiceStudioPage() {
 
   async function submitClone() {
     if (!cloneName.trim() || !cloneFile) {
-      toast.error('Voice name and audio file are required');
+      toast.error("Voice name and audio file are required");
       return;
     }
     setCloning(true);
     try {
       const fd = new FormData();
-      fd.append('name',     cloneName.trim());
-      fd.append('language', cloneLang);
-      fd.append('gender',   cloneGender);
-      fd.append('mode',     cloneMode);
-      fd.append('file',     cloneFile);
+      fd.append("name", cloneName.trim());
+      fd.append("language", cloneLang);
+      fd.append("gender", cloneGender);
+      fd.append("mode", cloneMode);
+      fd.append("file", cloneFile);
 
-      const res = await fetch('/api/voices/clone', { method: 'POST', body: fd });
-      const data = await res.json() as { error?: string; id?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Clone failed');
+      const res = await fetch("/api/voices/clone", {
+        method: "POST",
+        body: fd,
+      });
+      const data = (await res.json()) as { error?: string; id?: string };
+      if (!res.ok) throw new Error(data.error ?? "Clone failed");
 
-      toast.success('Voice cloned! Processing in background…');
+      toast.success("Voice cloned! Processing in background…");
       setCloneOpen(false);
-      setCloneName(''); setCloneFile(null); setCloneGender('neutral'); setCloneMode('similarity');
+      setCloneName("");
+      setCloneFile(null);
+      setCloneGender("neutral");
+      setCloneMode("similarity");
       loadData();
-    } catch (e) { toast.error(String(e)); }
-    finally { setCloning(false); }
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setCloning(false);
+    }
   }
 
   async function deleteVoice(id: string) {
     setDeletingId(id);
     try {
-      const res = await fetch('/api/voices/clone', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/voices/clone", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      if (!res.ok) throw new Error('Delete failed');
+      if (!res.ok) throw new Error("Delete failed");
       setCustomVoices((prev) => prev.filter((v) => v.id !== id));
-      toast.success('Voice deleted');
-    } catch (e) { toast.error(String(e)); }
-    finally { setDeletingId(null); }
+      toast.success("Voice deleted");
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -245,10 +305,14 @@ export default function VoiceStudioPage() {
             <Mic className="h-6 w-6" /> Voice Studio
           </h1>
           <p className="text-sm text-[#6b6b6b] mt-1">
-            Clone voices from audio samples. Cloned voices are available when configuring any agent.
+            Clone voices from audio samples. Cloned voices are available when
+            configuring any agent.
           </p>
         </div>
-        <Button onClick={() => setCloneOpen(true)} className="bg-[#0a0a0a] text-white hover:bg-[#262626] gap-2">
+        <Button
+          onClick={() => setCloneOpen(true)}
+          className="bg-[#0a0a0a] text-white hover:bg-[#262626] gap-2"
+        >
           <Wand2 className="h-4 w-4" /> Clone New Voice
         </Button>
       </div>
@@ -262,7 +326,10 @@ export default function VoiceStudioPage() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-xl bg-[#f5f5f5] animate-pulse" />
+              <div
+                key={i}
+                className="h-24 rounded-xl bg-[#f5f5f5] animate-pulse"
+              />
             ))}
           </div>
         ) : customVoices.length === 0 ? (
@@ -270,24 +337,41 @@ export default function VoiceStudioPage() {
             <Mic className="h-12 w-12 text-[#e0e0e0] mb-4" />
             <p className="font-semibold text-[#0a0a0a]">No cloned voices yet</p>
             <p className="text-sm text-[#6b6b6b] mt-1 mb-5 max-w-xs">
-              Upload an audio sample and we&apos;ll clone the voice using ElevenLabs Instant Voice Cloning.
+              Upload an audio sample and we&apos;ll clone the voice using
+              ElevenLabs Instant Voice Cloning.
             </p>
-            <Button onClick={() => setCloneOpen(true)} variant="outline" size="sm" className="gap-1.5">
+            <Button
+              onClick={() => setCloneOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+            >
               <Plus className="h-4 w-4" /> Clone your first voice
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {customVoices.map((voice) => (
-              <Card key={voice.id} className="border-[#e0e0e0] hover:border-[#0a0a0a] transition-colors group">
+              <Card
+                key={voice.id}
+                className="border-[#e0e0e0] hover:border-[#0a0a0a] transition-colors group"
+              >
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="min-w-0">
-                      <p className="font-semibold text-[#0a0a0a] truncate">{voice.name}</p>
+                      <p className="font-semibold text-[#0a0a0a] truncate">
+                        {voice.name}
+                      </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {STATUS_ICON[voice.status]}
-                        <span className={`text-xs ${voice.status === 'error' ? 'text-red-600' : 'text-[#6b6b6b]'}`}>
-                          {voice.status === 'cloning' ? 'Cloning…' : voice.status === 'error' ? (voice.error_message ?? 'Failed') : 'Ready'}
+                        <span
+                          className={`text-xs ${voice.status === "error" ? "text-red-600" : "text-[#6b6b6b]"}`}
+                        >
+                          {voice.status === "cloning"
+                            ? "Cloning…"
+                            : voice.status === "error"
+                              ? (voice.error_message ?? "Failed")
+                              : "Ready"}
                         </span>
                       </div>
                     </div>
@@ -299,33 +383,52 @@ export default function VoiceStudioPage() {
                         disabled={deletingId === voice.id}
                         onClick={() => deleteVoice(voice.id)}
                       >
-                        {deletingId === voice.id
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Trash2 className="h-3.5 w-3.5" />}
+                        {deletingId === voice.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
                       </Button>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px]">{voice.provider}</Badge>
-                    {voice.gender && <Badge variant="secondary" className="text-[10px]">{voice.gender}</Badge>}
-                    <Badge variant="secondary" className="text-[10px]">{voice.language.toUpperCase()}</Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {voice.provider}
+                    </Badge>
+                    {voice.gender && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {voice.gender}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-[10px]">
+                      {voice.language.toUpperCase()}
+                    </Badge>
                   </div>
 
-                  {voice.preview_url && voice.status === 'ready' && (
+                  {voice.preview_url && voice.status === "ready" && (
                     <Button
                       size="sm"
                       variant="outline"
                       className="w-full gap-2 text-xs"
                       onClick={() => togglePreview(voice.preview_url)}
                     >
-                      {playingUrl === voice.preview_url
-                        ? <><Pause className="h-3.5 w-3.5" /> Stop preview</>
-                        : <><Play  className="h-3.5 w-3.5" /> Preview voice</>}
+                      {playingUrl === voice.preview_url ? (
+                        <>
+                          <Pause className="h-3.5 w-3.5" /> Stop preview
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3.5 w-3.5" /> Preview voice
+                        </>
+                      )}
                     </Button>
                   )}
 
-                  <p className="text-[10px] text-[#a0a0a0] font-mono truncate" title={voice.provider_voice_id}>
+                  <p
+                    className="text-[10px] text-[#a0a0a0] font-mono truncate"
+                    title={voice.provider_voice_id}
+                  >
                     ID: {voice.provider_voice_id}
                   </p>
                 </CardContent>
@@ -339,7 +442,9 @@ export default function VoiceStudioPage() {
       <section>
         <h2 className="text-sm font-semibold text-[#6b6b6b] uppercase tracking-wide mb-4 flex items-center gap-2">
           <Zap className="h-3.5 w-3.5" /> AI Voice Library
-          <span className="font-normal text-[#a0a0a0]">({builtInVoices.length} voices)</span>
+          <span className="font-normal text-[#a0a0a0]">
+            ({builtInVoices.length} voices)
+          </span>
         </h2>
 
         {/* Search + filter bar */}
@@ -353,7 +458,10 @@ export default function VoiceStudioPage() {
               onChange={(e) => setVoiceSearch(e.target.value)}
             />
             {voiceSearch && (
-              <button className="absolute right-2.5 top-1/2 -translate-y-1/2" onClick={() => setVoiceSearch('')}>
+              <button
+                className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                onClick={() => setVoiceSearch("")}
+              >
                 <X className="h-3.5 w-3.5 text-[#6b6b6b] hover:text-[#0a0a0a]" />
               </button>
             )}
@@ -366,13 +474,15 @@ export default function VoiceStudioPage() {
               return (
                 <button
                   key={f.id}
-                  onClick={() => setActiveFilters(prev =>
-                    active ? prev.filter(x => x !== f.id) : [...prev, f.id]
-                  )}
+                  onClick={() =>
+                    setActiveFilters((prev) =>
+                      active ? prev.filter((x) => x !== f.id) : [...prev, f.id],
+                    )
+                  }
                   className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border transition-all ${
                     active
-                      ? 'bg-[#0a0a0a] text-white border-[#0a0a0a]'
-                      : 'bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]'
+                      ? "bg-[#0a0a0a] text-white border-[#0a0a0a]"
+                      : "bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]"
                   }`}
                 >
                   {f.label}
@@ -381,7 +491,10 @@ export default function VoiceStudioPage() {
             })}
             {(activeFilters.length > 0 || voiceSearch) && (
               <button
-                onClick={() => { setActiveFilters([]); setVoiceSearch(''); }}
+                onClick={() => {
+                  setActiveFilters([]);
+                  setVoiceSearch("");
+                }}
                 className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs text-[#6b6b6b] hover:text-red-600 border border-[#e0e0e0] hover:border-red-200 transition-all"
               >
                 <X className="h-3 w-3" /> Limpiar
@@ -392,10 +505,16 @@ export default function VoiceStudioPage() {
 
         {/* Results */}
         {(() => {
-          const filtered = builtInVoices.filter(v => {
-            const text = `${v.name} ${v.description ?? ''} ${v.language ?? ''}`.toLowerCase();
-            if (voiceSearch && !text.includes(voiceSearch.toLowerCase())) return false;
-            if (activeFilters.length > 0 && !activeFilters.every(f => voiceMatchesFilter(v, f))) return false;
+          const filtered = builtInVoices.filter((v) => {
+            const text =
+              `${v.name} ${v.description ?? ""} ${v.language ?? ""}`.toLowerCase();
+            if (voiceSearch && !text.includes(voiceSearch.toLowerCase()))
+              return false;
+            if (
+              activeFilters.length > 0 &&
+              !activeFilters.every((f) => voiceMatchesFilter(v, f))
+            )
+              return false;
             return true;
           });
 
@@ -403,26 +522,41 @@ export default function VoiceStudioPage() {
             return (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#e0e0e0] py-14 text-center">
                 <Search className="h-8 w-8 text-[#e0e0e0] mb-3" />
-                <p className="text-sm font-medium text-[#0a0a0a]">No se encontraron voces</p>
-                <p className="text-xs text-[#6b6b6b] mt-1">Prueba con otros términos o limpia los filtros</p>
+                <p className="text-sm font-medium text-[#0a0a0a]">
+                  No se encontraron voces
+                </p>
+                <p className="text-xs text-[#6b6b6b] mt-1">
+                  Prueba con otros términos o limpia los filtros
+                </p>
               </div>
             );
           }
 
           return (
             <>
-              <p className="text-xs text-[#a0a0a0] mb-3">{filtered.length} {filtered.length === 1 ? 'voz' : 'voces'}</p>
+              <p className="text-xs text-[#a0a0a0] mb-3">
+                {filtered.length} {filtered.length === 1 ? "voz" : "voces"}
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {filtered.map((v) => {
-                  const activeTags = VOICE_FILTERS.filter(f => voiceMatchesFilter(v, f.id));
+                  const activeTags = VOICE_FILTERS.filter((f) =>
+                    voiceMatchesFilter(v, f.id),
+                  );
                   return (
-                    <Card key={v.voice_id} className="border-[#e0e0e0] hover:border-[#6b6b6b] transition-colors group">
+                    <Card
+                      key={v.voice_id}
+                      className="border-[#e0e0e0] hover:border-[#6b6b6b] transition-colors group"
+                    >
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between mb-1.5">
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-[#0a0a0a] truncate">{v.name}</p>
+                            <p className="text-sm font-medium text-[#0a0a0a] truncate">
+                              {v.name}
+                            </p>
                             {v.language && (
-                              <p className="text-[10px] text-[#a0a0a0] uppercase tracking-wide">{v.language}</p>
+                              <p className="text-[10px] text-[#a0a0a0] uppercase tracking-wide">
+                                {v.language}
+                              </p>
                             )}
                           </div>
                           <Button
@@ -433,19 +567,26 @@ export default function VoiceStudioPage() {
                             disabled={loadingPreview === v.voice_id}
                             title="Preview voice"
                           >
-                            {loadingPreview === v.voice_id
-                              ? <Loader2 className="h-3 w-3 animate-spin" />
-                              : playingUrl === `builtin:${v.voice_id}`
-                                ? <Pause className="h-3 w-3" />
-                                : <Play  className="h-3 w-3" />}
+                            {loadingPreview === v.voice_id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : playingUrl === `builtin:${v.voice_id}` ? (
+                              <Pause className="h-3 w-3" />
+                            ) : (
+                              <Play className="h-3 w-3" />
+                            )}
                           </Button>
                         </div>
                         {v.description && (
-                          <p className="text-[10px] text-[#6b6b6b] line-clamp-2 mb-1.5 leading-relaxed">{v.description}</p>
+                          <p className="text-[10px] text-[#6b6b6b] line-clamp-2 mb-1.5 leading-relaxed">
+                            {v.description}
+                          </p>
                         )}
                         <div className="flex flex-wrap gap-1">
-                          {activeTags.map(t => (
-                            <span key={t.id} className="rounded-full bg-[#f5f5f5] px-1.5 py-0.5 text-[9px] font-medium text-[#6b6b6b]">
+                          {activeTags.map((t) => (
+                            <span
+                              key={t.id}
+                              className="rounded-full bg-[#f5f5f5] px-1.5 py-0.5 text-[9px] font-medium text-[#6b6b6b]"
+                            >
                               {t.label}
                             </span>
                           ))}
@@ -471,7 +612,9 @@ export default function VoiceStudioPage() {
 
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Voice name <span className="text-red-500">*</span></Label>
+              <Label>
+                Voice name <span className="text-red-500">*</span>
+              </Label>
               <Input
                 placeholder="e.g. Alex Sales Voice"
                 value={cloneName}
@@ -483,10 +626,25 @@ export default function VoiceStudioPage() {
               <div className="space-y-1.5">
                 <Label>Language</Label>
                 <Select value={cloneLang} onValueChange={setCloneLang}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {([['en','English'],['es','Spanish'],['fr','French'],['de','German'],['pt','Portuguese'],['it','Italian'],['ja','Japanese'],['zh','Chinese']] as [string,string][]).map(([v,l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    {(
+                      [
+                        ["en", "English"],
+                        ["es", "Spanish"],
+                        ["fr", "French"],
+                        ["de", "German"],
+                        ["pt", "Portuguese"],
+                        ["it", "Italian"],
+                        ["ja", "Japanese"],
+                        ["zh", "Chinese"],
+                      ] as [string, string][]
+                    ).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>
+                        {l}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -494,7 +652,9 @@ export default function VoiceStudioPage() {
               <div className="space-y-1.5">
                 <Label>Gender (metadata)</Label>
                 <Select value={cloneGender} onValueChange={setCloneGender}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
                     <SelectItem value="female">Female</SelectItem>
@@ -507,42 +667,72 @@ export default function VoiceStudioPage() {
             <div className="space-y-1.5">
               <Label>Clone mode</Label>
               <div className="grid grid-cols-2 gap-2">
-                {([
-                  { v: 'similarity',     label: 'Similarity',     desc: 'Fastest · ≥10s clip' },
-                  { v: 'reconstruction', label: 'Reconstruction',  desc: 'Best quality · ≥30s' },
-                ] as const).map(({ v, label, desc }) => (
+                {(
+                  [
+                    {
+                      v: "similarity",
+                      label: "Similarity",
+                      desc: "Fastest · ≥10s clip",
+                    },
+                    {
+                      v: "reconstruction",
+                      label: "Reconstruction",
+                      desc: "Best quality · ≥30s",
+                    },
+                  ] as const
+                ).map(({ v, label, desc }) => (
                   <button
                     key={v}
                     type="button"
                     onClick={() => setCloneMode(v)}
                     className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors
-                      ${cloneMode === v ? 'border-[#0a0a0a] bg-[#0a0a0a] text-white' : 'border-[#e0e0e0] hover:border-[#6b6b6b]'}`}
+                      ${cloneMode === v ? "border-[#0a0a0a] bg-[#0a0a0a] text-white" : "border-[#e0e0e0] hover:border-[#6b6b6b]"}`}
                   >
                     <p className="font-semibold">{label}</p>
-                    <p className={cloneMode === v ? 'text-white/60' : 'text-[#6b6b6b]'}>{desc}</p>
+                    <p
+                      className={
+                        cloneMode === v ? "text-white/60" : "text-[#6b6b6b]"
+                      }
+                    >
+                      {desc}
+                    </p>
                   </button>
                 ))}
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Audio clip <span className="text-red-500">*</span></Label>
+              <Label>
+                Audio clip <span className="text-red-500">*</span>
+              </Label>
               <div
                 className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-colors
-                  ${cloneFile ? 'border-green-400 bg-green-50' : 'border-[#e0e0e0] hover:border-[#0a0a0a]'}`}
+                  ${cloneFile ? "border-green-400 bg-green-50" : "border-[#e0e0e0] hover:border-[#0a0a0a]"}`}
                 onClick={() => fileRef.current?.click()}
               >
                 {cloneFile ? (
                   <>
                     <CheckCircle2 className="h-6 w-6 text-green-500 mb-2" />
-                    <p className="text-sm font-medium text-green-700">{cloneFile.name}</p>
-                    <p className="text-xs text-green-600">{(cloneFile.size / 1024 / 1024).toFixed(1)} MB · {cloneMode} mode</p>
+                    <p className="text-sm font-medium text-green-700">
+                      {cloneFile.name}
+                    </p>
+                    <p className="text-xs text-green-600">
+                      {(cloneFile.size / 1024 / 1024).toFixed(1)} MB ·{" "}
+                      {cloneMode} mode
+                    </p>
                   </>
                 ) : (
                   <>
                     <Upload className="h-6 w-6 text-[#6b6b6b] mb-2" />
-                    <p className="text-sm text-[#6b6b6b]">Click to upload .mp3 or .wav</p>
-                    <p className="text-xs text-[#a0a0a0] mt-0.5">Max 25 MB · {cloneMode === 'similarity' ? '≥10 seconds' : '≥30 seconds recommended'}</p>
+                    <p className="text-sm text-[#6b6b6b]">
+                      Click to upload .mp3 or .wav
+                    </p>
+                    <p className="text-xs text-[#a0a0a0] mt-0.5">
+                      Max 25 MB ·{" "}
+                      {cloneMode === "similarity"
+                        ? "≥10 seconds"
+                        : "≥30 seconds recommended"}
+                    </p>
                   </>
                 )}
                 <input
@@ -550,13 +740,18 @@ export default function VoiceStudioPage() {
                   type="file"
                   accept=".mp3,.wav,.m4a,.ogg"
                   className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setCloneFile(f); }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setCloneFile(f);
+                  }}
                 />
               </div>
             </div>
 
             <div className="rounded-lg border border-[#e0e0e0] bg-[#f9f9f9] px-3 py-2.5 text-xs text-[#6b6b6b] space-y-1">
-              <p className="font-semibold text-[#0a0a0a]">Voice Cloning tips:</p>
+              <p className="font-semibold text-[#0a0a0a]">
+                Voice Cloning tips:
+              </p>
               <ul className="space-y-0.5 list-disc list-inside">
                 <li>One speaker only, no background music</li>
                 <li>Similarity mode: fast clone from any clear clip ≥10s</li>
@@ -567,16 +762,22 @@ export default function VoiceStudioPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setCloneOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setCloneOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={submitClone}
               disabled={cloning || !cloneName.trim() || !cloneFile}
               className="bg-[#0a0a0a] text-white hover:bg-[#262626]"
             >
               {cloning ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cloning…</>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cloning…
+                </>
               ) : (
-                <><Wand2 className="mr-2 h-4 w-4" /> Clone Voice</>
+                <>
+                  <Wand2 className="mr-2 h-4 w-4" /> Clone Voice
+                </>
               )}
             </Button>
           </DialogFooter>
