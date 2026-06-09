@@ -41,6 +41,7 @@ import * as dotenv from "dotenv";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as net from "node:net";
+import * as crypto from "node:crypto";
 import { runStartupCleanup } from "./startup-cleanup.js";
 import { CallLifecycleManager } from "./runtime/call-lifecycle.js";
 import { makeEventRecorder } from "./persistence/call-events-repository.js";
@@ -2384,6 +2385,12 @@ export default defineAgent({
       // Cost tracking + CRM extraction + webhook — all fire-and-forget.
       // Runs after slot release so none of this can delay the call lifecycle.
       void (async () => {
+        // Shared billing summary: populated by the billing block, consumed by webhook.
+        let _postCallId: string | null = null;
+        let _postCostUsd: number | null = null;
+        let _postCostBreakdown: unknown = null;
+        let _postCostStatus: string | null = null;
+
         try {
           // ── Fase 7: compute and persist call costs ───────────────────────────
           if (billing) {
@@ -2394,6 +2401,7 @@ export default defineAgent({
               .eq("retell_call_id", roomName)
               .maybeSingle();
             const resolvedCallId = costCallRow?.id ?? null;
+            _postCallId = resolvedCallId;
 
             billing.trackTelephony(durationSeconds, callDirection);
             billing.trackLiveKit(durationSeconds);
@@ -2407,6 +2415,20 @@ export default defineAgent({
             }
 
             await billing.computeAndPersist(resolvedCallId, supabase);
+
+            // Fetch the final cost row so the webhook can include billing data.
+            if (resolvedCallId) {
+              const { data: costRow } = await supabase
+                .from("calls")
+                .select("cost_usd, cost_breakdown, cost_status")
+                .eq("id", resolvedCallId)
+                .maybeSingle();
+              if (costRow) {
+                _postCostUsd = costRow.cost_usd ?? null;
+                _postCostBreakdown = costRow.cost_breakdown ?? null;
+                _postCostStatus = costRow.cost_status ?? null;
+              }
+            }
 
             // Safety backfill: update any cost events written with null call_id
             if (resolvedCallId) {
@@ -2446,37 +2468,77 @@ export default defineAgent({
               .eq("id", callRow.id);
           }
 
-          // Outbound webhook: deliver call result + CRM analysis to external platform
-          if (callEndedWebhookUrl) {
+          // Outbound webhook — signed call.completed payload (Fase 9)
+          // Sources: room metadata webhook_url OR workspace-level webhook_url column.
+          let effectiveWebhookUrl = callEndedWebhookUrl;
+          if (!effectiveWebhookUrl && workspaceId) {
+            const { data: wsRow } = await supabase
+              .from("workspaces")
+              .select("webhook_url")
+              .eq("id", workspaceId)
+              .maybeSingle();
+            effectiveWebhookUrl =
+              (wsRow as { webhook_url?: string | null } | null)?.webhook_url ??
+              null;
+          }
+
+          if (effectiveWebhookUrl) {
+            const webhookPayload = {
+              event: "call.completed",
+              timestamp: new Date().toISOString(),
+              call_id: _postCallId ?? null,
+              technical_status: finalTechnicalStatus,
+              business_outcome: lifecycle?.outcome ?? null,
+              duration_seconds: durationSeconds,
+              cost_usd: _postCostUsd,
+              cost_status: _postCostStatus,
+              cost_breakdown: _postCostBreakdown,
+              // First 400 chars of transcript as a summary proxy (no full text)
+              transcript_summary: transcript
+                ? transcript.slice(0, 400) +
+                  (transcript.length > 400 ? "…" : "")
+                : null,
+              call: {
+                room: roomName,
+                agent_id: agentId,
+                workspace_id: workspaceId,
+                direction: callDirection,
+                voicemail: _voicemailDetected,
+              },
+              crm_fields: {
+                Funnel: crmFunnel,
+                LeadId: crmLeadId,
+                Country: crmCountry,
+                Campaign: crmCampaign,
+              },
+              analysis: crmAnalysis,
+            };
+            const payloadStr = JSON.stringify(webhookPayload);
+            const secret = process.env["INTERNAL_API_SECRET"];
+            const headers: Record<string, string> = {
+              "Content-Type": "application/json",
+            };
+            if (secret) {
+              headers["X-VoiceOS-Signature"] = `sha256=${crypto
+                .createHmac("sha256", secret)
+                .update(payloadStr)
+                .digest("hex")}`;
+            }
             await Promise.race([
-              fetch(callEndedWebhookUrl, {
+              fetch(effectiveWebhookUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  event: "call.completed",
-                  timestamp: new Date().toISOString(),
-                  call: {
-                    room: roomName,
-                    agent_id: agentId,
-                    workspace_id: workspaceId,
-                    direction: callDirection,
-                    duration_seconds: durationSeconds,
-                    voicemail: _voicemailDetected,
-                  },
-                  crm_fields: {
-                    Funnel: crmFunnel,
-                    LeadId: crmLeadId,
-                    Country: crmCountry,
-                    Campaign: crmCampaign,
-                  },
-                  analysis: crmAnalysis,
-                }),
+                headers,
+                body: payloadStr,
               }),
               new Promise<never>((_, rej) =>
-                setTimeout(() => rej(new Error("webhook timeout")), 8000),
+                setTimeout(() => rej(new Error("webhook timeout")), 8_000),
               ),
             ]);
-            log("info", { message: "call.webhook.sent", room: roomName });
+            log("info", {
+              message: "call.webhook.sent",
+              room: roomName,
+              signed: !!secret,
+            });
           }
         } catch (err) {
           log("error", {
