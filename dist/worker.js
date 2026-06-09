@@ -45780,13 +45780,20 @@ function round6(n) {
 }
 
 // agent/persistence/billing-tracker.ts
+var DEDUPE_WINDOW_MS = 5e3;
 var BillingTracker = class {
   constructor(room, workspaceId, agentId) {
     this._usage = [];
-    // TTS is accumulated across many session.say() calls during a call;
-    // we flush into _usage as a single consolidated record in computeAndPersist().
-    this._ttsCharsTotal = 0;
-    this._ttsSayCount = 0;
+    // TTS: two separate source buckets flushed into a single cost event at call-end.
+    this._manualSayChars = 0;
+    // from trackedSay() / explicit session.say() injections
+    this._manualSayCount = 0;
+    this._pipelineChars = 0;
+    // from ConversationItemAdded (LLM-generated responses)
+    this._pipelineCount = 0;
+    // Dedup registry: maps a short key to pending manual-say units.
+    // Consumed by trackPipelineTTS() when ConversationItemAdded fires for the same text.
+    this._pendingManual = /* @__PURE__ */ new Map();
     // LLM tokens are estimated once at call-end; accumulated for completeness.
     this._llmTokensTotal = 0;
     this._room = room;
@@ -45839,13 +45846,44 @@ var BillingTracker = class {
       },
     });
   }
-  // Accumulates TTS characters across all session.say() calls.
-  // Call this every time text is sent to TTS (via trackedSay wrapper).
-  // A single consolidated cost event is emitted at computeAndPersist time.
-  trackTTS(characters) {
-    if (characters <= 0) return;
-    this._ttsCharsTotal += characters;
-    this._ttsSayCount++;
+  // Called by trackedSay() BEFORE calling session.say(text).
+  // Registers the text as a pending manual injection so that when
+  // ConversationItemAdded fires for the same text, it is attributed to
+  // the manual_session_say source bucket rather than the pipeline bucket.
+  trackManualSay(text) {
+    const chars = text.length;
+    if (chars <= 0) return;
+    const key = this._dedupeKey(text);
+    const existing = this._pendingManual.get(key);
+    if (existing) {
+      existing.count++;
+      existing.ts = Date.now();
+    } else {
+      this._pendingManual.set(key, { count: 1, chars, ts: Date.now() });
+    }
+  }
+  // Called from ConversationItemAdded for role=assistant items.
+  // Deduplicates against pending manual entries; if a match is found within
+  // DEDUPE_WINDOW_MS the chars are routed to _manualSayChars (not double-counted).
+  // Non-matching items are LLM pipeline responses → _pipelineChars.
+  trackPipelineTTS(text) {
+    const chars = text.length;
+    if (chars <= 0) return;
+    const key = this._dedupeKey(text);
+    const pending = this._pendingManual.get(key);
+    if (
+      pending &&
+      pending.count > 0 &&
+      Date.now() - pending.ts < DEDUPE_WINDOW_MS
+    ) {
+      pending.count--;
+      if (pending.count === 0) this._pendingManual.delete(key);
+      this._manualSayChars += chars;
+      this._manualSayCount++;
+    } else {
+      this._pipelineChars += chars;
+      this._pipelineCount++;
+    }
   }
   // Accumulates estimated LLM token counts (estimated from transcript length).
   // A single consolidated cost event is emitted at computeAndPersist time.
@@ -45854,18 +45892,42 @@ var BillingTracker = class {
     this._llmTokensTotal += estimatedTokens;
   }
   async computeAndPersist(callId, supabase) {
-    if (this._ttsCharsTotal > 0) {
+    for (const [, p] of this._pendingManual) {
+      if (p.count > 0) {
+        this._manualSayChars += p.chars * p.count;
+        this._manualSayCount += p.count;
+      }
+    }
+    this._pendingManual.clear();
+    const totalTtsChars = this._manualSayChars + this._pipelineChars;
+    if (totalTtsChars > 0) {
+      const pipelineVisibility =
+        this._pipelineCount > 0
+          ? "captured"
+          : this._manualSayCount > 0
+            ? "manual_only"
+            : "none";
       this._usage.push({
         provider: "cartesia",
         cost_type: "tts",
-        quantity: this._ttsCharsTotal,
+        quantity: totalTtsChars,
         unit: "characters",
         metadata: {
-          estimation_method: "tracked_session_say_text_length",
+          estimation_method: "conversation_item_added_with_manual_say_dedup",
           confidence: "medium",
           quantity_source: "estimated",
           pricing_unit: "usd_per_1k_characters",
-          say_count: this._ttsSayCount,
+          tts_pipeline_visibility: pipelineVisibility,
+          sources: {
+            manual_session_say: {
+              characters: this._manualSayChars,
+              say_count: this._manualSayCount,
+            },
+            agent_pipeline_tts: {
+              characters: this._pipelineChars,
+              message_count: this._pipelineCount,
+            },
+          },
         },
       });
     }
@@ -45968,6 +46030,12 @@ var BillingTracker = class {
     } catch (err) {
       console.warn("[billing-tracker] backfillCallId error:", String(err));
     }
+  }
+  // Short dedupe key based on character count + first 32 normalized chars.
+  // Avoids storing full text in memory while being discriminating enough for
+  // the short phrases injected via session.say() (greetings, fillers, farewells).
+  _dedupeKey(text) {
+    return `${text.length}:${text.slice(0, 32).toLowerCase().replace(/\s+/g, " ").trim()}`;
   }
   _priceUsage(u, costs) {
     let base;
@@ -46249,7 +46317,7 @@ function buildDynamicTool(t, billing) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     execute: async (args, opts) => {
       const sayText = "One moment, let me check that for you.";
-      billing?.trackTTS(sayText.length);
+      billing?.trackManualSay(sayText);
       opts.ctx.session.say(sayText);
       try {
         const res = await Promise.race([
@@ -46288,7 +46356,7 @@ function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey, billing) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     execute: async (args, opts) => {
       const sayText = "Let me look that up for you.";
-      billing?.trackTTS(sayText.length);
+      billing?.trackManualSay(sayText);
       opts.ctx.session.say(sayText);
       try {
         const embRes = await Promise.race([
@@ -46745,7 +46813,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           room: roomName,
         });
         try {
-          billing?.trackTTS(args.farewell.length);
+          billing?.trackManualSay(args.farewell);
           await opts.ctx.session.say(args.farewell, {
             allowInterruptions: false,
           });
@@ -46905,7 +46973,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 targetNode.data.farewell ??
                 "Thank you for calling. Have a great day!";
               try {
-                billing?.trackTTS(farewell.length);
+                billing?.trackManualSay(farewell);
                 await opts.ctx.session.say(farewell, {
                   allowInterruptions: false,
                 });
@@ -46932,7 +47000,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
               if (tn && agentRef.current) {
                 try {
                   const transferSay = "One moment, let me transfer you now.";
-                  billing?.trackTTS(transferSay.length);
+                  billing?.trackManualSay(transferSay);
                   opts.ctx.session.say(transferSay);
                 } catch {}
               }
@@ -47106,7 +47174,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       tts,
     });
     const trackedSay = (text, options) => {
-      billing?.trackTTS(text.length);
+      billing?.trackManualSay(text);
       return session.say(text, options);
     };
     const _doDeleteRoom = () => {
@@ -47633,6 +47701,9 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         if (text.trim()) {
           const speaker = role === "assistant" ? agentName : "User";
           transcriptLines.push(`${speaker}: ${text.trim()}`);
+          if (role === "assistant") {
+            billing?.trackPipelineTTS(text.trim());
+          }
         }
       },
     );

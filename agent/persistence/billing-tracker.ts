@@ -18,16 +18,32 @@ interface UsageRecord {
 
 type CostEventRow = Record<string, unknown>;
 
+// Pending manual-say entry: each trackManualSay() call increments count by 1.
+// trackPipelineTTS() matching the same key within the dedupe window consumes
+// one count and routes those chars to the manual bucket (not pipeline).
+interface PendingEntry {
+  count: number;
+  chars: number;
+  ts: number;
+}
+
+const DEDUPE_WINDOW_MS = 5_000;
+
 export class BillingTracker {
   private readonly _room: string;
   private readonly _workspaceId: string;
   private readonly _agentId: string | null;
   private readonly _usage: UsageRecord[] = [];
 
-  // TTS is accumulated across many session.say() calls during a call;
-  // we flush into _usage as a single consolidated record in computeAndPersist().
-  private _ttsCharsTotal = 0;
-  private _ttsSayCount = 0;
+  // TTS: two separate source buckets flushed into a single cost event at call-end.
+  private _manualSayChars = 0; // from trackedSay() / explicit session.say() injections
+  private _manualSayCount = 0;
+  private _pipelineChars = 0; // from ConversationItemAdded (LLM-generated responses)
+  private _pipelineCount = 0;
+
+  // Dedup registry: maps a short key to pending manual-say units.
+  // Consumed by trackPipelineTTS() when ConversationItemAdded fires for the same text.
+  private _pendingManual = new Map<string, PendingEntry>();
 
   // LLM tokens are estimated once at call-end; accumulated for completeness.
   private _llmTokensTotal = 0;
@@ -90,13 +106,45 @@ export class BillingTracker {
     });
   }
 
-  // Accumulates TTS characters across all session.say() calls.
-  // Call this every time text is sent to TTS (via trackedSay wrapper).
-  // A single consolidated cost event is emitted at computeAndPersist time.
-  trackTTS(characters: number): void {
-    if (characters <= 0) return;
-    this._ttsCharsTotal += characters;
-    this._ttsSayCount++;
+  // Called by trackedSay() BEFORE calling session.say(text).
+  // Registers the text as a pending manual injection so that when
+  // ConversationItemAdded fires for the same text, it is attributed to
+  // the manual_session_say source bucket rather than the pipeline bucket.
+  trackManualSay(text: string): void {
+    const chars = text.length;
+    if (chars <= 0) return;
+    const key = this._dedupeKey(text);
+    const existing = this._pendingManual.get(key);
+    if (existing) {
+      existing.count++;
+      existing.ts = Date.now();
+    } else {
+      this._pendingManual.set(key, { count: 1, chars, ts: Date.now() });
+    }
+  }
+
+  // Called from ConversationItemAdded for role=assistant items.
+  // Deduplicates against pending manual entries; if a match is found within
+  // DEDUPE_WINDOW_MS the chars are routed to _manualSayChars (not double-counted).
+  // Non-matching items are LLM pipeline responses → _pipelineChars.
+  trackPipelineTTS(text: string): void {
+    const chars = text.length;
+    if (chars <= 0) return;
+    const key = this._dedupeKey(text);
+    const pending = this._pendingManual.get(key);
+    if (
+      pending &&
+      pending.count > 0 &&
+      Date.now() - pending.ts < DEDUPE_WINDOW_MS
+    ) {
+      pending.count--;
+      if (pending.count === 0) this._pendingManual.delete(key);
+      this._manualSayChars += chars;
+      this._manualSayCount++;
+    } else {
+      this._pipelineChars += chars;
+      this._pipelineCount++;
+    }
   }
 
   // Accumulates estimated LLM token counts (estimated from transcript length).
@@ -110,19 +158,49 @@ export class BillingTracker {
     callId: string | null,
     supabase: SupabaseClient,
   ): Promise<void> {
-    // Flush accumulated TTS and LLM token counts into the usage array
-    if (this._ttsCharsTotal > 0) {
+    // Flush any pending manual entries that ConversationItemAdded never consumed
+    // (e.g., session.say() calls issued before the session conversation context
+    // started, or future SDK versions that don't emit ConversationItemAdded for
+    // injected speech). Count them as manual_session_say so no chars are lost.
+    for (const [, p] of this._pendingManual) {
+      if (p.count > 0) {
+        this._manualSayChars += p.chars * p.count;
+        this._manualSayCount += p.count;
+      }
+    }
+    this._pendingManual.clear();
+
+    const totalTtsChars = this._manualSayChars + this._pipelineChars;
+
+    if (totalTtsChars > 0) {
+      const pipelineVisibility =
+        this._pipelineCount > 0
+          ? "captured"
+          : this._manualSayCount > 0
+            ? "manual_only"
+            : "none";
+
       this._usage.push({
         provider: "cartesia",
         cost_type: "tts",
-        quantity: this._ttsCharsTotal,
+        quantity: totalTtsChars,
         unit: "characters",
         metadata: {
-          estimation_method: "tracked_session_say_text_length",
+          estimation_method: "conversation_item_added_with_manual_say_dedup",
           confidence: "medium",
           quantity_source: "estimated",
           pricing_unit: "usd_per_1k_characters",
-          say_count: this._ttsSayCount,
+          tts_pipeline_visibility: pipelineVisibility,
+          sources: {
+            manual_session_say: {
+              characters: this._manualSayChars,
+              say_count: this._manualSayCount,
+            },
+            agent_pipeline_tts: {
+              characters: this._pipelineChars,
+              message_count: this._pipelineCount,
+            },
+          },
         },
       });
     }
@@ -241,6 +319,13 @@ export class BillingTracker {
     } catch (err) {
       console.warn("[billing-tracker] backfillCallId error:", String(err));
     }
+  }
+
+  // Short dedupe key based on character count + first 32 normalized chars.
+  // Avoids storing full text in memory while being discriminating enough for
+  // the short phrases injected via session.say() (greetings, fillers, farewells).
+  private _dedupeKey(text: string): string {
+    return `${text.length}:${text.slice(0, 32).toLowerCase().replace(/\s+/g, " ").trim()}`;
   }
 
   private _priceUsage(

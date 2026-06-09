@@ -362,7 +362,7 @@ function buildDynamicTool(t: AgentToolRow, billing?: BillingTracker | null) {
       opts: Parameters<llm.FunctionTool<any>["execute"]>[1],
     ) => {
       const sayText = "One moment, let me check that for you.";
-      billing?.trackTTS(sayText.length);
+      billing?.trackManualSay(sayText);
       opts.ctx.session.say(sayText);
       try {
         const res = await Promise.race([
@@ -414,7 +414,7 @@ function buildRagTool(
       opts: Parameters<llm.FunctionTool<any>["execute"]>[1],
     ) => {
       const sayText = "Let me look that up for you.";
-      billing?.trackTTS(sayText.length);
+      billing?.trackManualSay(sayText);
       opts.ctx.session.say(sayText);
       try {
         // Embed the query using OpenAI text-embedding-3-small (1536 dims)
@@ -1023,7 +1023,7 @@ export default defineAgent({
         });
         // Speak the farewell before disconnecting so the caller hears it
         try {
-          billing?.trackTTS(args.farewell.length);
+          billing?.trackManualSay(args.farewell);
           await opts.ctx.session.say(args.farewell, {
             allowInterruptions: false,
           });
@@ -1212,7 +1212,7 @@ export default defineAgent({
                 targetNode.data.farewell ??
                 "Thank you for calling. Have a great day!";
               try {
-                billing?.trackTTS(farewell.length);
+                billing?.trackManualSay(farewell);
                 await opts.ctx.session.say(farewell, {
                   allowInterruptions: false,
                 });
@@ -1243,7 +1243,7 @@ export default defineAgent({
                 // Use the existing transfer tool via session
                 try {
                   const transferSay = "One moment, let me transfer you now.";
-                  billing?.trackTTS(transferSay.length);
+                  billing?.trackManualSay(transferSay);
                   opts.ctx.session.say(transferSay);
                 } catch {
                   /* ok */
@@ -1443,7 +1443,9 @@ export default defineAgent({
       text: string,
       options?: Parameters<(typeof session)["say"]>[1],
     ): ReturnType<(typeof session)["say"]> => {
-      billing?.trackTTS(text.length);
+      // Register as manual before calling say() so that when ConversationItemAdded
+      // fires for this text it is deduplicated into the manual_session_say bucket.
+      billing?.trackManualSay(text);
       return session.say(text, options);
     };
 
@@ -2126,8 +2128,14 @@ export default defineAgent({
       if (text.trim()) {
         const speaker = role === "assistant" ? agentName : "User";
         transcriptLines.push(`${speaker}: ${text.trim()}`);
-        // TTS chars are tracked via trackedSay() — not here — to prevent
-        // double-counting with the explicit session.say() injections.
+        // Track all assistant speech through the pipeline TTS accumulator.
+        // trackPipelineTTS() deduplicates against pending manual-say entries
+        // (registered by trackedSay() before session.say()), so chars injected
+        // by trackedSay() are attributed to manual_session_say, while LLM-generated
+        // responses are attributed to agent_pipeline_tts — no double-counting.
+        if (role === "assistant") {
+          billing?.trackPipelineTTS(text.trim());
+        }
       }
     });
 
@@ -2275,7 +2283,7 @@ export default defineAgent({
             billing.trackTelephony(durationSeconds, callDirection);
             billing.trackLiveKit(durationSeconds);
             billing.trackSTT(durationSeconds);
-            // TTS chars accumulated via trackedSay() throughout the call
+            // TTS chars: manual injections via trackedSay() + pipeline via ConversationItemAdded
 
             // LLM token estimate: total transcript chars / 3 (rough; labeled 'estimated')
             const transcriptChars = transcriptLines.join("").length;
