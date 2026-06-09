@@ -36,19 +36,40 @@ import { runStartupCleanup } from './startup-cleanup.js';
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.local');
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
 
+// ── Global crash guards ───────────────────────────────────────────────────────
+// Transient socket errors (ECONNRESET, ETIMEDOUT) arise when TCP keepAlive
+// probes detect a dead connection and emit an error on a socket that has no
+// application-level error listener. Without this handler, Node.js would throw
+// the error as an uncaught exception and crash the Render instance.
+// We suppress only the expected transient codes; all other errors still exit.
+const TRANSIENT_CODES = new Set(['ECONNRESET','ETIMEDOUT','EPIPE','ENOTCONN','ECONNABORTED']);
+process.on('uncaughtException', (err: Error) => {
+  const code = (err as NodeJS.ErrnoException).code ?? '';
+  if (TRANSIENT_CODES.has(code)) {
+    console.warn(`[worker] Transient socket error suppressed (${code}): ${err.message}`);
+    return; // keep process alive
+  }
+  console.error('[worker] FATAL uncaught exception — exiting:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[worker] Unhandled Promise rejection (non-fatal):', String(reason));
+  // do NOT exit — just log
+});
+
 // ── Global TCP keepAlive — prevent silent mid-stream drops on Render ──────────
-// Without SO_KEEPALIVE, the OS considers an idle TCP socket alive indefinitely.
-// When Cartesia's WebSocket TCP connection silently dies, the ws library calls
-// ws.close() → waits up to 30s for the close ACK that never arrives → agent
-// stays in 'speaking' forever. Enabling keepAlive causes the OS to send probes;
-// when they fail (ETIMEDOUT/ECONNRESET), the WebSocket fires an error event
-// which properly unblocks the SynthesizeStream's recvTask.
-const _origCreateConnection = net.Socket.prototype.connect;
+// Applied on the 'connect' event (AFTER the socket is established) so
+// setKeepAlive runs on a fully initialised socket — calling it before connect
+// on certain TLS/internal socket types was emitting an error with no listener,
+// causing the process-level uncaughtException above to fire.
+const _origSocketConnect = net.Socket.prototype.connect;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (net.Socket.prototype as any).connect = function(...args: any[]) {
-  try { this.setKeepAlive(true, 15_000); } catch { /* ignore if socket not ready */ }
+  this.once('connect', () => {
+    try { this.setKeepAlive(true, 15_000); } catch { /* ignore */ }
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (_origCreateConnection as any).apply(this, args);
+  return (_origSocketConnect as any).apply(this, args);
 };
 
 // ── Pilar A: Flow Builder → LLM instructions ────────────────────────────────
@@ -431,6 +452,11 @@ export default defineAgent({
   entry: async (ctx) => {
     await ctx.connect();
 
+    // STT language — defaults to 'es'; overridden by room metadata `language` field
+    // Declared here so the call.init diagnostic can reference it (shows default until
+    // metadata is parsed below; stt.init log below captures the post-parse value).
+    let agentLanguage = 'es';
+
     // ── DIAGNOSTIC: log full env snapshot at call start ──────────────────────
     const dgKey = process.env['DEEPGRAM_API_KEY'] ?? '';
     const cartKey = process.env['CARTESIA_API_KEY'] ?? '';
@@ -448,8 +474,8 @@ export default defineAgent({
       LIVEKIT_URL:         process.env['LIVEKIT_URL'] ?? 'MISSING',
       SUPABASE_URL_set:    !!process.env['NEXT_PUBLIC_SUPABASE_URL'],
       SUPABASE_SRK_set:    !!process.env['SUPABASE_SERVICE_ROLE_KEY'],
-      // Deepgram connection URL that will be attempted
-      deepgram_url:        `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
+      // Deepgram connection URL that will be attempted (language resolved after metadata parse)
+      deepgram_url:        `wss://api.deepgram.com/v1/listen?model=nova-2&language=${agentLanguage}&encoding=linear16&vad_events=true&interim_results=true&endpointing=300`,
     }));
 
     // ─── 1. Parse room metadata ───────────────────────────────────────────────
@@ -497,6 +523,7 @@ export default defineAgent({
         Country?: string | null;
         Campaign?: string | null;
         webhook_url?: string | null;
+        language?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -531,6 +558,7 @@ export default defineAgent({
       if (meta.Country)     crmCountry  = meta.Country;
       if (meta.Campaign)    crmCampaign = meta.Campaign;
       if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
+      if (meta.language)    agentLanguage = meta.language;
     } catch { /* use defaults */ }
 
     // Inject CRM context section into system prompt when CRM fields are present
@@ -596,7 +624,8 @@ export default defineAgent({
     const dgApiKey = process.env['DEEPGRAM_API_KEY'];
     console.log('[worker.diag] stt.init', JSON.stringify({
       model: 'nova-2',
-      language: 'en',
+      language: agentLanguage,
+      endpointing: 300,
       api_key_present: !!dgApiKey,
       api_key_length:  dgApiKey?.length ?? 0,
       api_key_prefix:  dgApiKey ? dgApiKey.slice(0, 4) : 'MISSING',
@@ -605,7 +634,10 @@ export default defineAgent({
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: 'nova-2' as any,
-      language: 'es',
+      language: agentLanguage,
+      // 300 ms endpointing prevents premature turn-end on mobile connections
+      // while staying responsive on stable lines (plugin default 25 ms is too aggressive).
+      endpointing: 300,
       apiKey: dgApiKey,
     });
 
