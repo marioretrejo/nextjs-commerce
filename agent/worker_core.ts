@@ -29,11 +29,27 @@ import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import { runStartupCleanup } from './startup-cleanup.js';
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.local');
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+
+// ── Global TCP keepAlive — prevent silent mid-stream drops on Render ──────────
+// Without SO_KEEPALIVE, the OS considers an idle TCP socket alive indefinitely.
+// When Cartesia's WebSocket TCP connection silently dies, the ws library calls
+// ws.close() → waits up to 30s for the close ACK that never arrives → agent
+// stays in 'speaking' forever. Enabling keepAlive causes the OS to send probes;
+// when they fail (ETIMEDOUT/ECONNRESET), the WebSocket fires an error event
+// which properly unblocks the SynthesizeStream's recvTask.
+const _origCreateConnection = net.Socket.prototype.connect;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(net.Socket.prototype as any).connect = function(...args: any[]) {
+  try { this.setKeepAlive(true, 15_000); } catch { /* ignore if socket not ready */ }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (_origCreateConnection as any).apply(this, args);
+};
 
 // ── Pilar A: Flow Builder → LLM instructions ────────────────────────────────
 // Converts the ReactFlow graph stored in agents.flow_json into a structured
@@ -626,10 +642,14 @@ export default defineAgent({
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ttsInitOpts: any = {
-      model:    'sonic-multilingual',
-      voice:    voiceId,
-      apiKey:   process.env['CARTESIA_API_KEY'],
-      language: 'es',
+      model:        'sonic-multilingual',
+      voice:        voiceId,
+      apiKey:       process.env['CARTESIA_API_KEY'],
+      language:     'es',
+      // sonic-multilingual generates chunks with longer inter-chunk gaps than sonic-3.
+      // The plugin default (5000 ms) cuts the stream prematurely, causing the agent
+      // to go silent mid-sentence. 8 s gives the model enough breathing room.
+      chunkTimeout: 8_000,
       ...(voiceEmotion && EMOTION_MAP[voiceEmotion] ? { emotion: EMOTION_MAP[voiceEmotion] } : {}),
     };
     console.log('[DEBUG_CARTESIA]', {
@@ -1255,36 +1275,31 @@ export default defineAgent({
 
         // ── TTS stream watchdog ────────────────────────────────────────────
         // If the agent stays in 'speaking' for more than SPEAKING_WATCHDOG_MS
-        // with no AgentStateChanged out of that state, the Cartesia stream is
-        // considered hung (e.g., network drop after first audio chunk).
-        // Recovery: force-interrupt + speak a repair phrase.
+        // the Cartesia stream is considered hung (network drop, slow model, etc).
+        // Recovery is SILENT: we force-interrupt the stream and let the agent
+        // return to 'listening' naturally. The user can re-speak without hearing
+        // a disruptive repair phrase. Only if the interrupt itself is stuck do we
+        // delete the room as a last resort.
         _speakingWatchdog = setTimeout(() => {
           _speakingWatchdog = null;
           if (session.agentState !== 'speaking') return;
-          console.error('[worker.watchdog] Speaking watchdog fired — TTS stream hung, forcing recovery', {
+          console.error('[worker.watchdog] Speaking watchdog fired — TTS stream hung, silent recovery', {
             agent_id: agentId, room: roomName,
           });
-          // Wrap recovery in its own timeout so a stuck interrupt never blocks
+          // Give the interrupt 3 seconds to transition the agent to listening.
+          // If it's still stuck after that, the TCP/WebSocket cleanup hasn't fired
+          // yet — delete the room so the call ends cleanly instead of hanging.
           const recoveryKill = setTimeout(() => {
-            console.error('[worker.watchdog] Recovery timed out — deleting room', { agent_id: agentId });
-            _doDeleteRoom();
-          }, 6_000);
-          void (async () => {
-            try {
-              // Force-abort the current hung audio stream
-              session.interrupt({ force: true });
-              // Brief settle pause before issuing the repair phrase
-              await new Promise<void>(r => setTimeout(r, 200));
-              clearTimeout(recoveryKill);
-              console.log('[worker.watchdog] [Speech Aborted Cleanly] — issuing repair phrase');
-              await session.say('Disculpa, se cortó la señal un momento. ¿Me sigues?', { allowInterruptions: true });
-              console.log('[worker.watchdog] [Agent State Reset to Idle] — recovery phrase sent');
-            } catch (recoveryErr) {
-              clearTimeout(recoveryKill);
-              console.error('[worker.watchdog] Recovery phrase failed:', String(recoveryErr));
+            if (session.agentState === 'speaking') {
+              console.error('[worker.watchdog] Silent recovery timed out — deleting room', { agent_id: agentId });
               _doDeleteRoom();
             }
-          })();
+          }, 3_000);
+          session.interrupt({ force: true });
+          // Clear the kill timer if AgentStateChanged fires before it expires
+          // (handled by _clearWatchdogs() on the next AgentStateChanged event)
+          void new Promise<void>(r => setTimeout(r, 3_100)).then(() => clearTimeout(recoveryKill));
+          console.log('[worker.watchdog] [Speech Aborted Cleanly] — interrupt sent, awaiting state transition');
         }, SPEAKING_WATCHDOG_MS);
       }
 
