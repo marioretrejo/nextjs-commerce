@@ -64,9 +64,7 @@ export async function logCallEngagement(
   });
 }
 
-export async function refreshAccessToken(
-  refreshToken: string,
-): Promise<{
+export async function refreshAccessToken(refreshToken: string): Promise<{
   access_token: string;
   refresh_token: string;
   expires_in: number;
