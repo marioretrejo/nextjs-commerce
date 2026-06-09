@@ -12,7 +12,10 @@
  * Security note: room names are UUIDs + timestamps — not guessable.
  * We also validate the Twilio signature in production.
  */
-import { validateTwilioRequest } from "@/lib/twilio/validate";
+import {
+  validateTwilioRequest,
+  shouldValidateTwilio,
+} from "@/lib/twilio/validate";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +35,8 @@ async function handle(req: Request): Promise<NextResponse> {
     process.env["LIVEKIT_SIP_HOST"] ??
     "sip.livekit.run";
 
-  // In production, validate Twilio signature
-  if (process.env["NODE_ENV"] === "production") {
+  // Always enforced in production. In dev, bypass with TWILIO_WEBHOOK_VALIDATION_DISABLED=true.
+  if (shouldValidateTwilio()) {
     const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
     const body = req.method === "POST" ? await req.text() : "";
     const valid = validateTwilioRequest(

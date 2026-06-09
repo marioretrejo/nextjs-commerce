@@ -5,7 +5,10 @@
  * Used to update call records and surface failed inbound calls.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validateTwilioRequest } from "@/lib/twilio/validate";
+import {
+  validateTwilioRequest,
+  shouldValidateTwilio,
+} from "@/lib/twilio/validate";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +16,9 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const body = await req.text();
 
+  // Always enforced in production. In dev, bypass with TWILIO_WEBHOOK_VALIDATION_DISABLED=true.
   const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
-  if (process.env["NODE_ENV"] === "production") {
+  if (shouldValidateTwilio()) {
     const valid = validateTwilioRequest(
       req,
       body,

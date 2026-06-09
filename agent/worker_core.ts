@@ -2173,6 +2173,35 @@ export default defineAgent({
         { onConflict: "retell_call_id", ignoreDuplicates: false },
       );
 
+      // Backfill call_id on call_events — events fire during the call with only
+      // call_room set (the DB call.id isn't known until after the upsert above).
+      // Best-effort: a failure here never blocks slot release or background work.
+      try {
+        const { data: callIdRow } = await supabase
+          .from("calls")
+          .select("id")
+          .eq("retell_call_id", roomName)
+          .maybeSingle();
+        if (callIdRow?.id) {
+          await supabase
+            .from("call_events")
+            .update({ call_id: callIdRow.id })
+            .eq("call_room", roomName)
+            .eq("workspace_id", workspaceId)
+            .is("call_id", null);
+          log("info", {
+            message: "call_events.backfilled",
+            call_id: callIdRow.id,
+            room: roomName,
+          });
+        }
+      } catch (backfillErr) {
+        console.warn(
+          "[call-events] call_id backfill failed:",
+          String(backfillErr),
+        );
+      }
+
       // Release call slot IMMEDIATELY after upsert so the workspace concurrent-call
       // counter drops before any Groq/webhook background work begins.
       await supabase
