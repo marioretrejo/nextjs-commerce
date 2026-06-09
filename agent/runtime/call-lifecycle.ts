@@ -27,6 +27,7 @@ export type BusinessOutcome =
   | "not_interested"
   | "dnc"
   | "transferred"
+  | "transferred_to_human"
   | "silence_timeout"
   | "error";
 

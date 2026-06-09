@@ -528,6 +528,7 @@ interface RoutingContext {
   voiceId: string | null;
   voiceEmotion: string | null;
   phoneVars: Record<string, string>;
+  transferTargetPhone: string | null;
 }
 
 async function _resolveRoutingContext(
@@ -541,13 +542,14 @@ async function _resolveRoutingContext(
     voiceId: null,
     voiceEmotion: null,
     phoneVars: {},
+    transferTargetPhone: null,
   };
   if (!inboundPhoneId) return empty;
 
   try {
     const { data: phoneRow, error: phoneErr } = await supabase
       .from("phone_numbers")
-      .select("agent_id, metadata_config")
+      .select("agent_id, metadata_config, transfer_target_phone")
       .eq("id", inboundPhoneId)
       .maybeSingle();
 
@@ -556,10 +558,16 @@ async function _resolveRoutingContext(
     const phone = phoneRow as {
       agent_id: string | null;
       metadata_config: Record<string, unknown> | null;
+      transfer_target_phone: string | null;
     };
     const phoneVars = extractMetadataVars(phone.metadata_config);
 
-    if (!phone.agent_id) return { ...empty, phoneVars };
+    if (!phone.agent_id)
+      return {
+        ...empty,
+        phoneVars,
+        transferTargetPhone: phone.transfer_target_phone ?? null,
+      };
 
     // Fetch full agent config to enable per-number voice/prompt overrides
     const { data: agentRow } = await supabase
@@ -580,6 +588,7 @@ async function _resolveRoutingContext(
       voiceId: agent?.voice_id ?? null,
       voiceEmotion: agent?.voice_emotion ?? null,
       phoneVars,
+      transferTargetPhone: phone.transfer_target_phone ?? null,
     };
   } catch {
     return empty;
@@ -797,7 +806,9 @@ export default defineAgent({
     let workspaceId: string | null = null;
     let agentId: string | null = null;
     let callDirection: "inbound" | "outbound" = "inbound";
-    let transferNumber: string | null = null; // E.164 support phone number for human transfer
+    let transferNumber: string | null = null; // E.164 number or sip: URI for human hand-off
+    let _transferredToHuman = false; // set by onTransferInitiated callback
+    let twilioCallSid: string | null = null; // Twilio call SID for hot-redirect transfer
 
     let flowJson: unknown = null;
     let flowConfig: unknown = null;
@@ -951,6 +962,9 @@ export default defineAgent({
         if (routingCtx.voiceId && !voiceId) voiceId = routingCtx.voiceId;
         if (routingCtx.voiceEmotion && !voiceEmotion)
           voiceEmotion = routingCtx.voiceEmotion;
+        // Per-number transfer target (migration 053) — highest priority
+        if (routingCtx.transferTargetPhone && !transferNumber)
+          transferNumber = routingCtx.transferTargetPhone;
 
         void emit("routing.context_resolved", {
           inbound_phone_id: inboundPhoneId,
@@ -975,6 +989,28 @@ export default defineAgent({
       systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
       if (firstMessage)
         firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
+
+    // ── Fase 12: Resolve Twilio call SID + per-number transfer target ────────────
+    // Twilio call SID is stored in calls.routing_data.twilio_call_sid by the dial
+    // route after creation. We look it up here so the transfer tool can issue a
+    // hot call-redirect via Twilio's REST API (Fase 12).
+    if (_lifecycleSupabase && roomName) {
+      try {
+        const { data: callRecord } = await _lifecycleSupabase
+          .from("calls")
+          .select("routing_data")
+          .eq("retell_call_id", roomName)
+          .maybeSingle();
+        const rd = (
+          callRecord as { routing_data: Record<string, unknown> | null } | null
+        )?.routing_data;
+        if (rd && typeof rd["twilio_call_sid"] === "string") {
+          twilioCallSid = rd["twilio_call_sid"];
+        }
+      } catch {
+        /* non-fatal */
+      }
     }
 
     // Mark call as in-progress immediately (agent entry = call already connected)
@@ -1633,13 +1669,30 @@ export default defineAgent({
         ...buildTools({
           enableTransfer: true,
           enableOrders: false,
-          // ── 3. Pass call context for SIP transfer ─────────────────────────
+          // ── 3. Pass call context for SIP REFER + Twilio redirect ──────────
           roomName,
           transferNumber:
-            transferNumber ?? process.env["SUPPORT_TRANSFER_NUMBER"] ?? null,
+            transferNumber ??
+            process.env["SUPPORT_TRANSFER_NUMBER"] ??
+            process.env["VOICEOS_GLOBAL_TRANSFER_FALLBACK"] ??
+            null,
           livekitWsUrl: process.env["LIVEKIT_URL"] ?? "",
           livekitApiKey: process.env["LIVEKIT_API_KEY"] ?? "",
           livekitApiSecret: process.env["LIVEKIT_API_SECRET"] ?? "",
+          // Twilio hot-redirect (Fase 12) — only present for Twilio-originated calls
+          twilioCallSid: twilioCallSid,
+          twilioAccountSid: process.env["TWILIO_ACCOUNT_SID"] ?? null,
+          twilioAuthToken: process.env["TWILIO_AUTH_TOKEN"] ?? null,
+          onTransferInitiated: ({ reason, targetNumber }) => {
+            _transferredToHuman = true;
+            // Set outcome so close handler persists 'transferred_to_human'
+            lifecycle?.setOutcome("transferred_to_human");
+            void emit("call.transferred", {
+              reason,
+              target: targetNumber,
+              transfer_method: twilioCallSid ? "twilio_redirect" : "sip_refer",
+            });
+          },
         }),
         // Pilar B: workspace-defined custom HTTP tools
         ...dynamicTools,

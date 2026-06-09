@@ -10,6 +10,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RoomServiceClient, SipClient } from "livekit-server-sdk";
 import { getRegionalHttpUrl } from "@/lib/livekit/edge";
 import { resolveDialConfig, cacheLivekitTrunkId } from "@/lib/dialing/strategy";
+import {
+  checkDialEligibility,
+  recordDialEligibilityCheck,
+} from "@/lib/compliance/dial-eligibility";
 import { NextResponse } from "next/server";
 
 // ── SIP Egress helpers ───────────────────────────────────────────────────────
@@ -225,6 +229,29 @@ export async function POST(req: Request) {
           "No dialer configured. Add a phone number in /numbers or connect a SIP trunk in /integrations.",
       },
       { status: 503 },
+    );
+  }
+
+  // ── Compliance pre-dial gate ─────────────────────────────────────────────────
+  // Must run BEFORE slot acquisition, LiveKit room creation, and any Twilio call.
+  const eligibility = await checkDialEligibility({
+    workspaceId: workspace.id,
+    phoneNumber: to,
+    supabase: admin,
+  });
+  void recordDialEligibilityCheck(
+    eligibility,
+    { workspaceId: workspace.id, phoneNumber: to },
+    admin,
+  );
+  if (!eligibility.allowed) {
+    return NextResponse.json(
+      {
+        error: "Dial blocked by compliance",
+        reason_code: eligibility.reason_code,
+        reason: eligibility.reason,
+      },
+      { status: 422 },
     );
   }
 

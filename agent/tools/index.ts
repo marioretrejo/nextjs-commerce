@@ -20,10 +20,20 @@ export interface ToolConfig {
   enableTransfer?: boolean;
   enableOrders?: boolean;
   roomName?: string;
-  transferNumber?: string | null; // E.164: "+18005551234"
+  transferNumber?: string | null; // E.164 number or sip: URI for human hand-off
   livekitWsUrl?: string;
   livekitApiKey?: string;
   livekitApiSecret?: string;
+  // Twilio credentials for call-redirect (alternative to SIP REFER)
+  twilioCallSid?: string | null;
+  twilioAccountSid?: string | null;
+  twilioAuthToken?: string | null;
+  // Callback fired when a transfer is successfully initiated so the worker
+  // can update business_outcome and clean up the session
+  onTransferInitiated?: (opts: {
+    reason: string;
+    targetNumber: string;
+  }) => void;
 }
 
 const TOOL_TIMEOUT_MS = 8000;
@@ -186,13 +196,14 @@ function createMockBooking(params: {
 function buildTransferToHuman(config: ToolConfig) {
   return llm.tool({
     description:
-      "Transfer the call to a live human agent. Use when: user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts.",
+      "Transfer the call to a live human agent or specialist. Use when: the user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts. Call this tool instead of trying to resolve the issue yourself.",
     parameters: {
       type: "object" as const,
       properties: {
         reason: {
           type: "string",
-          description: "Brief reason for the transfer (used for routing)",
+          description:
+            "Brief reason for the transfer (e.g. 'customer_request', 'complaint', 'complex_query')",
         },
         urgency: {
           type: "string",
@@ -206,113 +217,159 @@ function buildTransferToHuman(config: ToolConfig) {
       args: { reason: string; urgency?: string },
       opts: ToolOpts,
     ) => {
-      // Speak immediately so the user hears something while the transfer completes
-      opts.ctx.session.say(
-        "Of course. I'm transferring your call to one of our team members right now. Please hold on for just a moment.",
-      );
-
       const {
         roomName,
         transferNumber,
         livekitWsUrl,
         livekitApiKey,
         livekitApiSecret,
+        twilioCallSid,
+        twilioAccountSid,
+        twilioAuthToken,
+        onTransferInitiated,
       } = config;
 
-      if (
-        !roomName ||
-        !transferNumber ||
-        !livekitApiKey ||
-        !livekitApiSecret ||
-        !livekitWsUrl
-      ) {
-        // WebRTC call or SIP not configured — graceful degradation
+      const targetNumber = transferNumber ?? null;
+
+      if (!targetNumber) {
         console.warn(
-          "[transfer_to_human] SIP transfer not configured; logging escalation only",
+          "[transfer_to_human] No transfer number configured — logging escalation only",
+        );
+        opts.ctx.session.say(
+          "I'm sorry, our transfer service is temporarily unavailable. A team member will call you back shortly.",
         );
         return {
           transfer_initiated: false,
           reason: args.reason,
-          urgency: args.urgency ?? "normal",
-          message: "A team member will call you back shortly.",
+          message:
+            "Transfer service unavailable. A team member will call back.",
         };
       }
 
-      try {
-        const httpUrl = livekitWsUrl
-          .replace("wss://", "https://")
-          .replace("ws://", "http://");
+      // Announce the transfer immediately so the user hears feedback
+      opts.ctx.session.say(
+        "Por favor espere un momento, estoy transfiriendo su llamada con un especialista.",
+      );
 
-        const roomService = new RoomServiceClient(
-          httpUrl,
-          livekitApiKey,
-          livekitApiSecret,
-        );
+      // ── Strategy 1: Twilio call-redirect (preferred for Twilio-originated calls) ─
+      if (twilioCallSid && twilioAccountSid && twilioAuthToken) {
+        try {
+          const twiml = `<Response><Dial>${targetNumber}</Dial></Response>`;
+          const res = await withTimeout(
+            fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Calls/${twilioCallSid}.json`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64")}`,
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: new URLSearchParams({ Twiml: twiml }).toString(),
+              },
+            ),
+            TOOL_TIMEOUT_MS,
+          );
 
-        // Find the SIP participant in the current room (the caller on PSTN)
-        const participants = await withTimeout(
-          roomService.listParticipants(roomName),
-          5000,
-        );
+          if (res.ok) {
+            console.log(
+              `[transfer_to_human] Twilio redirect sent to ${targetNumber} (SID: ${twilioCallSid})`,
+            );
+            // Notify worker so it can update lifecycle + interrupt session
+            onTransferInitiated?.({ reason: args.reason, targetNumber });
+            return {
+              transfer_initiated: true,
+              transfer_type: "twilio_redirect",
+              destination: targetNumber,
+              reason: args.reason,
+              urgency: args.urgency ?? "normal",
+            };
+          }
 
-        const sipParticipant = participants.find(
-          (p) => p.identity?.startsWith("sip_") || p.kind === 3, // ParticipantInfo_Kind.SIP = 3
-        );
+          // Twilio rejected the redirect — fall through to SIP REFER
+          console.warn(
+            `[transfer_to_human] Twilio redirect failed (${res.status}), trying SIP REFER`,
+          );
+        } catch (twilioErr) {
+          console.warn(
+            "[transfer_to_human] Twilio redirect threw, trying SIP REFER:",
+            String(twilioErr),
+          );
+        }
+      }
 
-        if (sipParticipant?.identity) {
-          // Issue SIP REFER — the telephony carrier bridges the call to the support number.
-          // The AI participant stays in the room until LiveKit removes it, but the user
-          // is already talking to the human agent. Session.Close fires shortly after.
-          const sipClient = new SipClient(
+      // ── Strategy 2: SIP REFER via LiveKit ────────────────────────────────────
+      if (roomName && livekitApiKey && livekitApiSecret && livekitWsUrl) {
+        try {
+          const httpUrl = livekitWsUrl
+            .replace("wss://", "https://")
+            .replace("ws://", "http://");
+
+          const roomService = new RoomServiceClient(
             httpUrl,
             livekitApiKey,
             livekitApiSecret,
           );
 
-          // SIP URI for the support number (Twilio-style)
-          const transferTo = transferNumber.startsWith("sip:")
-            ? transferNumber
-            : `sip:${transferNumber.replace("+", "")}@sip.twilio.com`;
-
-          await withTimeout(
-            sipClient.transferSipParticipant(
-              roomName,
-              sipParticipant.identity,
-              transferTo,
-            ),
-            8000,
+          const participants = await withTimeout(
+            roomService.listParticipants(roomName),
+            5000,
           );
 
-          console.log(
-            `[transfer_to_human] SIP REFER sent to ${transferTo} for participant ${sipParticipant.identity}`,
+          const sipParticipant = participants.find(
+            (p) => p.identity?.startsWith("sip_") || p.kind === 3,
           );
-          return {
-            transfer_initiated: true,
-            transfer_type: "sip_refer",
-            destination: transferTo,
-            reason: args.reason,
-            urgency: args.urgency ?? "normal",
-          };
+
+          if (sipParticipant?.identity) {
+            const sipClient = new SipClient(
+              httpUrl,
+              livekitApiKey,
+              livekitApiSecret,
+            );
+
+            const transferTo = targetNumber.startsWith("sip:")
+              ? targetNumber
+              : `sip:${targetNumber.replace("+", "")}@sip.twilio.com`;
+
+            await withTimeout(
+              sipClient.transferSipParticipant(
+                roomName,
+                sipParticipant.identity,
+                transferTo,
+              ),
+              8000,
+            );
+
+            console.log(
+              `[transfer_to_human] SIP REFER sent to ${transferTo} for ${sipParticipant.identity}`,
+            );
+            onTransferInitiated?.({ reason: args.reason, targetNumber });
+            return {
+              transfer_initiated: true,
+              transfer_type: "sip_refer",
+              destination: transferTo,
+              reason: args.reason,
+              urgency: args.urgency ?? "normal",
+            };
+          }
+
+          console.warn(
+            "[transfer_to_human] No SIP participant found; cannot issue REFER",
+          );
+        } catch (sipErr) {
+          console.error("[transfer_to_human] SIP REFER failed:", sipErr);
         }
-
-        // No SIP participant found (pure WebRTC call)
-        console.warn(
-          "[transfer_to_human] No SIP participant found in room; cannot issue REFER",
-        );
-        return {
-          transfer_initiated: false,
-          reason: args.reason,
-          message: "A team member will reach out to you within a few minutes.",
-        };
-      } catch (err) {
-        console.error("[transfer_to_human] Transfer failed:", err);
-        return {
-          transfer_initiated: false,
-          reason: args.reason,
-          error:
-            "Transfer encountered an issue. A team member will contact you shortly.",
-        };
       }
+
+      // ── Strategy 3: Both transfer methods failed — graceful fallback ─────────
+      opts.ctx.session.say(
+        "En este momento todos nuestros especialistas están ocupados. Por favor llame de nuevo en unos minutos.",
+      );
+      return {
+        transfer_initiated: false,
+        reason: args.reason,
+        message:
+          "All specialists are currently busy. Please call back in a few minutes.",
+      };
     },
   });
 }

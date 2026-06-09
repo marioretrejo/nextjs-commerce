@@ -10,6 +10,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RoomServiceClient, SipClient } from "livekit-server-sdk";
 import { getRegionalHttpUrl } from "@/lib/livekit/edge";
+import {
+  checkDialEligibility,
+  recordDialEligibilityCheck,
+} from "@/lib/compliance/dial-eligibility";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -407,6 +411,42 @@ async function dialContact(params: {
     apiSecret,
     httpUrl,
   } = params;
+
+  // ── Compliance pre-dial gate ────────────────────────────────────────────────
+  // Must run BEFORE slot acquisition and LiveKit room creation.
+  const eligibility = await checkDialEligibility({
+    workspaceId: workspace.id,
+    campaignId: campaign.id,
+    leadId: contact.id,
+    phoneNumber: contact.phone,
+    supabase: admin,
+  });
+  void recordDialEligibilityCheck(
+    eligibility,
+    {
+      workspaceId: workspace.id,
+      campaignId: campaign.id,
+      leadId: contact.id,
+      phoneNumber: contact.phone,
+    },
+    admin,
+  );
+  if (!eligibility.allowed) {
+    // Mark contact as skipped so it is not retried as a technical failure
+    if (
+      eligibility.reason_code === "dnc" ||
+      eligibility.reason_code === "opt_out"
+    ) {
+      void admin
+        .from("campaign_contacts")
+        .update({ status: "rejected" })
+        .eq("id", contact.id);
+    }
+    console.log(
+      `[cron/campaign-dial] blocked by compliance: ${eligibility.reason_code} for ${eligibility.normalized_phone ?? contact.phone}`,
+    );
+    return;
+  }
 
   // Auto-heal zombie slots before claiming
   const staleAt = new Date(Date.now() - 15 * 60 * 1000).toISOString();
