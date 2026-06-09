@@ -34544,7 +34544,7 @@ var require_main4 = __commonJS({
     var fs2 = require("fs");
     var path2 = require("path");
     var os = require("os");
-    var crypto5 = require("crypto");
+    var crypto6 = require("crypto");
     var TIPS = [
       "\u25C8 encrypted .env [www.dotenvx.com]",
       "\u25C8 secrets for agents [www.dotenvx.com]",
@@ -34815,7 +34815,7 @@ var require_main4 = __commonJS({
       const authTag = ciphertext.subarray(-16);
       ciphertext = ciphertext.subarray(12, -16);
       try {
-        const aesgcm = crypto5.createDecipheriv("aes-256-gcm", key, nonce);
+        const aesgcm = crypto6.createDecipheriv("aes-256-gcm", key, nonce);
         aesgcm.setAuthTag(authTag);
         return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
       } catch (error) {
@@ -45423,6 +45423,7 @@ var dotenv = __toESM(require_main4());
 var path = __toESM(require("node:path"));
 var fs = __toESM(require("node:fs"));
 var net = __toESM(require("node:net"));
+var crypto5 = __toESM(require("node:crypto"));
 
 // agent/startup-cleanup.ts
 async function runStartupCleanup() {
@@ -48003,6 +48004,10 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           close_reason: closeReason ?? null,
         });
         void (async () => {
+          let _postCallId = null;
+          let _postCostUsd = null;
+          let _postCostBreakdown = null;
+          let _postCostStatus = null;
           try {
             if (billing) {
               const { data: costCallRow } = await supabase
@@ -48011,6 +48016,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 .eq("retell_call_id", roomName)
                 .maybeSingle();
               const resolvedCallId = costCallRow?.id ?? null;
+              _postCallId = resolvedCallId;
               billing.trackTelephony(durationSeconds, callDirection);
               billing.trackLiveKit(durationSeconds);
               billing.trackSTT(durationSeconds);
@@ -48019,6 +48025,18 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 billing.trackLLMTokens(Math.round(transcriptChars / 3));
               }
               await billing.computeAndPersist(resolvedCallId, supabase);
+              if (resolvedCallId) {
+                const { data: costRow } = await supabase
+                  .from("calls")
+                  .select("cost_usd, cost_breakdown, cost_status")
+                  .eq("id", resolvedCallId)
+                  .maybeSingle();
+                if (costRow) {
+                  _postCostUsd = costRow.cost_usd ?? null;
+                  _postCostBreakdown = costRow.cost_breakdown ?? null;
+                  _postCostStatus = costRow.cost_status ?? null;
+                }
+              }
               if (resolvedCallId) {
                 await billing.backfillCallId(resolvedCallId, supabase);
                 void emit("billing.cost_events_backfilled", {
@@ -48052,36 +48070,70 @@ var worker_core_default = (0, import_agents2.defineAgent)({
                 .update({ extracted_data: crmAnalysis })
                 .eq("id", callRow.id);
             }
-            if (callEndedWebhookUrl) {
+            let effectiveWebhookUrl = callEndedWebhookUrl;
+            if (!effectiveWebhookUrl && workspaceId) {
+              const { data: wsRow } = await supabase
+                .from("workspaces")
+                .select("webhook_url")
+                .eq("id", workspaceId)
+                .maybeSingle();
+              effectiveWebhookUrl = wsRow?.webhook_url ?? null;
+            }
+            if (effectiveWebhookUrl) {
+              const webhookPayload = {
+                event: "call.completed",
+                timestamp: /* @__PURE__ */ new Date().toISOString(),
+                call_id: _postCallId ?? null,
+                technical_status: finalTechnicalStatus,
+                business_outcome: lifecycle?.outcome ?? null,
+                duration_seconds: durationSeconds,
+                cost_usd: _postCostUsd,
+                cost_status: _postCostStatus,
+                cost_breakdown: _postCostBreakdown,
+                // First 400 chars of transcript as a summary proxy (no full text)
+                transcript_summary: transcript
+                  ? transcript.slice(0, 400) +
+                    (transcript.length > 400 ? "\u2026" : "")
+                  : null,
+                call: {
+                  room: roomName,
+                  agent_id: agentId,
+                  workspace_id: workspaceId,
+                  direction: callDirection,
+                  voicemail: _voicemailDetected,
+                },
+                crm_fields: {
+                  Funnel: crmFunnel,
+                  LeadId: crmLeadId,
+                  Country: crmCountry,
+                  Campaign: crmCampaign,
+                },
+                analysis: crmAnalysis,
+              };
+              const payloadStr = JSON.stringify(webhookPayload);
+              const secret = process.env["INTERNAL_API_SECRET"];
+              const headers = {
+                "Content-Type": "application/json",
+              };
+              if (secret) {
+                headers["X-VoiceOS-Signature"] =
+                  `sha256=${crypto5.createHmac("sha256", secret).update(payloadStr).digest("hex")}`;
+              }
               await Promise.race([
-                fetch(callEndedWebhookUrl, {
+                fetch(effectiveWebhookUrl, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    event: "call.completed",
-                    timestamp: /* @__PURE__ */ new Date().toISOString(),
-                    call: {
-                      room: roomName,
-                      agent_id: agentId,
-                      workspace_id: workspaceId,
-                      direction: callDirection,
-                      duration_seconds: durationSeconds,
-                      voicemail: _voicemailDetected,
-                    },
-                    crm_fields: {
-                      Funnel: crmFunnel,
-                      LeadId: crmLeadId,
-                      Country: crmCountry,
-                      Campaign: crmCampaign,
-                    },
-                    analysis: crmAnalysis,
-                  }),
+                  headers,
+                  body: payloadStr,
                 }),
                 new Promise((_, rej) =>
                   setTimeout(() => rej(new Error("webhook timeout")), 8e3),
                 ),
               ]);
-              log("info", { message: "call.webhook.sent", room: roomName });
+              log("info", {
+                message: "call.webhook.sent",
+                room: roomName,
+                signed: !!secret,
+              });
             }
           } catch (err) {
             log("error", {
