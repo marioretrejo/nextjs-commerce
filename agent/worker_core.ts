@@ -1031,6 +1031,21 @@ export default defineAgent({
     let _ambientAbort:  AbortController | null = null;
     let _voicemailDetected = false; // set when voicemail greeting detected within first 30s
 
+    // ── Speaking / Thinking watchdogs ─────────────────────────────────────────
+    // Guard against a hung TTS stream (agent says one word then goes silent) or
+    // a stalled LLM pipeline. Both timers are cleared on every AgentStateChanged.
+    let _speakingWatchdog: ReturnType<typeof setTimeout> | null = null;
+    let _thinkingWatchdog: ReturnType<typeof setTimeout> | null = null;
+    // 15 s: agent HARD CONSTRAINT caps responses at 1-3 sentences ≈ 8-12 s max
+    const SPEAKING_WATCHDOG_MS = 15_000;
+    // 22 s: allows for Groq first-token latency (≤10 s) + Cartesia init (≤5 s)
+    const THINKING_WATCHDOG_MS = 22_000;
+
+    const _clearWatchdogs = () => {
+      if (_speakingWatchdog) { clearTimeout(_speakingWatchdog); _speakingWatchdog = null; }
+      if (_thinkingWatchdog) { clearTimeout(_thinkingWatchdog); _thinkingWatchdog = null; }
+    };
+
     // ── Barge-in state shared across event handlers ──────────────────────
     let _wasInterrupted      = false; // signals onUserTurnCompleted to inject prefix hint
     let _bargeInAt: number | null = null; // timestamp when interrupt fired (for gap log)
@@ -1118,6 +1133,10 @@ export default defineAgent({
           !isFillerOnly(partialText)
         ) {
           // ── Real barge-in confirmed — clear audio and inject transition ──
+          console.log('[worker.state] [VAD Interruption Triggered]', JSON.stringify({
+            ts: new Date().toISOString(), partial: partialText.slice(0, 60), agent_id: agentId,
+          }));
+          _clearWatchdogs(); // disarm speaking watchdog immediately on barge-in
           void session.interrupt({ force: true }).await.catch(() => null);
           _wasInterrupted = true; // onUserTurnCompleted will inject a transition prefix
           _bargeInAt      = Date.now(); // start gap timer for [worker.barge_in.flow] log
@@ -1189,7 +1208,25 @@ export default defineAgent({
 
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
       const { oldState, newState } = ev as { oldState?: string; newState?: string };
+      console.log('[worker.state]', JSON.stringify({
+        ts: new Date().toISOString(), from: oldState, to: newState, agent_id: agentId,
+      }));
+
+      if (newState === 'thinking') {
+        // Disarm speaking watchdog; arm thinking watchdog
+        _clearWatchdogs();
+        _thinkingWatchdog = setTimeout(() => {
+          _thinkingWatchdog = null;
+          if (session.agentState !== 'thinking') return;
+          console.error('[worker.watchdog] Thinking watchdog fired — LLM/TTS pipeline stalled', { agent_id: agentId, room: roomName });
+          void Promise.resolve(session.say('Disculpa, un momento.', { allowInterruptions: true })).catch(() => null);
+        }, THINKING_WATCHDOG_MS);
+      }
+
       if (newState === 'speaking') {
+        // Disarm thinking watchdog; arm speaking watchdog
+        _clearWatchdogs();
+
         // TTS latency: first audio chunk arrived — record elapsed time
         const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
         checkLatencyThreshold(ttsResult);
@@ -1199,17 +1236,12 @@ export default defineAgent({
         // after agent speech starts. This prevents self-interruption from echo/AEC.
         _speakLockoutUntil = Date.now() + 450;
 
-        // ── Barge-in gap log ──────────────────────────────────────────────
-        // Measures ms from user interrupt → Cartesia first frame.
-        // Target: < 600ms (STT ≈ 100ms + Groq ≈ 300ms + Cartesia ≈ 150ms).
+        // Barge-in gap log: ms from user interrupt → Cartesia first frame
         if (_bargeInAt !== null) {
           const gapMs = Date.now() - _bargeInAt;
           _bargeInAt = null;
           console.log('[worker.barge_in.flow]', JSON.stringify({
-            ts:       new Date().toISOString(),
-            gap_ms:   gapMs,
-            agent_id: agentId,
-            room:     roomName,
+            ts: new Date().toISOString(), gap_ms: gapMs, agent_id: agentId, room: roomName,
           }));
         }
         // Restore normal endpointing now that agent is speaking again
@@ -1220,15 +1252,53 @@ export default defineAgent({
             _audioRec.endpointing.updateOptions({ minDelay: 450, maxDelay: 3000 });
           }
         }
+
+        // ── TTS stream watchdog ────────────────────────────────────────────
+        // If the agent stays in 'speaking' for more than SPEAKING_WATCHDOG_MS
+        // with no AgentStateChanged out of that state, the Cartesia stream is
+        // considered hung (e.g., network drop after first audio chunk).
+        // Recovery: force-interrupt + speak a repair phrase.
+        _speakingWatchdog = setTimeout(() => {
+          _speakingWatchdog = null;
+          if (session.agentState !== 'speaking') return;
+          console.error('[worker.watchdog] Speaking watchdog fired — TTS stream hung, forcing recovery', {
+            agent_id: agentId, room: roomName,
+          });
+          // Wrap recovery in its own timeout so a stuck interrupt never blocks
+          const recoveryKill = setTimeout(() => {
+            console.error('[worker.watchdog] Recovery timed out — deleting room', { agent_id: agentId });
+            _doDeleteRoom();
+          }, 6_000);
+          void (async () => {
+            try {
+              // Force-abort the current hung audio stream
+              session.interrupt({ force: true });
+              // Brief settle pause before issuing the repair phrase
+              await new Promise<void>(r => setTimeout(r, 200));
+              clearTimeout(recoveryKill);
+              console.log('[worker.watchdog] [Speech Aborted Cleanly] — issuing repair phrase');
+              await session.say('Disculpa, se cortó la señal un momento. ¿Me sigues?', { allowInterruptions: true });
+              console.log('[worker.watchdog] [Agent State Reset to Idle] — recovery phrase sent');
+            } catch (recoveryErr) {
+              clearTimeout(recoveryKill);
+              console.error('[worker.watchdog] Recovery phrase failed:', String(recoveryErr));
+              _doDeleteRoom();
+            }
+          })();
+        }, SPEAKING_WATCHDOG_MS);
       }
-      if (newState === 'listening' && oldState === 'speaking') {
-        // Agent finished speaking — start silence watchdog and clear lockout
-        _speakLockoutUntil = 0;  // user is now free to interrupt immediately
-        // Queue cleanup: if the agent finished speaking without being interrupted,
-        // clear any stale barge-in state so it doesn't pollute the next turn.
-        if (_wasInterrupted) { _wasInterrupted = false; }
-        if (_bargeInAt !== null) { _bargeInAt = null; }
-        _armSilenceTimer();
+
+      if (newState === 'listening') {
+        // Any transition into listening → clean slate: disarm all watchdogs
+        _clearWatchdogs();
+        if (oldState === 'speaking') {
+          // Agent finished speaking — start silence watchdog and clear lockout
+          _speakLockoutUntil = 0;
+          if (_wasInterrupted) { _wasInterrupted = false; }
+          if (_bargeInAt !== null) { _bargeInAt = null; }
+          _armSilenceTimer();
+          console.log('[worker.watchdog] [Agent State Reset to Idle]', { agent_id: agentId });
+        }
       }
     });
 
@@ -1300,6 +1370,7 @@ export default defineAgent({
       backchannel.destroy();
       _silenceArmed = false;
       _clearSilenceTimers();
+      _clearWatchdogs();
       _ambientAbort?.abort();
       if (balanceCheckInterval) { clearInterval(balanceCheckInterval); balanceCheckInterval = null; }
       log('info', {
