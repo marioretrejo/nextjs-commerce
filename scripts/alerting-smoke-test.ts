@@ -421,12 +421,16 @@ async function t6_cronAuth() {
 async function t7_apiAuth() {
   section("T7: GET /api/alerts auth check");
 
-  const r = await fetch(`${APP_BASE_URL}/api/alerts`).catch(() => null);
+  // Use redirect:'manual' so node fetch does NOT follow the 307→login redirect
+  const r = await fetch(`${APP_BASE_URL}/api/alerts`, {
+    redirect: "manual",
+  }).catch(() => null);
   if (!r) {
     console.log("  ⚠️  Could not reach app — skipping API auth test");
     return;
   }
-  // Should redirect to login (307) or return 401 — depends on middleware
+  // Middleware redirects unauthenticated requests to /login (307);
+  // route handler returns 401 for API-key paths that bypass middleware.
   if (r.status === 401 || r.status === 307 || r.status === 302) {
     ok(`Unauthenticated request blocked (${r.status})`);
   } else {
