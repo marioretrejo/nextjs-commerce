@@ -74,7 +74,32 @@ Dedicated secret for signing outbound `call.completed` webhook payloads. Kept se
 Rules:
 
 - Minimum 16 characters (same policy as `INTERNAL_API_SECRET`).
-- If absent, webhooks are sent unsigned (`X-VoiceOS-Signature` header omitted).
+- If absent, webhooks are sent **unsigned** — the `X-VoiceOS-Signature` header will read
+  `unsigned` instead of a real HMAC. Strongly recommended for production.
+
+### Post-Call Jobs Cron (Fase 13)
+
+The `/api/cron/post-call-jobs` endpoint processes the `post_call_jobs` queue.
+Authentication uses the same `INTERNAL_API_SECRET`.
+
+Add to `vercel.json` to trigger automatically every minute:
+
+```json
+{
+  "crons": [{ "path": "/api/cron/post-call-jobs", "schedule": "* * * * *" }]
+}
+```
+
+Additional env vars required by the post-call job processor:
+
+| Variable                         | Where  | Notes                                           |
+| -------------------------------- | ------ | ----------------------------------------------- |
+| `GROQ_API_KEY`                   | Vercel | Primary LLM for `crm_extraction` job            |
+| `OPENAI_API_KEY`                 | Vercel | Fallback LLM for `crm_extraction` if Groq fails |
+| `VOICEOS_WEBHOOK_SIGNING_SECRET` | Vercel | Signs `outbound_webhook` job payloads           |
+
+These are already listed in the main table above. Ensure they are set in **Vercel** (not just
+Render), because the cron processor runs inside the Next.js app.
 
 ### Webhook signing
 
@@ -102,4 +127,4 @@ const isValid = crypto.timingSafeEqual(
 
 ---
 
-_Last updated: Fase 11 — LLM Fallback Router, Replay-protected Webhooks_
+_Last updated: Fase 13 — Campaign Outbound Engine, Post-Call Jobs Queue_

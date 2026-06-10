@@ -34544,7 +34544,7 @@ var require_main4 = __commonJS({
     var fs2 = require("fs");
     var path2 = require("path");
     var os = require("os");
-    var crypto6 = require("crypto");
+    var crypto5 = require("crypto");
     var TIPS = [
       "\u25C8 encrypted .env [www.dotenvx.com]",
       "\u25C8 secrets for agents [www.dotenvx.com]",
@@ -34815,7 +34815,7 @@ var require_main4 = __commonJS({
       const authTag = ciphertext.subarray(-16);
       ciphertext = ciphertext.subarray(12, -16);
       try {
-        const aesgcm = crypto6.createDecipheriv("aes-256-gcm", key, nonce);
+        const aesgcm = crypto5.createDecipheriv("aes-256-gcm", key, nonce);
         aesgcm.setAuthTag(authTag);
         return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
       } catch (error) {
@@ -45465,7 +45465,6 @@ var dotenv = __toESM(require_main4());
 var path = __toESM(require("node:path"));
 var fs = __toESM(require("node:fs"));
 var net = __toESM(require("node:net"));
-var crypto5 = __toESM(require("node:crypto"));
 
 // agent/startup-cleanup.ts
 async function runStartupCleanup() {
@@ -46365,6 +46364,39 @@ function _tryOpenAI(config2, factory, fallbackReason) {
   }
 }
 
+// lib/jobs/post-call-jobs.ts
+async function enqueuePostCallJobsForCall(input) {
+  const { workspaceId, callId, roomName, agentId, jobs, supabase } = input;
+  const errors = [];
+  let enqueued = 0;
+  const rows = jobs.map((j) => ({
+    workspace_id: workspaceId,
+    call_id: callId,
+    room_name: roomName ?? null,
+    agent_id: agentId ?? null,
+    job_type: j.job_type,
+    priority: j.priority ?? 100,
+    max_attempts: j.max_attempts ?? 5,
+    payload: j.payload ?? {},
+    run_after:
+      j.run_after?.toISOString() ?? /* @__PURE__ */ new Date().toISOString(),
+  }));
+  try {
+    const { data, error } = await supabase
+      .from("post_call_jobs")
+      .insert(rows)
+      .select("id");
+    if (error) {
+      errors.push(error.message);
+    } else {
+      enqueued = data.length;
+    }
+  } catch (err) {
+    errors.push(String(err));
+  }
+  return { enqueued, errors };
+}
+
 // agent/worker_core.ts
 var import_node_http = require("node:http");
 var import_meta = {};
@@ -46715,120 +46747,6 @@ function getSupabaseAdmin() {
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
-async function _callOpenAIChatCompletion(
-  apiKey,
-  baseURL,
-  model,
-  messages,
-  maxTokens,
-) {
-  const res = await fetch(`${baseURL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      max_tokens: maxTokens,
-      messages,
-    }),
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.choices?.[0]?.message?.content?.trim() ?? null;
-}
-function _parseCrmJson(raw, blank, voicemailDetected) {
-  if (!raw) return blank;
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return blank;
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      Age: parsed.Age ?? null,
-      Name: parsed.Name ?? null,
-      Motivation: parsed.Motivation ?? null,
-      interested: parsed.interested ?? null,
-      occupation: parsed.occupation ?? null,
-      Financial_goal: parsed.Financial_goal ?? null,
-      Call_transferred: parsed.Call_transferred ?? null,
-      monthly_expenses: parsed.monthly_expenses ?? null,
-      time_in_occupation: parsed.time_in_occupation ?? null,
-      "In Voicemail": voicemailDetected,
-      "Call Success": parsed["Call Success"] ?? !voicemailDetected,
-    };
-  } catch {
-    return blank;
-  }
-}
-async function extractCrmAnalysis(
-  transcript,
-  groqApiKey,
-  crmFunnel,
-  crmLeadId,
-  crmCountry,
-  crmCampaign,
-  voicemailDetected,
-  openaiApiKey,
-) {
-  const blank = {
-    Age: null,
-    Name: null,
-    Motivation: null,
-    interested: null,
-    occupation: null,
-    Financial_goal: null,
-    Call_transferred: null,
-    monthly_expenses: null,
-    time_in_occupation: null,
-    "In Voicemail": voicemailDetected,
-    "Call Success": !voicemailDetected,
-  };
-  const deterministic = {
-    data: blank,
-    provider: "deterministic",
-  };
-  if (!transcript.trim()) return deterministic;
-  const systemContent = `You are a CRM data extractor. Extract the following fields from the call transcript and return ONLY a valid JSON object with exactly these keys. Use null for unknown fields.
-Keys: Age, Name, Motivation, interested (boolean), occupation, Financial_goal, Call_transferred (boolean), monthly_expenses, time_in_occupation, "In Voicemail" (boolean, value: ${voicemailDetected}), "Call Success" (boolean)
-CRM Context: Funnel=${crmFunnel ?? "N/A"}, LeadId=${crmLeadId ?? "N/A"}, Country=${crmCountry ?? "N/A"}, Campaign=${crmCampaign ?? "N/A"}`;
-  const messages = [
-    { role: "system", content: systemContent },
-    {
-      role: "user",
-      content: `Transcript:
-${transcript.slice(0, 4e3)}`,
-    },
-  ];
-  if (groqApiKey) {
-    try {
-      const raw = await _callOpenAIChatCompletion(
-        groqApiKey,
-        "https://api.groq.com/openai/v1",
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        messages,
-        512,
-      );
-      const parsed = _parseCrmJson(raw, blank, voicemailDetected);
-      if (raw) return { data: parsed, provider: "groq" };
-    } catch {}
-  }
-  if (openaiApiKey) {
-    try {
-      const raw = await _callOpenAIChatCompletion(
-        openaiApiKey,
-        "https://api.openai.com/v1",
-        "gpt-4o-mini",
-        messages,
-        512,
-      );
-      const parsed = _parseCrmJson(raw, blank, voicemailDetected);
-      if (raw) return { data: parsed, provider: "openai" };
-    } catch {}
-  }
-  return deterministic;
-}
 var worker_core_default = (0, import_agents2.defineAgent)({
   entry: async (ctx) => {
     await ctx.connect();
@@ -46885,6 +46803,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
     let crmCampaign = null;
     let callEndedWebhookUrl = null;
     let inboundPhoneId = null;
+    let _campaignLeadId = null;
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}");
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
@@ -46920,6 +46839,7 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
       if (meta.language) agentLanguage = meta.language;
       if (meta.inbound_phone_id) inboundPhoneId = meta.inbound_phone_id;
+      _campaignLeadId = meta.contact_id ?? meta.campaign_lead_id ?? null;
     } catch {}
     if (crmFunnel || crmLeadId || crmCountry || crmCampaign) {
       systemPrompt += [
@@ -46991,6 +46911,33 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
       if (firstMessage)
         firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
+    if (_campaignLeadId && _lifecycleSupabase) {
+      try {
+        const { data: leadRow } = await _lifecycleSupabase
+          .from("campaign_contacts")
+          .select("name, variables")
+          .eq("id", _campaignLeadId)
+          .maybeSingle();
+        if (leadRow) {
+          const lr = leadRow;
+          const leadVars = { ...(lr.variables ?? {}) };
+          if (lr.name) {
+            const firstName = lr.name.split(" ")[0] ?? lr.name;
+            leadVars["lead_first_name"] = firstName;
+            leadVars["lead_full_name"] = lr.name;
+          }
+          if (Object.keys(leadVars).length > 0) {
+            systemPrompt = compileSystemPrompt(systemPrompt, leadVars);
+            if (firstMessage)
+              firstMessage = compileSystemPrompt(firstMessage, leadVars);
+            void emit("campaign.lead_context_injected", {
+              contact_id: _campaignLeadId,
+              vars_count: Object.keys(leadVars).length,
+            });
+          }
+        }
+      } catch {}
     }
     if (_lifecycleSupabase && roomName) {
       try {
@@ -48408,185 +48355,275 @@ var worker_core_default = (0, import_agents2.defineAgent)({
             console.warn("[billing] cost tracking error:", String(costErr));
           }
           try {
-            const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
-            const openaiKeyForAnalysis = process.env["OPENAI_API_KEY"];
-            void emit("crm.extraction_started", {
-              has_transcript: transcript.trim().length > 0,
-            });
-            const crmResult = await extractCrmAnalysis(
-              transcript,
-              groqKeyForAnalysis,
-              crmFunnel,
-              crmLeadId,
-              crmCountry,
-              crmCampaign,
-              _voicemailDetected,
-              openaiKeyForAnalysis,
-            );
-            if (crmResult.provider === "openai") {
-              void emit("crm.extraction_fallback_used", {
-                fallback_provider: "openai",
+            const jobCallId = _postCallId;
+            if (jobCallId && workspaceId) {
+              let webhookUrl = callEndedWebhookUrl;
+              if (!webhookUrl) {
+                const { data: wsRow } = await supabase
+                  .from("workspaces")
+                  .select("webhook_url")
+                  .eq("id", workspaceId)
+                  .maybeSingle();
+                webhookUrl = wsRow?.webhook_url ?? null;
+              }
+              const jobList = [
+                {
+                  job_type: "crm_extraction",
+                  priority: 50,
+                  payload: {
+                    transcript_available: transcript.trim().length > 0,
+                    business_outcome: lifecycle?.outcome ?? null,
+                    technical_status: finalTechnicalStatus,
+                    crm_fields: {
+                      Funnel: crmFunnel,
+                      LeadId: crmLeadId,
+                      Country: crmCountry,
+                      Campaign: crmCampaign,
+                    },
+                    call_duration_seconds: durationSeconds,
+                  },
+                },
+                {
+                  job_type: "qa_analysis",
+                  priority: 80,
+                  payload: { source: "post_call_job" },
+                },
+                {
+                  job_type: "integration_dispatch",
+                  priority: 90,
+                  payload: { source: "post_call_job" },
+                },
+                ...(webhookUrl
+                  ? [
+                      {
+                        job_type: "outbound_webhook",
+                        priority: 100,
+                        payload: {
+                          event: "call.completed",
+                          webhook_url_source: callEndedWebhookUrl
+                            ? "metadata"
+                            : "workspace",
+                          webhook_url: webhookUrl,
+                          include_costs: true,
+                          include_analysis: true,
+                        },
+                      },
+                    ]
+                  : []),
+              ];
+              await enqueuePostCallJobsForCall({
+                workspaceId,
+                callId: jobCallId,
+                roomName,
+                agentId: agentId ?? void 0,
+                jobs: jobList,
+                supabase,
               });
-            } else if (crmResult.provider === "deterministic") {
-              void emit("crm.extraction_failed", {
-                reason: "all_llm_providers_failed",
+              void emit("post_call_jobs.enqueued", {
+                call_id: jobCallId,
+                job_count: jobList.length,
               });
-            } else {
-              void emit("crm.extraction_completed", {
-                provider: crmResult.provider,
-              });
-            }
-            const crmAnalysis = crmResult.data;
-            const { data: callRow } = await supabase
-              .from("calls")
-              .select("id")
-              .eq("retell_call_id", roomName)
-              .single();
-            if (callRow?.id) {
-              await supabase
-                .from("calls")
-                .update({ extracted_data: crmAnalysis })
-                .eq("id", callRow.id);
-            }
-            let effectiveWebhookUrl = callEndedWebhookUrl;
-            if (!effectiveWebhookUrl && workspaceId) {
-              const { data: wsRow } = await supabase
-                .from("workspaces")
-                .select("webhook_url")
-                .eq("id", workspaceId)
-                .maybeSingle();
-              effectiveWebhookUrl = wsRow?.webhook_url ?? null;
-            }
-            if (!effectiveWebhookUrl) {
-              void emit("webhook.skipped", {
-                reason: "no_webhook_url",
-                workspace_id: workspaceId,
-              });
-            } else {
-              const webhookEventId = crypto5.randomUUID();
-              const webhookTimestamp = Math.floor(Date.now() / 1e3).toString();
-              let webhookHost = effectiveWebhookUrl;
-              try {
-                webhookHost = new URL(effectiveWebhookUrl).host;
-              } catch {}
-              void emit("webhook.started", {
-                event_id: webhookEventId,
-                url_host: webhookHost,
-                workspace_id: workspaceId,
-              });
-              const webhookPayload = {
-                event: "call.completed",
-                event_id: webhookEventId,
-                timestamp: webhookTimestamp,
-                workspace_id: workspaceId ?? null,
-                call_id: _postCallId ?? null,
-                technical_status: finalTechnicalStatus,
-                business_outcome: lifecycle?.outcome ?? null,
-                duration_seconds: durationSeconds,
-                cost_usd: _postCostUsd,
-                cost_status: _postCostStatus,
-                cost_breakdown: _postCostBreakdown,
-                // First 400 chars of transcript as a summary proxy (no full text)
-                transcript_summary: transcript
-                  ? transcript.slice(0, 400) +
-                    (transcript.length > 400 ? "\u2026" : "")
-                  : null,
-                call: {
-                  id: _postCallId ?? null,
-                  room: roomName,
-                  agent_id: agentId,
+              if (!webhookUrl) {
+                void emit("webhook.skipped", {
+                  reason: "no_webhook_url",
                   workspace_id: workspaceId,
-                  direction: callDirection,
-                  status: finalTechnicalStatus,
+                });
+              }
+            }
+          } catch (enqueueErr) {
+            console.error(
+              "[post-call-jobs] enqueue failed:",
+              String(enqueueErr),
+            );
+            void emit("post_call_jobs.enqueue_failed", {
+              error: String(enqueueErr).slice(0, 200),
+              room: roomName,
+            });
+          }
+          if (false) {
+            try {
+              const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
+              const openaiKeyForAnalysis = process.env["OPENAI_API_KEY"];
+              void emit("crm.extraction_started", {
+                has_transcript: transcript.trim().length > 0,
+              });
+              const crmResult = await extractCrmAnalysis(
+                transcript,
+                groqKeyForAnalysis,
+                crmFunnel,
+                crmLeadId,
+                crmCountry,
+                crmCampaign,
+                _voicemailDetected,
+                openaiKeyForAnalysis,
+              );
+              if (crmResult.provider === "openai") {
+                void emit("crm.extraction_fallback_used", {
+                  fallback_provider: "openai",
+                });
+              } else if (crmResult.provider === "deterministic") {
+                void emit("crm.extraction_failed", {
+                  reason: "all_llm_providers_failed",
+                });
+              } else {
+                void emit("crm.extraction_completed", {
+                  provider: crmResult.provider,
+                });
+              }
+              const crmAnalysis = crmResult.data;
+              const { data: callRow } = await supabase
+                .from("calls")
+                .select("id")
+                .eq("retell_call_id", roomName)
+                .single();
+              if (callRow?.id) {
+                await supabase
+                  .from("calls")
+                  .update({ extracted_data: crmAnalysis })
+                  .eq("id", callRow.id);
+              }
+              let effectiveWebhookUrl = callEndedWebhookUrl;
+              if (!effectiveWebhookUrl && workspaceId) {
+                const { data: wsRow } = await supabase
+                  .from("workspaces")
+                  .select("webhook_url")
+                  .eq("id", workspaceId)
+                  .maybeSingle();
+                effectiveWebhookUrl = wsRow?.webhook_url ?? null;
+              }
+              if (!effectiveWebhookUrl) {
+                void emit("webhook.skipped", {
+                  reason: "no_webhook_url",
+                  workspace_id: workspaceId,
+                });
+              } else {
+                const webhookEventId = crypto.randomUUID();
+                const webhookTimestamp = Math.floor(
+                  Date.now() / 1e3,
+                ).toString();
+                let webhookHost = effectiveWebhookUrl;
+                try {
+                  webhookHost = new URL(effectiveWebhookUrl).host;
+                } catch {}
+                void emit("webhook.started", {
+                  event_id: webhookEventId,
+                  url_host: webhookHost,
+                  workspace_id: workspaceId,
+                });
+                const webhookPayload = {
+                  event: "call.completed",
+                  event_id: webhookEventId,
+                  timestamp: webhookTimestamp,
+                  workspace_id: workspaceId ?? null,
+                  call_id: _postCallId ?? null,
                   technical_status: finalTechnicalStatus,
                   business_outcome: lifecycle?.outcome ?? null,
                   duration_seconds: durationSeconds,
                   cost_usd: _postCostUsd,
                   cost_status: _postCostStatus,
                   cost_breakdown: _postCostBreakdown,
-                  voicemail: _voicemailDetected,
-                },
-                crm_fields: {
-                  Funnel: crmFunnel,
-                  LeadId: crmLeadId,
-                  Country: crmCountry,
-                  Campaign: crmCampaign,
-                },
-                analysis: crmAnalysis,
-              };
-              const payloadStr = JSON.stringify(webhookPayload);
-              const signingSecret =
-                process.env["VOICEOS_WEBHOOK_SIGNING_SECRET"];
-              const headers = {
-                "Content-Type": "application/json",
-                "X-VoiceOS-Event-Id": webhookEventId,
-                "X-VoiceOS-Timestamp": webhookTimestamp,
-                "X-VoiceOS-Workspace-Id": workspaceId ?? "",
-              };
-              if (signingSecret) {
-                const sigInput = `${webhookTimestamp}.${payloadStr}`;
-                headers["X-VoiceOS-Signature"] =
-                  `sha256=${crypto5.createHmac("sha256", signingSecret).update(sigInput).digest("hex")}`;
-                void emit("webhook.signature_generated", {
-                  event_id: webhookEventId,
-                });
-              } else {
-                headers["X-VoiceOS-Signature"] = "unsigned";
-                console.warn(
-                  "[worker.webhook] VOICEOS_WEBHOOK_SIGNING_SECRET not set \u2014 webhook sent unsigned",
-                );
-                void emit("webhook.unsigned", {
-                  event_id: webhookEventId,
-                  reason: "no_signing_secret",
-                });
+                  // First 400 chars of transcript as a summary proxy (no full text)
+                  transcript_summary: transcript
+                    ? transcript.slice(0, 400) +
+                      (transcript.length > 400 ? "\u2026" : "")
+                    : null,
+                  call: {
+                    id: _postCallId ?? null,
+                    room: roomName,
+                    agent_id: agentId,
+                    workspace_id: workspaceId,
+                    direction: callDirection,
+                    status: finalTechnicalStatus,
+                    technical_status: finalTechnicalStatus,
+                    business_outcome: lifecycle?.outcome ?? null,
+                    duration_seconds: durationSeconds,
+                    cost_usd: _postCostUsd,
+                    cost_status: _postCostStatus,
+                    cost_breakdown: _postCostBreakdown,
+                    voicemail: _voicemailDetected,
+                  },
+                  crm_fields: {
+                    Funnel: crmFunnel,
+                    LeadId: crmLeadId,
+                    Country: crmCountry,
+                    Campaign: crmCampaign,
+                  },
+                  analysis: crmAnalysis,
+                };
+                const payloadStr = JSON.stringify(webhookPayload);
+                const signingSecret =
+                  process.env["VOICEOS_WEBHOOK_SIGNING_SECRET"];
+                const headers = {
+                  "Content-Type": "application/json",
+                  "X-VoiceOS-Event-Id": webhookEventId,
+                  "X-VoiceOS-Timestamp": webhookTimestamp,
+                  "X-VoiceOS-Workspace-Id": workspaceId ?? "",
+                };
+                if (signingSecret) {
+                  const sigInput = `${webhookTimestamp}.${payloadStr}`;
+                  headers["X-VoiceOS-Signature"] =
+                    `sha256=${crypto.createHmac("sha256", signingSecret).update(sigInput).digest("hex")}`;
+                  void emit("webhook.signature_generated", {
+                    event_id: webhookEventId,
+                  });
+                } else {
+                  headers["X-VoiceOS-Signature"] = "unsigned";
+                  console.warn(
+                    "[worker.webhook] VOICEOS_WEBHOOK_SIGNING_SECRET not set \u2014 webhook sent unsigned",
+                  );
+                  void emit("webhook.unsigned", {
+                    event_id: webhookEventId,
+                    reason: "no_signing_secret",
+                  });
+                }
+                const webhookStart = Date.now();
+                try {
+                  const webhookRes = await Promise.race([
+                    fetch(effectiveWebhookUrl, {
+                      method: "POST",
+                      headers,
+                      body: payloadStr,
+                    }),
+                    new Promise((_, rej) =>
+                      setTimeout(() => rej(new Error("webhook timeout")), 8e3),
+                    ),
+                  ]);
+                  void emit("webhook.sent", {
+                    event_id: webhookEventId,
+                    url_host: webhookHost,
+                    status_code: webhookRes.status,
+                    duration_ms: Date.now() - webhookStart,
+                    signed: !!signingSecret,
+                  });
+                  log("info", {
+                    message: "call.webhook.sent",
+                    room: roomName,
+                    event_id: webhookEventId,
+                    signed: !!signingSecret,
+                    status_code: webhookRes.status,
+                  });
+                } catch (webhookErr) {
+                  void emit("webhook.failed", {
+                    event_id: webhookEventId,
+                    url_host: webhookHost,
+                    error: String(webhookErr),
+                    duration_ms: Date.now() - webhookStart,
+                  });
+                  log("error", {
+                    message: "call.webhook.failed",
+                    room: roomName,
+                    event_id: webhookEventId,
+                    error: String(webhookErr),
+                  });
+                }
               }
-              const webhookStart = Date.now();
-              try {
-                const webhookRes = await Promise.race([
-                  fetch(effectiveWebhookUrl, {
-                    method: "POST",
-                    headers,
-                    body: payloadStr,
-                  }),
-                  new Promise((_, rej) =>
-                    setTimeout(() => rej(new Error("webhook timeout")), 8e3),
-                  ),
-                ]);
-                void emit("webhook.sent", {
-                  event_id: webhookEventId,
-                  url_host: webhookHost,
-                  status_code: webhookRes.status,
-                  duration_ms: Date.now() - webhookStart,
-                  signed: !!signingSecret,
-                });
-                log("info", {
-                  message: "call.webhook.sent",
-                  room: roomName,
-                  event_id: webhookEventId,
-                  signed: !!signingSecret,
-                  status_code: webhookRes.status,
-                });
-              } catch (webhookErr) {
-                void emit("webhook.failed", {
-                  event_id: webhookEventId,
-                  url_host: webhookHost,
-                  error: String(webhookErr),
-                  duration_ms: Date.now() - webhookStart,
-                });
-                log("error", {
-                  message: "call.webhook.failed",
-                  room: roomName,
-                  event_id: webhookEventId,
-                  error: String(webhookErr),
-                });
-              }
+            } catch (err) {
+              log("error", {
+                message: "call.background_crm_failed",
+                error: String(err),
+                room: roomName,
+              });
             }
-          } catch (err) {
-            log("error", {
-              message: "call.background_crm_failed",
-              error: String(err),
-              room: roomName,
-            });
           }
         })();
       },

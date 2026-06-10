@@ -61,6 +61,10 @@ import {
   createLLMProvider,
   EMERGENCY_LLM_FILLERS,
 } from "./providers/llm-provider-router.js";
+import {
+  enqueuePostCallJobsForCall,
+  type PostCallJobType,
+} from "../lib/jobs/post-call-jobs.js";
 
 // Load .env.local from project root in dev; in prod env vars come from the host
 const envPath = path.resolve(
@@ -822,6 +826,7 @@ export default defineAgent({
     let crmCampaign: string | null = null;
     let callEndedWebhookUrl: string | null = null;
     let inboundPhoneId: string | null = null;
+    let _campaignLeadId: string | null = null; // contact_id or campaign_lead_id from outbound campaign
 
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}") as {
@@ -847,6 +852,9 @@ export default defineAgent({
         language?: string | null;
         // Fase 10: set by Twilio inbound webhook (app/api/webhooks/twilio/incoming)
         inbound_phone_id?: string | null;
+        // Fase 13: set by campaign dispatcher for outbound personalisation
+        contact_id?: string | null;
+        campaign_lead_id?: string | null;
       };
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
       if (meta.agent_name) agentName = meta.agent_name;
@@ -887,6 +895,8 @@ export default defineAgent({
       if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
       if (meta.language) agentLanguage = meta.language;
       if (meta.inbound_phone_id) inboundPhoneId = meta.inbound_phone_id;
+      // Fase 13: campaign lead context (contact_id preferred; campaign_lead_id as fallback key)
+      _campaignLeadId = meta.contact_id ?? meta.campaign_lead_id ?? null;
     } catch {
       /* use defaults */
     }
@@ -989,6 +999,44 @@ export default defineAgent({
       systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
       if (firstMessage)
         firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
+
+    // ── Fase 13: Campaign lead context injection ──────────────────────────────────
+    // If the call carries a contact_id (outbound campaign), fetch name + variables
+    // from campaign_contacts and inject them into the system prompt so the bot can
+    // greet the lead by name and reference their custom fields.
+    if (_campaignLeadId && _lifecycleSupabase) {
+      try {
+        const { data: leadRow } = await _lifecycleSupabase
+          .from("campaign_contacts")
+          .select("name, variables")
+          .eq("id", _campaignLeadId)
+          .maybeSingle();
+
+        if (leadRow) {
+          const lr = leadRow as {
+            name: string | null;
+            variables: Record<string, string> | null;
+          };
+          const leadVars: Record<string, string> = { ...(lr.variables ?? {}) };
+          if (lr.name) {
+            const firstName = lr.name.split(" ")[0] ?? lr.name;
+            leadVars["lead_first_name"] = firstName;
+            leadVars["lead_full_name"] = lr.name;
+          }
+          if (Object.keys(leadVars).length > 0) {
+            systemPrompt = compileSystemPrompt(systemPrompt, leadVars);
+            if (firstMessage)
+              firstMessage = compileSystemPrompt(firstMessage, leadVars);
+            void emit("campaign.lead_context_injected", {
+              contact_id: _campaignLeadId,
+              vars_count: Object.keys(leadVars).length,
+            });
+          }
+        }
+      } catch {
+        /* lead context injection is best-effort — never blocks the call */
+      }
     }
 
     // ── Fase 12: Resolve Twilio call SID + per-number transfer target ────────────
@@ -2759,211 +2807,317 @@ export default defineAgent({
           console.warn("[billing] cost tracking error:", String(costErr));
         }
 
+        // ── Fase 13: Enqueue persistent post-call jobs ───────────────────────
+        // Replaces inline CRM extraction + webhook fire-and-forget.
+        // Billing (above) still runs synchronously — it's fast and DB-only.
         try {
-          const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
-          const openaiKeyForAnalysis = process.env["OPENAI_API_KEY"];
-          void emit("crm.extraction_started", {
-            has_transcript: transcript.trim().length > 0,
-          });
-          const crmResult = await extractCrmAnalysis(
-            transcript,
-            groqKeyForAnalysis,
-            crmFunnel,
-            crmLeadId,
-            crmCountry,
-            crmCampaign,
-            _voicemailDetected,
-            openaiKeyForAnalysis,
-          );
-          if (crmResult.provider === "openai") {
-            void emit("crm.extraction_fallback_used", {
-              fallback_provider: "openai",
-            });
-          } else if (crmResult.provider === "deterministic") {
-            void emit("crm.extraction_failed", {
-              reason: "all_llm_providers_failed",
-            });
-          } else {
-            void emit("crm.extraction_completed", {
-              provider: crmResult.provider,
-            });
-          }
-          const crmAnalysis = crmResult.data;
+          const jobCallId = _postCallId;
 
-          // Persist extracted_data to the calls row
-          const { data: callRow } = await supabase
-            .from("calls")
-            .select("id")
-            .eq("retell_call_id", roomName)
-            .single();
-          if (callRow?.id) {
-            await supabase
-              .from("calls")
-              .update({ extracted_data: crmAnalysis })
-              .eq("id", callRow.id);
-          }
-
-          // Outbound webhook — signed call.completed payload (Fase 9/10)
-          // Priority: room metadata webhook_url > workspace-level webhook_url column.
-          // Both sources checked; metadata wins (more specific override).
-          let effectiveWebhookUrl = callEndedWebhookUrl;
-          if (!effectiveWebhookUrl && workspaceId) {
-            const { data: wsRow } = await supabase
-              .from("workspaces")
-              .select("webhook_url")
-              .eq("id", workspaceId)
-              .maybeSingle();
-            effectiveWebhookUrl =
-              (wsRow as { webhook_url?: string | null } | null)?.webhook_url ??
-              null;
-          }
-
-          if (!effectiveWebhookUrl) {
-            void emit("webhook.skipped", {
-              reason: "no_webhook_url",
-              workspace_id: workspaceId,
-            });
-          } else {
-            // Generate replay-protection identifiers
-            const webhookEventId = crypto.randomUUID();
-            const webhookTimestamp = Math.floor(Date.now() / 1000).toString();
-
-            // Safe host-only log (never log full URL — may contain tokens in path)
-            let webhookHost = effectiveWebhookUrl;
-            try {
-              webhookHost = new URL(effectiveWebhookUrl).host;
-            } catch {
-              /* malformed URL — use raw string for observability */
+          if (jobCallId && workspaceId) {
+            // Determine webhook URL before building job list
+            let webhookUrl: string | null = callEndedWebhookUrl;
+            if (!webhookUrl) {
+              const { data: wsRow } = await supabase
+                .from("workspaces")
+                .select("webhook_url")
+                .eq("id", workspaceId)
+                .maybeSingle();
+              webhookUrl =
+                (wsRow as { webhook_url?: string | null } | null)
+                  ?.webhook_url ?? null;
             }
 
-            void emit("webhook.started", {
-              event_id: webhookEventId,
-              url_host: webhookHost,
-              workspace_id: workspaceId,
+            const jobList: Array<{
+              job_type: PostCallJobType;
+              priority: number;
+              payload: Record<string, unknown>;
+            }> = [
+              {
+                job_type: "crm_extraction",
+                priority: 50,
+                payload: {
+                  transcript_available: transcript.trim().length > 0,
+                  business_outcome: lifecycle?.outcome ?? null,
+                  technical_status: finalTechnicalStatus,
+                  crm_fields: {
+                    Funnel: crmFunnel,
+                    LeadId: crmLeadId,
+                    Country: crmCountry,
+                    Campaign: crmCampaign,
+                  },
+                  call_duration_seconds: durationSeconds,
+                },
+              },
+              {
+                job_type: "qa_analysis",
+                priority: 80,
+                payload: { source: "post_call_job" },
+              },
+              {
+                job_type: "integration_dispatch",
+                priority: 90,
+                payload: { source: "post_call_job" },
+              },
+              ...(webhookUrl
+                ? [
+                    {
+                      job_type: "outbound_webhook" as PostCallJobType,
+                      priority: 100,
+                      payload: {
+                        event: "call.completed",
+                        webhook_url_source: callEndedWebhookUrl
+                          ? "metadata"
+                          : "workspace",
+                        webhook_url: webhookUrl,
+                        include_costs: true,
+                        include_analysis: true,
+                      },
+                    },
+                  ]
+                : []),
+            ];
+
+            await enqueuePostCallJobsForCall({
+              workspaceId,
+              callId: jobCallId,
+              roomName,
+              agentId: agentId ?? undefined,
+              jobs: jobList,
+              supabase,
             });
 
-            const webhookPayload = {
-              event: "call.completed",
-              event_id: webhookEventId,
-              timestamp: webhookTimestamp,
-              workspace_id: workspaceId ?? null,
-              call_id: _postCallId ?? null,
-              technical_status: finalTechnicalStatus,
-              business_outcome: lifecycle?.outcome ?? null,
-              duration_seconds: durationSeconds,
-              cost_usd: _postCostUsd,
-              cost_status: _postCostStatus,
-              cost_breakdown: _postCostBreakdown,
-              // First 400 chars of transcript as a summary proxy (no full text)
-              transcript_summary: transcript
-                ? transcript.slice(0, 400) +
-                  (transcript.length > 400 ? "…" : "")
-                : null,
-              call: {
-                id: _postCallId ?? null,
-                room: roomName,
-                agent_id: agentId,
+            void emit("post_call_jobs.enqueued", {
+              call_id: jobCallId,
+              job_count: jobList.length,
+            });
+
+            if (!webhookUrl) {
+              void emit("webhook.skipped", {
+                reason: "no_webhook_url",
                 workspace_id: workspaceId,
-                direction: callDirection,
-                status: finalTechnicalStatus,
+              });
+            }
+          }
+        } catch (enqueueErr) {
+          console.error("[post-call-jobs] enqueue failed:", String(enqueueErr));
+          void emit("post_call_jobs.enqueue_failed", {
+            error: String(enqueueErr).slice(0, 200),
+            room: roomName,
+          });
+        }
+
+        // ── Legacy CRM extraction path (kept for reference, disabled) ────────
+        // The block below was replaced by the post-call job queue above.
+        // It is kept commented out as a reference until load testing confirms
+        // the queue-based approach is stable in production.
+        if (false) {
+          try {
+            const groqKeyForAnalysis = process.env["GROQ_API_KEY"] ?? "";
+            const openaiKeyForAnalysis = process.env["OPENAI_API_KEY"];
+            void emit("crm.extraction_started", {
+              has_transcript: transcript.trim().length > 0,
+            });
+            const crmResult = await extractCrmAnalysis(
+              transcript,
+              groqKeyForAnalysis,
+              crmFunnel,
+              crmLeadId,
+              crmCountry,
+              crmCampaign,
+              _voicemailDetected,
+              openaiKeyForAnalysis,
+            );
+            if (crmResult.provider === "openai") {
+              void emit("crm.extraction_fallback_used", {
+                fallback_provider: "openai",
+              });
+            } else if (crmResult.provider === "deterministic") {
+              void emit("crm.extraction_failed", {
+                reason: "all_llm_providers_failed",
+              });
+            } else {
+              void emit("crm.extraction_completed", {
+                provider: crmResult.provider,
+              });
+            }
+            const crmAnalysis = crmResult.data;
+
+            // Persist extracted_data to the calls row
+            const { data: callRow } = await supabase!
+              .from("calls")
+              .select("id")
+              .eq("retell_call_id", roomName)
+              .single();
+            if (callRow?.id) {
+              await supabase!
+                .from("calls")
+                .update({ extracted_data: crmAnalysis })
+                .eq("id", callRow!.id);
+            }
+
+            // Outbound webhook — signed call.completed payload (Fase 9/10)
+            // Priority: room metadata webhook_url > workspace-level webhook_url column.
+            // Both sources checked; metadata wins (more specific override).
+            let effectiveWebhookUrl = callEndedWebhookUrl;
+            if (!effectiveWebhookUrl && workspaceId) {
+              const { data: wsRow } = await supabase!
+                .from("workspaces")
+                .select("webhook_url")
+                .eq("id", workspaceId)
+                .maybeSingle();
+              effectiveWebhookUrl =
+                (wsRow as { webhook_url?: string | null } | null)
+                  ?.webhook_url ?? null;
+            }
+
+            if (!effectiveWebhookUrl) {
+              void emit("webhook.skipped", {
+                reason: "no_webhook_url",
+                workspace_id: workspaceId,
+              });
+            } else {
+              // Generate replay-protection identifiers
+              const webhookEventId = crypto.randomUUID();
+              const webhookTimestamp = Math.floor(Date.now() / 1000).toString();
+
+              // Safe host-only log (never log full URL — may contain tokens in path)
+              let webhookHost = effectiveWebhookUrl!;
+              try {
+                webhookHost = new URL(effectiveWebhookUrl!).host;
+              } catch {
+                /* malformed URL — use raw string for observability */
+              }
+
+              void emit("webhook.started", {
+                event_id: webhookEventId,
+                url_host: webhookHost,
+                workspace_id: workspaceId,
+              });
+
+              const webhookPayload = {
+                event: "call.completed",
+                event_id: webhookEventId,
+                timestamp: webhookTimestamp,
+                workspace_id: workspaceId ?? null,
+                call_id: _postCallId ?? null,
                 technical_status: finalTechnicalStatus,
                 business_outcome: lifecycle?.outcome ?? null,
                 duration_seconds: durationSeconds,
                 cost_usd: _postCostUsd,
                 cost_status: _postCostStatus,
                 cost_breakdown: _postCostBreakdown,
-                voicemail: _voicemailDetected,
-              },
-              crm_fields: {
-                Funnel: crmFunnel,
-                LeadId: crmLeadId,
-                Country: crmCountry,
-                Campaign: crmCampaign,
-              },
-              analysis: crmAnalysis,
-            };
-            const payloadStr = JSON.stringify(webhookPayload);
+                // First 400 chars of transcript as a summary proxy (no full text)
+                transcript_summary: transcript
+                  ? transcript.slice(0, 400) +
+                    (transcript.length > 400 ? "…" : "")
+                  : null,
+                call: {
+                  id: _postCallId ?? null,
+                  room: roomName,
+                  agent_id: agentId,
+                  workspace_id: workspaceId,
+                  direction: callDirection,
+                  status: finalTechnicalStatus,
+                  technical_status: finalTechnicalStatus,
+                  business_outcome: lifecycle?.outcome ?? null,
+                  duration_seconds: durationSeconds,
+                  cost_usd: _postCostUsd,
+                  cost_status: _postCostStatus,
+                  cost_breakdown: _postCostBreakdown,
+                  voicemail: _voicemailDetected,
+                },
+                crm_fields: {
+                  Funnel: crmFunnel,
+                  LeadId: crmLeadId,
+                  Country: crmCountry,
+                  Campaign: crmCampaign,
+                },
+                analysis: crmAnalysis,
+              };
+              const payloadStr = JSON.stringify(webhookPayload);
 
-            // Sign over timestamp.body — prevents payload replay across timestamps.
-            // VOICEOS_WEBHOOK_SIGNING_SECRET is dedicated for outbound webhooks;
-            // INTERNAL_API_SECRET is reserved for internal endpoint auth only.
-            const signingSecret = process.env["VOICEOS_WEBHOOK_SIGNING_SECRET"];
-            const headers: Record<string, string> = {
-              "Content-Type": "application/json",
-              "X-VoiceOS-Event-Id": webhookEventId,
-              "X-VoiceOS-Timestamp": webhookTimestamp,
-              "X-VoiceOS-Workspace-Id": workspaceId ?? "",
-            };
+              // Sign over timestamp.body — prevents payload replay across timestamps.
+              // VOICEOS_WEBHOOK_SIGNING_SECRET is dedicated for outbound webhooks;
+              // INTERNAL_API_SECRET is reserved for internal endpoint auth only.
+              const signingSecret =
+                process.env["VOICEOS_WEBHOOK_SIGNING_SECRET"];
+              const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+                "X-VoiceOS-Event-Id": webhookEventId,
+                "X-VoiceOS-Timestamp": webhookTimestamp,
+                "X-VoiceOS-Workspace-Id": workspaceId ?? "",
+              };
 
-            if (signingSecret) {
-              const sigInput = `${webhookTimestamp}.${payloadStr}`;
-              headers["X-VoiceOS-Signature"] = `sha256=${crypto
-                .createHmac("sha256", signingSecret)
-                .update(sigInput)
-                .digest("hex")}`;
-              void emit("webhook.signature_generated", {
-                event_id: webhookEventId,
-              });
-            } else {
-              // No signing secret — mark header so receivers know payload is unsigned
-              headers["X-VoiceOS-Signature"] = "unsigned";
-              console.warn(
-                "[worker.webhook] VOICEOS_WEBHOOK_SIGNING_SECRET not set — webhook sent unsigned",
-              );
-              void emit("webhook.unsigned", {
-                event_id: webhookEventId,
-                reason: "no_signing_secret",
-              });
+              if (signingSecret) {
+                const sigInput = `${webhookTimestamp}.${payloadStr}`;
+                headers["X-VoiceOS-Signature"] = `sha256=${crypto
+                  .createHmac("sha256", signingSecret as string)
+                  .update(sigInput)
+                  .digest("hex")}`;
+                void emit("webhook.signature_generated", {
+                  event_id: webhookEventId,
+                });
+              } else {
+                // No signing secret — mark header so receivers know payload is unsigned
+                headers["X-VoiceOS-Signature"] = "unsigned";
+                console.warn(
+                  "[worker.webhook] VOICEOS_WEBHOOK_SIGNING_SECRET not set — webhook sent unsigned",
+                );
+                void emit("webhook.unsigned", {
+                  event_id: webhookEventId,
+                  reason: "no_signing_secret",
+                });
+              }
+
+              const webhookStart = Date.now();
+              try {
+                const webhookRes = await Promise.race([
+                  fetch(effectiveWebhookUrl!, {
+                    method: "POST",
+                    headers,
+                    body: payloadStr,
+                  }),
+                  new Promise<never>((_, rej) =>
+                    setTimeout(() => rej(new Error("webhook timeout")), 8_000),
+                  ),
+                ]);
+                void emit("webhook.sent", {
+                  event_id: webhookEventId,
+                  url_host: webhookHost,
+                  status_code: webhookRes.status,
+                  duration_ms: Date.now() - webhookStart,
+                  signed: !!signingSecret,
+                });
+                log("info", {
+                  message: "call.webhook.sent",
+                  room: roomName,
+                  event_id: webhookEventId,
+                  signed: !!signingSecret,
+                  status_code: webhookRes.status,
+                });
+              } catch (webhookErr) {
+                void emit("webhook.failed", {
+                  event_id: webhookEventId,
+                  url_host: webhookHost,
+                  error: String(webhookErr),
+                  duration_ms: Date.now() - webhookStart,
+                });
+                log("error", {
+                  message: "call.webhook.failed",
+                  room: roomName,
+                  event_id: webhookEventId,
+                  error: String(webhookErr),
+                });
+              }
             }
-
-            const webhookStart = Date.now();
-            try {
-              const webhookRes = await Promise.race([
-                fetch(effectiveWebhookUrl, {
-                  method: "POST",
-                  headers,
-                  body: payloadStr,
-                }),
-                new Promise<never>((_, rej) =>
-                  setTimeout(() => rej(new Error("webhook timeout")), 8_000),
-                ),
-              ]);
-              void emit("webhook.sent", {
-                event_id: webhookEventId,
-                url_host: webhookHost,
-                status_code: webhookRes.status,
-                duration_ms: Date.now() - webhookStart,
-                signed: !!signingSecret,
-              });
-              log("info", {
-                message: "call.webhook.sent",
-                room: roomName,
-                event_id: webhookEventId,
-                signed: !!signingSecret,
-                status_code: webhookRes.status,
-              });
-            } catch (webhookErr) {
-              void emit("webhook.failed", {
-                event_id: webhookEventId,
-                url_host: webhookHost,
-                error: String(webhookErr),
-                duration_ms: Date.now() - webhookStart,
-              });
-              log("error", {
-                message: "call.webhook.failed",
-                room: roomName,
-                event_id: webhookEventId,
-                error: String(webhookErr),
-              });
-            }
+          } catch (err) {
+            log("error", {
+              message: "call.background_crm_failed",
+              error: String(err),
+              room: roomName,
+            });
           }
-        } catch (err) {
-          log("error", {
-            message: "call.background_crm_failed",
-            error: String(err),
-            room: roomName,
-          });
-        }
+        } // end if (false) legacy CRM block
       })();
     }); // end Close handler
 

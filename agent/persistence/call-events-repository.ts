@@ -79,7 +79,25 @@ export type CallEventType =
   | "crm.extraction_started"
   | "crm.extraction_completed"
   | "crm.extraction_failed"
-  | "crm.extraction_fallback_used";
+  | "crm.extraction_fallback_used"
+  // Post-call jobs (Fase 13)
+  | "post_call_jobs.enqueued"
+  | "post_call_jobs.enqueue_failed"
+  | "post_call_jobs.claimed"
+  | "post_call_jobs.completed"
+  | "post_call_jobs.failed"
+  | "post_call_jobs.retry_scheduled"
+  | "post_call_jobs.dead_letter"
+  | "post_call_jobs.canceled"
+  // QA
+  | "qa.started"
+  | "qa.completed"
+  | "qa.failed"
+  // Billing finalization
+  | "billing.cost_finalized"
+  | "billing.cost_finalization_failed"
+  // Campaign lead context (Fase 13)
+  | "campaign.lead_context_injected";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,
