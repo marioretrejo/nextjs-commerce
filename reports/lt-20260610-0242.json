@@ -1,0 +1,95 @@
+{
+  "run_id": "lt-20260610-0242",
+  "config": {
+    "workspaceId": "8a95d3f4-f8e4-4cb1-b252-d5891cb95264",
+    "agentId": "e6e83ce1-e9a6-4af1-bf7e-26065e896687",
+    "total": 10,
+    "concurrency": 2,
+    "dryRun": false,
+    "runPostCallJobs": true,
+    "runCron": true,
+    "sendWebhooks": false
+  },
+  "startedAt": "2026-06-10T02:42:29.541Z",
+  "completedAt": "2026-06-10T02:42:32.914Z",
+  "durationMs": 3373,
+  "callsAttempted": 10,
+  "callsCreated": 8,
+  "callsBlocked": 2,
+  "callsFailed": 0,
+  "peakActiveCalls": 2,
+  "dbInsertErrors": 8,
+  "dbInsertErrorRate": 1,
+  "closeHandlerMs": {
+    "p50": 195,
+    "p95": 387,
+    "p99": 387
+  },
+  "totalCostUsd": 0.3882,
+  "avgCostUsdPerCall": 0.0485,
+  "byScenario": {
+    "completed": 3,
+    "voicemail": 3,
+    "no_answer": 0,
+    "silence_timeout": 0,
+    "dnc": 2,
+    "transferred": 1,
+    "transfer_failed": 1,
+    "provider_failure": 0,
+    "balance_exhausted": 0
+  },
+  "jobsEnqueued": 0,
+  "jobsSkipped": 24,
+  "jobsEnqueueRate": 0,
+  "cronCompleted": 0,
+  "cronRetrying": 0,
+  "cronFailed": 0,
+  "cronDeadLetter": 0,
+  "cronDeadLetterRate": 0,
+  "cronProcessRate": 0,
+  "eligibilityAllowed": 8,
+  "eligibilityBlocked": 2,
+  "eligibilityReasonCodes": {
+    "allowed": 8,
+    "dnc_list": 2
+  },
+  "criteria": [
+    {
+      "name": "Zero crashes (DB error rate)",
+      "threshold": "< 0.5%",
+      "actual": "100.00%",
+      "pass": false
+    },
+    {
+      "name": "All calls have final state",
+      "threshold": "100%",
+      "actual": "8 created",
+      "pass": true
+    },
+    {
+      "name": "p95 close handler",
+      "threshold": "< 2000ms",
+      "actual": "387ms",
+      "pass": true
+    },
+    {
+      "name": "p99 close handler",
+      "threshold": "< 5000ms",
+      "actual": "387ms",
+      "pass": true
+    },
+    {
+      "name": "Dead letter rate",
+      "threshold": "< 1%",
+      "actual": "0.00%",
+      "pass": true
+    },
+    {
+      "name": "Jobs processed rate",
+      "threshold": ">= 99%",
+      "actual": "0.0%",
+      "pass": true
+    }
+  ],
+  "passed": false
+}
