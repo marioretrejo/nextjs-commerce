@@ -1,0 +1,96 @@
+{
+  "run_id": "lt-20260610-1403",
+  "config": {
+    "workspaceId": "cd7b409f-82a3-4da2-8f7c-d49c11d62105",
+    "agentId": "295cdc22-f4da-45ed-8f7b-3815b3a0ea5f",
+    "total": 1000,
+    "concurrency": 50,
+    "dryRun": false,
+    "runPostCallJobs": true,
+    "runCron": true,
+    "sendWebhooks": false
+  },
+  "startedAt": "2026-06-10T14:03:32.650Z",
+  "completedAt": "2026-06-10T14:08:00.066Z",
+  "durationMs": 267416,
+  "callsAttempted": 1000,
+  "callsCreated": 881,
+  "callsBlocked": 119,
+  "callsFailed": 0,
+  "peakActiveCalls": 50,
+  "dbInsertErrors": 0,
+  "dbInsertErrorRate": 0,
+  "closeHandlerMs": {
+    "p50": 581,
+    "p95": 762,
+    "p99": 2433
+  },
+  "totalCostUsd": 34.9344,
+  "avgCostUsdPerCall": 0.0397,
+  "byScenario": {
+    "completed": 371,
+    "voicemail": 213,
+    "no_answer": 91,
+    "silence_timeout": 94,
+    "dnc": 96,
+    "transferred": 40,
+    "transfer_failed": 41,
+    "provider_failure": 31,
+    "balance_exhausted": 23
+  },
+  "jobsEnqueued": 2277,
+  "jobsSkipped": 0,
+  "jobsEnqueueRate": 2.5845629965947787,
+  "cronCompleted": 2277,
+  "cronRetrying": 0,
+  "cronFailed": 0,
+  "cronDeadLetter": 0,
+  "cronDeadLetterRate": 0,
+  "cronProcessRate": 1,
+  "eligibilityAllowed": 881,
+  "eligibilityBlocked": 119,
+  "eligibilityReasonCodes": {
+    "allowed": 881,
+    "dnc_list": 96,
+    "balance_exhausted": 23
+  },
+  "criteria": [
+    {
+      "name": "Zero crashes (DB error rate)",
+      "threshold": "< 0.5%",
+      "actual": "0.00%",
+      "pass": true
+    },
+    {
+      "name": "All calls have final state",
+      "threshold": "100%",
+      "actual": "881 created",
+      "pass": true
+    },
+    {
+      "name": "p95 close handler",
+      "threshold": "< 2000ms",
+      "actual": "762ms",
+      "pass": true
+    },
+    {
+      "name": "p99 close handler",
+      "threshold": "< 5000ms",
+      "actual": "2433ms",
+      "pass": true
+    },
+    {
+      "name": "Dead letter rate",
+      "threshold": "< 1%",
+      "actual": "0.00%",
+      "pass": true
+    },
+    {
+      "name": "Jobs processed rate",
+      "threshold": ">= 99%",
+      "actual": "100.0%",
+      "pass": true
+    }
+  ],
+  "passed": true
+}
