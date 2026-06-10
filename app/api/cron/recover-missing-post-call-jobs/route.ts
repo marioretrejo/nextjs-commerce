@@ -16,6 +16,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   enqueuePostCallJobsForCall,
+  shouldEnqueuePostCallJobs,
   type EnqueueJobInput,
 } from "@/lib/jobs/post-call-jobs";
 import { timingSafeEqual } from "node:crypto";
@@ -46,6 +47,8 @@ interface CallRow {
   workspace_id: string;
   agent_id: string | null;
   room_name: string | null;
+  technical_status: string | null;
+  ended_at: string | null;
 }
 
 export async function GET(req: Request) {
@@ -69,12 +72,14 @@ export async function GET(req: Request) {
   const admin = createAdminClient();
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
-  // Step 1: Fetch recent completed/ended calls within the look-back window
+  // Step 1: Fetch recent calls that are eligible for post_call_jobs.
+  // Only completed/ended calls with ended_at set — excludes no_answer and failed.
   const { data: recentCalls, error: callsErr } = await admin
     .from("calls")
-    .select("id, workspace_id, agent_id, room_name")
+    .select("id, workspace_id, agent_id, room_name, technical_status, ended_at")
     .gte("created_at", cutoff)
-    .in("technical_status", ["ended", "completed", "failed"])
+    .in("technical_status", ["ended", "completed"])
+    .not("ended_at", "is", null)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -108,8 +113,10 @@ export async function GET(req: Request) {
     ((coveredRows ?? []) as { call_id: string }[]).map((r) => r.call_id),
   );
 
-  // Step 3: Orphaned = calls that have no post_call_jobs at all
-  const orphaned = calls.filter((c) => !coveredIds.has(c.id));
+  // Step 3: Orphaned = eligible calls that have no post_call_jobs at all
+  const orphaned = calls.filter(
+    (c) => !coveredIds.has(c.id) && shouldEnqueuePostCallJobs(c),
+  );
 
   const summary = {
     scanned: calls.length,

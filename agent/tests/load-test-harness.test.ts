@@ -24,6 +24,7 @@ import {
   type CallSimResult,
   type ActiveCallsCounter,
 } from "@/lib/load-test/simulator";
+import { shouldEnqueuePostCallJobs } from "@/lib/jobs/post-call-jobs";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -650,6 +651,112 @@ describe("Synthetic phone number generation", () => {
       Array.from({ length: 100 }, (_, i) => generateE164(i)),
     );
     assert.ok(phones.size > 50, "Should generate diverse phone numbers");
+  });
+});
+
+// ── Test 11b: shouldEnqueuePostCallJobs eligibility ──────────────────────────
+
+describe("shouldEnqueuePostCallJobs — eligibility", () => {
+  const ts = "2024-01-15T12:00:00.000Z";
+
+  it("no_answer call is NOT eligible (false positive prevention)", () => {
+    assert.strictEqual(
+      shouldEnqueuePostCallJobs({
+        technical_status: "no_answer",
+        ended_at: ts,
+      }),
+      false,
+      "no_answer must not be flagged as orphaned",
+    );
+  });
+
+  it("failed call is NOT eligible (provider_failure scenario)", () => {
+    assert.strictEqual(
+      shouldEnqueuePostCallJobs({ technical_status: "failed", ended_at: ts }),
+      false,
+      "failed (provider_failure) must not be flagged as orphaned",
+    );
+  });
+
+  it("call without ended_at is NOT eligible (call never finished)", () => {
+    assert.strictEqual(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: null,
+      }),
+      false,
+      "Call without ended_at must not be considered for recovery",
+    );
+  });
+
+  it("completed/contacted call without jobs IS an orphan", () => {
+    assert.strictEqual(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+      }),
+      true,
+      "completed call with ended_at must be eligible for recovery",
+    );
+  });
+
+  it("voicemail call without jobs IS an orphan (technical_status=completed)", () => {
+    // voicemail uses technical_status="completed" — same eligibility
+    assert.strictEqual(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+      }),
+      true,
+      "voicemail (completed) must be eligible for recovery",
+    );
+  });
+
+  it("recovery run is idempotent when jobs already exist (no duplicates)", () => {
+    const db = new Map<string, boolean>();
+    const recover = (callId: string): number => {
+      const types = [
+        "crm_extraction",
+        "qa_analysis",
+        "integration_dispatch",
+        "cost_finalization",
+      ];
+      let inserted = 0;
+      for (const t of types) {
+        const key = `${callId}:${t}`;
+        if (!db.has(key)) {
+          db.set(key, true);
+          inserted++;
+        }
+      }
+      return inserted;
+    };
+
+    // Simulate first recovery run (call is truly orphaned)
+    assert.strictEqual(recover("call-eligible-1"), 4, "First run: 4 jobs");
+    // Second recovery run — ON CONFLICT DO NOTHING → 0 new rows
+    assert.strictEqual(
+      recover("call-eligible-1"),
+      0,
+      "Second run: 0 duplicates",
+    );
+    assert.strictEqual(db.size, 4, "Exactly 4 unique job rows");
+  });
+
+  it("buildJobList returns empty for no_answer scenario", () => {
+    assert.strictEqual(
+      buildJobList("no_answer").length,
+      0,
+      "no_answer: no jobs enqueued",
+    );
+  });
+
+  it("buildJobList returns empty for provider_failure scenario", () => {
+    assert.strictEqual(
+      buildJobList("provider_failure").length,
+      0,
+      "provider_failure: no jobs enqueued",
+    );
   });
 });
 

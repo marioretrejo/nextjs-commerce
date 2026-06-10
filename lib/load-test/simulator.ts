@@ -23,6 +23,7 @@ import {
   markJobRetrying,
   markJobDeadLetter,
   shouldRetryJob,
+  shouldEnqueuePostCallJobs,
   type PostCallJob,
   type EnqueueJobInput,
 } from "@/lib/jobs/post-call-jobs";
@@ -361,6 +362,19 @@ export function buildJobList(
   scenario: ScenarioType,
   webhookUrl?: string,
 ): EnqueueJobInput[] {
+  const def = SCENARIO_DEFS[scenario];
+
+  // Use the shared eligibility function — same logic as the recovery endpoint.
+  // Scenarios that don't create calls (dnc, balance_exhausted) pass null ended_at.
+  if (
+    !shouldEnqueuePostCallJobs({
+      technical_status: def.technicalStatus,
+      ended_at: def.createsCall ? "mock" : null,
+    })
+  ) {
+    return [];
+  }
+
   const base: EnqueueJobInput[] = [
     { job_type: "crm_extraction", priority: 50 },
     { job_type: "qa_analysis", priority: 80 },
@@ -379,15 +393,6 @@ export function buildJobList(
         include_analysis: false,
       },
     });
-  }
-
-  // Scenarios with no meaningful content skip expensive jobs
-  if (
-    scenario === "provider_failure" ||
-    scenario === "no_answer" ||
-    scenario === "balance_exhausted"
-  ) {
-    return base.filter((j) => j.job_type === "cost_finalization");
   }
 
   return base;
