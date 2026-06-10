@@ -60,11 +60,19 @@ server, validating the full stack: auth middleware → route handlers → DB.
 
 ### Test tiers
 
-| Tier | Tests                          | Auth needed           |
-| ---- | ------------------------------ | --------------------- |
-| 0    | Safety guards (env vars)       | No                    |
-| 1    | Unauthenticated requests → 401 | No (just server)      |
-| 2    | Full CRUD lifecycle            | Yes (`--auth-cookie`) |
+| Tier | Tests                          | Auth needed                              |
+| ---- | ------------------------------ | ---------------------------------------- |
+| 0    | Safety guards (env vars)       | No                                       |
+| 1    | Unauthenticated requests → 307 | No (just server)                         |
+| 2    | Full CRUD lifecycle            | Yes (`--auth-cookie` or `--create-test-session`) |
+
+### Pass / Fail semantics
+
+| Outcome | Meaning |
+| ------- | ------- |
+| **FULL PASS** | Tier 0 + Tier 1 + Tier 2 all ran and passed |
+| **PARTIAL PASS** | Tier 0 + Tier 1 passed; Tier 2 was skipped (no auth) |
+| **FAILED** | At least one check did not pass |
 
 ### How to run
 
@@ -75,7 +83,15 @@ VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
   --base-url http://localhost:3000
 ```
 
-**Full lifecycle test** (requires a valid Supabase session cookie):
+**Full lifecycle — auto-create ephemeral test user** (recommended; no browser needed):
+
+```bash
+VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
+  --base-url http://localhost:3000 \
+  --create-test-session
+```
+
+**Full lifecycle — supply your own auth cookie**:
 
 ```bash
 VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
@@ -84,6 +100,15 @@ VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
   --agent-id <AGENT_ID> \
   --auth-cookie "sb-<project>-auth-token=<value>" \
   --cleanup true
+```
+
+**Require full lifecycle** (fails with error if no auth source is available):
+
+```bash
+VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
+  --base-url http://localhost:3000 \
+  --require-auth-full \
+  --create-test-session
 ```
 
 **Dry-run** (no HTTP calls, validates script logic):
@@ -95,16 +120,32 @@ VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
 
 ### Arguments
 
-| Argument         | Default                 | Description                       |
-| ---------------- | ----------------------- | --------------------------------- |
-| `--base-url`     | `http://localhost:3000` | Next.js server URL                |
-| `--workspace-id` | (Super Admin workspace) | Workspace to use for tests        |
-| `--agent-id`     | (Ventas Outbound LATAM) | Agent for activation precondition |
-| `--auth-cookie`  | (empty)                 | Supabase session cookie string    |
-| `--cleanup`      | `true`                  | Delete test campaigns after run   |
-| `--dry-run`      | (flag)                  | Print plan, skip HTTP calls       |
+| Argument                | Default                 | Description                                              |
+| ----------------------- | ----------------------- | -------------------------------------------------------- |
+| `--base-url`            | `http://localhost:3000` | Next.js server URL                                       |
+| `--workspace-id`        | (Super Admin workspace) | Workspace to use for tests                               |
+| `--agent-id`            | (Ventas Outbound LATAM) | Agent for activation precondition                        |
+| `--auth-cookie`         | (empty)                 | Supabase session cookie string                           |
+| `--create-test-session` | (flag)                  | Create a temp test user + session; delete after run      |
+| `--require-auth-full`   | (flag)                  | Fail immediately if no auth source is available          |
+| `--cleanup`             | `true`                  | Pause test campaigns and delete test user after run      |
+| `--dry-run`             | (flag)                  | Print plan, skip HTTP calls                              |
 
-### Getting an auth cookie
+### `--create-test-session` details
+
+When this flag is set the script:
+
+1. Creates an ephemeral test user via `admin.auth.admin.createUser({ email_confirm: true })`
+2. Adds the user to the target workspace as `editor`
+3. Signs in to get a real Supabase session token
+4. Formats the session as the `@supabase/ssr` base64url cookie
+5. Runs all Tier 2 tests with that cookie
+6. On cleanup: deletes the user's `audit_logs` rows (no-cascade FK) then calls `admin.auth.admin.deleteUser()`
+
+Required env vars: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (all typically in `.env.local`).
+
+### Getting an auth cookie manually
 
 In your browser, log into the app and copy the `sb-*-auth-token` cookie from
 DevTools → Application → Cookies. Pass it as a single quoted string:
@@ -127,15 +168,16 @@ DevTools → Application → Cookies. Pass it as a single quoted string:
 10. `PATCH completed→active` → 422 (illegal transition)
 11. `GET /api/campaigns/[id]` → 200 with campaign data
 
-### Auth rejection responses (302 vs 401)
+### Auth rejection responses (307 vs 401)
 
-The Next.js middleware intercepts unauthenticated requests and returns a **302
-redirect to `/login`** before the route handler is reached. This means REST
-clients without a session cookie will see `302`, not `401`. The route handlers
-contain their own `401` guard (belt-and-suspenders for cases where the
-middleware is bypassed). The HTTP smoke test accepts either `302` or `401` as a
-valid auth rejection and uses `redirect: "manual"` in `fetch` to observe the
-raw middleware response.
+The Next.js middleware intercepts unauthenticated requests and returns a **307
+Temporary Redirect to `/login`** before the route handler is reached. This
+means REST clients without a session cookie will see `307`, not `401`. The
+route handlers contain their own `401` guard (belt-and-suspenders for cases
+where the middleware is bypassed). The HTTP smoke test accepts `307`, `302`,
+`401`, or `403` as valid auth rejection signals and uses `redirect: "manual"`
+in `fetch` to observe the raw middleware response rather than the 200 HTML of
+the `/login` page.
 
 ### Limitations
 
@@ -175,10 +217,12 @@ Both scripts enforce:
 # 1. DB smoke test (no server needed)
 VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-smoke-test.ts
 
-# 2. HTTP smoke test — auth-protection tier only
+# 2. HTTP smoke test — full lifecycle (auto-creates ephemeral test user)
 pnpm dev &  # start server in background
 VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
-  --base-url http://localhost:3000
+  --base-url http://localhost:3000 \
+  --create-test-session \
+  --require-auth-full
 kill %1     # stop dev server
 
 # 3. Full type check

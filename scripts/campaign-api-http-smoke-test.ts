@@ -11,20 +11,31 @@
  * Test tiers:
  *   Tier 0 (always run):    Safety guards and env checks
  *   Tier 1 (no auth):       Unauthenticated requests must return 401/403
- *   Tier 2 (auth required): Full CRUD lifecycle (needs --auth-cookie)
+ *   Tier 2 (auth required): Full CRUD lifecycle (needs --auth-cookie or --create-test-session)
  *
  * Usage:
  *   # Auth-protection tests only (no cookie needed, server must be running):
  *   VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
  *     --base-url http://localhost:3000
  *
- *   # Full lifecycle test:
+ *   # Full lifecycle — auto-create test session (requires DB env vars):
+ *   VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
+ *     --base-url http://localhost:3000 \
+ *     --create-test-session
+ *
+ *   # Full lifecycle — supply your own auth cookie:
  *   VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
  *     --base-url http://localhost:3000 \
  *     --workspace-id <WS_ID> \
  *     --agent-id <AGENT_ID> \
  *     --auth-cookie "sb-<project>-auth-token=<value>" \
  *     --cleanup true
+ *
+ *   # Require full lifecycle — fail if no auth available:
+ *   VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
+ *     --base-url http://localhost:3000 \
+ *     --require-auth-full \
+ *     --create-test-session
  *
  *   # Dry-run (no HTTP calls, validates script logic and prints plan):
  *   VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
@@ -34,11 +45,12 @@
  *   • Requires VOICEOS_LOAD_TEST_MODE=true
  *   • 0 real Twilio / LiveKit / LLM / STT / TTS calls
  *   • 0 webhooks sent (VOICEOS_LOAD_TEST_SEND_WEBHOOKS must be false/unset)
- *   • Cleanup deletes all test rows when --cleanup true
+ *   • Cleanup deletes test campaigns and removes the temporary test user
  */
 
 import * as path from "node:path";
 import * as dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -59,9 +71,11 @@ const WORKSPACE_ID = getArg(
   "cd7b409f-82a3-4da2-8f7c-d49c11d62105",
 );
 const AGENT_ID = getArg("--agent-id", "295cdc22-f4da-45ed-8f7b-3815b3a0ea5f");
-const AUTH_COOKIE = getArg("--auth-cookie", "");
+let AUTH_COOKIE = getArg("--auth-cookie", "");
 const CLEANUP = getArg("--cleanup", "true") !== "false";
 const DRY_RUN = hasFlag("--dry-run");
+const CREATE_TEST_SESSION = hasFlag("--create-test-session");
+const REQUIRE_AUTH_FULL = hasFlag("--require-auth-full");
 const REQUEST_TIMEOUT_MS = 15_000;
 
 // ── Safety guards ──────────────────────────────────────────────────────────────
@@ -130,11 +144,11 @@ interface FetchResult {
 
 async function apiRequest(
   method: string,
-  path: string,
+  urlPath: string,
   body?: unknown,
   withAuth = false,
 ): Promise<FetchResult> {
-  const url = `${BASE_URL}${path}`;
+  const url = `${BASE_URL}${urlPath}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -146,8 +160,8 @@ async function apiRequest(
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      // Do not follow redirects so we see the middleware's 302 directly.
-      // Unauthenticated API requests are redirected to /login (302), not 401.
+      // Do not follow redirects so we see the middleware's 307 directly.
+      // Unauthenticated API requests are redirected to /login (307), not 401.
       redirect: "manual",
     });
     let parsed: unknown = null;
@@ -172,11 +186,159 @@ async function checkServerReachable(): Promise<boolean> {
 
 let createdCampaignId = "";
 const createdCampaignIds: string[] = [];
+let testSessionUserId = "";
+let tier2WasRun = false;
+
+// ── Session creation ───────────────────────────────────────────────────────────
+
+/**
+ * Creates a temporary test user, adds them to the smoke-test workspace, signs
+ * in to get a real session, and returns the formatted Supabase SSR cookie
+ * string that the Next.js middleware will accept.
+ *
+ * Cookie format expected by @supabase/ssr createServerClient with
+ * cookieEncoding: "base64url":
+ *   sb-{projectRef}-auth-token=base64-{base64url(JSON.stringify(session))}
+ *
+ * base64url uses the alphabet A-Z a-z 0-9 - _ (no + / or = padding).
+ */
+async function createTestSession(): Promise<{
+  cookie: string;
+  userId: string;
+}> {
+  const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
+  const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const anonKey = process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"];
+
+  if (!supabaseUrl || !serviceKey || !anonKey) {
+    throw new Error(
+      "createTestSession requires NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
+    );
+  }
+
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  // 1. Create ephemeral test user
+  const email = `smoketest-${Date.now()}@voiceos-smoke.test`;
+  const password = `SmokeT-${Date.now()}-!Aa`;
+
+  const { data: createData, error: createErr } =
+    await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+  if (createErr || !createData.user) {
+    throw new Error(`Failed to create test user: ${createErr?.message}`);
+  }
+  const userId = createData.user.id;
+  console.log(`  Created test user: ${email} (id: ${userId})`);
+
+  // 2. Add user to workspace as editor
+  const { error: memberErr } = await admin.from("workspace_members").insert({
+    workspace_id: WORKSPACE_ID,
+    user_id: userId,
+    role: "editor",
+    status: "active",
+    visible_modules: [],
+  });
+  if (memberErr) {
+    // Best-effort cleanup before throwing
+    await admin.auth.admin.deleteUser(userId).catch(() => {});
+    throw new Error(`Failed to add test user to workspace: ${memberErr.message}`);
+  }
+
+  // 3. Sign in with anon client to get a real session
+  const anon = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: signInData, error: signInErr } =
+    await anon.auth.signInWithPassword({ email, password });
+  if (signInErr || !signInData.session) {
+    await admin.auth.admin.deleteUser(userId).catch(() => {});
+    throw new Error(`Failed to sign in as test user: ${signInErr?.message}`);
+  }
+
+  // 4. Format session as @supabase/ssr base64url cookie
+  //    Value = "base64-" + base64url(JSON.stringify(session))
+  //    base64url alphabet: A-Z a-z 0-9 - _  (replaces + with -, / with _, strips =)
+  const sessionJson = JSON.stringify(signInData.session);
+  const base64url = Buffer.from(sessionJson)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+
+  // Extract project ref from Supabase URL: https://{projectRef}.supabase.co
+  const projectRef = new URL(supabaseUrl).hostname.split(".")[0]!;
+  const cookieName = `sb-${projectRef}-auth-token`;
+  const cookieValue = `base64-${base64url}`;
+  const cookie = `${cookieName}=${cookieValue}`;
+
+  console.log(`  Session cookie ready (projectRef: ${projectRef})`);
+  return { cookie, userId };
+}
+
+async function cleanupTestUser(userId: string): Promise<void> {
+  const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
+  const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  if (!supabaseUrl || !serviceKey) return;
+
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  // audit_logs.actor_id → public.users(id) has no ON DELETE CASCADE, so
+  // we must nullify/delete those rows first before Postgres will allow the
+  // auth.users row to be removed.
+  await admin
+    .from("audit_logs")
+    .delete()
+    .eq("actor_id", userId)
+    .then((r) => {
+      if (r.error)
+        console.warn(`  Warning: could not clean audit_logs for ${userId}: ${r.error.message}`);
+    });
+
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) {
+    console.warn(`  Warning: could not delete test user ${userId}: ${error.message}`);
+  } else {
+    console.log(`  Deleted test user: ${userId}`);
+  }
+}
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main() {
   const startMs = Date.now();
+
+  // Resolve auth: either from --auth-cookie or by creating a test session
+  if (CREATE_TEST_SESSION && !AUTH_COOKIE && !DRY_RUN) {
+    console.log("── Creating test session ─────────────────────────────────");
+    try {
+      const { cookie, userId } = await createTestSession();
+      AUTH_COOKIE = cookie;
+      testSessionUserId = userId;
+    } catch (err) {
+      console.error(
+        `  ERROR: --create-test-session failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
+  }
+
+  // --require-auth-full: bail out if there is still no auth
+  if (REQUIRE_AUTH_FULL && !AUTH_COOKIE && !DRY_RUN) {
+    console.error(
+      "ERROR: --require-auth-full set but no auth cookie available.\n" +
+        "Provide --auth-cookie or add --create-test-session.",
+    );
+    process.exit(1);
+  }
+
   const hasAuth = !!AUTH_COOKIE;
 
   console.log("═══════════════════════════════════════════════════════════");
@@ -185,7 +347,13 @@ async function main() {
   console.log(`  Workspace : ${WORKSPACE_ID}`);
   console.log(`  Agent     : ${AGENT_ID}`);
   console.log(
-    `  Auth      : ${hasAuth ? "cookie provided" : "NO COOKIE (Tier 2 skipped)"}`,
+    `  Auth      : ${
+      hasAuth
+        ? testSessionUserId
+          ? `test session (user: ${testSessionUserId})`
+          : "cookie provided"
+        : "NO COOKIE (Tier 2 skipped)"
+    }`,
   );
   console.log(`  Dry-run   : ${DRY_RUN}`);
   console.log(`  Cleanup   : ${CLEANUP}`);
@@ -221,7 +389,7 @@ async function main() {
   if (DRY_RUN) {
     console.log("\n  [DRY-RUN] No HTTP calls will be made.\n");
     printDryRunPlan();
-    printReport(Date.now() - startMs);
+    printReport(Date.now() - startMs, hasAuth);
     process.exit(0);
   }
 
@@ -241,8 +409,11 @@ async function main() {
     console.log(`  ✗  Cannot reach ${BASE_URL}`);
     console.log("  Start the Next.js server first: pnpm dev");
     console.log("  Tier 1 and Tier 2 tests are skipped.\n");
-    // Still print tier-0 results and exit with error
-    printReport(Date.now() - startMs);
+    if (CLEANUP && testSessionUserId) {
+      console.log("── Cleanup Test User ─────────────────────────────────────");
+      await cleanupTestUser(testSessionUserId);
+    }
+    printReport(Date.now() - startMs, hasAuth);
     process.exit(1);
   }
   console.log(`  ✓  Server at ${BASE_URL} is responding`);
@@ -253,17 +424,13 @@ async function main() {
 
   const FAKE_ID = "00000000-0000-0000-0000-000000000000";
 
-  // Auth rejection = 302 (middleware redirect to /login) OR 401 (route-level guard).
-  // The middleware returns 302 before the route handler runs; fetch is set to
-  // redirect:"manual" so we see the 302 directly rather than following to the
-  // /login HTML page (which returns 200).
-  // Next.js NextResponse.redirect() returns 307 (Temporary Redirect) by default.
-  // Also accept 302 and 401/403 as valid auth rejection signals.
+  // Auth rejection = 307 (Next.js middleware redirect to /login) OR 401/403
+  // from route-level guard. We use redirect:"manual" in fetch so we see the
+  // raw 307 rather than the /login HTML page.
   function isAuthRejected(status: number): boolean {
     return status === 307 || status === 302 || status === 401 || status === 403;
   }
 
-  // GET /api/campaigns without auth
   {
     const r = await apiRequest("GET", "/api/campaigns");
     record(
@@ -274,7 +441,6 @@ async function main() {
       "307/302/401",
     );
   }
-  // POST /api/campaigns without auth
   {
     const r = await apiRequest("POST", "/api/campaigns", {
       name: "should fail",
@@ -288,7 +454,6 @@ async function main() {
       "307/302/401",
     );
   }
-  // GET /api/campaigns/[id] without auth
   {
     const r = await apiRequest("GET", `/api/campaigns/${FAKE_ID}`);
     record(
@@ -299,7 +464,6 @@ async function main() {
       "307/302/401",
     );
   }
-  // PATCH /api/campaigns/[id] without auth
   {
     const r = await apiRequest("PATCH", `/api/campaigns/${FAKE_ID}`, {
       name: "should fail",
@@ -312,14 +476,11 @@ async function main() {
       "307/302/401",
     );
   }
-  // POST /api/campaigns/[id]/leads/batch without auth
   {
     const r = await apiRequest(
       "POST",
       `/api/campaigns/${FAKE_ID}/leads/batch`,
-      {
-        leads: [{ phone: "+12025551234" }],
-      },
+      { leads: [{ phone: "+12025551234" }] },
     );
     record(
       "T01.5 POST leads/batch (no auth) → 307/401",
@@ -351,6 +512,7 @@ async function main() {
     for (const name of tier2Tests) skip(name, 2, "No --auth-cookie provided");
   } else {
     console.log("\n── Tier 2: Authenticated Lifecycle ───────────────────────");
+    tier2WasRun = true;
     await runTier2();
   }
 
@@ -382,7 +544,6 @@ async function main() {
   if (CLEANUP && hasAuth && createdCampaignIds.length > 0) {
     console.log("\n── Cleanup ───────────────────────────────────────────────");
     for (const cid of createdCampaignIds) {
-      // Set to completed first (so delete is allowed by RLS if needed), then delete
       const r = await apiRequest(
         "PATCH",
         `/api/campaigns/${cid}`,
@@ -396,7 +557,14 @@ async function main() {
     );
   }
 
-  printReport(Date.now() - startMs);
+  // ── Cleanup test user ──────────────────────────────────────────────────────
+
+  if (CLEANUP && testSessionUserId) {
+    console.log("\n── Cleanup Test User ─────────────────────────────────────");
+    await cleanupTestUser(testSessionUserId);
+  }
+
+  printReport(Date.now() - startMs, hasAuth);
 
   const failed = results.filter((r) => !r.pass && !r.skipped).length;
   process.exit(failed > 0 ? 1 : 0);
@@ -441,11 +609,12 @@ async function runTier2() {
       console.log(
         `  Failed to create campaign: status=${r.status} body=${JSON.stringify(r.body)}`,
       );
-      return; // can't continue without a campaign
+      return;
     }
   }
 
   // T02.2 GET /api/campaigns lists the created campaign
+  // apiOk() returns the array directly (no {data:...} wrapper)
   {
     const r = await apiRequest(
       "GET",
@@ -453,9 +622,11 @@ async function runTier2() {
       undefined,
       true,
     );
-    const campaigns = Array.isArray((r.body as Record<string, unknown>)?.data)
-      ? ((r.body as Record<string, unknown>).data as unknown[])
-      : [];
+    const campaigns = Array.isArray(r.body)
+      ? (r.body as unknown[])
+      : Array.isArray((r.body as Record<string, unknown>)?.data)
+        ? ((r.body as Record<string, unknown>).data as unknown[])
+        : [];
     const found = campaigns.some(
       (c) => (c as Record<string, unknown>).id === createdCampaignId,
     );
@@ -486,6 +657,7 @@ async function runTier2() {
   }
 
   // T02.4 PATCH → api_key stripped (config accepted but key removed)
+  // apiOk() returns the campaign object directly (no {data:...} wrapper)
   {
     const r = await apiRequest(
       "PATCH",
@@ -496,9 +668,10 @@ async function runTier2() {
       true,
     );
     const body = r.body as Record<string, unknown>;
-    const config = (body?.data as Record<string, unknown> | undefined)
-      ?.configuration as Record<string, unknown> | undefined;
-    const keyStripped = config ? !("api_key" in config) : true;
+    const config = (body?.configuration ??
+      (body?.data as Record<string, unknown> | undefined)
+        ?.configuration) as Record<string, unknown> | undefined;
+    const keyStripped = config ? !("api_key" in config) : false;
     record(
       "T02.4 PATCH api_key stripped from configuration",
       2,
@@ -506,7 +679,9 @@ async function runTier2() {
       r.ok
         ? keyStripped
           ? "stripped"
-          : "api_key present!"
+          : config
+            ? "api_key present!"
+            : "no config in response"
         : `status=${r.status}`,
       "api_key absent in response",
     );
@@ -536,6 +711,8 @@ async function runTier2() {
       console.log(
         `  Batch: inserted=${inserted} skipped=${skipped} invalid_phones=${invalids?.length ?? 0}`,
       );
+    } else {
+      console.log(`  Batch failed: status=${r.status} body=${JSON.stringify(body)}`);
     }
   }
 
@@ -559,10 +736,7 @@ async function runTier2() {
     );
   }
 
-  // T02.7 Activate without leads on a fresh campaign (no leads campaign)
-  // We need another campaign for this test — use the one we have before adding leads
-  // Actually at this point the campaign has leads, so test a separate validation:
-  // Try PATCH draft→active on a brand-new campaign (no leads)
+  // T02.7 Activate without leads → need fresh campaign with 0 leads
   {
     const r2 = await apiRequest(
       "POST",
@@ -601,6 +775,7 @@ async function runTier2() {
   }
 
   // T02.8 Activate main campaign (has 15 leads + agent_id)
+  // apiOk() returns the campaign object directly (no {data:...} wrapper)
   {
     const r = await apiRequest(
       "PATCH",
@@ -609,7 +784,9 @@ async function runTier2() {
       true,
     );
     const body = r.body as Record<string, unknown>;
-    const status = (body?.data as Record<string, unknown> | undefined)?.status;
+    const status =
+      (body?.status as string | undefined) ??
+      (body?.data as Record<string, unknown> | undefined)?.status;
     record(
       "T02.8 PATCH draft→active (has leads + agent) → 200, status=active",
       2,
@@ -617,6 +794,9 @@ async function runTier2() {
       `http=${r.status} campaign.status=${status ?? "unknown"}`,
       "http=200 campaign.status=active",
     );
+    if (!r.ok) {
+      console.log(`  Activation failed: ${JSON.stringify(body)}`);
+    }
   }
 
   // T02.9 Transition active→completed
@@ -653,7 +833,7 @@ async function runTier2() {
     );
   }
 
-  // T02.11 GET /api/campaigns/[id] returns lead_counts
+  // T02.11 GET /api/campaigns/[id] returns campaign data
   {
     const r = await apiRequest(
       "GET",
@@ -728,12 +908,14 @@ function buildTestLeads() {
 
 function printDryRunPlan() {
   console.log("  Planned test sequence:");
-  console.log("  Tier 0: Safety guards (4 checks)");
-  console.log("  Tier 1 (no auth): 401/403 on all 5 campaign endpoints");
+  console.log("  Tier 0: Safety guards (5 checks incl. server reachability)");
+  console.log("  Tier 1 (no auth): 307/401 on all 5 campaign endpoints");
   console.log(
-    "  Tier 2 (auth): Full CRUD — create, list, batch leads, activate, illegal transition, cleanup",
+    "  Tier 2 (auth): Full CRUD — create, list, batch leads, activate, illegal transition",
   );
-  console.log("  Note: Tier 2 requires --auth-cookie and a running server.");
+  console.log(
+    "  Auth options: --auth-cookie <value>  OR  --create-test-session",
+  );
   console.log(
     "  Cross-workspace isolation documented as limitation (covered by unit tests + RLS).",
   );
@@ -741,10 +923,15 @@ function printDryRunPlan() {
 
 // ── Report ─────────────────────────────────────────────────────────────────────
 
-function printReport(durationMs: number) {
+function printReport(durationMs: number, hasAuth: boolean) {
   const passed = results.filter((r) => r.pass && !r.skipped).length;
   const failed = results.filter((r) => !r.pass && !r.skipped).length;
   const skipped = results.filter((r) => r.skipped).length;
+
+  // Determine tier-2 outcome
+  const tier2Results = results.filter((r) => r.tier === 2 && !r.skipped);
+  const tier2Passed = tier2Results.every((r) => r.pass);
+  const tier2Failed = tier2Results.filter((r) => !r.pass).length;
 
   console.log("\n═══════════════════════════════════════════════════════════");
   console.log("  Campaign API HTTP Smoke Test Report");
@@ -772,13 +959,9 @@ function printReport(durationMs: number) {
   }
 
   console.log("");
-  if (failed === 0) {
-    const skippedNote =
-      skipped > 0
-        ? ` (${skipped} skipped — provide --auth-cookie for full coverage)`
-        : "";
-    console.log(`  ✅ HTTP SMOKE TEST PASSED${skippedNote}`);
-  } else {
+
+  if (failed > 0) {
+    // Hard failures always show as FAILED
     console.log(
       `  ❌ HTTP SMOKE TEST FAILED — ${failed} check(s) did not pass`,
     );
@@ -787,7 +970,28 @@ function printReport(durationMs: number) {
         `     FAIL [${r.name}]: actual=${r.actual} expected=${r.expected}`,
       );
     }
+  } else if (!hasAuth || !tier2WasRun) {
+    // No failures, but Tier 2 was not run
+    console.log(
+      "  ⚠️  PARTIAL PASS — Auth protection only (Tier 0 + Tier 1)",
+    );
+    console.log(
+      "     Tier 2 full lifecycle not validated. Re-run with:",
+    );
+    console.log(
+      "       --create-test-session    (auto-creates temp user)",
+    );
+    console.log(
+      '       --auth-cookie "sb-...-auth-token=..."   (manual cookie)',
+    );
+  } else if (tier2WasRun && tier2Failed === 0 && tier2Passed) {
+    // All tiers run and all passed
+    console.log("  ✅ FULL PASS — All tiers passed (Tier 0 + Tier 1 + Tier 2)");
+  } else {
+    // Tier 2 ran but had issues (redundant given the failed>0 branch above, but defensive)
+    console.log(`  ❌ HTTP SMOKE TEST FAILED — Tier 2 had ${tier2Failed} failure(s)`);
   }
+
   console.log("═══════════════════════════════════════════════════════════\n");
 }
 
