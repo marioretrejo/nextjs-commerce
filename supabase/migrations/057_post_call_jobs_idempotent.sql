@@ -22,6 +22,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_pcj_call_job_type_unique
 -- Rows that conflict on (call_id, job_type) are silently skipped (DO NOTHING).
 -- Returns only the rows that were actually inserted (enqueued count = len(result)).
 
+-- LANGUAGE sql avoids PL/pgSQL variable scoping: the RETURNS TABLE output
+-- columns (including `call_id`) would create implicit variables in plpgsql,
+-- making the ON CONFLICT ... WHERE call_id IS NOT NULL reference ambiguous.
 CREATE OR REPLACE FUNCTION public.enqueue_post_call_jobs_idempotent(
   p_jobs JSONB
 )
@@ -32,12 +35,10 @@ RETURNS TABLE (
   call_id     UUID,
   created_at  TIMESTAMPTZ
 )
-LANGUAGE plpgsql
+LANGUAGE sql
 SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
-BEGIN
-  RETURN QUERY
   INSERT INTO public.post_call_jobs (
     workspace_id,
     call_id,
@@ -69,7 +70,6 @@ BEGIN
     post_call_jobs.status,
     post_call_jobs.call_id,
     post_call_jobs.created_at;
-END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.enqueue_post_call_jobs_idempotent(JSONB) FROM PUBLIC;

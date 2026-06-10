@@ -145,7 +145,7 @@ export async function enqueuePostCallJobsForCall(
     // Returns only the rows actually inserted; skipped = total - inserted.
     const { data, error } = await supabase.rpc(
       "enqueue_post_call_jobs_idempotent",
-      { p_jobs: JSON.stringify(rows) },
+      { p_jobs: rows },
     );
 
     if (error) {

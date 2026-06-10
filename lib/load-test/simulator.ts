@@ -490,6 +490,7 @@ export async function simulateOneCall(
           cost_usd: 0,
           technical_status: "initiated",
           campaign_id: config.campaignId ?? null,
+          routing_data: { method: "load_test", load_test: true },
         })
         .select("id")
         .single();
