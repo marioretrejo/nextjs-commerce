@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, apiOk, parseBody } from "@/lib/api";
+import { sanitizeConfiguration } from "@/lib/campaigns/validation";
 import type { CampaignLeadCounts } from "@/lib/supabase/types";
 
 const CreateCampaignSchema = z.object({
@@ -91,6 +92,28 @@ export async function POST(req: Request) {
   const parsed = parseBody(CreateCampaignSchema, await req.json());
   if (!parsed.success) return parsed.response;
   const body = parsed.data;
+
+  // Verify workspace membership via RLS-scoped client before admin write.
+  // This prevents a user from creating campaigns in workspaces they don't belong to.
+  const { data: membership } = await supabase
+    .from("workspace_members")
+    .select("id, role")
+    .eq("workspace_id", body.workspace_id)
+    .eq("user_id", user.id)
+    .in("status", ["active"])
+    .maybeSingle();
+
+  if (!membership) {
+    return NextResponse.json(
+      { error: "Workspace not found or access denied" },
+      { status: 403 },
+    );
+  }
+
+  // Sanitize configuration: strip secret-like keys, validate webhook_url
+  const configResult = sanitizeConfiguration(body.configuration ?? null);
+  if (configResult.error) return apiError(configResult.error, 422);
+
   const admin = createAdminClient();
 
   const { data, error } = await admin
@@ -109,7 +132,7 @@ export async function POST(req: Request) {
       retry_interval_hours: body.retry_interval_hours ?? 24,
       max_retries: body.max_retries ?? 3,
       respect_schedule: body.respect_schedule ?? true,
-      configuration: body.configuration ?? {},
+      configuration: configResult.sanitized,
     })
     .select()
     .single();

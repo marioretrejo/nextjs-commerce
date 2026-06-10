@@ -10,11 +10,16 @@ import { createClient } from "@/lib/supabase/server";
  * If the cron call fails or is not configured, the campaign will still be
  * picked up on the next 5-minute cron cycle.
  *
+ * No-ops in load-test mode to avoid triggering real outbound calls.
+ *
  * Throws on auth / ownership errors so the caller can surface them.
  */
 export async function triggerCampaignDispatcher(
   campaignId: string,
 ): Promise<void> {
+  // Skip real dispatcher wake in load-test mode — the simulator handles pacing.
+  if (process.env["VOICEOS_LOAD_TEST_MODE"] === "true") return;
+
   const supabase = await createClient();
   const {
     data: { user },

@@ -2,45 +2,24 @@
  * POST /api/campaigns/[id]/leads/batch
  *
  * Ingests an array of contacts (e.g. parsed from a CSV upload) into
- * campaign_contacts. Each phone number is normalised to E.164; rows with
- * invalid / un-normalizable numbers are skipped and reported back to the
- * caller rather than failing the entire batch.
+ * campaign_contacts. Each phone number is normalised to E.164 via
+ * libphonenumber-js (supports LATAM and international numbers).
+ * Rows with invalid / un-normalizable numbers are skipped and reported.
+ *
+ * Within-batch deduplication is applied on (phone, campaign_lead_id)
+ * before the database upsert, which itself uses ON CONFLICT DO NOTHING
+ * on the unique indexes (campaign_id, phone) and (campaign_id, campaign_lead_id).
  *
  * Auth: user session — campaign ownership verified via RLS before admin write.
- * Limit: 10,000 rows per request.
+ * Limit: 1,000 rows per request.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, parseBody } from "@/lib/api";
-
-const E164_RE = /^\+[1-9]\d{6,14}$/;
-
-function normalizeE164(raw: string): { normalized: string; valid: boolean } {
-  const trimmed = raw.trim();
-  const digits = trimmed.replace(/\D/g, "");
-
-  // Already in +<digits> form
-  if (trimmed.startsWith("+")) {
-    const candidate = `+${digits}`;
-    return { normalized: candidate, valid: E164_RE.test(candidate) };
-  }
-
-  // 11 digits starting with 1 → US/Canada with country code omitting +
-  if (digits.length === 11 && digits.startsWith("1")) {
-    const candidate = `+${digits}`;
-    return { normalized: candidate, valid: E164_RE.test(candidate) };
-  }
-
-  // 10 digits → assume US/Canada (+1)
-  if (digits.length === 10) {
-    const candidate = `+1${digits}`;
-    return { normalized: candidate, valid: E164_RE.test(candidate) };
-  }
-
-  return { normalized: trimmed, valid: false };
-}
+import { normalizePhone, sanitizeVariables } from "@/lib/campaigns/validation";
+import type { CountryCode } from "libphonenumber-js";
 
 const LeadSchema = z.object({
   phone: z.string().min(1),
@@ -51,7 +30,8 @@ const LeadSchema = z.object({
 });
 
 const BatchLeadsSchema = z.object({
-  leads: z.array(LeadSchema).min(1).max(10_000),
+  leads: z.array(LeadSchema).min(1).max(1_000),
+  default_country: z.string().length(2).optional(),
 });
 
 interface InvalidLead {
@@ -84,14 +64,21 @@ export async function POST(
 
   const parsed = parseBody(BatchLeadsSchema, await req.json());
   if (!parsed.success) return parsed.response;
-  const { leads } = parsed.data;
+  const { leads, default_country } = parsed.data;
+
+  const defaultCountry = (default_country?.toUpperCase() ??
+    "US") as CountryCode;
 
   const validRows: Record<string, unknown>[] = [];
   const invalidLeads: InvalidLead[] = [];
 
+  // Within-batch deduplication sets
+  const seenPhones = new Set<string>();
+  const seenLeadIds = new Set<string>();
+
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i]!;
-    const { normalized, valid } = normalizeE164(lead.phone);
+    const { normalized, valid } = normalizePhone(lead.phone, defaultCountry);
 
     if (!valid) {
       invalidLeads.push({
@@ -102,12 +89,57 @@ export async function POST(
       continue;
     }
 
+    // Within-batch phone dedup
+    if (seenPhones.has(normalized)) {
+      invalidLeads.push({
+        index: i,
+        phone: lead.phone,
+        reason: `Duplicate phone in batch: ${normalized}`,
+      });
+      continue;
+    }
+    seenPhones.add(normalized);
+
+    // Within-batch campaign_lead_id dedup
+    if (lead.campaign_lead_id) {
+      if (seenLeadIds.has(lead.campaign_lead_id)) {
+        invalidLeads.push({
+          index: i,
+          phone: lead.phone,
+          reason: `Duplicate campaign_lead_id in batch: ${lead.campaign_lead_id}`,
+        });
+        continue;
+      }
+      seenLeadIds.add(lead.campaign_lead_id);
+    }
+
+    // Sanitize variables: strip secret-like keys, enforce 4 KB limit
+    const rawVars = lead.variables ?? {};
+    const {
+      sanitized: safeVars,
+      removedKeys,
+      oversized,
+    } = sanitizeVariables(rawVars);
+    if (oversized) {
+      invalidLeads.push({
+        index: i,
+        phone: lead.phone,
+        reason: "variables payload exceeds 4 KB limit",
+      });
+      continue;
+    }
+    if (removedKeys.length > 0) {
+      console.warn(
+        `[campaigns/leads/batch] Removed secret-like variable keys for lead ${i}: ${removedKeys.join(", ")}`,
+      );
+    }
+
     validRows.push({
       campaign_id: id,
       phone: normalized,
       name: lead.name ?? null,
       email: lead.email ?? null,
-      variables: lead.variables ?? {},
+      variables: safeVars,
       campaign_lead_id: lead.campaign_lead_id ?? null,
       status: "pending",
     });
@@ -118,22 +150,29 @@ export async function POST(
 
   if (validRows.length) {
     const admin = createAdminClient();
-    const { error } = await admin.from("campaign_contacts").insert(validRows);
+    // ignoreDuplicates: upsert with ON CONFLICT DO NOTHING — idempotent across retries
+    const { error, count } = await admin
+      .from("campaign_contacts")
+      .upsert(validRows, {
+        onConflict: "campaign_id,phone",
+        ignoreDuplicates: true,
+        count: "exact",
+      });
 
     if (error) {
-      console.error("[campaigns/leads/batch] insert error:", error);
+      console.error("[campaigns/leads/batch] upsert error:", error);
       dbError = error.message;
     } else {
-      inserted = validRows.length;
+      inserted = count ?? validRows.length;
 
       // Keep total_contacts in sync
-      const { count } = await admin
+      const { count: total } = await admin
         .from("campaign_contacts")
         .select("*", { count: "exact", head: true })
         .eq("campaign_id", id);
       void admin
         .from("campaigns")
-        .update({ total_contacts: count ?? 0 })
+        .update({ total_contacts: total ?? 0 })
         .eq("id", id)
         .then(
           () => null,
