@@ -31,6 +31,12 @@
     "app/api/cron/campaign-dial/route.ts": {
       "maxDuration": 60
     },
+    "app/api/cron/post-call-jobs/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/recover-missing-post-call-jobs/route.ts": {
+      "maxDuration": 60
+    },
     "app/api/webhooks/livekit/route.ts": {
       "maxDuration": 30
     }
@@ -63,6 +69,10 @@
     {
       "path": "/api/cron/campaign-dial",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/post-call-jobs",
+      "schedule": "* * * * *"
     }
   ]
 }

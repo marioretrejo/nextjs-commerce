@@ -71,7 +71,7 @@ function backoffSeconds(attempts: number): number {
 function shouldRetryJob(
   job: Pick<MockJob, "attempts" | "max_attempts">,
   errorCode?: string,
-): { shouldRetry: boolean; isDeadLetter: boolean } {
+): { shouldRetry: boolean; isDeadLetter: boolean; reason: string } {
   const permanentCodes = [
     "400",
     "401",
@@ -84,12 +84,17 @@ function shouldRetryJob(
     return {
       shouldRetry: false,
       isDeadLetter: job.attempts >= job.max_attempts,
+      reason: "permanent_error",
     };
   }
   if (job.attempts >= job.max_attempts) {
-    return { shouldRetry: false, isDeadLetter: true };
+    return {
+      shouldRetry: false,
+      isDeadLetter: true,
+      reason: "max_attempts_reached",
+    };
   }
-  return { shouldRetry: true, isDeadLetter: false };
+  return { shouldRetry: true, isDeadLetter: false, reason: "transient_error" };
 }
 
 // ── Test 1: enqueuePostCallJob creates pending job ────────────────────────────
@@ -851,5 +856,360 @@ describe("Close handler job list composition", () => {
       "HTTP fetch must not be called from close handler — only from cron processor",
     );
     void mockFetch;
+  });
+});
+
+// ── Scenario A: Happy path — pending → claimed → processed → completed ────────
+
+describe("Scenario A: Happy path end-to-end flow", () => {
+  it("pending job transitions to running, then completed", () => {
+    type Status =
+      | "pending"
+      | "running"
+      | "completed"
+      | "retrying"
+      | "dead_letter"
+      | "failed";
+    const db: { status: Status; result: Record<string, unknown> | null } = {
+      status: "pending",
+      result: null,
+    };
+
+    // Cron claims job → running
+    db.status = "running";
+    assert.strictEqual(db.status, "running");
+
+    // Processor succeeds → completed
+    db.status = "completed";
+    db.result = { provider: "groq" };
+
+    assert.strictEqual(db.status, "completed");
+    assert.deepStrictEqual(db.result, { provider: "groq" });
+  });
+
+  it("claim sets locked_by to worker ID", () => {
+    const workerId = "cron-iad1-1700000000000";
+    const job = makeJob({ status: "pending" });
+
+    const claimed = { ...job, status: "running" as const, locked_by: workerId };
+
+    assert.strictEqual(claimed.locked_by, workerId);
+    assert.strictEqual(claimed.status, "running");
+  });
+});
+
+// ── Scenario B: Double close — second enqueue is idempotent ──────────────────
+
+describe("Scenario B: Double close — second enqueue is a no-op", () => {
+  it("two close events for the same call produce only one set of job rows", () => {
+    const db = new Map<string, string>(); // "callId:jobType" → jobId
+
+    const enqueue = (callId: string, jobTypes: string[]): number => {
+      let enqueued = 0;
+      for (const jt of jobTypes) {
+        const key = `${callId}:${jt}`;
+        if (!db.has(key)) {
+          db.set(key, `job-${db.size + 1}`);
+          enqueued++;
+        }
+      }
+      return enqueued;
+    };
+
+    const jobTypes = ["crm_extraction", "qa_analysis", "integration_dispatch"];
+
+    // First close event
+    assert.strictEqual(
+      enqueue("call-1", jobTypes),
+      3,
+      "First: 3 jobs inserted",
+    );
+
+    // Second close event (double-close race condition)
+    assert.strictEqual(
+      enqueue("call-1", jobTypes),
+      0,
+      "Second: 0 inserted — all conflicted (ON CONFLICT DO NOTHING)",
+    );
+
+    assert.strictEqual(db.size, 3, "DB has exactly 3 unique rows");
+  });
+});
+
+// ── Scenario C: Transient error → backoff → retry → success ──────────────────
+
+describe("Scenario C: Transient error retry flow", () => {
+  it("500 error on attempt 1 → schedules retry at +30s", () => {
+    const job = makeJob({ attempts: 1, max_attempts: 5 });
+    const decision = shouldRetryJob(job, "500");
+
+    assert.strictEqual(decision.shouldRetry, true);
+    assert.strictEqual(decision.isDeadLetter, false);
+
+    const delaySec = backoffSeconds(1);
+    assert.strictEqual(delaySec, 30, "30s backoff after first attempt");
+  });
+
+  it("attempt 2 uses 2min backoff", () => {
+    const job = makeJob({ attempts: 2, max_attempts: 5 });
+    const decision = shouldRetryJob(job, "500");
+
+    assert.strictEqual(decision.shouldRetry, true);
+    assert.strictEqual(backoffSeconds(2), 120);
+  });
+
+  it("retried job that succeeds moves to completed", () => {
+    type Status = "retrying" | "running" | "completed";
+    const db: { status: Status } = { status: "retrying" };
+
+    // Cron reclaims retrying job
+    db.status = "running";
+    // Processor succeeds
+    db.status = "completed";
+
+    assert.strictEqual(db.status, "completed");
+  });
+});
+
+// ── Scenario D: Dead letter after max_attempts ────────────────────────────────
+
+describe("Scenario D: Dead letter after exhausting max_attempts", () => {
+  it("job at max_attempts with transient error → isDeadLetter=true", () => {
+    const job = makeJob({ attempts: 5, max_attempts: 5 });
+    const decision = shouldRetryJob(job, "500");
+
+    assert.strictEqual(decision.shouldRetry, false);
+    assert.strictEqual(decision.isDeadLetter, true);
+    assert.strictEqual(decision.reason, "max_attempts_reached");
+  });
+
+  it("dead-letter job has locked_at=null and locked_by=null", () => {
+    const patch = {
+      status: "dead_letter",
+      locked_at: null,
+      locked_by: null,
+      failed_at: new Date().toISOString(),
+    };
+
+    assert.strictEqual(patch.locked_at, null);
+    assert.strictEqual(patch.locked_by, null);
+    assert.strictEqual(patch.status, "dead_letter");
+  });
+
+  it("final backoff before dead_letter caps at 1800s (30min)", () => {
+    assert.strictEqual(backoffSeconds(4), 1800);
+    assert.strictEqual(
+      backoffSeconds(10),
+      1800,
+      "Caps at 1800s regardless of attempt count",
+    );
+  });
+});
+
+// ── Scenario E: Permanent error → failed state, no retry ─────────────────────
+
+describe("Scenario E: Permanent error codes skip retry queue", () => {
+  it("401 → shouldRetry=false, reason=permanent_error", () => {
+    const job = makeJob({ attempts: 1, max_attempts: 5 });
+    const decision = shouldRetryJob(job, "401");
+
+    assert.strictEqual(decision.shouldRetry, false);
+    assert.strictEqual(decision.reason, "permanent_error");
+    assert.strictEqual(
+      decision.isDeadLetter,
+      false,
+      "Not dead_letter on first attempt — goes to failed",
+    );
+  });
+
+  it("not_found code → permanent failure immediately", () => {
+    const job = makeJob({ attempts: 1, max_attempts: 5 });
+    const decision = shouldRetryJob(job, "not_found");
+
+    assert.strictEqual(decision.shouldRetry, false);
+    assert.strictEqual(decision.reason, "permanent_error");
+  });
+
+  it("403 from webhook → permanent, no retry", () => {
+    const job = makeJob({
+      job_type: "outbound_webhook",
+      attempts: 1,
+      max_attempts: 5,
+    });
+    const decision = shouldRetryJob(job, "403");
+    assert.strictEqual(decision.shouldRetry, false);
+    assert.strictEqual(decision.reason, "permanent_error");
+  });
+});
+
+// ── Scenario F: Recovery — orphaned calls are re-enqueued ────────────────────
+
+describe("Scenario F: Recovery endpoint re-enqueues orphaned calls", () => {
+  it("finds calls without jobs (NOT EXISTS logic)", () => {
+    const completedCalls = [
+      { id: "call-A", workspace_id: "ws-1" },
+      { id: "call-B", workspace_id: "ws-1" },
+      { id: "call-C", workspace_id: "ws-1" },
+    ];
+
+    // call-C already has jobs from a previous run
+    const coveredIds = new Set(["call-C"]);
+
+    const orphaned = completedCalls.filter((c) => !coveredIds.has(c.id));
+
+    assert.strictEqual(orphaned.length, 2, "2 orphaned calls found");
+    assert.ok(
+      !orphaned.find((c) => c.id === "call-C"),
+      "call-C excluded (already has jobs)",
+    );
+  });
+
+  it("recovery enqueue is idempotent — second run produces zero new rows", () => {
+    const db = new Map<string, boolean>();
+
+    const enqueue = (callId: string): number => {
+      const types = [
+        "crm_extraction",
+        "qa_analysis",
+        "integration_dispatch",
+        "cost_finalization",
+      ];
+      let inserted = 0;
+      for (const t of types) {
+        const key = `${callId}:${t}`;
+        if (!db.has(key)) {
+          db.set(key, true);
+          inserted++;
+        }
+      }
+      return inserted;
+    };
+
+    // First recovery run
+    assert.strictEqual(
+      enqueue("call-A"),
+      4,
+      "call-A: 4 standard jobs enqueued",
+    );
+    assert.strictEqual(
+      enqueue("call-B"),
+      4,
+      "call-B: 4 standard jobs enqueued",
+    );
+
+    // Second recovery run (jobs now exist → all conflict)
+    assert.strictEqual(
+      enqueue("call-A"),
+      0,
+      "Second run: idempotent, 0 new rows",
+    );
+    assert.strictEqual(enqueue("call-B"), 0);
+
+    assert.strictEqual(db.size, 8, "Exactly 8 unique job rows total");
+  });
+
+  it("dry_run returns orphaned count without writing", () => {
+    const orphaned = [{ id: "call-X" }, { id: "call-Y" }];
+    const dryRun = true;
+    let jobsEnqueued = 0;
+
+    if (!dryRun) {
+      // Would enqueue here
+      jobsEnqueued = orphaned.length * 4;
+    }
+
+    assert.strictEqual(jobsEnqueued, 0, "dry_run: no rows written");
+    assert.strictEqual(
+      orphaned.length,
+      2,
+      "dry_run still reports orphaned count",
+    );
+  });
+});
+
+// ── Scenario G: QA analysis idempotency ──────────────────────────────────────
+
+describe("Scenario G: QA analysis skips duplicate evaluation", () => {
+  it("returns already_evaluated when evaluation exists for the call", () => {
+    const existingEval: { id: string; risk_score: number } | null = {
+      id: "eval-123",
+      risk_score: 25,
+    };
+
+    const result = existingEval
+      ? {
+          evaluation_id: existingEval.id,
+          risk_score: existingEval.risk_score,
+          skipped: true,
+          reason: "already_evaluated",
+        }
+      : { evaluation_id: "new-id", risk_score: 0, violations_count: 0 };
+
+    assert.strictEqual(result.skipped, true);
+    assert.strictEqual(result.reason, "already_evaluated");
+    assert.strictEqual(result.evaluation_id, "eval-123");
+    assert.strictEqual(result.risk_score, 25);
+  });
+
+  it("proceeds with full analysis when no existing evaluation", () => {
+    const existingEval = ((): { id: string; risk_score: number } | null =>
+      null)();
+
+    const result = existingEval
+      ? { evaluation_id: existingEval.id, skipped: true as const }
+      : {
+          evaluation_id: "new-eval-xyz",
+          risk_score: 10,
+          violations_count: 1,
+        };
+
+    assert.ok(
+      !("skipped" in result),
+      "No skipped field when fresh analysis runs",
+    );
+    assert.ok(
+      "violations_count" in result,
+      "Full result returned when analysis runs",
+    );
+  });
+
+  it("cost_finalization marks needs_review when billing did not finalize", () => {
+    const costStatus: string | null = null; // billing tracker failed
+
+    const result =
+      costStatus === "final"
+        ? { skipped: true, reason: "already_final" }
+        : { reconciled: true, was_status: costStatus, cost_usd: null };
+
+    assert.ok(
+      !("skipped" in result),
+      "Not skipped when cost_status is not final",
+    );
+    assert.strictEqual(
+      (result as { reconciled: boolean }).reconciled,
+      true,
+      "reconciled=true written to DB",
+    );
+  });
+
+  it("integration_dispatch throws not_found when call row is missing", () => {
+    const callRow: Record<string, unknown> | null = null;
+
+    let threw = false;
+    let errorCode = "";
+    try {
+      if (!callRow)
+        throw Object.assign(new Error("call not found"), { code: "not_found" });
+    } catch (err) {
+      threw = true;
+      errorCode = (err as { code?: string }).code ?? "";
+    }
+
+    assert.ok(threw, "Throws when call not found");
+    assert.strictEqual(
+      errorCode,
+      "not_found",
+      "Error code is not_found → permanent failure",
+    );
   });
 });

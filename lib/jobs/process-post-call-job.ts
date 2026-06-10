@@ -204,6 +204,23 @@ async function runQaAnalysis(
   if (!job.call_id)
     throw Object.assign(new Error("call_id missing"), { code: "not_found" });
 
+  // Idempotency: skip if an evaluation already exists for this call
+  const { data: existing } = await supabase
+    .from("qa_evaluations")
+    .select("id, risk_score")
+    .eq("call_id", job.call_id)
+    .maybeSingle();
+
+  if (existing) {
+    const e = existing as { id: string; risk_score: number };
+    return {
+      evaluation_id: e.id,
+      risk_score: e.risk_score,
+      skipped: true,
+      reason: "already_evaluated",
+    };
+  }
+
   const { data: callRow } = await supabase
     .from("calls")
     .select("transcript")
@@ -336,7 +353,8 @@ async function runIntegrationDispatch(
     .eq("id", job.call_id)
     .maybeSingle();
 
-  if (!callRow) return { skipped: true, reason: "call_not_found" };
+  if (!callRow)
+    throw Object.assign(new Error("call not found"), { code: "not_found" });
 
   const c = callRow as Record<string, unknown>;
 
@@ -382,14 +400,21 @@ async function runCostFinalization(
     cost_usd: number | null;
     cost_status: string | null;
   } | null;
-  // If already finalized by BillingTracker, this is a no-op
+  // If already finalized by BillingTracker in the close handler, this is a no-op
   if (r?.cost_status === "final")
     return { skipped: true, reason: "already_final" };
 
+  // Billing did not finalize this call (tracker may have failed or been absent).
+  // Mark as needs_review so the ops team can investigate and correct manually.
+  await supabase
+    .from("calls")
+    .update({ cost_status: "needs_review" })
+    .eq("id", job.call_id);
+
   return {
-    call_id: job.call_id,
+    reconciled: true,
+    was_status: r?.cost_status ?? null,
     cost_usd: r?.cost_usd ?? null,
-    cost_status: r?.cost_status ?? null,
   };
 }
 

@@ -82,15 +82,13 @@ Rules:
 The `/api/cron/post-call-jobs` endpoint processes the `post_call_jobs` queue.
 Authentication uses the same `INTERNAL_API_SECRET`.
 
-Add to `vercel.json` to trigger automatically every minute:
+**Already configured in `vercel.json`** — triggers every minute automatically on Vercel Pro/Enterprise:
 
 ```json
-{
-  "crons": [{ "path": "/api/cron/post-call-jobs", "schedule": "* * * * *" }]
-}
+{ "path": "/api/cron/post-call-jobs", "schedule": "* * * * *" }
 ```
 
-Additional env vars required by the post-call job processor:
+Additional env vars required by the post-call job processor (**must be set in Vercel, not just Render**):
 
 | Variable                         | Where  | Notes                                           |
 | -------------------------------- | ------ | ----------------------------------------------- |
@@ -98,8 +96,25 @@ Additional env vars required by the post-call job processor:
 | `OPENAI_API_KEY`                 | Vercel | Fallback LLM for `crm_extraction` if Groq fails |
 | `VOICEOS_WEBHOOK_SIGNING_SECRET` | Vercel | Signs `outbound_webhook` job payloads           |
 
-These are already listed in the main table above. Ensure they are set in **Vercel** (not just
-Render), because the cron processor runs inside the Next.js app.
+### Recovery Endpoint (Fase 13)
+
+`GET /api/cron/recover-missing-post-call-jobs` — scans for calls completed in the last N hours
+that have **no** `post_call_jobs` rows and re-enqueues the standard job set idempotently.
+
+| Param     | Default | Max | Notes                              |
+| --------- | ------- | --- | ---------------------------------- |
+| `hours`   | 48      | 168 | Look-back window                   |
+| `limit`   | 50      | 200 | Max calls per run                  |
+| `dry_run` | —       | —   | Set to `1` to scan without writing |
+
+Auth: same `INTERNAL_API_SECRET` Bearer token or `x-internal-secret` header.
+
+Run manually after incidents or deploy gaps:
+
+```bash
+curl -H "Authorization: Bearer $INTERNAL_API_SECRET" \
+  "https://your-app.vercel.app/api/cron/recover-missing-post-call-jobs?hours=72&dry_run=1"
+```
 
 ### Webhook signing
 
