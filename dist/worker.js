@@ -46368,7 +46368,6 @@ function _tryOpenAI(config2, factory, fallbackReason) {
 async function enqueuePostCallJobsForCall(input) {
   const { workspaceId, callId, roomName, agentId, jobs, supabase } = input;
   const errors = [];
-  let enqueued = 0;
   const rows = jobs.map((j) => ({
     workspace_id: workspaceId,
     call_id: callId,
@@ -46382,19 +46381,24 @@ async function enqueuePostCallJobsForCall(input) {
       j.run_after?.toISOString() ?? /* @__PURE__ */ new Date().toISOString(),
   }));
   try {
-    const { data, error } = await supabase
-      .from("post_call_jobs")
-      .insert(rows)
-      .select("id");
+    const { data, error } = await supabase.rpc(
+      "enqueue_post_call_jobs_idempotent",
+      { p_jobs: JSON.stringify(rows) },
+    );
     if (error) {
       errors.push(error.message);
-    } else {
-      enqueued = data.length;
+      return { enqueued: 0, skipped: jobs.length, errors };
     }
+    const inserted = data ?? [];
+    return {
+      enqueued: inserted.length,
+      skipped: jobs.length - inserted.length,
+      errors,
+    };
   } catch (err) {
     errors.push(String(err));
+    return { enqueued: 0, skipped: jobs.length, errors };
   }
-  return { enqueued, errors };
 }
 
 // agent/worker_core.ts
@@ -48271,30 +48275,34 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           },
           { onConflict: "retell_call_id", ignoreDuplicates: false },
         );
+        let _callId = null;
         try {
           const { data: callIdRow } = await supabase
             .from("calls")
             .select("id")
             .eq("retell_call_id", roomName)
             .maybeSingle();
-          if (callIdRow?.id) {
+          _callId = callIdRow?.id ?? null;
+        } catch {}
+        if (_callId) {
+          try {
             await supabase
               .from("call_events")
-              .update({ call_id: callIdRow.id })
+              .update({ call_id: _callId })
               .eq("call_room", roomName)
               .eq("workspace_id", workspaceId)
               .is("call_id", null);
             log("info", {
               message: "call_events.backfilled",
-              call_id: callIdRow.id,
+              call_id: _callId,
               room: roomName,
             });
+          } catch (backfillErr) {
+            console.warn(
+              "[call-events] call_id backfill failed:",
+              String(backfillErr),
+            );
           }
-        } catch (backfillErr) {
-          console.warn(
-            "[call-events] call_id backfill failed:",
-            String(backfillErr),
-          );
         }
         await supabase
           .rpc("release_call_slot", { p_workspace_id: workspaceId })
@@ -48309,138 +48317,109 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           business_outcome: lifecycle?.outcome ?? null,
           close_reason: closeReason ?? null,
         });
-        void (async () => {
-          let _postCallId = null;
-          let _postCostUsd = null;
-          let _postCostBreakdown = null;
-          let _postCostStatus = null;
+        if (billing) {
           try {
-            if (billing) {
-              const { data: costCallRow } = await supabase
-                .from("calls")
-                .select("id")
-                .eq("retell_call_id", roomName)
-                .maybeSingle();
-              const resolvedCallId = costCallRow?.id ?? null;
-              _postCallId = resolvedCallId;
-              billing.trackTelephony(durationSeconds, callDirection);
-              billing.trackLiveKit(durationSeconds);
-              billing.trackSTT(durationSeconds);
-              const transcriptChars = transcriptLines.join("").length;
-              if (transcriptChars > 0) {
-                billing.trackLLMTokens(Math.round(transcriptChars / 3));
-              }
-              await billing.computeAndPersist(resolvedCallId, supabase);
-              if (resolvedCallId) {
-                const { data: costRow } = await supabase
-                  .from("calls")
-                  .select("cost_usd, cost_breakdown, cost_status")
-                  .eq("id", resolvedCallId)
-                  .maybeSingle();
-                if (costRow) {
-                  _postCostUsd = costRow.cost_usd ?? null;
-                  _postCostBreakdown = costRow.cost_breakdown ?? null;
-                  _postCostStatus = costRow.cost_status ?? null;
-                }
-              }
-              if (resolvedCallId) {
-                await billing.backfillCallId(resolvedCallId, supabase);
-                void emit("billing.cost_events_backfilled", {
-                  call_id: resolvedCallId,
-                  room: roomName,
-                });
-              }
+            billing.trackTelephony(durationSeconds, callDirection);
+            billing.trackLiveKit(durationSeconds);
+            billing.trackSTT(durationSeconds);
+            const transcriptChars = transcriptLines.join("").length;
+            if (transcriptChars > 0) {
+              billing.trackLLMTokens(Math.round(transcriptChars / 3));
+            }
+            await billing.computeAndPersist(_callId, supabase);
+            if (_callId) {
+              await billing.backfillCallId(_callId, supabase);
+              void emit("billing.cost_events_backfilled", {
+                call_id: _callId,
+                room: roomName,
+              });
             }
           } catch (costErr) {
             console.warn("[billing] cost tracking error:", String(costErr));
           }
-          try {
-            const jobCallId = _postCallId;
-            if (jobCallId && workspaceId) {
-              let webhookUrl = callEndedWebhookUrl;
-              if (!webhookUrl) {
-                const { data: wsRow } = await supabase
-                  .from("workspaces")
-                  .select("webhook_url")
-                  .eq("id", workspaceId)
-                  .maybeSingle();
-                webhookUrl = wsRow?.webhook_url ?? null;
-              }
-              const jobList = [
-                {
-                  job_type: "crm_extraction",
-                  priority: 50,
-                  payload: {
-                    transcript_available: transcript.trim().length > 0,
-                    business_outcome: lifecycle?.outcome ?? null,
-                    technical_status: finalTechnicalStatus,
-                    crm_fields: {
-                      Funnel: crmFunnel,
-                      LeadId: crmLeadId,
-                      Country: crmCountry,
-                      Campaign: crmCampaign,
-                    },
-                    call_duration_seconds: durationSeconds,
-                  },
-                },
-                {
-                  job_type: "qa_analysis",
-                  priority: 80,
-                  payload: { source: "post_call_job" },
-                },
-                {
-                  job_type: "integration_dispatch",
-                  priority: 90,
-                  payload: { source: "post_call_job" },
-                },
-                ...(webhookUrl
-                  ? [
-                      {
-                        job_type: "outbound_webhook",
-                        priority: 100,
-                        payload: {
-                          event: "call.completed",
-                          webhook_url_source: callEndedWebhookUrl
-                            ? "metadata"
-                            : "workspace",
-                          webhook_url: webhookUrl,
-                          include_costs: true,
-                          include_analysis: true,
-                        },
-                      },
-                    ]
-                  : []),
-              ];
-              await enqueuePostCallJobsForCall({
-                workspaceId,
-                callId: jobCallId,
-                roomName,
-                agentId: agentId ?? void 0,
-                jobs: jobList,
-                supabase,
-              });
-              void emit("post_call_jobs.enqueued", {
-                call_id: jobCallId,
-                job_count: jobList.length,
-              });
-              if (!webhookUrl) {
-                void emit("webhook.skipped", {
-                  reason: "no_webhook_url",
-                  workspace_id: workspaceId,
-                });
-              }
+        }
+        try {
+          if (_callId && workspaceId) {
+            let webhookUrl = callEndedWebhookUrl;
+            if (!webhookUrl) {
+              const { data: wsRow } = await supabase
+                .from("workspaces")
+                .select("webhook_url")
+                .eq("id", workspaceId)
+                .maybeSingle();
+              webhookUrl = wsRow?.webhook_url ?? null;
             }
-          } catch (enqueueErr) {
-            console.error(
-              "[post-call-jobs] enqueue failed:",
-              String(enqueueErr),
-            );
-            void emit("post_call_jobs.enqueue_failed", {
-              error: String(enqueueErr).slice(0, 200),
-              room: roomName,
+            const jobList = [
+              {
+                job_type: "crm_extraction",
+                priority: 50,
+                payload: {
+                  transcript_available: transcript.trim().length > 0,
+                  business_outcome: lifecycle?.outcome ?? null,
+                  technical_status: finalTechnicalStatus,
+                  crm_fields: {
+                    Funnel: crmFunnel,
+                    LeadId: crmLeadId,
+                    Country: crmCountry,
+                    Campaign: crmCampaign,
+                  },
+                  call_duration_seconds: durationSeconds,
+                },
+              },
+              {
+                job_type: "qa_analysis",
+                priority: 80,
+                payload: { source: "post_call_job" },
+              },
+              {
+                job_type: "integration_dispatch",
+                priority: 90,
+                payload: { source: "post_call_job" },
+              },
+              ...(webhookUrl
+                ? [
+                    {
+                      job_type: "outbound_webhook",
+                      priority: 100,
+                      payload: {
+                        event: "call.completed",
+                        webhook_url_source: callEndedWebhookUrl
+                          ? "metadata"
+                          : "workspace",
+                        webhook_url: webhookUrl,
+                        include_costs: true,
+                        include_analysis: true,
+                      },
+                    },
+                  ]
+                : []),
+            ];
+            await enqueuePostCallJobsForCall({
+              workspaceId,
+              callId: _callId,
+              roomName,
+              agentId: agentId ?? void 0,
+              jobs: jobList,
+              supabase,
             });
+            void emit("post_call_jobs.enqueued", {
+              call_id: _callId,
+              job_count: jobList.length,
+            });
+            if (!webhookUrl) {
+              void emit("webhook.skipped", {
+                reason: "no_webhook_url",
+                workspace_id: workspaceId,
+              });
+            }
           }
-        })();
+        } catch (enqueueErr) {
+          console.error("[post-call-jobs] enqueue failed:", String(enqueueErr));
+          void emit("post_call_jobs.enqueue_failed", {
+            error: String(enqueueErr).slice(0, 200),
+            room: roomName,
+          });
+        }
       },
     );
     if (workspaceId && _lifecycleSupabase) {

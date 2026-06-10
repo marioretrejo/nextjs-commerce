@@ -75,6 +75,12 @@ export interface EnqueueForCallInput {
   supabase: SupabaseClient;
 }
 
+export interface EnqueueForCallResult {
+  enqueued: number;
+  skipped: number;
+  errors: string[];
+}
+
 // Backoff delays in seconds: attempt 1=30s, 2=120s, 3=600s, 4=1800s, 5+=dead_letter
 const BACKOFF_SECONDS = [30, 120, 600, 1800] as const;
 
@@ -118,10 +124,9 @@ export async function enqueuePostCallJob(
 
 export async function enqueuePostCallJobsForCall(
   input: EnqueueForCallInput,
-): Promise<{ enqueued: number; errors: string[] }> {
+): Promise<EnqueueForCallResult> {
   const { workspaceId, callId, roomName, agentId, jobs, supabase } = input;
   const errors: string[] = [];
-  let enqueued = 0;
 
   const rows = jobs.map((j) => ({
     workspace_id: workspaceId,
@@ -136,21 +141,28 @@ export async function enqueuePostCallJobsForCall(
   }));
 
   try {
-    const { data, error } = await supabase
-      .from("post_call_jobs")
-      .insert(rows)
-      .select("id");
+    // Uses ON CONFLICT (call_id, job_type) DO NOTHING — idempotent.
+    // Returns only the rows actually inserted; skipped = total - inserted.
+    const { data, error } = await supabase.rpc(
+      "enqueue_post_call_jobs_idempotent",
+      { p_jobs: JSON.stringify(rows) },
+    );
 
     if (error) {
       errors.push(error.message);
-    } else {
-      enqueued = (data as { id: string }[]).length;
+      return { enqueued: 0, skipped: jobs.length, errors };
     }
+
+    const inserted = (data as { id: string }[] | null) ?? [];
+    return {
+      enqueued: inserted.length,
+      skipped: jobs.length - inserted.length,
+      errors,
+    };
   } catch (err) {
     errors.push(String(err));
+    return { enqueued: 0, skipped: jobs.length, errors };
   }
-
-  return { enqueued, errors };
 }
 
 // ── Claim ─────────────────────────────────────────────────────────────────────

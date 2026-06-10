@@ -2698,33 +2698,40 @@ export default defineAgent({
         { onConflict: "retell_call_id", ignoreDuplicates: false },
       );
 
-      // Backfill call_id on call_events — events fire during the call with only
-      // call_room set (the DB call.id isn't known until after the upsert above).
-      // Best-effort: a failure here never blocks slot release or background work.
+      // Resolve call UUID — shared by backfill, billing, and job enqueue.
+      // A single query avoids redundant round-trips in the close path.
+      let _callId: string | null = null;
       try {
         const { data: callIdRow } = await supabase
           .from("calls")
           .select("id")
           .eq("retell_call_id", roomName)
           .maybeSingle();
-        if (callIdRow?.id) {
+        _callId = (callIdRow as { id: string } | null)?.id ?? null;
+      } catch {
+        /* non-fatal — _callId stays null; jobs skipped if unresolvable */
+      }
+
+      // Backfill call_id on call_events (best-effort)
+      if (_callId) {
+        try {
           await supabase
             .from("call_events")
-            .update({ call_id: callIdRow.id })
+            .update({ call_id: _callId })
             .eq("call_room", roomName)
             .eq("workspace_id", workspaceId)
             .is("call_id", null);
           log("info", {
             message: "call_events.backfilled",
-            call_id: callIdRow.id,
+            call_id: _callId,
             room: roomName,
           });
+        } catch (backfillErr) {
+          console.warn(
+            "[call-events] call_id backfill failed:",
+            String(backfillErr),
+          );
         }
-      } catch (backfillErr) {
-        console.warn(
-          "[call-events] call_id backfill failed:",
-          String(backfillErr),
-        );
       }
 
       // Release call slot IMMEDIATELY after upsert so the workspace concurrent-call
@@ -2746,166 +2753,127 @@ export default defineAgent({
         close_reason: closeReason ?? null,
       });
 
-      // Cost tracking + CRM extraction + webhook — all fire-and-forget.
-      // Runs after slot release so none of this can delay the call lifecycle.
-      void (async () => {
-        // Shared billing summary: populated by the billing block, consumed by webhook.
-        let _postCallId: string | null = null;
-        let _postCostUsd: number | null = null;
-        let _postCostBreakdown: unknown = null;
-        let _postCostStatus: string | null = null;
-
+      // ── Billing: awaited directly (fast, DB-only) ──────────────────────────
+      // Strategy A: costs persisted here; cost_finalization job reconciles later.
+      // Runs after release_call_slot so it never delays the concurrent-call counter.
+      if (billing) {
         try {
-          // ── Fase 7: compute and persist call costs ───────────────────────────
-          if (billing) {
-            // Retrieve callId for cost event linking
-            const { data: costCallRow } = await supabase
-              .from("calls")
-              .select("id")
-              .eq("retell_call_id", roomName)
-              .maybeSingle();
-            const resolvedCallId = costCallRow?.id ?? null;
-            _postCallId = resolvedCallId;
-
-            billing.trackTelephony(durationSeconds, callDirection);
-            billing.trackLiveKit(durationSeconds);
-            billing.trackSTT(durationSeconds);
-            // TTS chars: manual injections via trackedSay() + pipeline via ConversationItemAdded
-
-            // LLM token estimate: total transcript chars / 3 (rough; labeled 'estimated')
-            const transcriptChars = transcriptLines.join("").length;
-            if (transcriptChars > 0) {
-              billing.trackLLMTokens(Math.round(transcriptChars / 3));
-            }
-
-            await billing.computeAndPersist(resolvedCallId, supabase);
-
-            // Fetch the final cost row so the webhook can include billing data.
-            if (resolvedCallId) {
-              const { data: costRow } = await supabase
-                .from("calls")
-                .select("cost_usd, cost_breakdown, cost_status")
-                .eq("id", resolvedCallId)
-                .maybeSingle();
-              if (costRow) {
-                _postCostUsd = costRow.cost_usd ?? null;
-                _postCostBreakdown = costRow.cost_breakdown ?? null;
-                _postCostStatus = costRow.cost_status ?? null;
-              }
-            }
-
-            // Safety backfill: update any cost events written with null call_id
-            if (resolvedCallId) {
-              await billing.backfillCallId(resolvedCallId, supabase);
-              void emit("billing.cost_events_backfilled", {
-                call_id: resolvedCallId,
-                room: roomName,
-              });
-            }
+          billing.trackTelephony(durationSeconds, callDirection);
+          billing.trackLiveKit(durationSeconds);
+          billing.trackSTT(durationSeconds);
+          // LLM tokens: estimate from transcript length
+          const transcriptChars = transcriptLines.join("").length;
+          if (transcriptChars > 0) {
+            billing.trackLLMTokens(Math.round(transcriptChars / 3));
+          }
+          await billing.computeAndPersist(_callId, supabase);
+          if (_callId) {
+            await billing.backfillCallId(_callId, supabase);
+            void emit("billing.cost_events_backfilled", {
+              call_id: _callId,
+              room: roomName,
+            });
           }
         } catch (costErr) {
           console.warn("[billing] cost tracking error:", String(costErr));
         }
+      }
 
-        // ── Fase 13: Enqueue persistent post-call jobs ───────────────────────
-        // Replaces inline CRM extraction + webhook fire-and-forget.
-        // Billing (above) still runs synchronously — it's fast and DB-only.
-        try {
-          const jobCallId = _postCallId;
-
-          if (jobCallId && workspaceId) {
-            // Determine webhook URL before building job list
-            let webhookUrl: string | null = callEndedWebhookUrl;
-            if (!webhookUrl) {
-              const { data: wsRow } = await supabase
-                .from("workspaces")
-                .select("webhook_url")
-                .eq("id", workspaceId)
-                .maybeSingle();
-              webhookUrl =
-                (wsRow as { webhook_url?: string | null } | null)
-                  ?.webhook_url ?? null;
-            }
-
-            const jobList: Array<{
-              job_type: PostCallJobType;
-              priority: number;
-              payload: Record<string, unknown>;
-            }> = [
-              {
-                job_type: "crm_extraction",
-                priority: 50,
-                payload: {
-                  transcript_available: transcript.trim().length > 0,
-                  business_outcome: lifecycle?.outcome ?? null,
-                  technical_status: finalTechnicalStatus,
-                  crm_fields: {
-                    Funnel: crmFunnel,
-                    LeadId: crmLeadId,
-                    Country: crmCountry,
-                    Campaign: crmCampaign,
-                  },
-                  call_duration_seconds: durationSeconds,
-                },
-              },
-              {
-                job_type: "qa_analysis",
-                priority: 80,
-                payload: { source: "post_call_job" },
-              },
-              {
-                job_type: "integration_dispatch",
-                priority: 90,
-                payload: { source: "post_call_job" },
-              },
-              ...(webhookUrl
-                ? [
-                    {
-                      job_type: "outbound_webhook" as PostCallJobType,
-                      priority: 100,
-                      payload: {
-                        event: "call.completed",
-                        webhook_url_source: callEndedWebhookUrl
-                          ? "metadata"
-                          : "workspace",
-                        webhook_url: webhookUrl,
-                        include_costs: true,
-                        include_analysis: true,
-                      },
-                    },
-                  ]
-                : []),
-            ];
-
-            await enqueuePostCallJobsForCall({
-              workspaceId,
-              callId: jobCallId,
-              roomName,
-              agentId: agentId ?? undefined,
-              jobs: jobList,
-              supabase,
-            });
-
-            void emit("post_call_jobs.enqueued", {
-              call_id: jobCallId,
-              job_count: jobList.length,
-            });
-
-            if (!webhookUrl) {
-              void emit("webhook.skipped", {
-                reason: "no_webhook_url",
-                workspace_id: workspaceId,
-              });
-            }
+      // ── Enqueue post-call jobs: awaited — durable, not fire-and-forget ────────
+      // Billing must run first (writes cost_usd) so outbound_webhook can include it.
+      // ON CONFLICT DO NOTHING (migration 057): double-close is safe.
+      try {
+        if (_callId && workspaceId) {
+          let webhookUrl: string | null = callEndedWebhookUrl;
+          if (!webhookUrl) {
+            const { data: wsRow } = await supabase
+              .from("workspaces")
+              .select("webhook_url")
+              .eq("id", workspaceId)
+              .maybeSingle();
+            webhookUrl =
+              (wsRow as { webhook_url?: string | null } | null)?.webhook_url ??
+              null;
           }
-        } catch (enqueueErr) {
-          console.error("[post-call-jobs] enqueue failed:", String(enqueueErr));
-          void emit("post_call_jobs.enqueue_failed", {
-            error: String(enqueueErr).slice(0, 200),
-            room: roomName,
+
+          const jobList: Array<{
+            job_type: PostCallJobType;
+            priority: number;
+            payload: Record<string, unknown>;
+          }> = [
+            {
+              job_type: "crm_extraction",
+              priority: 50,
+              payload: {
+                transcript_available: transcript.trim().length > 0,
+                business_outcome: lifecycle?.outcome ?? null,
+                technical_status: finalTechnicalStatus,
+                crm_fields: {
+                  Funnel: crmFunnel,
+                  LeadId: crmLeadId,
+                  Country: crmCountry,
+                  Campaign: crmCampaign,
+                },
+                call_duration_seconds: durationSeconds,
+              },
+            },
+            {
+              job_type: "qa_analysis",
+              priority: 80,
+              payload: { source: "post_call_job" },
+            },
+            {
+              job_type: "integration_dispatch",
+              priority: 90,
+              payload: { source: "post_call_job" },
+            },
+            ...(webhookUrl
+              ? [
+                  {
+                    job_type: "outbound_webhook" as PostCallJobType,
+                    priority: 100,
+                    payload: {
+                      event: "call.completed",
+                      webhook_url_source: callEndedWebhookUrl
+                        ? "metadata"
+                        : "workspace",
+                      webhook_url: webhookUrl,
+                      include_costs: true,
+                      include_analysis: true,
+                    },
+                  },
+                ]
+              : []),
+          ];
+
+          await enqueuePostCallJobsForCall({
+            workspaceId,
+            callId: _callId,
+            roomName,
+            agentId: agentId ?? undefined,
+            jobs: jobList,
+            supabase,
           });
+
+          void emit("post_call_jobs.enqueued", {
+            call_id: _callId,
+            job_count: jobList.length,
+          });
+
+          if (!webhookUrl) {
+            void emit("webhook.skipped", {
+              reason: "no_webhook_url",
+              workspace_id: workspaceId,
+            });
+          }
         }
-      })();
+      } catch (enqueueErr) {
+        console.error("[post-call-jobs] enqueue failed:", String(enqueueErr));
+        void emit("post_call_jobs.enqueue_failed", {
+          error: String(enqueueErr).slice(0, 200),
+          room: roomName,
+        });
+      }
     }); // end Close handler
 
     // ── Pre-flight billing guard ──────────────────────────────────────────────
