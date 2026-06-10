@@ -22,6 +22,8 @@ const PUBLIC_PATHS = [
   "/api/auth/set-session",
   "/api/auth/signout",
   "/api/auth/direct-access",
+  // Cron routes use timing-safe INTERNAL_API_SECRET — no session cookie
+  "/api/cron",
 ];
 
 const ADMIN_PATHS = ["/admin"];
