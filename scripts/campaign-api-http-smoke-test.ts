@@ -247,7 +247,9 @@ async function createTestSession(): Promise<{
   if (memberErr) {
     // Best-effort cleanup before throwing
     await admin.auth.admin.deleteUser(userId).catch(() => {});
-    throw new Error(`Failed to add test user to workspace: ${memberErr.message}`);
+    throw new Error(
+      `Failed to add test user to workspace: ${memberErr.message}`,
+    );
   }
 
   // 3. Sign in with anon client to get a real session
@@ -299,12 +301,16 @@ async function cleanupTestUser(userId: string): Promise<void> {
     .eq("actor_id", userId)
     .then((r) => {
       if (r.error)
-        console.warn(`  Warning: could not clean audit_logs for ${userId}: ${r.error.message}`);
+        console.warn(
+          `  Warning: could not clean audit_logs for ${userId}: ${r.error.message}`,
+        );
     });
 
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) {
-    console.warn(`  Warning: could not delete test user ${userId}: ${error.message}`);
+    console.warn(
+      `  Warning: could not delete test user ${userId}: ${error.message}`,
+    );
   } else {
     console.log(`  Deleted test user: ${userId}`);
   }
@@ -669,8 +675,9 @@ async function runTier2() {
     );
     const body = r.body as Record<string, unknown>;
     const config = (body?.configuration ??
-      (body?.data as Record<string, unknown> | undefined)
-        ?.configuration) as Record<string, unknown> | undefined;
+      (body?.data as Record<string, unknown> | undefined)?.configuration) as
+      | Record<string, unknown>
+      | undefined;
     const keyStripped = config ? !("api_key" in config) : false;
     record(
       "T02.4 PATCH api_key stripped from configuration",
@@ -712,7 +719,9 @@ async function runTier2() {
         `  Batch: inserted=${inserted} skipped=${skipped} invalid_phones=${invalids?.length ?? 0}`,
       );
     } else {
-      console.log(`  Batch failed: status=${r.status} body=${JSON.stringify(body)}`);
+      console.log(
+        `  Batch failed: status=${r.status} body=${JSON.stringify(body)}`,
+      );
     }
   }
 
@@ -972,15 +981,9 @@ function printReport(durationMs: number, hasAuth: boolean) {
     }
   } else if (!hasAuth || !tier2WasRun) {
     // No failures, but Tier 2 was not run
-    console.log(
-      "  ⚠️  PARTIAL PASS — Auth protection only (Tier 0 + Tier 1)",
-    );
-    console.log(
-      "     Tier 2 full lifecycle not validated. Re-run with:",
-    );
-    console.log(
-      "       --create-test-session    (auto-creates temp user)",
-    );
+    console.log("  ⚠️  PARTIAL PASS — Auth protection only (Tier 0 + Tier 1)");
+    console.log("     Tier 2 full lifecycle not validated. Re-run with:");
+    console.log("       --create-test-session    (auto-creates temp user)");
     console.log(
       '       --auth-cookie "sb-...-auth-token=..."   (manual cookie)',
     );
@@ -989,7 +992,9 @@ function printReport(durationMs: number, hasAuth: boolean) {
     console.log("  ✅ FULL PASS — All tiers passed (Tier 0 + Tier 1 + Tier 2)");
   } else {
     // Tier 2 ran but had issues (redundant given the failed>0 branch above, but defensive)
-    console.log(`  ❌ HTTP SMOKE TEST FAILED — Tier 2 had ${tier2Failed} failure(s)`);
+    console.log(
+      `  ❌ HTTP SMOKE TEST FAILED — Tier 2 had ${tier2Failed} failure(s)`,
+    );
   }
 
   console.log("═══════════════════════════════════════════════════════════\n");

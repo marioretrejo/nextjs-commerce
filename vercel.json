@@ -39,6 +39,9 @@
     },
     "app/api/webhooks/livekit/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/cron/provider-health/route.ts": {
+      "maxDuration": 60
     }
   },
   "headers": [
@@ -73,6 +76,10 @@
     {
       "path": "/api/cron/post-call-jobs",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/provider-health",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

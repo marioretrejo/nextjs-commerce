@@ -97,7 +97,18 @@ export type CallEventType =
   | "billing.cost_finalized"
   | "billing.cost_finalization_failed"
   // Campaign lead context (Fase 13)
-  | "campaign.lead_context_injected";
+  | "campaign.lead_context_injected"
+  // STT pipeline (Deepgram) — emitted when STT observability is instrumented
+  | "stt.provider_selected"
+  | "stt.provider_error"
+  | "stt.provider_degraded"
+  | "stt.provider_down"
+  // Telephony (SIP/Twilio) — emitted by dial cron and webhook handlers
+  | "telephony.provider_selected"
+  | "telephony.sip_participant_created"
+  | "telephony.sip_participant_failed"
+  | "telephony.status_callback_failed"
+  | "telephony.webhook_validation_failed";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,

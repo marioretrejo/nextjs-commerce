@@ -60,19 +60,19 @@ server, validating the full stack: auth middleware → route handlers → DB.
 
 ### Test tiers
 
-| Tier | Tests                          | Auth needed                              |
-| ---- | ------------------------------ | ---------------------------------------- |
-| 0    | Safety guards (env vars)       | No                                       |
-| 1    | Unauthenticated requests → 307 | No (just server)                         |
+| Tier | Tests                          | Auth needed                                      |
+| ---- | ------------------------------ | ------------------------------------------------ |
+| 0    | Safety guards (env vars)       | No                                               |
+| 1    | Unauthenticated requests → 307 | No (just server)                                 |
 | 2    | Full CRUD lifecycle            | Yes (`--auth-cookie` or `--create-test-session`) |
 
 ### Pass / Fail semantics
 
-| Outcome | Meaning |
-| ------- | ------- |
-| **FULL PASS** | Tier 0 + Tier 1 + Tier 2 all ran and passed |
+| Outcome          | Meaning                                              |
+| ---------------- | ---------------------------------------------------- |
+| **FULL PASS**    | Tier 0 + Tier 1 + Tier 2 all ran and passed          |
 | **PARTIAL PASS** | Tier 0 + Tier 1 passed; Tier 2 was skipped (no auth) |
-| **FAILED** | At least one check did not pass |
+| **FAILED**       | At least one check did not pass                      |
 
 ### How to run
 
@@ -120,16 +120,16 @@ VOICEOS_LOAD_TEST_MODE=true npx tsx scripts/campaign-api-http-smoke-test.ts \
 
 ### Arguments
 
-| Argument                | Default                 | Description                                              |
-| ----------------------- | ----------------------- | -------------------------------------------------------- |
-| `--base-url`            | `http://localhost:3000` | Next.js server URL                                       |
-| `--workspace-id`        | (Super Admin workspace) | Workspace to use for tests                               |
-| `--agent-id`            | (Ventas Outbound LATAM) | Agent for activation precondition                        |
-| `--auth-cookie`         | (empty)                 | Supabase session cookie string                           |
-| `--create-test-session` | (flag)                  | Create a temp test user + session; delete after run      |
-| `--require-auth-full`   | (flag)                  | Fail immediately if no auth source is available          |
-| `--cleanup`             | `true`                  | Pause test campaigns and delete test user after run      |
-| `--dry-run`             | (flag)                  | Print plan, skip HTTP calls                              |
+| Argument                | Default                 | Description                                         |
+| ----------------------- | ----------------------- | --------------------------------------------------- |
+| `--base-url`            | `http://localhost:3000` | Next.js server URL                                  |
+| `--workspace-id`        | (Super Admin workspace) | Workspace to use for tests                          |
+| `--agent-id`            | (Ventas Outbound LATAM) | Agent for activation precondition                   |
+| `--auth-cookie`         | (empty)                 | Supabase session cookie string                      |
+| `--create-test-session` | (flag)                  | Create a temp test user + session; delete after run |
+| `--require-auth-full`   | (flag)                  | Fail immediately if no auth source is available     |
+| `--cleanup`             | `true`                  | Pause test campaigns and delete test user after run |
+| `--dry-run`             | (flag)                  | Print plan, skip HTTP calls                         |
 
 ### `--create-test-session` details
 

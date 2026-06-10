@@ -142,4 +142,27 @@ const isValid = crypto.timingSafeEqual(
 
 ---
 
-_Last updated: Fase 13 — Campaign Outbound Engine, Post-Call Jobs Queue_
+### Provider Health Cron (Fase 14)
+
+`GET /api/cron/provider-health` — computes per-provider health snapshots from `call_events`
+and writes them to `provider_health_checks`. Runs every 5 minutes.
+
+Auth: same `INTERNAL_API_SECRET` or `CRON_SECRET` Bearer token.
+
+**Already configured in `vercel.json`** (`maxDuration = 60`):
+
+```json
+{ "path": "/api/cron/provider-health", "schedule": "*/5 * * * *" }
+```
+
+Optional env var:
+
+| Variable                                | Default | Notes                                                         |
+| --------------------------------------- | ------- | ------------------------------------------------------------- |
+| `VOICEOS_PROVIDER_HEALTH_ACTIVE_PROBES` | `false` | Set to `true` to enable external probes (not yet implemented) |
+
+See `docs/provider-health.md` for full documentation.
+
+---
+
+_Last updated: Fase 14 — Provider Health Dashboard + Circuit Breaker Visual_
