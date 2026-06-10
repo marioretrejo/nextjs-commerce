@@ -42,6 +42,9 @@
     },
     "app/api/cron/provider-health/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/alerts/route.ts": {
+      "maxDuration": 60
     }
   },
   "headers": [
@@ -79,6 +82,10 @@
     },
     {
       "path": "/api/cron/provider-health",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/alerts",
       "schedule": "*/5 * * * *"
     }
   ]

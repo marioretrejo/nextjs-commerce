@@ -165,4 +165,28 @@ See `docs/provider-health.md` for full documentation.
 
 ---
 
-_Last updated: Fase 14 — Provider Health Dashboard + Circuit Breaker Visual_
+### Alerting + Incident Notifications Cron (Fase 15)
+
+`GET /api/cron/alerts` — evaluates alert signals, creates/updates incidents, and enqueues delivery notifications. Runs every 5 minutes.
+
+Auth: same `INTERNAL_API_SECRET` Bearer token or `x-internal-secret` header.
+
+**Already configured in `vercel.json`** (`maxDuration = 60`):
+
+```json
+{ "path": "/api/cron/alerts", "schedule": "*/5 * * * *" }
+```
+
+Optional alerting env vars (all default to disabled/unset):
+
+| Variable                             | Where  | Default | Notes                                          |
+| ------------------------------------ | ------ | ------- | ---------------------------------------------- |
+| `VOICEOS_ALERTING_SEND_EXTERNAL`     | Vercel | `false` | Set `true` to enable Slack/email/webhook sends |
+| `VOICEOS_ALERTING_SLACK_WEBHOOK_URL` | Vercel | —       | Slack incoming webhook URL                     |
+| `VOICEOS_ALERTING_DEFAULT_EMAIL`     | Vercel | —       | Default email for alert delivery               |
+
+See `docs/alerting.md` for full documentation.
+
+---
+
+_Last updated: Fase 15 — Alerting + Incident Notifications_
