@@ -46383,7 +46383,7 @@ async function enqueuePostCallJobsForCall(input) {
   try {
     const { data, error } = await supabase.rpc(
       "enqueue_post_call_jobs_idempotent",
-      { p_jobs: JSON.stringify(rows) },
+      { p_jobs: rows },
     );
     if (error) {
       errors.push(error.message);

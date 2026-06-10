@@ -24,9 +24,9 @@ All simulated calls carry `routing_data.method = 'load_test'` for easy cleanup.
 
 Set these in `.env.local` before running (not needed for `--dry-run`):
 
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| Variable                    | Purpose                         |
+| --------------------------- | ------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`  | Supabase project URL            |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (admin writes) |
 
 **Never run against a production Supabase project unless you have explicitly set
@@ -75,19 +75,19 @@ Add `--campaign-id <id>` to associate all calls with a specific campaign.
 
 ### All CLI flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--workspace-id <id>` | _(required)_ | Workspace to create calls under |
-| `--agent-id <id>` | _(required)_ | Agent ID associated with each call |
-| `--campaign-id <id>` | — | Optional campaign to associate calls with |
-| `--total <n>` | 100 | Number of calls to simulate |
-| `--concurrency <n>` | 10 | Max concurrent simulated calls |
-| `--dry-run` | — | Skip all DB writes; pure in-memory simulation |
-| `--load-test-mode` | — | Required for DB writes (safety acknowledgement) |
-| `--post-call-jobs` | true | Enqueue post-call jobs after each call |
-| `--run-cron` | true | Run mock cron processor after all calls complete |
-| `--send-webhooks` | false | Enable outbound webhook delivery for jobs |
-| `--output-dir <dir>` | `reports` | Directory for JSON + Markdown report files |
+| Flag                  | Default      | Description                                      |
+| --------------------- | ------------ | ------------------------------------------------ |
+| `--workspace-id <id>` | _(required)_ | Workspace to create calls under                  |
+| `--agent-id <id>`     | _(required)_ | Agent ID associated with each call               |
+| `--campaign-id <id>`  | —            | Optional campaign to associate calls with        |
+| `--total <n>`         | 100          | Number of calls to simulate                      |
+| `--concurrency <n>`   | 10           | Max concurrent simulated calls                   |
+| `--dry-run`           | —            | Skip all DB writes; pure in-memory simulation    |
+| `--load-test-mode`    | —            | Required for DB writes (safety acknowledgement)  |
+| `--post-call-jobs`    | true         | Enqueue post-call jobs after each call           |
+| `--run-cron`          | true         | Run mock cron processor after all calls complete |
+| `--send-webhooks`     | false        | Enable outbound webhook delivery for jobs        |
+| `--output-dir <dir>`  | `reports`    | Directory for JSON + Markdown report files       |
 
 You can also set `VOICEOS_LOAD_TEST_MODE=true` as an env var instead of `--load-test-mode`.
 
@@ -97,17 +97,17 @@ You can also set `VOICEOS_LOAD_TEST_MODE=true` as an env var instead of `--load-
 
 Each simulated call is assigned one of 9 outcome scenarios using weighted random selection:
 
-| Scenario | Weight | `technical_status` | `business_outcome` | Creates call row? |
-|----------|--------|--------------------|--------------------|:-----------------:|
-| `completed` | 35% | `completed` | `contacted` | ✓ |
-| `voicemail` | 20% | `completed` | `voicemail` | ✓ |
-| `no_answer` | 10% | `no_answer` | — | ✓ |
-| `silence_timeout` | 10% | `completed` | `silence_timeout` | ✓ |
-| `dnc` | 10% | — | — | ✗ (eligibility block) |
-| `transferred` | 5% | `completed` | `transferred` | ✓ |
-| `transfer_failed` | 5% | `completed` | `error` | ✓ |
-| `provider_failure` | 3% | `failed` | — | ✓ |
-| `balance_exhausted` | 2% | — | — | ✗ (eligibility block) |
+| Scenario            | Weight | `technical_status` | `business_outcome` |   Creates call row?   |
+| ------------------- | ------ | ------------------ | ------------------ | :-------------------: |
+| `completed`         | 35%    | `completed`        | `contacted`        |           ✓           |
+| `voicemail`         | 20%    | `completed`        | `voicemail`        |           ✓           |
+| `no_answer`         | 10%    | `no_answer`        | —                  |           ✓           |
+| `silence_timeout`   | 10%    | `completed`        | `silence_timeout`  |           ✓           |
+| `dnc`               | 10%    | —                  | —                  | ✗ (eligibility block) |
+| `transferred`       | 5%     | `completed`        | `transferred`      |           ✓           |
+| `transfer_failed`   | 5%     | `completed`        | `error`            |           ✓           |
+| `provider_failure`  | 3%     | `failed`           | —                  |           ✓           |
+| `balance_exhausted` | 2%     | —                  | —                  | ✗ (eligibility block) |
 
 Blocked scenarios (`dnc`, `balance_exhausted`) write a `dial_eligibility_checks` row
 with `allowed=false` and do **not** create a `calls` row.
@@ -138,14 +138,14 @@ After the run, a formatted report is printed to stdout and saved to
 
 ### Technical section
 
-| Metric | Meaning |
-|--------|---------|
-| Calls attempted | Total calls dispatched (including blocked) |
-| Calls created (DB) | Calls where a `calls` row was inserted |
-| Calls blocked | Eligibility-blocked calls (dnc, balance_exhausted) |
-| Calls errored | Calls that threw an unexpected error |
-| Peak active calls | Maximum concurrent calls during the run |
-| DB insert error rate | Fraction of calls with at least one DB error |
+| Metric                    | Meaning                                            |
+| ------------------------- | -------------------------------------------------- |
+| Calls attempted           | Total calls dispatched (including blocked)         |
+| Calls created (DB)        | Calls where a `calls` row was inserted             |
+| Calls blocked             | Eligibility-blocked calls (dnc, balance_exhausted) |
+| Calls errored             | Calls that threw an unexpected error               |
+| Peak active calls         | Maximum concurrent calls during the run            |
+| DB insert error rate      | Fraction of calls with at least one DB error       |
 | Close handler p50/p95/p99 | Latency distribution of the per-call close handler |
 
 ### Business outcomes section
@@ -154,15 +154,15 @@ Counts by scenario type and their share of total attempted calls.
 
 ### Post-call jobs section
 
-| Metric | Meaning |
-|--------|---------|
-| Jobs enqueued | Total post-call job rows inserted |
-| Jobs skipped | Idempotent duplicates skipped (ON CONFLICT DO NOTHING) |
-| Enqueue rate | Fraction of calls with at least one job enqueued |
-| Cron completed | Jobs processed successfully by mock cron |
-| Cron dead-letter | Jobs that exhausted all retries |
-| Dead-letter rate | `cronDeadLetter / (cronCompleted + cronDeadLetter)` |
-| Processed rate | `cronCompleted / (cronCompleted + cronDeadLetter + cronFailed)` |
+| Metric           | Meaning                                                         |
+| ---------------- | --------------------------------------------------------------- |
+| Jobs enqueued    | Total post-call job rows inserted                               |
+| Jobs skipped     | Idempotent duplicates skipped (ON CONFLICT DO NOTHING)          |
+| Enqueue rate     | Fraction of calls with at least one job enqueued                |
+| Cron completed   | Jobs processed successfully by mock cron                        |
+| Cron dead-letter | Jobs that exhausted all retries                                 |
+| Dead-letter rate | `cronDeadLetter / (cronCompleted + cronDeadLetter)`             |
+| Processed rate   | `cronCompleted / (cronCompleted + cronDeadLetter + cronFailed)` |
 
 ### Costs section
 
@@ -175,14 +175,14 @@ they exist to exercise the cost tracking code path end-to-end.
 
 A load test run is marked **PASSED** only when all 6 criteria are met:
 
-| Criterion | Threshold |
-|-----------|-----------|
-| DB error rate | < 0.5% |
-| All calls have final state | 100% |
-| Close handler p95 | < 2 000 ms |
-| Close handler p99 | < 5 000 ms |
-| Dead-letter rate | < 1% |
-| Jobs processed rate | ≥ 99% |
+| Criterion                  | Threshold  |
+| -------------------------- | ---------- |
+| DB error rate              | < 0.5%     |
+| All calls have final state | 100%       |
+| Close handler p95          | < 2 000 ms |
+| Close handler p99          | < 5 000 ms |
+| Dead-letter rate           | < 1%       |
+| Jobs processed rate        | ≥ 99%      |
 
 If any criterion fails, the CLI exits with code `1` and the report shows `✗ FAILED`.
 
@@ -239,13 +239,13 @@ WHERE reason LIKE 'Load test:%'
 
 ## Known risks and mitigations
 
-| Risk | Mitigation |
-|------|-----------|
-| Accidentally targeting production | Production guard blocks unless `VOICEOS_ALLOW_PROD_LOAD_TEST=true` |
-| DB quota exhaustion | Each call writes ~5–10 rows; 1 000 calls ≈ 10 000 rows — well within Supabase free tier |
-| Foreign key violations | `workspace_id` and `agent_id` must exist in the DB; use real IDs from your workspace |
-| Port exhaustion from high concurrency | Keep `--concurrency` ≤ 50 on free-tier Supabase (connection limit ~60) |
-| Leftover rows after failed run | Use the cleanup SQL above; all rows are tagged `routing_data.method='load_test'` |
+| Risk                                  | Mitigation                                                                              |
+| ------------------------------------- | --------------------------------------------------------------------------------------- |
+| Accidentally targeting production     | Production guard blocks unless `VOICEOS_ALLOW_PROD_LOAD_TEST=true`                      |
+| DB quota exhaustion                   | Each call writes ~5–10 rows; 1 000 calls ≈ 10 000 rows — well within Supabase free tier |
+| Foreign key violations                | `workspace_id` and `agent_id` must exist in the DB; use real IDs from your workspace    |
+| Port exhaustion from high concurrency | Keep `--concurrency` ≤ 50 on free-tier Supabase (connection limit ~60)                  |
+| Leftover rows after failed run        | Use the cleanup SQL above; all rows are tagged `routing_data.method='load_test'`        |
 
 ---
 
