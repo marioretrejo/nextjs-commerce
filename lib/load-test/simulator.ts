@@ -335,7 +335,7 @@ function generateCostEventRows(
       quantity: durationSec,
       unit: "seconds",
       unit_cost_usd: 0.0049 / 60,
-      total_cost_usd: Math.round((perMin * 0.0049) * 1000000) / 1000000,
+      total_cost_usd: Math.round(perMin * 0.0049 * 1000000) / 1000000,
       pricing_source: "configured",
       metadata: { load_test: true },
     },
@@ -397,10 +397,7 @@ export function buildJobList(
 
 export function percentile(sorted: number[], pct: number): number {
   if (!sorted.length) return 0;
-  const idx = Math.min(
-    Math.floor(sorted.length * pct),
-    sorted.length - 1,
-  );
+  const idx = Math.max(0, Math.ceil(sorted.length * pct) - 1);
   return sorted[idx] ?? 0;
 }
 
@@ -418,10 +415,7 @@ export async function mapWithConcurrency<T>(
       results[i] = await tasks[i]!();
     }
   }
-  const workers = Array.from(
-    { length: Math.min(limit, tasks.length) },
-    worker,
-  );
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, worker);
   await Promise.all(workers);
   return results as T[];
 }
@@ -523,7 +517,10 @@ export async function simulateOneCall(
             scenario,
           },
         })
-        .then(() => null, (e) => dbErrors.push(`events.initiated: ${String(e)}`));
+        .then(
+          () => null,
+          (e) => dbErrors.push(`events.initiated: ${String(e)}`),
+        );
     }
 
     // call.answered (if non-zero duration and not hard failure)
@@ -542,7 +539,10 @@ export async function simulateOneCall(
             event_type: "call.answered",
             payload: { agent_id: config.agentId, load_test: true },
           })
-          .then(() => null, (e) => dbErrors.push(`events.answered: ${String(e)}`));
+          .then(
+            () => null,
+            (e) => dbErrors.push(`events.answered: ${String(e)}`),
+          );
       }
     }
 
@@ -570,7 +570,10 @@ export async function simulateOneCall(
           ended_at: new Date().toISOString(),
         })
         .eq("id", callId)
-        .then(() => null, (e) => dbErrors.push(`calls.update: ${String(e)}`));
+        .then(
+          () => null,
+          (e) => dbErrors.push(`calls.update: ${String(e)}`),
+        );
 
       // call.ended event
       await supabase
@@ -588,7 +591,10 @@ export async function simulateOneCall(
             load_test: true,
           },
         })
-        .then(() => null, (e) => dbErrors.push(`events.ended: ${String(e)}`));
+        .then(
+          () => null,
+          (e) => dbErrors.push(`events.ended: ${String(e)}`),
+        );
 
       // Cost events (only for calls with duration)
       if (durationSec > 0) {
@@ -602,7 +608,10 @@ export async function simulateOneCall(
         await supabase
           .from("call_cost_events")
           .insert(costRows)
-          .then(() => null, (e) => dbErrors.push(`cost_events: ${String(e)}`));
+          .then(
+            () => null,
+            (e) => dbErrors.push(`cost_events: ${String(e)}`),
+          );
       }
     }
 
@@ -663,7 +672,10 @@ async function mockProcessJob(
         .from("calls")
         .update({ extracted_data: { load_test: true, provider: "mock" } })
         .eq("id", job.call_id)
-        .then(() => null, () => null);
+        .then(
+          () => null,
+          () => null,
+        );
       return { provider: "mock", load_test: true };
 
     case "qa_analysis": {
@@ -765,7 +777,12 @@ export async function runLoadTestCron(
           await markJobDeadLetter(supabase, job.id, { message: msg, code });
           deadLetter++;
         } else if (decision.shouldRetry) {
-          await markJobRetrying(supabase, job.id, { message: msg, code }, job.attempts);
+          await markJobRetrying(
+            supabase,
+            job.id,
+            { message: msg, code },
+            job.attempts,
+          );
           retrying++;
         } else {
           await markJobFailed(supabase, job.id, { message: msg, code });
@@ -834,8 +851,7 @@ export function compileMetrics(
   const cronFailed = cronResult?.failed ?? 0;
   const cronRetrying = cronResult?.retrying ?? 0;
   const cronClaimed = cronResult?.claimed ?? 0;
-  const cronDeadLetterRate =
-    cronClaimed > 0 ? cronDeadLetter / cronClaimed : 0;
+  const cronDeadLetterRate = cronClaimed > 0 ? cronDeadLetter / cronClaimed : 0;
   const cronProcessRate =
     cronClaimed > 0
       ? (cronCompleted + cronFailed + cronDeadLetter) / cronClaimed
@@ -965,11 +981,7 @@ export async function runLoadTest(
   let cronResult: CronRunResult | null = null;
   if (!config.dryRun && config.runCron && supabase) {
     const workerId = `lt-cron-${Date.now()}`;
-    cronResult = await runLoadTestCron(
-      supabase,
-      workerId,
-      config.sendWebhooks,
-    );
+    cronResult = await runLoadTestCron(supabase, workerId, config.sendWebhooks);
   }
 
   const completedAt = new Date().toISOString();

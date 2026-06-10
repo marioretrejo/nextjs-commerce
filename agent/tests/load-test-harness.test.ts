@@ -71,36 +71,36 @@ describe("Production guard", () => {
   });
 
   it("throws in production without VOICEOS_ALLOW_PROD_LOAD_TEST", () => {
-    const orig = process.env["NODE_ENV"];
-    const origAllow = process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
+    const env = process.env as Record<string, string | undefined>;
+    const orig = env["NODE_ENV"];
+    const origAllow = env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
     try {
-      process.env["NODE_ENV"] = "production";
-      delete process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
+      env["NODE_ENV"] = "production";
+      delete env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
       assert.throws(
         () => checkProductionGuard(true),
         /SAFETY: Load test blocked in production/,
       );
     } finally {
-      if (orig !== undefined) process.env["NODE_ENV"] = orig;
-      else delete process.env["NODE_ENV"];
+      env["NODE_ENV"] = orig;
       if (origAllow !== undefined)
-        process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"] = origAllow;
+        env["VOICEOS_ALLOW_PROD_LOAD_TEST"] = origAllow;
     }
   });
 
   it("allows production when VOICEOS_ALLOW_PROD_LOAD_TEST=true", () => {
-    const orig = process.env["NODE_ENV"];
-    const origAllow = process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
+    const env = process.env as Record<string, string | undefined>;
+    const orig = env["NODE_ENV"];
+    const origAllow = env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
     try {
-      process.env["NODE_ENV"] = "production";
-      process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"] = "true";
+      env["NODE_ENV"] = "production";
+      env["VOICEOS_ALLOW_PROD_LOAD_TEST"] = "true";
       assert.doesNotThrow(() => checkProductionGuard(true));
     } finally {
-      if (orig !== undefined) process.env["NODE_ENV"] = orig;
-      else delete process.env["NODE_ENV"];
+      env["NODE_ENV"] = orig;
       if (origAllow !== undefined)
-        process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"] = origAllow;
-      else delete process.env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
+        env["VOICEOS_ALLOW_PROD_LOAD_TEST"] = origAllow;
+      else delete env["VOICEOS_ALLOW_PROD_LOAD_TEST"];
     }
   });
 });
@@ -121,7 +121,10 @@ describe("Load test mode — no external provider calls", () => {
     // In load test mode, the simulator does NOT call Twilio
     // (it bypasses the dial route entirely and inserts directly to DB)
     mockFetch("https://supabase.co/rest/v1/calls"); // supabase only
-    assert.ok(!twilioFetchCalled, "Twilio API must not be called in load test mode");
+    assert.ok(
+      !twilioFetchCalled,
+      "Twilio API must not be called in load test mode",
+    );
   });
 
   it("simulator does not call Groq/OpenAI (LLM APIs)", () => {
@@ -152,7 +155,11 @@ describe("Load test mode — no external provider calls", () => {
       ["created", "blocked", "error"].includes(result.outcome),
       "dry-run still returns valid outcome",
     );
-    assert.strictEqual(result.dbErrors.length, 0, "dry-run produces zero DB errors");
+    assert.strictEqual(
+      result.dbErrors.length,
+      0,
+      "dry-run produces zero DB errors",
+    );
     assert.strictEqual(result.jobsEnqueued, 0, "dry-run enqueues 0 jobs");
   });
 });
@@ -173,7 +180,9 @@ describe("dry-run mode — zero DB writes", () => {
             then: () => null,
           }),
           update: () => ({ eq: () => ({ then: () => null }) }),
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+          select: () => ({
+            eq: () => ({ maybeSingle: async () => ({ data: null }) }),
+          }),
         };
       },
     };
@@ -188,7 +197,11 @@ describe("dry-run mode — zero DB writes", () => {
     );
 
     // With supabase=null AND dryRun=true, no table inserts happen
-    assert.strictEqual(insertCalls.length, 0, "No DB tables accessed in dry-run with null client");
+    assert.strictEqual(
+      insertCalls.length,
+      0,
+      "No DB tables accessed in dry-run with null client",
+    );
     void mockSupabase;
   });
 });
@@ -207,27 +220,30 @@ describe("Scenario distribution (100 samples)", () => {
     // completed = 35% → should be between 25–45% with 1000 samples
     const completedPct = (counts["completed"] ?? 0) / N;
     assert.ok(completedPct > 0.22, `completed% too low: ${completedPct}`);
-    assert.ok(completedPct < 0.50, `completed% too high: ${completedPct}`);
+    assert.ok(completedPct < 0.5, `completed% too high: ${completedPct}`);
 
     // All scenarios should appear at least once in 1000 samples
     const scenarios = Object.keys(DEFAULT_DISTRIBUTION) as ScenarioType[];
     for (const s of scenarios) {
-      assert.ok((counts[s] ?? 0) > 0, `Scenario ${s} never appeared in 1000 samples`);
+      assert.ok(
+        (counts[s] ?? 0) > 0,
+        `Scenario ${s} never appeared in 1000 samples`,
+      );
     }
   });
 
   it("distribution weights sum to a positive number", () => {
-    const total = Object.values(DEFAULT_DISTRIBUTION).reduce((s, w) => s + w, 0);
+    const total = Object.values(DEFAULT_DISTRIBUTION).reduce(
+      (s, w) => s + w,
+      0,
+    );
     assert.ok(total > 0, "Distribution weights must sum to > 0");
     assert.strictEqual(total, 100, "Default distribution should sum to 100");
   });
 
   it("all scenarios have non-negative durations", () => {
     for (const [s, def] of Object.entries(SCENARIO_DEFS)) {
-      assert.ok(
-        def.minDurationSec >= 0,
-        `${s}: minDurationSec must be >= 0`,
-      );
+      assert.ok(def.minDurationSec >= 0, `${s}: minDurationSec must be >= 0`);
       assert.ok(
         def.maxDurationSec >= def.minDurationSec,
         `${s}: maxDurationSec must be >= minDurationSec`,
@@ -263,13 +279,10 @@ describe("Concurrency control", () => {
 
   it("all tasks complete regardless of concurrency", async () => {
     let completed = 0;
-    const tasks = Array.from(
-      { length: 50 },
-      () => async () => {
-        completed++;
-        return completed;
-      },
-    );
+    const tasks = Array.from({ length: 50 }, () => async () => {
+      completed++;
+      return completed;
+    });
     const results = await mapWithConcurrency(tasks, 5);
     assert.strictEqual(results.length, 50);
     assert.strictEqual(completed, 50);
@@ -288,10 +301,24 @@ describe("call_events generated per simulated call", () => {
             const r = row as { event_type?: string };
             if (r?.event_type) insertedEvents.push(r.event_type);
           }
-          return { then: (fn: (v: unknown) => unknown) => fn(null) };
+          const res = { data: { id: "call-1" }, error: null };
+          return {
+            then: (fn: (v: unknown) => unknown) => fn(res),
+            select: (_cols?: string) => ({
+              single: () => Promise.resolve(res),
+            }),
+          };
         },
-        update: () => ({ eq: () => ({ then: (fn: (v: unknown) => unknown) => fn(null) }) }),
-        select: () => ({ eq: () => ({ single: async () => ({ data: { id: "call-1" }, error: null }) }) }),
+        update: () => ({
+          eq: () => ({
+            then: (fn: (v: unknown) => unknown) => fn({ error: null }),
+          }),
+        }),
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: { id: "call-1" }, error: null }),
+          }),
+        }),
       }),
     };
 
@@ -301,7 +328,17 @@ describe("call_events generated per simulated call", () => {
       makeConfig({ dryRun: false, runPostCallJobs: false }),
       mockSupabase as never,
       counter,
-      { completed: 100, voicemail: 0, no_answer: 0, silence_timeout: 0, dnc: 0, transferred: 0, transfer_failed: 0, provider_failure: 0, balance_exhausted: 0 },
+      {
+        completed: 100,
+        voicemail: 0,
+        no_answer: 0,
+        silence_timeout: 0,
+        dnc: 0,
+        transferred: 0,
+        transfer_failed: 0,
+        provider_failure: 0,
+        balance_exhausted: 0,
+      },
       0,
     );
 
@@ -324,7 +361,7 @@ describe("call_events generated per simulated call", () => {
             const r = row as { event_type?: string };
             if (r?.event_type) insertedEvents.push(r.event_type);
           }
-          return { then: (fn: (v: unknown) => unknown) => fn(null) };
+          return { then: (fn: (v: unknown) => unknown) => fn({ error: null }) };
         },
       }),
     };
@@ -335,7 +372,17 @@ describe("call_events generated per simulated call", () => {
       makeConfig({ dryRun: false }),
       mockSupabase as never,
       counter,
-      { dnc: 100, completed: 0, voicemail: 0, no_answer: 0, silence_timeout: 0, transferred: 0, transfer_failed: 0, provider_failure: 0, balance_exhausted: 0 },
+      {
+        dnc: 100,
+        completed: 0,
+        voicemail: 0,
+        no_answer: 0,
+        silence_timeout: 0,
+        transferred: 0,
+        transfer_failed: 0,
+        provider_failure: 0,
+        balance_exhausted: 0,
+      },
       0,
     );
 
@@ -354,9 +401,15 @@ describe("post_call_jobs enqueued per simulated call", () => {
   it("buildJobList returns standard jobs for completed scenario", () => {
     const jobs = buildJobList("completed");
     const types = jobs.map((j) => j.job_type);
-    assert.ok(types.includes("crm_extraction"), "crm_extraction must be enqueued");
+    assert.ok(
+      types.includes("crm_extraction"),
+      "crm_extraction must be enqueued",
+    );
     assert.ok(types.includes("qa_analysis"), "qa_analysis must be enqueued");
-    assert.ok(types.includes("integration_dispatch"), "integration_dispatch must be enqueued");
+    assert.ok(
+      types.includes("integration_dispatch"),
+      "integration_dispatch must be enqueued",
+    );
   });
 
   it("buildJobList includes outbound_webhook only when webhook_url provided", () => {
@@ -404,9 +457,17 @@ describe("No duplicate post_call_jobs per call_id/job_type", () => {
     const types = ["crm_extraction", "qa_analysis", "integration_dispatch"];
 
     // First enqueue
-    assert.strictEqual(enqueueSim("call-A", types), 3, "First: 3 jobs inserted");
+    assert.strictEqual(
+      enqueueSim("call-A", types),
+      3,
+      "First: 3 jobs inserted",
+    );
     // Second enqueue (simulating double-close)
-    assert.strictEqual(enqueueSim("call-A", types), 0, "Second: 0 inserted (all conflict)");
+    assert.strictEqual(
+      enqueueSim("call-A", types),
+      0,
+      "Second: 0 inserted (all conflict)",
+    );
     assert.strictEqual(db.size, 3, "DB has exactly 3 unique rows");
   });
 
@@ -417,13 +478,20 @@ describe("No duplicate post_call_jobs per call_id/job_type", () => {
       let n = 0;
       for (const t of types) {
         const k = `${id}:${t}`;
-        if (!db.has(k)) { db.set(k, true); n++; }
+        if (!db.has(k)) {
+          db.set(k, true);
+          n++;
+        }
       }
       return n;
     };
 
     assert.strictEqual(enqueue("call-1"), 2);
-    assert.strictEqual(enqueue("call-2"), 2, "call-2 does not conflict with call-1");
+    assert.strictEqual(
+      enqueue("call-2"),
+      2,
+      "call-2 does not conflict with call-1",
+    );
     assert.strictEqual(db.size, 4);
   });
 });
@@ -434,11 +502,19 @@ describe("Recovery endpoint idempotency", () => {
   it("second recovery run produces 0 new rows when jobs already exist", () => {
     const db = new Map<string, boolean>();
     const enqueue = (callId: string): number => {
-      const types = ["crm_extraction", "qa_analysis", "integration_dispatch", "cost_finalization"];
+      const types = [
+        "crm_extraction",
+        "qa_analysis",
+        "integration_dispatch",
+        "cost_finalization",
+      ];
       let n = 0;
       for (const t of types) {
         const k = `${callId}:${t}`;
-        if (!db.has(k)) { db.set(k, true); n++; }
+        if (!db.has(k)) {
+          db.set(k, true);
+          n++;
+        }
       }
       return n;
     };
@@ -454,15 +530,16 @@ describe("Recovery endpoint idempotency", () => {
   });
 
   it("recovery only touches orphaned calls (those without existing jobs)", () => {
-    const completedCalls = [
-      { id: "c1" }, { id: "c2" }, { id: "c3" },
-    ];
+    const completedCalls = [{ id: "c1" }, { id: "c2" }, { id: "c3" }];
     const coveredIds = new Set(["c3"]); // c3 already has jobs
 
     const orphaned = completedCalls.filter((c) => !coveredIds.has(c.id));
 
     assert.strictEqual(orphaned.length, 2, "Only 2 orphaned calls");
-    assert.ok(!orphaned.find((c) => c.id === "c3"), "c3 excluded from recovery");
+    assert.ok(
+      !orphaned.find((c) => c.id === "c3"),
+      "c3 excluded from recovery",
+    );
   });
 });
 
@@ -472,11 +549,38 @@ describe("Report metrics computation", () => {
   it("compileMetrics counts scenarios correctly", () => {
     const config = makeConfig({ total: 5, dryRun: true });
     const results: CallSimResult[] = [
-      makeResult({ scenario: "completed", outcome: "created", jobsEnqueued: 3, costUsd: 0.02 }),
-      makeResult({ scenario: "voicemail", outcome: "created", jobsEnqueued: 3, costUsd: 0.005 }),
-      makeResult({ scenario: "dnc", outcome: "blocked", callId: null, jobsEnqueued: 0, costUsd: 0 }),
-      makeResult({ scenario: "no_answer", outcome: "created", jobsEnqueued: 0, costUsd: 0 }),
-      makeResult({ scenario: "completed", outcome: "created", closeHandlerMs: 200, jobsEnqueued: 3, costUsd: 0.018 }),
+      makeResult({
+        scenario: "completed",
+        outcome: "created",
+        jobsEnqueued: 3,
+        costUsd: 0.02,
+      }),
+      makeResult({
+        scenario: "voicemail",
+        outcome: "created",
+        jobsEnqueued: 3,
+        costUsd: 0.005,
+      }),
+      makeResult({
+        scenario: "dnc",
+        outcome: "blocked",
+        callId: null,
+        jobsEnqueued: 0,
+        costUsd: 0,
+      }),
+      makeResult({
+        scenario: "no_answer",
+        outcome: "created",
+        jobsEnqueued: 0,
+        costUsd: 0,
+      }),
+      makeResult({
+        scenario: "completed",
+        outcome: "created",
+        closeHandlerMs: 200,
+        jobsEnqueued: 3,
+        costUsd: 0.018,
+      }),
     ];
 
     const now = new Date().toISOString();
@@ -508,8 +612,8 @@ describe("Report metrics computation", () => {
     const now = new Date().toISOString();
     const metrics = compileMetrics(config, results, null, now, now);
 
-    const errorRateCriterion = metrics.criteria.find(
-      (c) => c.name.includes("DB error rate"),
+    const errorRateCriterion = metrics.criteria.find((c) =>
+      c.name.includes("DB error rate"),
     );
     assert.ok(errorRateCriterion?.pass, "DB error rate criterion should pass");
   });
@@ -528,10 +632,7 @@ describe("Report metrics computation", () => {
     const metrics = compileMetrics(config, results, null, now, now);
 
     // dbInsertErrors > 0.5% of calls
-    assert.ok(
-      metrics.dbInsertErrors > 0,
-      "Should report DB insert errors",
-    );
+    assert.ok(metrics.dbInsertErrors > 0, "Should report DB insert errors");
   });
 });
 
@@ -545,7 +646,9 @@ describe("Synthetic phone number generation", () => {
   });
 
   it("different indices produce different numbers", () => {
-    const phones = new Set(Array.from({ length: 100 }, (_, i) => generateE164(i)));
+    const phones = new Set(
+      Array.from({ length: 100 }, (_, i) => generateE164(i)),
+    );
     assert.ok(phones.size > 50, "Should generate diverse phone numbers");
   });
 });
