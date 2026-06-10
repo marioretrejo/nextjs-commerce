@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, apiOk, parseBody } from "@/lib/api";
+import type { CampaignLeadCounts } from "@/lib/supabase/types";
 
 const CreateCampaignSchema = z.object({
   workspace_id: z.string().uuid(),
@@ -17,6 +18,7 @@ const CreateCampaignSchema = z.object({
   retry_interval_hours: z.number().int().min(1).optional(),
   max_retries: z.number().int().min(0).max(10).optional(),
   respect_schedule: z.boolean().optional(),
+  configuration: z.record(z.unknown()).optional().nullable(),
 });
 
 export async function GET(req: Request) {
@@ -42,7 +44,40 @@ export async function GET(req: Request) {
     console.error("[campaigns] GET error:", error);
     return apiError("Internal server error", 500);
   }
-  return apiOk(data);
+
+  const campaigns = data ?? [];
+
+  // Fetch per-campaign lead counts via RPC (one query, respects RLS).
+  const ids = campaigns.map((c: { id: string }) => c.id);
+  const statsMap: Record<string, CampaignLeadCounts> = {};
+
+  if (ids.length) {
+    const { data: statsRows } = await supabase.rpc("campaign_contact_stats", {
+      p_campaign_ids: ids,
+    });
+    for (const row of (statsRows ?? []) as Array<
+      CampaignLeadCounts & { campaign_id: string }
+    >) {
+      statsMap[row.campaign_id] = {
+        pending: Number(row.pending),
+        completed: Number(row.completed),
+        failed: Number(row.failed),
+        calling: Number(row.calling),
+      };
+    }
+  }
+
+  const enriched = campaigns.map((c: Record<string, unknown>) => ({
+    ...c,
+    lead_counts: statsMap[c.id as string] ?? {
+      pending: 0,
+      completed: 0,
+      failed: 0,
+      calling: 0,
+    },
+  }));
+
+  return apiOk(enriched);
 }
 
 export async function POST(req: Request) {
@@ -74,6 +109,7 @@ export async function POST(req: Request) {
       retry_interval_hours: body.retry_interval_hours ?? 24,
       max_retries: body.max_retries ?? 3,
       respect_schedule: body.respect_schedule ?? true,
+      configuration: body.configuration ?? {},
     })
     .select()
     .single();

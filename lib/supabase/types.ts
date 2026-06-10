@@ -15,7 +15,10 @@ export type ContactStatus =
   | "invalid"
   | "rejected"
   | "voicemail"
-  | "max_attempts";
+  | "max_attempts"
+  | "excluded"
+  | "completed"
+  | "failed";
 export type CallOutcome =
   | "converted"
   | "no_answer"
@@ -260,6 +263,13 @@ export interface KnowledgeDocument {
   created_at: string;
 }
 
+export interface CampaignLeadCounts {
+  pending: number;
+  completed: number;
+  failed: number;
+  calling: number;
+}
+
 export interface Campaign {
   id: string;
   workspace_id: string;
@@ -282,8 +292,10 @@ export interface Campaign {
   ab_enabled: boolean;
   ab_agent_id: string | null;
   ab_split_ratio: number;
+  configuration: Record<string, unknown> | null;
   created_at: string;
   agent?: Agent;
+  lead_counts?: CampaignLeadCounts;
 }
 
 export interface CampaignContact {
@@ -297,6 +309,7 @@ export interface CampaignContact {
   attempts: number;
   last_called_at: string | null;
   call_id: string | null;
+  campaign_lead_id: string | null;
   created_at: string;
 }
 
