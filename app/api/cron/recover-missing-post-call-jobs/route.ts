@@ -49,6 +49,7 @@ interface CallRow {
   room_name: string | null;
   technical_status: string | null;
   ended_at: string | null;
+  answered_at: string | null;
 }
 
 export async function GET(req: Request) {
@@ -76,7 +77,9 @@ export async function GET(req: Request) {
   // Only completed/ended calls with ended_at set — excludes no_answer and failed.
   const { data: recentCalls, error: callsErr } = await admin
     .from("calls")
-    .select("id, workspace_id, agent_id, room_name, technical_status, ended_at")
+    .select(
+      "id, workspace_id, agent_id, room_name, technical_status, ended_at, answered_at",
+    )
     .gte("created_at", cutoff)
     .in("technical_status", ["ended", "completed"])
     .not("ended_at", "is", null)

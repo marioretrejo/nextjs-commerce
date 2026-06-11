@@ -274,6 +274,40 @@ describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
       true,
     );
   });
+
+  test("completed call with answered_at=null (no agent connection) is NOT eligible", () => {
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+        answered_at: null,
+      }),
+      false,
+      "calls with no agent connection (answered_at=null) must not get post-call jobs",
+    );
+  });
+
+  test("completed call with answered_at set IS eligible", () => {
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+        answered_at: ts,
+      }),
+      true,
+    );
+  });
+
+  test("completed call without answered_at field (undefined) remains eligible (backwards compat)", () => {
+    // Callers that don't supply answered_at don't hit the null check
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+      }),
+      true,
+    );
+  });
 });
 
 // ── 4. Idempotency guard ──────────────────────────────────────────────────────

@@ -601,7 +601,9 @@ async function dialContact(params: {
   // Twilio fallback
   const twilioSid = process.env["TWILIO_ACCOUNT_SID"];
   const twilioToken = process.env["TWILIO_AUTH_TOKEN"];
-  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
+  const appUrl = process.env["VERCEL_URL"]
+    ? `https://${process.env["VERCEL_URL"]}`
+    : (process.env["NEXT_PUBLIC_APP_URL"] ?? "");
   const livekitSipHost = process.env["LIVEKIT_SIP_HOST"] ?? "sip.livekit.run";
 
   if (!twilioSid || !twilioToken || !callerId) {
@@ -622,7 +624,7 @@ async function dialContact(params: {
     Url: twimlCallbackUrl,
     StatusCallback: `${appUrl}/api/webhooks/twilio/status`,
     StatusCallbackMethod: "POST",
-    StatusCallbackEvent: "completed failed busy no-answer canceled",
+    StatusCallbackEvent: "initiated ringing answered completed",
     Timeout: "25",
   });
 

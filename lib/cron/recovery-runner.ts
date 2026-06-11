@@ -25,6 +25,7 @@ interface CallRow {
   room_name: string | null;
   technical_status: string | null;
   ended_at: string | null;
+  answered_at: string | null;
 }
 
 export interface RecoveryRunnerResult {
@@ -51,7 +52,9 @@ export async function runRecovery(opts: {
 
   const { data: recentCalls, error: callsErr } = await admin
     .from("calls")
-    .select("id, workspace_id, agent_id, room_name, technical_status, ended_at")
+    .select(
+      "id, workspace_id, agent_id, room_name, technical_status, ended_at, answered_at",
+    )
     .gte("created_at", cutoff)
     .in("technical_status", ["ended", "completed"])
     .not("ended_at", "is", null)

@@ -346,10 +346,12 @@ export async function getJobsForCall(
 export function shouldEnqueuePostCallJobs(call: {
   technical_status: string | null;
   ended_at: string | null;
+  answered_at?: string | null;
 }): boolean {
   if (!call.ended_at) return false;
   if (call.technical_status === "no_answer") return false;
   if (call.technical_status === "failed") return false;
+  if (call.answered_at === null) return false;
   return true;
 }
 

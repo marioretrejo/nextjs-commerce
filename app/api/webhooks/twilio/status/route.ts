@@ -110,7 +110,9 @@ function mapStatus(twilio: string): {
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
+  const appUrl = process.env["VERCEL_URL"]
+    ? `https://${process.env["VERCEL_URL"]}`
+    : (process.env["NEXT_PUBLIC_APP_URL"] ?? "");
 
   if (shouldValidateTwilio()) {
     const valid = validateTwilioRequest(
@@ -341,6 +343,7 @@ export async function POST(req: Request) {
     const eligible = shouldEnqueuePostCallJobs({
       technical_status: technicalStatus,
       ended_at: now,
+      answered_at: callRow.answered_at,
     });
     if (eligible) {
       const result = await enqueuePostCallJobsForCall({
