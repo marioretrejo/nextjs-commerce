@@ -23,6 +23,7 @@
  *   - Secrets are never printed
  */
 
+import { createServer } from "node:http";
 import { runPostCallJobs } from "@/lib/cron/post-call-jobs-runner";
 import { runProviderHealth } from "@/lib/cron/provider-health-runner";
 import { runAlerts } from "@/lib/cron/alerts-runner";
@@ -213,6 +214,13 @@ function main() {
   startRecoveryLoop();
 
   log("all loops started — operational worker is running");
+
+  // Health server required for Render web_service health checks
+  const port = parseInt(process.env["PORT"] ?? "10000", 10);
+  createServer((_, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", worker: "operational" }));
+  }).listen(port, "0.0.0.0", () => log(`health server on :${port}`));
 }
 
 main();
