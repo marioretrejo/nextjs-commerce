@@ -17,12 +17,16 @@ const CAMPAIGN_ID = "be89baba-d6bd-4e83-8151-ce5127e6fda7";
 const CONTACT_ID = "829b4c7f-0c8d-42a9-a58d-19a7d69e77bf";
 const WS_ID = "cd7b409f-82a3-4da2-8f7c-d49c11d62105";
 
-function ts() { return new Date().toISOString().slice(11,23); }
+function ts() {
+  return new Date().toISOString().slice(11, 23);
+}
 
 async function getCall() {
   return admin
     .from("calls")
-    .select("id,retell_call_id,technical_status,business_outcome,duration_seconds,answered_at,ended_at,routing_data,cost_usd,contact_phone,created_at")
+    .select(
+      "id,retell_call_id,technical_status,business_outcome,duration_seconds,answered_at,ended_at,routing_data,cost_usd,contact_phone,created_at",
+    )
     .eq("campaign_id", CAMPAIGN_ID)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -44,15 +48,18 @@ async function main() {
   let callId: string | null = null;
   let roomName: string | null = null;
   for (let i = 0; i < 30; i++) {
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 2000));
     const { data: c } = await getCall();
     if (c?.id) {
       callId = c.id;
       roomName = c.retell_call_id;
-      console.log(`[${ts()}] ✅ Call record found: id=${callId} room=${roomName} status=${c.technical_status} routing=${JSON.stringify(c.routing_data)}`);
+      console.log(
+        `[${ts()}] ✅ Call record found: id=${callId} room=${roomName} status=${c.technical_status} routing=${JSON.stringify(c.routing_data)}`,
+      );
       break;
     }
-    if (i % 5 === 0) console.log(`[${ts()}] Waiting for call record... (${i*2}s)`);
+    if (i % 5 === 0)
+      console.log(`[${ts()}] Waiting for call record... (${i * 2}s)`);
   }
 
   if (!callId) {
@@ -79,14 +86,16 @@ async function main() {
   let callEnded = false;
 
   for (let i = 0; i < 150; i++) {
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 2000));
 
     const { data: call } = await getCall();
     if (!call) continue;
 
     const status = `${call.technical_status}/${call.business_outcome ?? "—"}`;
     if (status !== lastStatus) {
-      console.log(`[${ts()}] 📞 Status: ${status} | answered=${call.answered_at ?? "no"} | ended=${call.ended_at ?? "no"} | duration=${call.duration_seconds ?? 0}s | cost=$${call.cost_usd ?? 0}`);
+      console.log(
+        `[${ts()}] 📞 Status: ${status} | answered=${call.answered_at ?? "no"} | ended=${call.ended_at ?? "no"} | duration=${call.duration_seconds ?? 0}s | cost=$${call.cost_usd ?? 0}`,
+      );
       lastStatus = status;
     }
 
@@ -109,7 +118,9 @@ async function main() {
         .eq("call_room", roomName)
         .order("created_at", { ascending: true });
       if (events?.length) {
-        console.log(`[${ts()}] 📋 Events (${events.length}): ${events.map(e => e.event_type).join(", ")}`);
+        console.log(
+          `[${ts()}] 📋 Events (${events.length}): ${events.map((e) => e.event_type).join(", ")}`,
+        );
       }
     }
   }
@@ -139,14 +150,16 @@ async function main() {
     .select("active_calls,minutes_used")
     .eq("id", WS_ID)
     .single();
-  console.log(`[${ts()}] Workspace active_calls=${ws?.active_calls} minutes_used=${ws?.minutes_used}`);
+  console.log(
+    `[${ts()}] Workspace active_calls=${ws?.active_calls} minutes_used=${ws?.minutes_used}`,
+  );
 
   if (!callId) return;
 
   // Post-call jobs (wait up to 2 min for worker to process)
   console.log(`\n[${ts()}] Waiting for post_call_jobs...`);
   for (let i = 0; i < 24; i++) {
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 5000));
     const { data: jobs } = await admin
       .from("post_call_jobs")
       .select("job_type,status,attempts,error_message,completed_at")
@@ -154,8 +167,10 @@ async function main() {
       .order("created_at", { ascending: true });
 
     if (jobs?.length) {
-      const summary = jobs.map(j => `${j.job_type}:${j.status}`).join(", ");
-      const pending = jobs.filter(j => !["completed","dead_letter","canceled"].includes(j.status)).length;
+      const summary = jobs.map((j) => `${j.job_type}:${j.status}`).join(", ");
+      const pending = jobs.filter(
+        (j) => !["completed", "dead_letter", "canceled"].includes(j.status),
+      ).length;
       console.log(`[${ts()}] Jobs (${jobs.length}): ${summary}`);
       if (pending === 0) {
         console.log(`[${ts()}] ✅ All post_call_jobs completed`);
@@ -163,7 +178,7 @@ async function main() {
         break;
       }
     } else if (i % 4 === 0) {
-      console.log(`[${ts()}] Waiting for post_call_jobs... (${i*5}s)`);
+      console.log(`[${ts()}] Waiting for post_call_jobs... (${i * 5}s)`);
     }
   }
 
@@ -175,7 +190,12 @@ async function main() {
       .eq("call_room", roomName)
       .order("created_at", { ascending: true });
     console.log(`\n[${ts()}] All call_events (${events?.length ?? 0}):`);
-    events?.forEach(e => console.log(`  ${e.created_at.slice(11,23)} ${e.event_type}`, JSON.stringify(e.payload).slice(0,100)));
+    events?.forEach((e) =>
+      console.log(
+        `  ${e.created_at.slice(11, 23)} ${e.event_type}`,
+        JSON.stringify(e.payload).slice(0, 100),
+      ),
+    );
   }
 
   // Provider health last snapshot

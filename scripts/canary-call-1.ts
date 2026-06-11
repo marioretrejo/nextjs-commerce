@@ -11,7 +11,8 @@ dotenv.config({ path: resolve(__dirname, "../.env.local") });
 const SUPABASE_URL = process.env["NEXT_PUBLIC_SUPABASE_URL"]!;
 const SERVICE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"]!;
 const INTERNAL_SECRET = process.env["INTERNAL_API_SECRET"]!;
-const VERCEL_URL = "https://nextjs-commerce-git-claude-voic-6cb608-marios-projects-0d440ccd.vercel.app";
+const VERCEL_URL =
+  "https://nextjs-commerce-git-claude-voic-6cb608-marios-projects-0d440ccd.vercel.app";
 
 const AGENT_ID = "295cdc22-f4da-45ed-8f7b-3815b3a0ea5f";
 const WS_ID = "cd7b409f-82a3-4da2-8f7c-d49c11d62105";
@@ -44,7 +45,10 @@ async function run() {
     .select("id,name,minutes_used,minutes_limit,is_suspended,billing_status")
     .eq("id", WS_ID)
     .single();
-  if (wsErr) { fail("workspace", wsErr); process.exit(1); }
+  if (wsErr) {
+    fail("workspace", wsErr);
+    process.exit(1);
+  }
   ok("workspace", ws);
 
   if (ws!.is_suspended) {
@@ -62,7 +66,10 @@ async function run() {
     .eq("workspace_id", WS_ID)
     .eq("phone", PHONE);
   ok("dnc_list", dnc?.length ? "BLOCKED" : "clear");
-  if (dnc?.length) { console.error("❌ Number in DNC — aborting"); process.exit(1); }
+  if (dnc?.length) {
+    console.error("❌ Number in DNC — aborting");
+    process.exit(1);
+  }
 
   const { data: optOuts } = await admin
     .from("calls")
@@ -71,20 +78,26 @@ async function run() {
     .eq("contact_phone", PHONE)
     .in("business_outcome", ["dnc", "opt_out"]);
   ok("opt_out_check", optOuts?.length ? "BLOCKED" : "clear");
-  if (optOuts?.length) { console.error("❌ Previous opt-out — aborting"); process.exit(1); }
+  if (optOuts?.length) {
+    console.error("❌ Previous opt-out — aborting");
+    process.exit(1);
+  }
 
   const { data: compSettings } = await admin
     .from("compliance_settings")
     .select("*")
     .eq("workspace_id", WS_ID);
-  ok("compliance_settings", compSettings?.length ? compSettings : "none (hours check DISABLED)");
+  ok(
+    "compliance_settings",
+    compSettings?.length ? compSettings : "none (hours check DISABLED)",
+  );
 
   console.log("\n✅ PRE-DIAL COMPLIANCE: ALL CLEAR");
 
   // ── CREATE CAMPAIGN ───────────────────────────────────────────
   section("CREATE CANARY CAMPAIGN");
 
-  const campaignName = `Canary-Call-1-${new Date().toISOString().slice(0,19).replace(/[T:]/g, "-")}`;
+  const campaignName = `Canary-Call-1-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}`;
   const { data: campaign, error: campErr } = await admin
     .from("campaigns")
     .insert({
@@ -100,7 +113,10 @@ async function run() {
     .select()
     .single();
 
-  if (campErr) { fail("create_campaign", campErr); process.exit(1); }
+  if (campErr) {
+    fail("create_campaign", campErr);
+    process.exit(1);
+  }
   ok("campaign", campaign);
   const campaignId = campaign!.id as string;
 
@@ -118,7 +134,10 @@ async function run() {
     .select()
     .single();
 
-  if (contactErr) { fail("add_contact", contactErr); process.exit(1); }
+  if (contactErr) {
+    fail("add_contact", contactErr);
+    process.exit(1);
+  }
   ok("contact", contact);
   const contactId = contact!.id as string;
 
@@ -132,7 +151,10 @@ async function run() {
     .select()
     .single();
 
-  if (activateErr) { fail("activate_campaign", activateErr); process.exit(1); }
+  if (activateErr) {
+    fail("activate_campaign", activateErr);
+    process.exit(1);
+  }
   ok("campaign_status", activated!.status);
 
   // ── TRIGGER CRON DIAL ─────────────────────────────────────────
@@ -153,7 +175,11 @@ async function run() {
   }
 
   let cronJson: unknown;
-  try { cronJson = JSON.parse(cronBody); } catch { cronJson = cronBody; }
+  try {
+    cronJson = JSON.parse(cronBody);
+  } catch {
+    cronJson = cronBody;
+  }
   ok("cron_dial_response", cronJson);
 
   // ── OUTPUT IDs FOR MONITORING ─────────────────────────────────
@@ -165,4 +191,7 @@ async function run() {
   console.log(`workspace_id:${WS_ID}`);
 }
 
-run().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+run().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

@@ -139,7 +139,8 @@ async function triggerDial(campaignId: string) {
   console.log(
     `[${ts()}] Cron response: HTTP ${res.status} — ${body.slice(0, 300)}`,
   );
-  if (res.status !== 200) throw new Error(`Dial trigger failed: HTTP ${res.status}`);
+  if (res.status !== 200)
+    throw new Error(`Dial trigger failed: HTTP ${res.status}`);
   const json = JSON.parse(body) as {
     ok: boolean;
     dialed?: number;
@@ -397,9 +398,7 @@ async function postCallReport(
     .gt("created_at", thirtyMinsAgo)
     .order("created_at", { ascending: false })
     .limit(10);
-  console.log(
-    `\n[${ts()}] Recent alerts (last 30min): ${alerts?.length ?? 0}`,
-  );
+  console.log(`\n[${ts()}] Recent alerts (last 30min): ${alerts?.length ?? 0}`);
   alerts?.forEach((a) =>
     console.log(
       `  ${a.created_at.slice(11, 19)} [${a.severity}] ${a.alert_type}: ${a.message}`,
@@ -415,8 +414,12 @@ async function main() {
   console.log(`[${ts()}] ║      CANARY CALL #3 — STARTING        ║`);
   console.log(`[${ts()}] ╚═══════════════════════════════════════╝\n`);
   console.log(`[${ts()}] Fixes applied:`);
-  console.log(`[${ts()}]   Fix #1 — /api/v1/outbound/twiml now in PUBLIC_PATHS`);
-  console.log(`[${ts()}]   Fix #2 — Status webhook updates all schema fields\n`);
+  console.log(
+    `[${ts()}]   Fix #1 — /api/v1/outbound/twiml now in PUBLIC_PATHS`,
+  );
+  console.log(
+    `[${ts()}]   Fix #2 — Status webhook updates all schema fields\n`,
+  );
 
   const { data: agent } = await admin
     .from("agents")
@@ -448,11 +451,19 @@ async function main() {
     wsId,
   );
 
-  console.log(`\n[${ts()}] ╔═══════════════════════════════════════════════════╗`);
-  console.log(`[${ts()}] ║          CANARY CALL #3 — FINAL REPORT            ║`);
-  console.log(`[${ts()}] ╚═══════════════════════════════════════════════════╝`);
+  console.log(
+    `\n[${ts()}] ╔═══════════════════════════════════════════════════╗`,
+  );
+  console.log(
+    `[${ts()}] ║          CANARY CALL #3 — FINAL REPORT            ║`,
+  );
+  console.log(
+    `[${ts()}] ╚═══════════════════════════════════════════════════╝`,
+  );
   console.log(`  1.  Twilio SID       : ${twilioSid ?? "not recorded"}`);
-  console.log(`  2.  Conectó          : ${answeredAt ? "SÍ (answered_at set)" : "NO"}`);
+  console.log(
+    `  2.  Conectó          : ${answeredAt ? "SÍ (answered_at set)" : "NO"}`,
+  );
   console.log(`  3.  Call ended       : ${callEnded ? "SÍ" : "timeout"}`);
   console.log(`  4.  ended_at         : ${endedAt ?? "—"}`);
   console.log(

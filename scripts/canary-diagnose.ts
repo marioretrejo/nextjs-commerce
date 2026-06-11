@@ -62,7 +62,11 @@ async function main() {
     .eq("call_room", ROOM_NAME)
     .order("created_at", { ascending: true });
   console.log(`\nCALL EVENTS (${events?.length ?? 0}):`);
-  events?.forEach(e => console.log(` ${e.created_at.slice(11,19)} ${e.event_type} ${JSON.stringify(e.payload).slice(0,150)}`));
+  events?.forEach((e) =>
+    console.log(
+      ` ${e.created_at.slice(11, 19)} ${e.event_type} ${JSON.stringify(e.payload).slice(0, 150)}`,
+    ),
+  );
 
   // Post-call jobs
   const { data: jobs } = await admin
@@ -70,7 +74,11 @@ async function main() {
     .select("*")
     .eq("call_id", CALL_ID);
   console.log(`\nPOST_CALL_JOBS (${jobs?.length ?? 0}):`);
-  jobs?.forEach(j => console.log(` ${j.job_type} ${j.status} attempts=${j.attempts} err=${j.error_message ?? "none"}`));
+  jobs?.forEach((j) =>
+    console.log(
+      ` ${j.job_type} ${j.status} attempts=${j.attempts} err=${j.error_message ?? "none"}`,
+    ),
+  );
 
   // Dial eligibility check for this call
   const { data: eligChecks } = await admin
@@ -80,38 +88,61 @@ async function main() {
     .order("created_at", { ascending: false })
     .limit(3);
   console.log(`\nDIAL ELIGIBILITY CHECKS (${eligChecks?.length ?? 0}):`);
-  eligChecks?.forEach(c => console.log(` ${c.created_at?.slice(11,19)} allowed=${c.allowed} reason=${c.reason ?? "ok"} code=${c.reason_code ?? "—"}`));
+  eligChecks?.forEach((c) =>
+    console.log(
+      ` ${c.created_at?.slice(11, 19)} allowed=${c.allowed} reason=${c.reason ?? "ok"} code=${c.reason_code ?? "—"}`,
+    ),
+  );
 
   // Twilio status via REST
   const twilioSid = process.env["TWILIO_ACCOUNT_SID"]!;
   const twilioAuth = process.env["TWILIO_AUTH_TOKEN"]!;
   const twilioRes = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls/${TWILIO_SID}.json`,
-    { headers: { Authorization: "Basic " + Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64") } }
+    {
+      headers: {
+        Authorization:
+          "Basic " +
+          Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64"),
+      },
+    },
   );
-  const twilioData = await twilioRes.json() as Record<string, unknown>;
+  const twilioData = (await twilioRes.json()) as Record<string, unknown>;
   console.log("\nTWILIO CALL STATUS:");
-  console.log(` sid=${twilioData["sid"]} status=${twilioData["status"]} direction=${twilioData["direction"]}`);
-  console.log(` duration=${twilioData["duration"]}s to=${twilioData["to"]} from=${twilioData["from"]}`);
+  console.log(
+    ` sid=${twilioData["sid"]} status=${twilioData["status"]} direction=${twilioData["direction"]}`,
+  );
+  console.log(
+    ` duration=${twilioData["duration"]}s to=${twilioData["to"]} from=${twilioData["from"]}`,
+  );
   console.log(` answered_by=${twilioData["answered_by"] ?? "—"}`);
   if (twilioData["subresource_uris"]) {
-    console.log(` price=${twilioData["price"] ?? "—"} price_unit=${twilioData["price_unit"] ?? "—"}`);
+    console.log(
+      ` price=${twilioData["price"] ?? "—"} price_unit=${twilioData["price_unit"] ?? "—"}`,
+    );
   }
-  console.log(`\nFull Twilio:`, JSON.stringify({
-    status: twilioData["status"],
-    direction: twilioData["direction"],
-    duration: twilioData["duration"],
-    to: twilioData["to"],
-    from: twilioData["from"],
-    answered_by: twilioData["answered_by"],
-    price: twilioData["price"],
-    error_code: twilioData["error_code"],
-    error_message: twilioData["error_message"],
-    start_time: twilioData["start_time"],
-    end_time: twilioData["end_time"],
-    date_created: twilioData["date_created"],
-    forwarded_from: twilioData["forwarded_from"],
-  }, null, 2));
+  console.log(
+    `\nFull Twilio:`,
+    JSON.stringify(
+      {
+        status: twilioData["status"],
+        direction: twilioData["direction"],
+        duration: twilioData["duration"],
+        to: twilioData["to"],
+        from: twilioData["from"],
+        answered_by: twilioData["answered_by"],
+        price: twilioData["price"],
+        error_code: twilioData["error_code"],
+        error_message: twilioData["error_message"],
+        start_time: twilioData["start_time"],
+        end_time: twilioData["end_time"],
+        date_created: twilioData["date_created"],
+        forwarded_from: twilioData["forwarded_from"],
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch(console.error);

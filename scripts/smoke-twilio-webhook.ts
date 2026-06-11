@@ -51,7 +51,9 @@ async function run() {
   const selfCheck = validateRequest(AUTH_TOKEN, signature, fullUrl, params);
   console.log(`=== Twilio StatusCallback smoke test ===`);
   console.log(`Target: ${fullUrl}`);
-  console.log(`Self-check (local): ${selfCheck ? "✅ signature correct" : "❌ signature wrong"}`);
+  console.log(
+    `Self-check (local): ${selfCheck ? "✅ signature correct" : "❌ signature wrong"}`,
+  );
   if (!selfCheck) {
     console.error("Local signature computation failed — aborting");
     process.exit(1);
@@ -73,16 +75,28 @@ async function run() {
 
   if (res.status === 200) {
     console.log("\n✅ PASS — Webhook reachable, signature accepted");
-    console.log("   NEXT_PUBLIC_APP_URL is correctly set to the Vercel preview URL");
+    console.log(
+      "   NEXT_PUBLIC_APP_URL is correctly set to the Vercel preview URL",
+    );
     console.log("   Twilio status callbacks will update the DB correctly");
   } else if (res.status === 403) {
     console.error("\n❌ FAIL — HTTP 403 Forbidden");
-    console.error("   Our signature is locally valid, so Vercel's NEXT_PUBLIC_APP_URL is STILL wrong.");
-    console.error(`   Vercel is validating against a different URL than: ${fullUrl}`);
-    console.error("   Fix: set NEXT_PUBLIC_APP_URL=" + VERCEL_URL + " in Vercel Dashboard → Redeploy");
+    console.error(
+      "   Our signature is locally valid, so Vercel's NEXT_PUBLIC_APP_URL is STILL wrong.",
+    );
+    console.error(
+      `   Vercel is validating against a different URL than: ${fullUrl}`,
+    );
+    console.error(
+      "   Fix: set NEXT_PUBLIC_APP_URL=" +
+        VERCEL_URL +
+        " in Vercel Dashboard → Redeploy",
+    );
     process.exit(1);
   } else if (res.status === 307 || res.status === 308) {
-    console.error(`\n❌ FAIL — Redirect ${res.status} — middleware blocking this route`);
+    console.error(
+      `\n❌ FAIL — Redirect ${res.status} — middleware blocking this route`,
+    );
     process.exit(1);
   } else if (res.status === 404) {
     console.error("\n❌ FAIL — 404 — route missing in deploy");
@@ -93,4 +107,7 @@ async function run() {
   }
 }
 
-run().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+run().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

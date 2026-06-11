@@ -35,27 +35,40 @@ async function main() {
       end_reason: "twilio_no_answer",
     })
     .eq("id", CALL_ID);
-  console.log("call update:", callErr ? callErr.message : "✅ ok (technical_status=no_answer)");
+  console.log(
+    "call update:",
+    callErr ? callErr.message : "✅ ok (technical_status=no_answer)",
+  );
 
   // 2. Update contact status
   const { error: contactErr } = await admin
     .from("campaign_contacts")
     .update({ status: "no_answer" })
     .eq("id", CONTACT_ID);
-  console.log("contact update:", contactErr ? contactErr.message : "✅ ok (status=no_answer)");
+  console.log(
+    "contact update:",
+    contactErr ? contactErr.message : "✅ ok (status=no_answer)",
+  );
 
   // 3. Release workspace active_calls slot via RPC (prefer RPC, fallback to direct)
   const { error: rpcErr } = await admin.rpc("release_call_slot", {
     p_workspace_id: WS_ID,
   });
   if (rpcErr) {
-    console.log("release_call_slot RPC:", rpcErr.message, "— trying direct update...");
+    console.log(
+      "release_call_slot RPC:",
+      rpcErr.message,
+      "— trying direct update...",
+    );
     // Direct update as fallback
     const { error: wsErr } = await admin
       .from("workspaces")
       .update({ active_calls: 0 })
       .eq("id", WS_ID);
-    console.log("workspace direct update:", wsErr ? wsErr.message : "✅ ok (active_calls=0)");
+    console.log(
+      "workspace direct update:",
+      wsErr ? wsErr.message : "✅ ok (active_calls=0)",
+    );
   } else {
     console.log("release_call_slot RPC: ✅ ok");
   }
@@ -65,17 +78,32 @@ async function main() {
     .from("campaigns")
     .update({ status: "completed" })
     .eq("id", CAMPAIGN_ID);
-  console.log("campaign update:", campErr ? campErr.message : "✅ ok (status=completed)");
+  console.log(
+    "campaign update:",
+    campErr ? campErr.message : "✅ ok (status=completed)",
+  );
 
   // Verify final state
   console.log("\n=== Verification ===");
-  const { data: call } = await admin.from("calls").select("technical_status,business_outcome,ended_at,duration_seconds").eq("id", CALL_ID).single();
+  const { data: call } = await admin
+    .from("calls")
+    .select("technical_status,business_outcome,ended_at,duration_seconds")
+    .eq("id", CALL_ID)
+    .single();
   console.log("call:", call);
 
-  const { data: ws } = await admin.from("workspaces").select("active_calls,minutes_used").eq("id", WS_ID).single();
+  const { data: ws } = await admin
+    .from("workspaces")
+    .select("active_calls,minutes_used")
+    .eq("id", WS_ID)
+    .single();
   console.log("workspace:", ws);
 
-  const { data: contact } = await admin.from("campaign_contacts").select("status,attempts").eq("id", CONTACT_ID).single();
+  const { data: contact } = await admin
+    .from("campaign_contacts")
+    .select("status,attempts")
+    .eq("id", CONTACT_ID)
+    .single();
   console.log("contact:", contact);
 }
 

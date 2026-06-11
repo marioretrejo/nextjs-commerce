@@ -18,7 +18,9 @@ async function main() {
   // Full call record verification
   const { data: call } = await admin
     .from("calls")
-    .select("id,technical_status,business_outcome,ended_at,end_reason,duration_seconds,routing_data")
+    .select(
+      "id,technical_status,business_outcome,ended_at,end_reason,duration_seconds,routing_data",
+    )
     .eq("id", CALL_ID)
     .single();
   console.log("calls record:", JSON.stringify(call, null, 2));
@@ -51,7 +53,11 @@ async function main() {
     .from("post_call_jobs")
     .select("id,job_type,status")
     .eq("room_name", ROOM_NAME);
-  console.log("post_call_jobs by room:", roomJobs?.length ?? 0, "jobs (expected: 0)");
+  console.log(
+    "post_call_jobs by room:",
+    roomJobs?.length ?? 0,
+    "jobs (expected: 0)",
+  );
 }
 
 main().catch(console.error);

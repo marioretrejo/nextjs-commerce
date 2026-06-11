@@ -22,7 +22,9 @@ const AGENT_ID = "295cdc22-f4da-45ed-8f7b-3815b3a0ea5f";
 const DEST_PHONE = "+18099052406";
 const INTERNAL_SECRET = process.env["INTERNAL_API_SECRET"]!;
 
-function ts() { return new Date().toISOString().slice(11, 23); }
+function ts() {
+  return new Date().toISOString().slice(11, 23);
+}
 
 // ─── PRE-FLIGHT COMPLIANCE CHECK ─────────────────────────────────────────────
 async function preFlightCheck(wsId: string) {
@@ -30,27 +32,43 @@ async function preFlightCheck(wsId: string) {
 
   // 1. Workspace active_calls
   const { data: ws } = await admin
-    .from("workspaces").select("active_calls,minutes_used,concurrent_calls_limit")
-    .eq("id", wsId).single();
-  console.log(`[${ts()}] Workspace: active_calls=${ws?.active_calls} max=${ws?.concurrent_calls_limit} minutes_used=${ws?.minutes_used}`);
+    .from("workspaces")
+    .select("active_calls,minutes_used,concurrent_calls_limit")
+    .eq("id", wsId)
+    .single();
+  console.log(
+    `[${ts()}] Workspace: active_calls=${ws?.active_calls} max=${ws?.concurrent_calls_limit} minutes_used=${ws?.minutes_used}`,
+  );
   if ((ws?.active_calls ?? 0) > 0) throw new Error("active_calls > 0 — abort");
 
   // 2. DNC check
   const { data: dnc } = await admin
-    .from("dnc_list").select("id").eq("phone", DEST_PHONE).limit(1);
-  if (dnc && dnc.length > 0) throw new Error(`${DEST_PHONE} is on DNC list — abort`);
+    .from("dnc_list")
+    .select("id")
+    .eq("phone", DEST_PHONE)
+    .limit(1);
+  if (dnc && dnc.length > 0)
+    throw new Error(`${DEST_PHONE} is on DNC list — abort`);
   console.log(`[${ts()}] DNC check: CLEAR`);
 
   // 3. Compliance settings
   const { data: comp } = await admin
-    .from("compliance_settings").select("*").eq("workspace_id", wsId).single();
+    .from("compliance_settings")
+    .select("*")
+    .eq("workspace_id", wsId)
+    .single();
   const hour = new Date().getUTCHours() - 4; // UTC-4 = AST (Dominican Republic)
   const normalizedHour = ((hour % 24) + 24) % 24;
-  console.log(`[${ts()}] Compliance: call_hours_start=${comp?.call_hours_start ?? "—"} end=${comp?.call_hours_end ?? "—"} local_hour=${normalizedHour} (AST)`);
+  console.log(
+    `[${ts()}] Compliance: call_hours_start=${comp?.call_hours_start ?? "—"} end=${comp?.call_hours_end ?? "—"} local_hour=${normalizedHour} (AST)`,
+  );
 
   // 4. Agent exists
   const { data: agent } = await admin
-    .from("agents").select("id,name,status").eq("id", AGENT_ID).single();
+    .from("agents")
+    .select("id,name,status")
+    .eq("id", AGENT_ID)
+    .single();
   if (!agent) throw new Error(`Agent ${AGENT_ID} not found`);
   console.log(`[${ts()}] Agent: "${agent.name}" status=${agent.status}`);
 
@@ -63,7 +81,8 @@ async function createCampaign(wsId: string) {
   console.log(`[${ts()}] === CREATING CANARY CALL #2 CAMPAIGN ===`);
 
   const { data: camp, error: campErr } = await admin
-    .from("campaigns").insert({
+    .from("campaigns")
+    .insert({
       workspace_id: wsId,
       agent_id: AGENT_ID,
       name: `Canary Call #2 — ${new Date().toISOString()}`,
@@ -72,23 +91,33 @@ async function createCampaign(wsId: string) {
       retry_enabled: false,
       max_retries: 0,
       retry_interval_hours: 1,
-    }).select("id").single();
-  if (campErr || !camp) throw new Error(`Campaign create failed: ${campErr?.message}`);
+    })
+    .select("id")
+    .single();
+  if (campErr || !camp)
+    throw new Error(`Campaign create failed: ${campErr?.message}`);
   console.log(`[${ts()}] Campaign created: ${camp.id}`);
 
   const { data: contact, error: contactErr } = await admin
-    .from("campaign_contacts").insert({
+    .from("campaign_contacts")
+    .insert({
       campaign_id: camp.id,
       phone: DEST_PHONE,
       name: "Canary Test #2",
       status: "pending",
-    }).select("id").single();
-  if (contactErr || !contact) throw new Error(`Contact insert failed: ${contactErr?.message}`);
+    })
+    .select("id")
+    .single();
+  if (contactErr || !contact)
+    throw new Error(`Contact insert failed: ${contactErr?.message}`);
   console.log(`[${ts()}] Contact created: ${contact.id}`);
 
   const { error: activateErr } = await admin
-    .from("campaigns").update({ status: "active" }).eq("id", camp.id);
-  if (activateErr) throw new Error(`Campaign activate failed: ${activateErr.message}`);
+    .from("campaigns")
+    .update({ status: "active" })
+    .eq("id", camp.id);
+  if (activateErr)
+    throw new Error(`Campaign activate failed: ${activateErr.message}`);
   console.log(`[${ts()}] Campaign activated ✅`);
 
   return { campaignId: camp.id, contactId: contact.id };
@@ -104,17 +133,35 @@ async function triggerDial(campaignId: string) {
     signal: AbortSignal.timeout(15_000),
   });
   const body = await res.text();
-  console.log(`[${ts()}] Cron response: HTTP ${res.status} — ${body.slice(0, 200)}`);
-  if (res.status !== 200) throw new Error(`Dial trigger failed: HTTP ${res.status}`);
-  const json = JSON.parse(body) as { ok: boolean; dialed?: number; error?: string };
-  if (!json.ok || (json.dialed ?? 0) < 1) throw new Error(`Dial returned dialed=${json.dialed}: ${json.error ?? "unknown"}`);
+  console.log(
+    `[${ts()}] Cron response: HTTP ${res.status} — ${body.slice(0, 200)}`,
+  );
+  if (res.status !== 200)
+    throw new Error(`Dial trigger failed: HTTP ${res.status}`);
+  const json = JSON.parse(body) as {
+    ok: boolean;
+    dialed?: number;
+    error?: string;
+  };
+  if (!json.ok || (json.dialed ?? 0) < 1)
+    throw new Error(
+      `Dial returned dialed=${json.dialed}: ${json.error ?? "unknown"}`,
+    );
   console.log(`[${ts()}] Dial triggered: dialed=${json.dialed} ✅\n`);
 }
 
 // ─── MONITOR ─────────────────────────────────────────────────────────────────
-async function monitorCall(campaignId: string, contactId: string, wsId: string) {
-  console.log(`[${ts()}] === MONITORING CALL (poll every 3s, timeout 10min) ===`);
-  console.log(`[${ts()}] ⚠️  ANSWER THE CALL when your phone rings at ${DEST_PHONE}\n`);
+async function monitorCall(
+  campaignId: string,
+  contactId: string,
+  wsId: string,
+) {
+  console.log(
+    `[${ts()}] === MONITORING CALL (poll every 3s, timeout 10min) ===`,
+  );
+  console.log(
+    `[${ts()}] ⚠️  ANSWER THE CALL when your phone rings at ${DEST_PHONE}\n`,
+  );
 
   // Wait for call record (up to 45s)
   let callId: string | null = null;
@@ -122,13 +169,16 @@ async function monitorCall(campaignId: string, contactId: string, wsId: string) 
   let twilioSid: string | null = null;
 
   for (let i = 0; i < 15; i++) {
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 3000));
     const { data: c } = await admin
       .from("calls")
-      .select("id,twilio_call_sid,retell_call_id,technical_status,routing_data,created_at")
+      .select(
+        "id,twilio_call_sid,retell_call_id,technical_status,routing_data,created_at",
+      )
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false })
-      .limit(1).single();
+      .limit(1)
+      .single();
 
     if (c?.id) {
       callId = c.id;
@@ -137,15 +187,24 @@ async function monitorCall(campaignId: string, contactId: string, wsId: string) 
       console.log(`[${ts()}] ✅ Call record: id=${callId}`);
       console.log(`[${ts()}]    Twilio SID: ${twilioSid ?? "pending"}`);
       console.log(`[${ts()}]    LiveKit room: ${roomName ?? "pending"}`);
-      console.log(`[${ts()}]    Status: ${c.technical_status} routing=${JSON.stringify(c.routing_data)}`);
+      console.log(
+        `[${ts()}]    Status: ${c.technical_status} routing=${JSON.stringify(c.routing_data)}`,
+      );
       break;
     }
-    if (i % 3 === 0) console.log(`[${ts()}] Waiting for call record... (${(i + 1) * 3}s)`);
+    if (i % 3 === 0)
+      console.log(`[${ts()}] Waiting for call record... (${(i + 1) * 3}s)`);
   }
 
   if (!callId) {
-    const { data: ws } = await admin.from("workspaces").select("active_calls").eq("id", wsId).single();
-    console.error(`[${ts()}] ❌ No call record after 45s. active_calls=${ws?.active_calls}`);
+    const { data: ws } = await admin
+      .from("workspaces")
+      .select("active_calls")
+      .eq("id", wsId)
+      .single();
+    console.error(
+      `[${ts()}] ❌ No call record after 45s. active_calls=${ws?.active_calls}`,
+    );
     return null;
   }
 
@@ -156,12 +215,15 @@ async function monitorCall(campaignId: string, contactId: string, wsId: string) 
   let endedAt: string | null = null;
 
   for (let i = 0; i < 200; i++) {
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 3000));
 
     const { data: call } = await admin
       .from("calls")
-      .select("id,twilio_call_sid,retell_call_id,technical_status,business_outcome,answered_at,ended_at,duration_seconds,cost_usd,routing_data,end_reason")
-      .eq("id", callId).single();
+      .select(
+        "id,twilio_call_sid,retell_call_id,technical_status,business_outcome,answered_at,ended_at,duration_seconds,cost_usd,routing_data,end_reason",
+      )
+      .eq("id", callId)
+      .single();
     if (!call) continue;
 
     roomName = call.retell_call_id ?? roomName;
@@ -170,7 +232,9 @@ async function monitorCall(campaignId: string, contactId: string, wsId: string) 
 
     const status = `${call.technical_status ?? "—"}/${call.business_outcome ?? "—"}`;
     if (status !== lastStatus) {
-      console.log(`[${ts()}] 📞 ${status} | answered=${call.answered_at ? "YES" : "no"} | ended=${call.ended_at ? "YES" : "no"} | duration=${call.duration_seconds ?? 0}s | cost=$${call.cost_usd ?? 0}`);
+      console.log(
+        `[${ts()}] 📞 ${status} | answered=${call.answered_at ? "YES" : "no"} | ended=${call.ended_at ? "YES" : "no"} | duration=${call.duration_seconds ?? 0}s | cost=$${call.cost_usd ?? 0}`,
+      );
       lastStatus = status;
     }
 
@@ -182,7 +246,9 @@ async function monitorCall(campaignId: string, contactId: string, wsId: string) 
         .eq("call_room", roomName)
         .order("created_at", { ascending: true });
       if (events?.length) {
-        console.log(`[${ts()}] 📋 Events (${events.length}): ${events.map(e => e.event_type).join(", ")}`);
+        console.log(
+          `[${ts()}] 📋 Events (${events.length}): ${events.map((e) => e.event_type).join(", ")}`,
+        );
       }
     }
 
@@ -222,33 +288,48 @@ async function postCallReport(
 
   // 1. Contact
   const { data: contact } = await admin
-    .from("campaign_contacts").select("status,attempts,last_called_at")
-    .eq("id", contactId).single();
-  console.log(`[${ts()}] Contact: status=${contact?.status} attempts=${contact?.attempts}`);
+    .from("campaign_contacts")
+    .select("status,attempts,last_called_at")
+    .eq("id", contactId)
+    .single();
+  console.log(
+    `[${ts()}] Contact: status=${contact?.status} attempts=${contact?.attempts}`,
+  );
 
   // 2. Campaign
   const { data: camp } = await admin
-    .from("campaigns").select("status,completed_contacts,total_contacts")
-    .eq("id", campaignId).single();
-  console.log(`[${ts()}] Campaign: status=${camp?.status} completed=${camp?.completed_contacts}/${camp?.total_contacts}`);
+    .from("campaigns")
+    .select("status,completed_contacts,total_contacts")
+    .eq("id", campaignId)
+    .single();
+  console.log(
+    `[${ts()}] Campaign: status=${camp?.status} completed=${camp?.completed_contacts}/${camp?.total_contacts}`,
+  );
 
   // 3. Workspace
   const { data: ws } = await admin
-    .from("workspaces").select("active_calls,minutes_used")
-    .eq("id", wsId).single();
-  console.log(`[${ts()}] Workspace: active_calls=${ws?.active_calls} minutes_used=${ws?.minutes_used}`);
+    .from("workspaces")
+    .select("active_calls,minutes_used")
+    .eq("id", wsId)
+    .single();
+  console.log(
+    `[${ts()}] Workspace: active_calls=${ws?.active_calls} minutes_used=${ws?.minutes_used}`,
+  );
   if ((ws?.active_calls ?? 1) !== 0) {
-    console.warn(`[${ts()}] ⚠️  active_calls is NOT 0 — slot may not have been released`);
+    console.warn(
+      `[${ts()}] ⚠️  active_calls is NOT 0 — slot may not have been released`,
+    );
   }
 
   // 4. Call events
   if (roomName) {
     const { data: events } = await admin
-      .from("call_events").select("event_type,payload,created_at")
+      .from("call_events")
+      .select("event_type,payload,created_at")
       .eq("call_room", roomName)
       .order("created_at", { ascending: true });
     console.log(`\n[${ts()}] Call events (${events?.length ?? 0}):`);
-    events?.forEach(e => {
+    events?.forEach((e) => {
       const p = JSON.stringify(e.payload ?? {}).slice(0, 120);
       console.log(`  ${e.created_at.slice(11, 23)} ${e.event_type} ${p}`);
     });
@@ -256,9 +337,15 @@ async function postCallReport(
 
   // 5. Post-call jobs (wait up to 3 min)
   console.log(`\n[${ts()}] Waiting for post_call_jobs (up to 3min)...`);
-  let finalJobs: Array<{ job_type: string; status: string; attempts: number; error_message: string | null; completed_at: string | null }> = [];
+  let finalJobs: Array<{
+    job_type: string;
+    status: string;
+    attempts: number;
+    error_message: string | null;
+    completed_at: string | null;
+  }> = [];
   for (let i = 0; i < 36; i++) {
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 5000));
     const { data: jobs } = await admin
       .from("post_call_jobs")
       .select("job_type,status,attempts,error_message,completed_at")
@@ -267,8 +354,10 @@ async function postCallReport(
 
     if (jobs?.length) {
       finalJobs = jobs;
-      const summary = jobs.map(j => `${j.job_type}:${j.status}`).join(", ");
-      const pending = jobs.filter(j => !["completed", "dead_letter", "canceled"].includes(j.status)).length;
+      const summary = jobs.map((j) => `${j.job_type}:${j.status}`).join(", ");
+      const pending = jobs.filter(
+        (j) => !["completed", "dead_letter", "canceled"].includes(j.status),
+      ).length;
       console.log(`[${ts()}] Jobs (${jobs.length}): ${summary}`);
       if (pending === 0) {
         console.log(`[${ts()}] ✅ All post_call_jobs settled`);
@@ -286,7 +375,11 @@ async function postCallReport(
     .order("snapshot_at", { ascending: false })
     .limit(6);
   console.log(`\n[${ts()}] Provider health (latest):`);
-  health?.forEach(h => console.log(`  ${h.provider}: success_rate=${h.success_rate} avg_latency=${h.avg_latency_ms}ms @ ${h.snapshot_at?.slice(11, 19)}`));
+  health?.forEach((h) =>
+    console.log(
+      `  ${h.provider}: success_rate=${h.success_rate} avg_latency=${h.avg_latency_ms}ms @ ${h.snapshot_at?.slice(11, 19)}`,
+    ),
+  );
 
   // 7. Alerts (last 30min)
   const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -297,7 +390,11 @@ async function postCallReport(
     .order("created_at", { ascending: false })
     .limit(10);
   console.log(`\n[${ts()}] Recent alerts (last 30min): ${alerts?.length ?? 0}`);
-  alerts?.forEach(a => console.log(`  ${a.created_at.slice(11, 19)} [${a.severity}] ${a.alert_type}: ${a.message}`));
+  alerts?.forEach((a) =>
+    console.log(
+      `  ${a.created_at.slice(11, 19)} [${a.severity}] ${a.alert_type}: ${a.message}`,
+    ),
+  );
 
   return { finalJobs, health, alerts };
 }
@@ -310,8 +407,12 @@ async function main() {
 
   // Get workspace ID from agent
   const { data: agent } = await admin
-    .from("agents").select("workspace_id").eq("id", AGENT_ID).single();
-  if (!agent?.workspace_id) throw new Error("Could not determine workspace_id from agent");
+    .from("agents")
+    .select("workspace_id")
+    .eq("id", AGENT_ID)
+    .single();
+  if (!agent?.workspace_id)
+    throw new Error("Could not determine workspace_id from agent");
   const wsId = agent.workspace_id;
   console.log(`[${ts()}] Workspace: ${wsId}\n`);
 
@@ -325,30 +426,51 @@ async function main() {
     process.exit(1);
   }
 
-  const { callId, roomName, twilioSid, answeredAt, endedAt, callEnded } = result;
-  const report = await postCallReport(callId, roomName, campaignId, contactId, wsId);
+  const { callId, roomName, twilioSid, answeredAt, endedAt, callEnded } =
+    result;
+  const report = await postCallReport(
+    callId,
+    roomName,
+    campaignId,
+    contactId,
+    wsId,
+  );
 
   // ─── FINAL REPORT ────────────────────────────────────────────────────────
-  console.log(`\n[${ts()}] ╔═══════════════════════════════════════════════════╗`);
-  console.log(`[${ts()}] ║          CANARY CALL #2 — FINAL REPORT            ║`);
-  console.log(`[${ts()}] ╚═══════════════════════════════════════════════════╝`);
+  console.log(
+    `\n[${ts()}] ╔═══════════════════════════════════════════════════╗`,
+  );
+  console.log(
+    `[${ts()}] ║          CANARY CALL #2 — FINAL REPORT            ║`,
+  );
+  console.log(
+    `[${ts()}] ╚═══════════════════════════════════════════════════╝`,
+  );
   console.log(`  1.  Twilio SID       : ${twilioSid ?? "not recorded"}`);
   console.log(`  2.  Conectó          : ${answeredAt ? "SÍ" : "NO"}`);
   console.log(`  3.  Call ended       : ${callEnded ? "SÍ" : "timeout"}`);
   console.log(`  4.  ended_at         : ${endedAt ?? "—"}`);
-  console.log(`  5.  post_call_jobs   : ${report.finalJobs.length > 0 ? report.finalJobs.map(j => `${j.job_type}:${j.status}`).join(", ") : "none"}`);
+  console.log(
+    `  5.  post_call_jobs   : ${report.finalJobs.length > 0 ? report.finalJobs.map((j) => `${j.job_type}:${j.status}`).join(", ") : "none"}`,
+  );
 
-  const hasErrors = report.finalJobs.some(j => j.status === "dead_letter" || j.error_message);
+  const hasErrors = report.finalJobs.some(
+    (j) => j.status === "dead_letter" || j.error_message,
+  );
   if (hasErrors) {
     console.warn(`\n[${ts()}] ⚠️  Some post_call_jobs had errors:`);
-    report.finalJobs.filter(j => j.error_message).forEach(j =>
-      console.warn(`  ${j.job_type}: ${j.error_message}`)
-    );
+    report.finalJobs
+      .filter((j) => j.error_message)
+      .forEach((j) => console.warn(`  ${j.job_type}: ${j.error_message}`));
   }
 
-  const criticalAlerts = report.alerts?.filter(a => a.severity === "critical") ?? [];
+  const criticalAlerts =
+    report.alerts?.filter((a) => a.severity === "critical") ?? [];
   console.log(`  Critical alerts  : ${criticalAlerts.length}`);
   console.log(`\n[${ts()}] ✅ Canary Call #2 complete`);
 }
 
-main().catch(e => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});
