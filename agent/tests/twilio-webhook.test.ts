@@ -212,15 +212,24 @@ describe("mapStatus — Twilio → schema fields", () => {
 //
 // Gate rules (ALL must be true):
 //   • ended_at must be set
-//   • has_agent_session must be true (call_events confirm real voice/agent activity)
-//   • technical_status must not be no_answer or failed
+//   • has_agent_session must be true (call_events confirm LLM/TTS worker pipeline ran)
+//   • technical_status must equal "completed" exactly
+//
+// Only technical_status="completed" is eligible. All other statuses
+// (no_answer, failed, busy, canceled, cancelled, null, in_progress, etc.)
+// must return false even when has_agent_session=true.
+
+// AGENT_SESSION_EVENT_TYPES used by recovery runners — tested here for correctness.
+const AGENT_SESSION_EVENT_TYPES_UNDER_TEST = [
+  "llm.provider_selected",
+  "tts.provider_selected",
+];
 
 describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
   const ts = "2024-01-15T12:00:00.000Z";
 
-  // ── Requires real agent session ──────────────────────────────────────────────
-
-  test("completed + has_agent_session=true IS eligible", () => {
+  // Test 1: completed + real agent session → eligible
+  test("1. completed + has_agent_session=true IS eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
@@ -231,7 +240,8 @@ describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
     );
   });
 
-  test("completed + has_agent_session=false (e.g. trial disclaimer / TwiML error) is NOT eligible", () => {
+  // Test 2: completed without agent session (trial disclaimer, TwiML error) → NOT eligible
+  test("2. completed + has_agent_session=false (trial disclaimer / TwiML error) is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
@@ -239,12 +249,13 @@ describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
         has_agent_session: false,
       }),
       false,
-      "CallDuration>0 or Twilio completed does not prove agent was present",
+      "Twilio 'completed' alone does not prove agent was present",
     );
   });
 
-  test("completed + duration>0 + has_agent_session=false → NOT eligible (duration alone is insufficient)", () => {
-    // Twilio can report duration>0 for trial disclaimer, voicemail, TwiML error, etc.
+  // Test 3: duration_seconds > 0 is not evidence of agent connection
+  test("3. completed + duration_seconds>0 + has_agent_session=false → NOT eligible (duration is not proof)", () => {
+    // CallDuration>0 can come from trial disclaimer, voicemail, or TwiML error
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
@@ -255,9 +266,8 @@ describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
     );
   });
 
-  // ── Status gates ─────────────────────────────────────────────────────────────
-
-  test("no_answer + has_agent_session=true is NOT eligible", () => {
+  // Test 4: no_answer — blocked even with agent session
+  test("4. no_answer + has_agent_session=true is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "no_answer",
@@ -268,7 +278,8 @@ describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
     );
   });
 
-  test("failed + has_agent_session=true is NOT eligible", () => {
+  // Test 5: failed — blocked even with agent session
+  test("5. failed + has_agent_session=true is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "failed",
@@ -279,26 +290,63 @@ describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
     );
   });
 
-  test("busy + has_agent_session=true is eligible (busy not in blocked list)", () => {
-    // busy calls that somehow had an agent session (edge case) should still process
+  // Test 6: busy — blocked even with agent session
+  test("6. busy + has_agent_session=true is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "busy",
         ended_at: ts,
         has_agent_session: true,
       }),
-      true,
+      false,
     );
   });
 
-  test("cancelled + has_agent_session=true is eligible", () => {
+  // Test 7: canceled — blocked even with agent session
+  test("7. canceled + has_agent_session=true is NOT eligible", () => {
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "canceled",
+        ended_at: ts,
+        has_agent_session: true,
+      }),
+      false,
+    );
+  });
+
+  // Test 8: cancelled — blocked even with agent session
+  test("8. cancelled + has_agent_session=true is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "cancelled",
         ended_at: ts,
         has_agent_session: true,
       }),
+      false,
+    );
+  });
+
+  // Test 9: call.answered must NOT be in AGENT_SESSION_EVENT_TYPES
+  // (it is emitted by the Twilio status webhook on in-progress callback — not worker-only)
+  test("9. call.answered is NOT in AGENT_SESSION_EVENT_TYPES (dual-source event excluded)", () => {
+    assert.equal(
+      AGENT_SESSION_EVENT_TYPES_UNDER_TEST.includes("call.answered"),
+      false,
+      "call.answered is also emitted by the Twilio webhook and must not count as agent evidence",
+    );
+  });
+
+  // Test 10: worker LLM/TTS events ARE in AGENT_SESSION_EVENT_TYPES
+  test("10. llm.provider_selected and tts.provider_selected ARE in AGENT_SESSION_EVENT_TYPES (worker-only proof)", () => {
+    assert.equal(
+      AGENT_SESSION_EVENT_TYPES_UNDER_TEST.includes("llm.provider_selected"),
       true,
+      "llm.provider_selected must be a recognized agent session event",
+    );
+    assert.equal(
+      AGENT_SESSION_EVENT_TYPES_UNDER_TEST.includes("tts.provider_selected"),
+      true,
+      "tts.provider_selected must be a recognized agent session event",
     );
   });
 

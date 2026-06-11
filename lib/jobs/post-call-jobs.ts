@@ -355,8 +355,7 @@ export function shouldEnqueuePostCallJobs(call: {
 }): boolean {
   if (!call.ended_at) return false;
   if (!call.has_agent_session) return false;
-  if (call.technical_status === "no_answer") return false;
-  if (call.technical_status === "failed") return false;
+  if (call.technical_status !== "completed") return false;
   return true;
 }
 

@@ -42,12 +42,12 @@ const RECOVERY_JOBS: EnqueueJobInput[] = [
   { job_type: "cost_finalization", priority: 110 },
 ];
 
-// Event types emitted by the voice worker confirming a real agent/voice session.
+// Events emitted exclusively by the voice worker — prove LLM/TTS pipeline ran.
+// "call.answered" is excluded: also emitted by the Twilio status webhook.
+// "stt.provider_selected" is excluded: never actually emitted.
 const AGENT_SESSION_EVENT_TYPES = [
-  "call.answered",
   "llm.provider_selected",
   "tts.provider_selected",
-  "stt.provider_selected",
 ];
 
 interface CallRow {
