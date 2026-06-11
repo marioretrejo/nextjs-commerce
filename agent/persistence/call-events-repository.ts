@@ -107,6 +107,8 @@ export type CallEventType =
   | "telephony.provider_selected"
   | "telephony.sip_participant_created"
   | "telephony.sip_participant_failed"
+  | "telephony.status_callback_received"
+  | "telephony.status_callback_processed"
   | "telephony.status_callback_failed"
   | "telephony.webhook_validation_failed";
 

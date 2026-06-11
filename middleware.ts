@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   "/api/webhooks/livekit",
   "/api/webhooks/twilio",
   "/api/webhooks/stripe",
+  "/api/v1/outbound/twiml",
   "/api/health",
   "/api/debug",
   "/api/auth/callback",
