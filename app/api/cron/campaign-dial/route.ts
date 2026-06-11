@@ -15,6 +15,7 @@ import {
   recordDialEligibilityCheck,
 } from "@/lib/compliance/dial-eligibility";
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -680,10 +681,27 @@ async function dialContact(params: {
   }
 }
 
-export async function GET(req: Request) {
+function verifyCronSecret(req: Request): boolean {
+  const secret =
+    process.env["CRON_SECRET"] ?? process.env["INTERNAL_API_SECRET"];
+  if (!secret || secret.trim().length < 16) return false;
   const authHeader = req.headers.get("Authorization");
-  const cronSecret = process.env["CRON_SECRET"];
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const provided = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+  if (!provided) return false;
+  const a = Buffer.from(secret, "utf8");
+  const b = Buffer.from(provided.trim(), "utf8");
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+export async function GET(req: Request) {
+  if (!verifyCronSecret(req)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 

@@ -1,12 +1,30 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+
+function verifyCronSecret(req: Request): boolean {
+  const secret =
+    process.env["CRON_SECRET"] ?? process.env["INTERNAL_API_SECRET"];
+  if (!secret || secret.trim().length < 16) return false;
+  const authHeader = req.headers.get("Authorization");
+  const provided = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+  if (!provided) return false;
+  const a = Buffer.from(secret, "utf8");
+  const b = Buffer.from(provided.trim(), "utf8");
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
 
 // Called by Vercel Cron on the 1st of each month (see vercel.json)
 // Resets workspace minutes — replaces the commented pg_cron in migration 015
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("Authorization");
-  const cronSecret = process.env["CRON_SECRET"];
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(req)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 

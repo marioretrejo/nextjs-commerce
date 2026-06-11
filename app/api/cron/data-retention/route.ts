@@ -18,14 +18,32 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min — may process large batches
 
-export async function GET(req: Request) {
-  // Verify Vercel Cron secret
+function verifyCronSecret(req: Request): boolean {
+  const secret =
+    process.env["CRON_SECRET"] ?? process.env["INTERNAL_API_SECRET"];
+  if (!secret || secret.trim().length < 16) return false;
   const authHeader = req.headers.get("Authorization");
-  if (authHeader !== `Bearer ${process.env["CRON_SECRET"]}`) {
+  const provided = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+  if (!provided) return false;
+  const a = Buffer.from(secret, "utf8");
+  const b = Buffer.from(provided.trim(), "utf8");
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+export async function GET(req: Request) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -189,4 +189,65 @@ See `docs/alerting.md` for full documentation.
 
 ---
 
-_Last updated: Fase 15 — Alerting + Incident Notifications_
+---
+
+### Production Gate (Fase 16)
+
+Run both scripts before every production deploy. Both must pass before promoting to production.
+
+#### Script 1 — Production Readiness Check
+
+Validates env vars, cron route security, DB schema, secret strength, and build health.
+
+```bash
+npx tsx scripts/production-readiness-check.ts --env production --skip-http
+```
+
+**Required result**: exit code `0` (PASS). Any FAIL item blocks deploy.
+
+Sections checked:
+
+| Section             | What is checked                                                            |
+| ------------------- | -------------------------------------------------------------------------- |
+| A — Env Vars        | All critical vars present, no unsafe defaults, LLM/TTS provider configured |
+| B — Cron Security   | Route files exist, middleware exemption present, `timingSafeEqual` used    |
+| C — DB Schema       | 12 required tables present, 3 RPCs registered                              |
+| D — Secrets         | No weak defaults, `LOAD_TEST_MODE` off, no hardcoded secrets in source     |
+| E — HTTP Auth Gates | Cron routes return 401 without auth, protected APIs return 401/307         |
+| F — Build           | `tsc --noEmit` passes, `prettier --check` passes                           |
+
+#### Script 2 — Deployment Smoke Test
+
+Post-deploy HTTP verification. Run after every Vercel deployment.
+
+```bash
+# Without credentials — PARTIAL PASS acceptable in CI
+npx tsx scripts/deployment-smoke-test.ts \
+  --base-url https://your-app.vercel.app \
+  --safe-mode
+
+# With internal secret — FULL PASS required for staging promotion
+npx tsx scripts/deployment-smoke-test.ts \
+  --base-url https://your-app.vercel.app \
+  --internal-secret "$INTERNAL_API_SECRET" \
+  --safe-mode
+```
+
+**Required result**: PARTIAL PASS (minimum) or FULL PASS (with credentials). Any FAIL blocks promotion.
+
+#### First Real Call Criteria
+
+Do not enable production calling until ALL of these are confirmed:
+
+- [ ] Both scripts above pass
+- [ ] All CRITICAL env vars set in both Vercel and Render
+- [ ] `LOAD_TEST_MODE` is unset or `false`
+- [ ] `VOICEOS_ALERTING_SEND_EXTERNAL=false` (unless Slack/email intentionally enabled)
+- [ ] Supabase on paid plan, Render on Standard+, Vercel on Pro+
+- [ ] Smoke test first call with your own number before enabling campaigns
+
+See `docs/production-readiness.md` for the full runbook.
+
+---
+
+_Last updated: Fase 16 — Production Readiness + Staging Deployment Gate_
