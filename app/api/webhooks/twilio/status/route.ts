@@ -295,20 +295,21 @@ export async function POST(req: Request) {
 
     await admin.from("calls").update(terminalUpdate).eq("id", callRow.id);
 
-    // Release active_calls slot (idempotent RPC handles double-release safely)
-    void Promise.resolve(
-      admin.rpc("release_call_slot", { p_workspace_id: callRow.workspace_id }),
-    ).catch(() => null);
+    // Release active_calls slot — awaited so the serverless function doesn't exit first
+    await admin
+      .rpc("release_call_slot", { p_workspace_id: callRow.workspace_id })
+      .then(
+        () => null,
+        () => null,
+      );
 
-    // Update campaign_contacts for non-completed terminals; completed is handled by post-call jobs
-    if (
-      callRow.campaign_id &&
-      callRow.contact_phone &&
-      technicalStatus !== "completed"
-    ) {
+    // Update campaign_contacts status based on call outcome
+    if (callRow.campaign_id && callRow.contact_phone) {
+      const contactOutcome =
+        technicalStatus === "completed" ? "completed" : "no_answer";
       void admin
         .from("campaign_contacts")
-        .update({ status: "no_answer" })
+        .update({ status: contactOutcome })
         .eq("campaign_id", callRow.campaign_id)
         .eq("phone", callRow.contact_phone)
         .eq("status", "calling")
