@@ -504,10 +504,10 @@ async function checkDatabase() {
     }
   }
 
-  // Critical RPCs
+  // Critical RPCs (use actual DB function names)
   const criticalRPCs = [
     {
-      name: "acquire_call_slot",
+      name: "try_claim_call_slot",
       params: { p_workspace_id: "00000000-0000-0000-0000-000000000000" },
     },
     {
@@ -517,6 +517,10 @@ async function checkDatabase() {
     {
       name: "get_provider_health_summary",
       params: { p_workspace_id: null, p_window_minutes: 1 },
+    },
+    {
+      name: "get_workspace_billing_status",
+      params: { p_workspace_id: "00000000-0000-0000-0000-000000000000" },
     },
   ];
 
