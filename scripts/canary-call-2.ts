@@ -71,6 +71,7 @@ async function createCampaign(wsId: string) {
       max_concurrency: 1,
       retry_enabled: false,
       max_retries: 0,
+      retry_interval_hours: 1,
     }).select("id").single();
   if (campErr || !camp) throw new Error(`Campaign create failed: ${campErr?.message}`);
   console.log(`[${ts()}] Campaign created: ${camp.id}`);
