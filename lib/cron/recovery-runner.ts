@@ -2,6 +2,10 @@
  * Recovery runner — re-enqueues post_call_jobs for orphaned calls.
  * Called by agent/operational_worker.ts on a slow cadence (every 30–60 min).
  *
+ * Only re-enqueues when call_events confirm a real agent/voice session occurred.
+ * This prevents spurious jobs for calls where telephony connected but no agent
+ * was present (trial disclaimer, voicemail, TwiML error, etc.).
+ *
  * Safe to run repeatedly — uses ON CONFLICT DO NOTHING.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,6 +22,15 @@ const RECOVERY_JOBS: EnqueueJobInput[] = [
   { job_type: "cost_finalization", priority: 110 },
 ];
 
+// Event types emitted by the voice worker that confirm a real agent/voice session.
+// Any of these in call_events means the LLM/TTS/STT pipeline ran.
+const AGENT_SESSION_EVENT_TYPES = [
+  "call.answered",
+  "llm.provider_selected",
+  "tts.provider_selected",
+  "stt.provider_selected",
+];
+
 interface CallRow {
   id: string;
   workspace_id: string;
@@ -25,7 +38,6 @@ interface CallRow {
   room_name: string | null;
   technical_status: string | null;
   ended_at: string | null;
-  answered_at: string | null;
 }
 
 export interface RecoveryRunnerResult {
@@ -89,9 +101,30 @@ export async function runRecovery(opts: {
     ((coveredRows ?? []) as { call_id: string }[]).map((r) => r.call_id),
   );
 
-  const orphaned = calls.filter(
-    (c) => !coveredIds.has(c.id) && shouldEnqueuePostCallJobs(c),
-  );
+  const uncovered = calls.filter((c) => !coveredIds.has(c.id));
+
+  // Check which uncovered calls had real agent/voice sessions via call_events
+  const roomNames = uncovered
+    .map((c) => c.room_name)
+    .filter(Boolean) as string[];
+  let roomsWithAgentSession = new Set<string>();
+  if (roomNames.length > 0) {
+    const { data: agentEvents } = await admin
+      .from("call_events")
+      .select("call_room")
+      .in("call_room", roomNames)
+      .in("event_type", AGENT_SESSION_EVENT_TYPES)
+      .limit(1000);
+    roomsWithAgentSession = new Set(
+      ((agentEvents ?? []) as { call_room: string }[]).map((e) => e.call_room),
+    );
+  }
+
+  const orphaned = uncovered.filter((c) => {
+    const has_agent_session =
+      !!c.room_name && roomsWithAgentSession.has(c.room_name);
+    return shouldEnqueuePostCallJobs({ ...c, has_agent_session });
+  });
 
   const summary: RecoveryRunnerResult = {
     scanned: calls.length,

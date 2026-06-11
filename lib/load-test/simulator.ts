@@ -370,6 +370,7 @@ export function buildJobList(
     !shouldEnqueuePostCallJobs({
       technical_status: def.technicalStatus,
       ended_at: def.createsCall ? "mock" : null,
+      has_agent_session: def.createsCall,
     })
   ) {
     return [];

@@ -3,30 +3,20 @@
  *
  * Receives Twilio call status callbacks (completed, failed, no-answer, busy, canceled).
  * Updates technical_status, ended_at, answered_at, duration_seconds, end_reason,
- * releases call slots for terminal statuses, updates campaign_contacts, and
- * enqueues post-call jobs.
+ * releases call slots for terminal statuses, and updates campaign_contacts.
+ *
+ * NOTE: post_call_jobs are NOT created here. The voice worker close handler is
+ * the authoritative creator of post_call_jobs (it has evidence of a real session).
+ * The recovery runner creates jobs for orphaned calls only when call_events confirm
+ * real agent/voice activity.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   validateTwilioRequest,
   shouldValidateTwilio,
 } from "@/lib/twilio/validate";
-import {
-  enqueuePostCallJobsForCall,
-  shouldEnqueuePostCallJobs,
-  type EnqueueJobInput,
-} from "@/lib/jobs/post-call-jobs";
 import { recordCallEvent } from "@/agent/persistence/call-events-repository";
 import { NextResponse } from "next/server";
-
-export const dynamic = "force-dynamic";
-
-const POST_CALL_JOBS: EnqueueJobInput[] = [
-  { job_type: "crm_extraction", priority: 50 },
-  { job_type: "qa_analysis", priority: 80 },
-  { job_type: "integration_dispatch", priority: 90 },
-  { job_type: "cost_finalization", priority: 110 },
-];
 
 interface CallRow {
   id: string;
@@ -302,16 +292,6 @@ export async function POST(req: Request) {
       duration_seconds: callDuration,
     };
     if (endReason) terminalUpdate["end_reason"] = endReason;
-    // Backfill answered_at for completed calls if the in-progress callback was missed
-    if (
-      technicalStatus === "completed" &&
-      callDuration > 0 &&
-      !callRow.answered_at
-    ) {
-      terminalUpdate["answered_at"] = new Date(
-        Date.now() - callDuration * 1000,
-      ).toISOString();
-    }
 
     await admin.from("calls").update(terminalUpdate).eq("id", callRow.id);
 
@@ -345,26 +325,6 @@ export async function POST(req: Request) {
       ...(endReason ? { end_reason: endReason } : {}),
     });
 
-    // Enqueue post-call jobs for eligible calls (completed, not no_answer/failed)
-    const eligible = shouldEnqueuePostCallJobs({
-      technical_status: technicalStatus,
-      ended_at: now,
-      answered_at: callRow.answered_at,
-    });
-    if (eligible) {
-      const result = await enqueuePostCallJobsForCall({
-        workspaceId: callRow.workspace_id,
-        callId: callRow.id,
-        roomName: callRow.retell_call_id ?? undefined,
-        agentId: callRow.agent_id ?? undefined,
-        jobs: POST_CALL_JOBS,
-        supabase: admin,
-      });
-      if (result.errors.length > 0) {
-        console.warn("[twilio-status] post_call_jobs errors:", result.errors);
-      }
-    }
-
     void recordCallEvent(
       admin,
       callRoom,
@@ -375,7 +335,6 @@ export async function POST(req: Request) {
         call_status: callStatus,
         technical_status: technicalStatus,
         path: "terminal",
-        jobs_eligible: eligible,
       },
     );
 

@@ -209,103 +209,109 @@ describe("mapStatus — Twilio → schema fields", () => {
 });
 
 // ── 3. shouldEnqueuePostCallJobs guards ───────────────────────────────────────
+//
+// Gate rules (ALL must be true):
+//   • ended_at must be set
+//   • has_agent_session must be true (call_events confirm real voice/agent activity)
+//   • technical_status must not be no_answer or failed
 
 describe("shouldEnqueuePostCallJobs — post_call_jobs eligibility", () => {
   const ts = "2024-01-15T12:00:00.000Z";
 
-  test("no-answer call is NOT eligible", () => {
+  // ── Requires real agent session ──────────────────────────────────────────────
+
+  test("completed + has_agent_session=true IS eligible", () => {
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+        has_agent_session: true,
+      }),
+      true,
+    );
+  });
+
+  test("completed + has_agent_session=false (e.g. trial disclaimer / TwiML error) is NOT eligible", () => {
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+        has_agent_session: false,
+      }),
+      false,
+      "CallDuration>0 or Twilio completed does not prove agent was present",
+    );
+  });
+
+  test("completed + duration>0 + has_agent_session=false → NOT eligible (duration alone is insufficient)", () => {
+    // Twilio can report duration>0 for trial disclaimer, voicemail, TwiML error, etc.
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "completed",
+        ended_at: ts,
+        has_agent_session: false,
+      }),
+      false,
+    );
+  });
+
+  // ── Status gates ─────────────────────────────────────────────────────────────
+
+  test("no_answer + has_agent_session=true is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "no_answer",
         ended_at: ts,
+        has_agent_session: true,
       }),
       false,
-      "no_answer must never get post-call jobs",
     );
   });
 
-  test("failed call is NOT eligible", () => {
-    assert.equal(
-      shouldEnqueuePostCallJobs({ technical_status: "failed", ended_at: ts }),
-      false,
-    );
-  });
-
-  test("busy call is NOT eligible (busy uses technical_status=busy)", () => {
-    assert.equal(
-      shouldEnqueuePostCallJobs({ technical_status: "busy", ended_at: ts }),
-      true,
-      "busy has ended_at and is not no_answer/failed — eligible per shouldEnqueuePostCallJobs",
-    );
-    // Note: the webhook maps busy → but shouldEnqueuePostCallJobs only blocks
-    // no_answer and failed. If we want to block busy, we rely on the caller's
-    // pre-check, not shouldEnqueuePostCallJobs itself.
-  });
-
-  test("completed call with ended_at IS eligible", () => {
+  test("failed + has_agent_session=true is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
-        technical_status: "completed",
+        technical_status: "failed",
         ended_at: ts,
+        has_agent_session: true,
+      }),
+      false,
+    );
+  });
+
+  test("busy + has_agent_session=true is eligible (busy not in blocked list)", () => {
+    // busy calls that somehow had an agent session (edge case) should still process
+    assert.equal(
+      shouldEnqueuePostCallJobs({
+        technical_status: "busy",
+        ended_at: ts,
+        has_agent_session: true,
       }),
       true,
     );
   });
 
-  test("completed call WITHOUT ended_at is NOT eligible", () => {
-    assert.equal(
-      shouldEnqueuePostCallJobs({
-        technical_status: "completed",
-        ended_at: null,
-      }),
-      false,
-      "ended_at must be set before post-call jobs are eligible",
-    );
-  });
-
-  test("cancelled call: shouldEnqueuePostCallJobs returns true (status not blocked)", () => {
-    // cancelled is not in the blocked list; webhook passes ended_at so jobs would
-    // be enqueued. This is acceptable — cost_finalization still makes sense.
+  test("cancelled + has_agent_session=true is eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "cancelled",
         ended_at: ts,
+        has_agent_session: true,
       }),
       true,
     );
   });
 
-  test("completed call with answered_at=null (no agent connection) is NOT eligible", () => {
+  // ── ended_at gate ────────────────────────────────────────────────────────────
+
+  test("completed + has_agent_session=true WITHOUT ended_at is NOT eligible", () => {
     assert.equal(
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
-        ended_at: ts,
-        answered_at: null,
+        ended_at: null,
+        has_agent_session: true,
       }),
       false,
-      "calls with no agent connection (answered_at=null) must not get post-call jobs",
-    );
-  });
-
-  test("completed call with answered_at set IS eligible", () => {
-    assert.equal(
-      shouldEnqueuePostCallJobs({
-        technical_status: "completed",
-        ended_at: ts,
-        answered_at: ts,
-      }),
-      true,
-    );
-  });
-
-  test("completed call without answered_at field (undefined) remains eligible (backwards compat)", () => {
-    // Callers that don't supply answered_at don't hit the null check
-    assert.equal(
-      shouldEnqueuePostCallJobs({
-        technical_status: "completed",
-        ended_at: ts,
-      }),
-      true,
     );
   });
 });

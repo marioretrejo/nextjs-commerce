@@ -42,6 +42,14 @@ const RECOVERY_JOBS: EnqueueJobInput[] = [
   { job_type: "cost_finalization", priority: 110 },
 ];
 
+// Event types emitted by the voice worker confirming a real agent/voice session.
+const AGENT_SESSION_EVENT_TYPES = [
+  "call.answered",
+  "llm.provider_selected",
+  "tts.provider_selected",
+  "stt.provider_selected",
+];
+
 interface CallRow {
   id: string;
   workspace_id: string;
@@ -49,7 +57,6 @@ interface CallRow {
   room_name: string | null;
   technical_status: string | null;
   ended_at: string | null;
-  answered_at: string | null;
 }
 
 export async function GET(req: Request) {
@@ -116,10 +123,30 @@ export async function GET(req: Request) {
     ((coveredRows ?? []) as { call_id: string }[]).map((r) => r.call_id),
   );
 
-  // Step 3: Orphaned = eligible calls that have no post_call_jobs at all
-  const orphaned = calls.filter(
-    (c) => !coveredIds.has(c.id) && shouldEnqueuePostCallJobs(c),
-  );
+  // Step 3: For uncovered calls, check call_events for real agent session evidence
+  const uncovered = calls.filter((c) => !coveredIds.has(c.id));
+  const roomNames = uncovered
+    .map((c) => c.room_name)
+    .filter(Boolean) as string[];
+  let roomsWithAgentSession = new Set<string>();
+  if (roomNames.length > 0) {
+    const { data: agentEvents } = await admin
+      .from("call_events")
+      .select("call_room")
+      .in("call_room", roomNames)
+      .in("event_type", AGENT_SESSION_EVENT_TYPES)
+      .limit(1000);
+    roomsWithAgentSession = new Set(
+      ((agentEvents ?? []) as { call_room: string }[]).map((e) => e.call_room),
+    );
+  }
+
+  // Orphaned = uncovered calls with confirmed real agent session
+  const orphaned = uncovered.filter((c) => {
+    const has_agent_session =
+      !!c.room_name && roomsWithAgentSession.has(c.room_name);
+    return shouldEnqueuePostCallJobs({ ...c, has_agent_session });
+  });
 
   const summary = {
     scanned: calls.length,

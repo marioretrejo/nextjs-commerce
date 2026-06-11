@@ -664,6 +664,7 @@ describe("shouldEnqueuePostCallJobs — eligibility", () => {
       shouldEnqueuePostCallJobs({
         technical_status: "no_answer",
         ended_at: ts,
+        has_agent_session: true,
       }),
       false,
       "no_answer must not be flagged as orphaned",
@@ -672,7 +673,11 @@ describe("shouldEnqueuePostCallJobs — eligibility", () => {
 
   it("failed call is NOT eligible (provider_failure scenario)", () => {
     assert.strictEqual(
-      shouldEnqueuePostCallJobs({ technical_status: "failed", ended_at: ts }),
+      shouldEnqueuePostCallJobs({
+        technical_status: "failed",
+        ended_at: ts,
+        has_agent_session: true,
+      }),
       false,
       "failed (provider_failure) must not be flagged as orphaned",
     );
@@ -683,32 +688,34 @@ describe("shouldEnqueuePostCallJobs — eligibility", () => {
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
         ended_at: null,
+        has_agent_session: true,
       }),
       false,
       "Call without ended_at must not be considered for recovery",
     );
   });
 
-  it("completed/contacted call without jobs IS an orphan", () => {
+  it("completed call with confirmed agent session IS an orphan", () => {
     assert.strictEqual(
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
         ended_at: ts,
+        has_agent_session: true,
       }),
       true,
-      "completed call with ended_at must be eligible for recovery",
+      "completed call with ended_at and agent session must be eligible for recovery",
     );
   });
 
-  it("voicemail call without jobs IS an orphan (technical_status=completed)", () => {
-    // voicemail uses technical_status="completed" — same eligibility
+  it("completed call without agent session is NOT an orphan (no call_events evidence)", () => {
     assert.strictEqual(
       shouldEnqueuePostCallJobs({
         technical_status: "completed",
         ended_at: ts,
+        has_agent_session: false,
       }),
-      true,
-      "voicemail (completed) must be eligible for recovery",
+      false,
+      "completed without agent session (trial disclaimer, voicemail, TwiML error) must not be eligible",
     );
   });
 

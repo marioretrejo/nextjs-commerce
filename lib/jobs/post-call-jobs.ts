@@ -339,19 +339,24 @@ export async function getJobsForCall(
 
 /**
  * Returns true when a call row should receive post_call_jobs.
- * Excludes: no_answer, failed (provider errors), and calls without ended_at.
- * DNC/balance_exhausted are never eligible because those scenarios never create
- * a calls row — they are excluded structurally before this check is reached.
+ *
+ * Requires explicit agent session evidence (has_agent_session=true), which is
+ * determined by the caller via call_events inspection. This prevents creating
+ * CRM/QA/integration jobs for calls where only telephony connected but no real
+ * voice session occurred (trial disclaimer, voicemail, TwiML error, etc.).
+ *
+ * The voice worker close handler is the primary creator of post_call_jobs.
+ * Recovery runners use this function to re-enqueue for orphaned calls.
  */
 export function shouldEnqueuePostCallJobs(call: {
   technical_status: string | null;
   ended_at: string | null;
-  answered_at?: string | null;
+  has_agent_session: boolean;
 }): boolean {
   if (!call.ended_at) return false;
+  if (!call.has_agent_session) return false;
   if (call.technical_status === "no_answer") return false;
   if (call.technical_status === "failed") return false;
-  if (call.answered_at === null) return false;
   return true;
 }
 
