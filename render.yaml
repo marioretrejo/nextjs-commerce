@@ -1,29 +1,34 @@
 # ─── VoiceOS Render deployment ─────────────────────────────────────────────────
 #
-# Deploys the LiveKit agent worker as a persistent background worker.
-# The Next.js frontend is deployed separately on Vercel.
+# Two persistent background workers:
+#   A. voiceos-agent-worker      — LiveKit voice agent (handles live calls)
+#   B. voiceos-operational-worker — recurring job loops (post-call, health, alerts)
 #
-# Usage:
-#   1. Push this repo to GitHub
-#   2. New → Blueprint in Render dashboard → connect repo
-#   3. Fill in the env var values marked "sync: false" in the Render UI
+# The Next.js frontend/API is deployed separately on Vercel.
+#
+# Setup:
+#   1. Push repo to GitHub
+#   2. Render Dashboard → New → Blueprint → connect repo
+#   3. Fill env vars marked sync:false in the Render UI
 #   4. Deploy
 #
-# Recommended plan: "starter plus" ($14/mo) or "standard" ($25/mo)
-# The worker is always-on and handles concurrent voice calls.
+# Plans:
+#   agent-worker:       starter+ ($14/mo) — always-on, concurrent calls
+#   operational-worker: starter  ($7/mo)  — light I/O, no voice processing
 # ───────────────────────────────────────────────────────────────────────────────
 
 services:
+  # ── A. Voice Agent Worker ────────────────────────────────────────────────────
+  # Handles LiveKit voice sessions. Scale horizontally for more concurrent calls.
   - type: worker
     name: voiceos-agent-worker
     env: docker
     dockerfilePath: ./Dockerfile
     plan: starter
     autoDeploy: true
-    # LiveKit agent workers are stateless — scale horizontally for more concurrent calls
     numInstances: 1
     envVars:
-      # ── LiveKit (required) ────────────────────────────────────────────────────
+      # LiveKit (required)
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
@@ -31,7 +36,7 @@ services:
       - key: LIVEKIT_API_SECRET
         sync: false
 
-      # ── AI providers (required) ───────────────────────────────────────────────
+      # AI providers (required)
       - key: DEEPGRAM_API_KEY
         sync: false
       - key: GROQ_API_KEY
@@ -39,18 +44,87 @@ services:
       - key: CARTESIA_API_KEY
         sync: false
       - key: OPENAI_API_KEY
-        sync: false # Used for LLM fallback, TTS fallback, and RAG embeddings
+        sync: false
 
-      # ── Supabase (required) ───────────────────────────────────────────────────
+      # Supabase (required)
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
 
-      # ── Optional ─────────────────────────────────────────────────────────────
-      - key: SUPPORT_TRANSFER_NUMBER
-        sync: false # E.164 fallback transfer number, e.g. +12125550100
+      # Twilio (required for outbound dialing)
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
 
-      # ── Runtime ──────────────────────────────────────────────────────────────
+      # Webhook signing (recommended)
+      - key: VOICEOS_WEBHOOK_SIGNING_SECRET
+        sync: false
+
+      # Optional
+      - key: SUPPORT_TRANSFER_NUMBER
+        sync: false
+      - key: NODE_ENV
+        value: production
+
+  # ── B. Operational Worker ────────────────────────────────────────────────────
+  # Runs recurring job loops: post-call processing, health checks, alerting.
+  # Does NOT handle voice sessions — keep separate for isolation and scaling.
+  #
+  # Feature flags (set in Render Dashboard env vars):
+  #   VOICEOS_OPERATIONAL_WORKER_ENABLED=true   (must be true to start)
+  #   VOICEOS_RUN_POST_CALL_JOBS=true
+  #   VOICEOS_RUN_PROVIDER_HEALTH=true
+  #   VOICEOS_RUN_ALERTS=true
+  #   VOICEOS_RUN_CAMPAIGN_DIAL=false           (OFF by default — enables real calls)
+  #   VOICEOS_RUN_RECOVERY=false               (OFF by default — manual only)
+  #   VOICEOS_ALERTING_SEND_EXTERNAL=false     (OFF by default — no Slack/email)
+  - type: worker
+    name: voiceos-operational-worker
+    env: node
+    buildCommand: pnpm install
+    startCommand: pnpm start:operational-worker
+    plan: starter
+    autoDeploy: true
+    numInstances: 1
+    envVars:
+      # Supabase (required)
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Internal auth (required for campaign-dial proxy)
+      - key: INTERNAL_API_SECRET
+        sync: false
+
+      # App URL (required for campaign-dial proxy)
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
+      # Webhook signing (recommended)
+      - key: VOICEOS_WEBHOOK_SIGNING_SECRET
+        sync: false
+
+      # Feature flags
+      - key: VOICEOS_OPERATIONAL_WORKER_ENABLED
+        value: "true"
+      - key: VOICEOS_RUN_POST_CALL_JOBS
+        value: "true"
+      - key: VOICEOS_RUN_PROVIDER_HEALTH
+        value: "true"
+      - key: VOICEOS_RUN_ALERTS
+        value: "true"
+      - key: VOICEOS_RUN_CAMPAIGN_DIAL
+        value: "false"
+      - key: VOICEOS_RUN_RECOVERY
+        value: "false"
+
+      # Safety flags
+      - key: VOICEOS_ALERTING_SEND_EXTERNAL
+        value: "false"
+      - key: VOICEOS_LOAD_TEST_MODE
+        value: "false"
       - key: NODE_ENV
         value: production
