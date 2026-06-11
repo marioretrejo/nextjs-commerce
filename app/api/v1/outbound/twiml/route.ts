@@ -35,14 +35,17 @@ async function handle(req: Request): Promise<NextResponse> {
     process.env["LIVEKIT_SIP_HOST"] ??
     "sip.livekit.run";
 
+  // Use the actual request origin so HMAC validation matches regardless of which
+  // Vercel URL (deployment hash vs branch alias) Twilio used to reach this route.
+  const origin = url.origin;
+
   // Always enforced in production. In dev, bypass with TWILIO_WEBHOOK_VALIDATION_DISABLED=true.
   if (shouldValidateTwilio()) {
-    const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
     const body = req.method === "POST" ? await req.text() : "";
     const valid = validateTwilioRequest(
       req,
       body,
-      appUrl,
+      origin,
       url.pathname + url.search,
     );
     if (!valid) return new NextResponse("Forbidden", { status: 403 });
@@ -57,7 +60,7 @@ async function handle(req: Request): Promise<NextResponse> {
   // Bridge the PSTN call into the LiveKit room via SIP.
   // LiveKit accepts the call, the worker is already in the room.
   const sipUri = `sip:${encodeURIComponent(roomName)}@${sipHost}`;
-  const statusCallbackUrl = `${process.env["NEXT_PUBLIC_APP_URL"] ?? ""}/api/webhooks/twilio/status`;
+  const statusCallbackUrl = `${origin}/api/webhooks/twilio/status`;
 
   return twiml(
     `  <Dial timeout="30" action="${statusCallbackUrl}" method="POST">\n` +

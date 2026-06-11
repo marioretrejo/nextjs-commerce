@@ -624,9 +624,11 @@ async function dialContact(params: {
     Url: twimlCallbackUrl,
     StatusCallback: `${appUrl}/api/webhooks/twilio/status`,
     StatusCallbackMethod: "POST",
-    StatusCallbackEvent: "initiated ringing answered completed",
     Timeout: "25",
   });
+  // Twilio REST API requires separate parameters per event (not space-separated string)
+  twilioParams.append("StatusCallbackEvent", "answered");
+  twilioParams.append("StatusCallbackEvent", "completed");
 
   // AMD — always respect the agent's answering-machine-detection setting
   if (agent.amd_enabled) {

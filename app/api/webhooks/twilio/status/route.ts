@@ -110,17 +110,13 @@ function mapStatus(twilio: string): {
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const appUrl = process.env["VERCEL_URL"]
-    ? `https://${process.env["VERCEL_URL"]}`
-    : (process.env["NEXT_PUBLIC_APP_URL"] ?? "");
+  const reqUrl = new URL(req.url);
+  // Use the actual request origin so HMAC validation matches regardless of which
+  // Vercel URL (deployment hash vs branch alias) Twilio used to reach this route.
+  const appUrl = reqUrl.origin;
 
   if (shouldValidateTwilio()) {
-    const valid = validateTwilioRequest(
-      req,
-      body,
-      appUrl,
-      "/api/webhooks/twilio/status",
-    );
+    const valid = validateTwilioRequest(req, body, appUrl, reqUrl.pathname);
     if (!valid) return new NextResponse("Forbidden", { status: 403 });
   }
 
@@ -306,6 +302,16 @@ export async function POST(req: Request) {
       duration_seconds: callDuration,
     };
     if (endReason) terminalUpdate["end_reason"] = endReason;
+    // Backfill answered_at for completed calls if the in-progress callback was missed
+    if (
+      technicalStatus === "completed" &&
+      callDuration > 0 &&
+      !callRow.answered_at
+    ) {
+      terminalUpdate["answered_at"] = new Date(
+        Date.now() - callDuration * 1000,
+      ).toISOString();
+    }
 
     await admin.from("calls").update(terminalUpdate).eq("id", callRow.id);
 
