@@ -1247,9 +1247,10 @@ export default defineAgent({
       openaiApiKey: process.env["OPENAI_API_KEY"],
       voiceId,
       language: agentLanguage ?? "es",
-      ttsModel: "sonic-2",
-      // sonic-2 is Cartesia's multilingual model (replaces deprecated sonic-multilingual).
-      // Chunk gaps are similar; 8 s timeout prevents premature stream cuts mid-sentence.
+      ttsModel: "sonic-2-2025-03-07",
+      // sonic-2-2025-03-07 is Cartesia's datestamped multilingual model — supports
+      // emotion/speed controls unlike the base sonic-2 alias.
+      // 8 s chunkTimeout prevents premature stream cuts mid-sentence.
       chunkTimeout: 8_000,
       emotion:
         voiceEmotion && EMOTION_MAP[voiceEmotion]

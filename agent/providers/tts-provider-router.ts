@@ -27,7 +27,7 @@ export interface TTSRouterConfig {
   voiceId?: string;
   /** BCP-47 language tag, e.g. 'es' */
   language?: string;
-  /** Cartesia model, e.g. 'sonic-multilingual' */
+  /** Cartesia model, e.g. 'sonic-2-2025-03-07' */
   ttsModel?: string;
   /** Cartesia emotion control tags, e.g. ['positivity:highest'] */
   emotion?: string[] | null;
@@ -77,7 +77,7 @@ export function createTTSProvider(
   if (config.cartesiaApiKey) {
     try {
       const opts: Record<string, unknown> = {
-        model: config.ttsModel ?? "sonic-2",
+        model: config.ttsModel ?? "sonic-2-2025-03-07",
         voice: config.voiceId,
         apiKey: config.cartesiaApiKey,
         language: config.language ?? "es",
