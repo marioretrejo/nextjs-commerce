@@ -77,7 +77,7 @@ export function createTTSProvider(
   if (config.cartesiaApiKey) {
     try {
       const opts: Record<string, unknown> = {
-        model: config.ttsModel ?? "sonic-multilingual",
+        model: config.ttsModel ?? "sonic-2",
         voice: config.voiceId,
         apiKey: config.cartesiaApiKey,
         language: config.language ?? "es",

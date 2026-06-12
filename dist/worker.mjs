@@ -37812,7 +37812,7 @@ function createTTSProvider(config2) {
   if (config2.cartesiaApiKey) {
     try {
       const opts = {
-        model: config2.ttsModel ?? "sonic-multilingual",
+        model: config2.ttsModel ?? "sonic-2",
         voice: config2.voiceId,
         apiKey: config2.cartesiaApiKey,
         language: config2.language ?? "es",
@@ -38627,10 +38627,9 @@ var worker_core_default = defineAgent({
       openaiApiKey: process.env["OPENAI_API_KEY"],
       voiceId,
       language: agentLanguage ?? "es",
-      ttsModel: "sonic-multilingual",
-      // sonic-multilingual generates chunks with longer inter-chunk gaps than sonic-3.
-      // The plugin default (5000 ms) cuts the stream prematurely, causing the agent
-      // to go silent mid-sentence. 8 s gives the model enough breathing room.
+      ttsModel: "sonic-2",
+      // sonic-2 is Cartesia's multilingual model (replaces deprecated sonic-multilingual).
+      // Chunk gaps are similar; 8 s timeout prevents premature stream cuts mid-sentence.
       chunkTimeout: 8e3,
       emotion: voiceEmotion && EMOTION_MAP[voiceEmotion] ? EMOTION_MAP[voiceEmotion] : null
     });
