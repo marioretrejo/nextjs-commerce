@@ -8,6 +8,7 @@ import {
   Bot,
   Code2,
   Cpu,
+  FlaskConical,
   Headphones,
   Mic,
   CreditCard,
@@ -143,6 +144,12 @@ export function Sidebar({
           href: "/voice-studio",
           labelKey: "voiceStudio",
           icon: Mic,
+          module: "agents",
+        },
+        {
+          href: "/voice-lab",
+          labelKey: "voiceLab",
+          icon: FlaskConical,
           module: "agents",
         },
         {

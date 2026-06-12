@@ -110,7 +110,11 @@ export type CallEventType =
   | "telephony.status_callback_received"
   | "telephony.status_callback_processed"
   | "telephony.status_callback_failed"
-  | "telephony.webhook_validation_failed";
+  | "telephony.webhook_validation_failed"
+  // Voice Agent Lab — WebRTC/browser session observability
+  | "livekit.room_joined"
+  | "assistant.speech_started"
+  | "assistant.speech_ended";
 
 export async function recordCallEvent(
   supabase: SupabaseClient,

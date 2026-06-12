@@ -21,7 +21,8 @@
     "developers": "Developers",
     "design": "Design",
     "leaderboard": "Leaderboard",
-    "agentAssist": "Agent Assist"
+    "agentAssist": "Agent Assist",
+    "voiceLab": "Voice Lab"
   },
   "common": {
     "save": "Save",

@@ -1068,6 +1068,11 @@ export default defineAgent({
       workspace_id: workspaceId,
       direction: callDirection,
     });
+    void emit("livekit.room_joined", {
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      room: roomName,
+    });
 
     // ─── 4. Load pronunciation dictionaries from Supabase ────────────────────
     // Non-blocking: awaited here but designed to never throw
@@ -2421,6 +2426,10 @@ export default defineAgent({
       }
 
       if (newState === "speaking") {
+        void emit("assistant.speech_started", {
+          agent_id: agentId,
+          room: roomName,
+        });
         // TAREA 4: first audio arrived — discard any pending TTFB watchdog
         _clearWatchdogs(); // also clears _ttfbWatchdog via updated _clearWatchdogs()
 
@@ -2501,6 +2510,10 @@ export default defineAgent({
         // Any transition into listening → clean slate: disarm all watchdogs
         _clearWatchdogs();
         if (oldState === "speaking") {
+          void emit("assistant.speech_ended", {
+            agent_id: agentId,
+            room: roomName,
+          });
           // Agent finished speaking — start silence watchdog and clear lockout
           _speakLockoutUntil = 0;
           if (_wasInterrupted) {

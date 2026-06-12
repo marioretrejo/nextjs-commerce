@@ -21,7 +21,8 @@
     "developers": "開発者",
     "design": "デザイン",
     "leaderboard": "リーダーボード",
-    "agentAssist": "エージェントアシスト"
+    "agentAssist": "エージェントアシスト",
+    "voiceLab": "ボイスラボ"
   },
   "common": {
     "save": "保存",

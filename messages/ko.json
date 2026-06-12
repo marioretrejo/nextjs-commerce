@@ -21,7 +21,8 @@
     "developers": "개발자",
     "design": "디자인",
     "leaderboard": "리더보드",
-    "agentAssist": "에이전트 어시스트"
+    "agentAssist": "에이전트 어시스트",
+    "voiceLab": "음성 랩"
   },
   "common": {
     "save": "저장",
