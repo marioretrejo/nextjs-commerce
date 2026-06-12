@@ -1,5 +1,3 @@
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -2021,7 +2019,7 @@ var require_phoenix_cjs = __commonJS({
       Presence: () => Presence,
       Push: () => Push,
       Serializer: () => serializer_default,
-      Socket: () => Socket,
+      Socket: () => Socket2,
       Timer: () => Timer,
     });
     module.exports = __toCommonJS2(phoenix_exports);
@@ -3309,7 +3307,7 @@ var require_phoenix_cjs = __commonJS({
         return { join_ref: null, ref: null, topic, event, payload: data };
       },
     };
-    var Socket = class {
+    var Socket2 = class {
       /** Initializes the Socket *
        *
        * For IE8 support use an ES5-shim (https://github.com/es-shims/es5-shim)
@@ -34897,8 +34895,6 @@ import {
   ServerOptions,
 } from "@livekit/agents";
 import { STT } from "@livekit/agents-plugin-deepgram";
-import { LLM } from "@livekit/agents-plugin-openai";
-import { TTS as CartesiaTTS } from "@livekit/agents-plugin-cartesia";
 
 // node_modules/.pnpm/@supabase+supabase-js@2.106.1/node_modules/@supabase/supabase-js/dist/index.mjs
 var dist_exports = {};
@@ -45078,13 +45074,14 @@ function createMockBooking(params) {
 function buildTransferToHuman(config2) {
   return llm.tool({
     description:
-      "Transfer the call to a live human agent. Use when: user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts.",
+      "Transfer the call to a live human agent or specialist. Use when: the user explicitly asks for a human, the issue is too complex, or it cannot be resolved after 2 attempts. Call this tool instead of trying to resolve the issue yourself.",
     parameters: {
       type: "object",
       properties: {
         reason: {
           type: "string",
-          description: "Brief reason for the transfer (used for routing)",
+          description:
+            "Brief reason for the transfer (e.g. 'customer_request', 'complaint', 'complex_query')",
         },
         urgency: {
           type: "string",
@@ -45095,95 +45092,137 @@ function buildTransferToHuman(config2) {
       required: ["reason"],
     },
     execute: async (args, opts) => {
-      opts.ctx.session.say(
-        "Of course. I'm transferring your call to one of our team members right now. Please hold on for just a moment.",
-      );
       const {
         roomName,
         transferNumber,
         livekitWsUrl,
         livekitApiKey,
         livekitApiSecret,
+        twilioCallSid,
+        twilioAccountSid,
+        twilioAuthToken,
+        onTransferInitiated,
       } = config2;
-      if (
-        !roomName ||
-        !transferNumber ||
-        !livekitApiKey ||
-        !livekitApiSecret ||
-        !livekitWsUrl
-      ) {
+      const targetNumber = transferNumber ?? null;
+      if (!targetNumber) {
         console.warn(
-          "[transfer_to_human] SIP transfer not configured; logging escalation only",
+          "[transfer_to_human] No transfer number configured \u2014 logging escalation only",
+        );
+        opts.ctx.session.say(
+          "I'm sorry, our transfer service is temporarily unavailable. A team member will call you back shortly.",
         );
         return {
           transfer_initiated: false,
           reason: args.reason,
-          urgency: args.urgency ?? "normal",
-          message: "A team member will call you back shortly.",
+          message:
+            "Transfer service unavailable. A team member will call back.",
         };
       }
-      try {
-        const httpUrl = livekitWsUrl
-          .replace("wss://", "https://")
-          .replace("ws://", "http://");
-        const roomService = new RoomServiceClient(
-          httpUrl,
-          livekitApiKey,
-          livekitApiSecret,
-        );
-        const participants = await withTimeout(
-          roomService.listParticipants(roomName),
-          5e3,
-        );
-        const sipParticipant = participants.find(
-          (p) => p.identity?.startsWith("sip_") || p.kind === 3,
-          // ParticipantInfo_Kind.SIP = 3
-        );
-        if (sipParticipant?.identity) {
-          const sipClient = new SipClient(
+      opts.ctx.session.say(
+        "Por favor espere un momento, estoy transfiriendo su llamada con un especialista.",
+      );
+      if (twilioCallSid && twilioAccountSid && twilioAuthToken) {
+        try {
+          const twiml = `<Response><Dial>${targetNumber}</Dial></Response>`;
+          const res = await withTimeout(
+            fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Calls/${twilioCallSid}.json`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64")}`,
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: new URLSearchParams({ Twiml: twiml }).toString(),
+              },
+            ),
+            TOOL_TIMEOUT_MS,
+          );
+          if (res.ok) {
+            console.log(
+              `[transfer_to_human] Twilio redirect sent to ${targetNumber} (SID: ${twilioCallSid})`,
+            );
+            onTransferInitiated?.({ reason: args.reason, targetNumber });
+            return {
+              transfer_initiated: true,
+              transfer_type: "twilio_redirect",
+              destination: targetNumber,
+              reason: args.reason,
+              urgency: args.urgency ?? "normal",
+            };
+          }
+          console.warn(
+            `[transfer_to_human] Twilio redirect failed (${res.status}), trying SIP REFER`,
+          );
+        } catch (twilioErr) {
+          console.warn(
+            "[transfer_to_human] Twilio redirect threw, trying SIP REFER:",
+            String(twilioErr),
+          );
+        }
+      }
+      if (roomName && livekitApiKey && livekitApiSecret && livekitWsUrl) {
+        try {
+          const httpUrl = livekitWsUrl
+            .replace("wss://", "https://")
+            .replace("ws://", "http://");
+          const roomService = new RoomServiceClient(
             httpUrl,
             livekitApiKey,
             livekitApiSecret,
           );
-          const transferTo = transferNumber.startsWith("sip:")
-            ? transferNumber
-            : `sip:${transferNumber.replace("+", "")}@sip.twilio.com`;
-          await withTimeout(
-            sipClient.transferSipParticipant(
-              roomName,
-              sipParticipant.identity,
-              transferTo,
-            ),
-            8e3,
+          const participants = await withTimeout(
+            roomService.listParticipants(roomName),
+            5e3,
           );
-          console.log(
-            `[transfer_to_human] SIP REFER sent to ${transferTo} for participant ${sipParticipant.identity}`,
+          const sipParticipant = participants.find(
+            (p) => p.identity?.startsWith("sip_") || p.kind === 3,
           );
-          return {
-            transfer_initiated: true,
-            transfer_type: "sip_refer",
-            destination: transferTo,
-            reason: args.reason,
-            urgency: args.urgency ?? "normal",
-          };
+          if (sipParticipant?.identity) {
+            const sipClient = new SipClient(
+              httpUrl,
+              livekitApiKey,
+              livekitApiSecret,
+            );
+            const transferTo = targetNumber.startsWith("sip:")
+              ? targetNumber
+              : `sip:${targetNumber.replace("+", "")}@sip.twilio.com`;
+            await withTimeout(
+              sipClient.transferSipParticipant(
+                roomName,
+                sipParticipant.identity,
+                transferTo,
+              ),
+              8e3,
+            );
+            console.log(
+              `[transfer_to_human] SIP REFER sent to ${transferTo} for ${sipParticipant.identity}`,
+            );
+            onTransferInitiated?.({ reason: args.reason, targetNumber });
+            return {
+              transfer_initiated: true,
+              transfer_type: "sip_refer",
+              destination: transferTo,
+              reason: args.reason,
+              urgency: args.urgency ?? "normal",
+            };
+          }
+          console.warn(
+            "[transfer_to_human] No SIP participant found; cannot issue REFER",
+          );
+        } catch (sipErr) {
+          console.error("[transfer_to_human] SIP REFER failed:", sipErr);
         }
-        console.warn(
-          "[transfer_to_human] No SIP participant found in room; cannot issue REFER",
-        );
-        return {
-          transfer_initiated: false,
-          reason: args.reason,
-          message: "A team member will reach out to you within a few minutes.",
-        };
-      } catch (err) {
-        console.error("[transfer_to_human] Transfer failed:", err);
-        return {
-          transfer_initiated: false,
-          reason: args.reason,
-          error:
-            "Transfer encountered an issue. A team member will contact you shortly.",
-        };
       }
+      opts.ctx.session.say(
+        "En este momento todos nuestros especialistas est\xE1n ocupados. Por favor llame de nuevo en unos minutos.",
+      );
+      return {
+        transfer_initiated: false,
+        reason: args.reason,
+        message:
+          "All specialists are currently busy. Please call back in a few minutes.",
+      };
     },
   });
 }
@@ -45421,12 +45460,981 @@ var dotenv = __toESM(require_main4());
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as net from "node:net";
+
+// agent/startup-cleanup.ts
+async function runStartupCleanup() {
+  const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];
+  const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const lkUrl = process.env["LIVEKIT_URL"] ?? "";
+  const lkKey = process.env["LIVEKIT_API_KEY"];
+  const lkSecret = process.env["LIVEKIT_API_SECRET"];
+  if (!supabaseUrl || !supabaseKey) {
+    console.log(
+      "[startup-cleanup] Skipping \u2014 Supabase env vars not configured",
+    );
+    return;
+  }
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false },
+  });
+  const { data: activeCalls, error } = await supabase
+    .from("calls")
+    .select("id, retell_call_id, workspace_id, status")
+    .in("status", ["in_progress", "dialing"]);
+  if (error) {
+    console.error("[startup-cleanup] DB query failed:", error.message);
+    return;
+  }
+  if (!activeCalls?.length) {
+    console.log(
+      "[startup-cleanup] No active calls in DB \u2014 nothing to reconcile",
+    );
+    return;
+  }
+  console.log(
+    `[startup-cleanup] Found ${activeCalls.length} DB-active call(s) \u2014 verifying against LiveKit`,
+  );
+  const liveRooms = /* @__PURE__ */ new Set();
+  let lkReachable = false;
+  if (lkUrl && lkKey && lkSecret) {
+    try {
+      const httpUrl = lkUrl
+        .replace("wss://", "https://")
+        .replace("ws://", "http://");
+      const { RoomServiceClient: RoomServiceClient2 } =
+        await Promise.resolve().then(() => (init_dist2(), dist_exports2));
+      const roomSvc = new RoomServiceClient2(httpUrl, lkKey, lkSecret);
+      const rooms = await Promise.race([
+        roomSvc.listRooms(),
+        new Promise((_, rej) =>
+          setTimeout(() => rej(new Error("listRooms timeout")), 1e4),
+        ),
+      ]);
+      for (const r of rooms) if (r.name) liveRooms.add(r.name);
+      lkReachable = true;
+      console.log(
+        `[startup-cleanup] LiveKit reports ${liveRooms.size} live room(s)`,
+      );
+    } catch (err) {
+      console.error("[startup-cleanup] LiveKit unreachable:", String(err));
+    }
+  } else {
+    console.log(
+      "[startup-cleanup] LiveKit env vars not set \u2014 treating all active calls as zombies",
+    );
+  }
+  const cleanedAt = /* @__PURE__ */ new Date().toISOString();
+  let cleaned = 0;
+  for (const call of activeCalls) {
+    const roomName = call.retell_call_id ?? "";
+    const workspaceId = call.workspace_id;
+    const isZombie = lkReachable
+      ? !!roomName && !liveRooms.has(roomName)
+      : true;
+    if (!isZombie) continue;
+    console.log(
+      `[startup-cleanup] Zombie \u2192 id=${call.id} room=${roomName || "(null)"} workspace=${workspaceId ?? "unknown"} prev_status=${call.status}`,
+    );
+    const { error: updateErr } = await supabase
+      .from("calls")
+      .update({
+        status: "completed",
+        extracted_data: {
+          _cleanup_reason: "ZOMBIE_CLEANUP_AUTO",
+          _cleaned_at: cleanedAt,
+        },
+      })
+      .eq("id", call.id);
+    if (updateErr) {
+      console.error(
+        `[startup-cleanup] Update failed for call ${call.id}:`,
+        updateErr.message,
+      );
+      continue;
+    }
+    if (workspaceId) {
+      await supabase
+        .rpc("release_call_slot", { p_workspace_id: workspaceId })
+        .then(
+          () => null,
+          () => null,
+        );
+    }
+    cleaned++;
+  }
+  console.log(
+    `[startup-cleanup] Reconciliation complete \u2014 ${cleaned} zombie(s) cleaned, ${activeCalls.length - cleaned} call(s) confirmed live`,
+  );
+}
+
+// agent/runtime/call-lifecycle.ts
+var TECH_TO_LEGACY = {
+  initiated: "initiated",
+  ringing: "ringing",
+  in_progress: "in-progress",
+  completed: "completed",
+  failed: "failed",
+  no_answer: "no_answer",
+  busy: "failed",
+  cancelled: "cancelled",
+};
+var TERMINAL_STATUSES = /* @__PURE__ */ new Set([
+  "completed",
+  "failed",
+  "no_answer",
+  "busy",
+  "cancelled",
+]);
+var CallLifecycleManager = class {
+  constructor(roomName, workspaceId, supabase) {
+    this.roomName = roomName;
+    this.workspaceId = workspaceId;
+    this.supabase = supabase;
+    this._status = "initiated";
+    this._outcome = null;
+    this._endReason = null;
+    this._answeredAt = null;
+    this._endedAt = null;
+    this._closed = false;
+  }
+  get status() {
+    return this._status;
+  }
+  get outcome() {
+    return this._outcome;
+  }
+  get endReason() {
+    return this._endReason;
+  }
+  get answeredAt() {
+    return this._answeredAt;
+  }
+  get endedAt() {
+    return this._endedAt;
+  }
+  /** Record that a real human answered (first meaningful user speech). */
+  markAnswered() {
+    if (!this._answeredAt) this._answeredAt = /* @__PURE__ */ new Date();
+    if (this._status === "ringing" || this._status === "initiated") {
+      this._status = "in_progress";
+      void this._persist();
+    }
+  }
+  /** Override the business outcome (can be called multiple times; last write wins). */
+  setOutcome(outcome) {
+    this._outcome = outcome;
+  }
+  /**
+   * Transition to a new technical status and optionally set an end reason.
+   * Automatically stamps `ended_at` for terminal statuses.
+   */
+  async transitionTo(status, reason) {
+    this._status = status;
+    if (reason) this._endReason = reason;
+    if (TERMINAL_STATUSES.has(status)) {
+      this._endedAt = this._endedAt ?? /* @__PURE__ */ new Date();
+    }
+    await this._persist();
+  }
+  /**
+   * Called once at Close time. Idempotent — subsequent calls are no-ops.
+   * Derives final status/outcome from what was set during the call.
+   */
+  async finalize(opts) {
+    if (this._closed) return;
+    this._closed = true;
+    this._endedAt = this._endedAt ?? /* @__PURE__ */ new Date();
+    if (!TERMINAL_STATUSES.has(this._status)) {
+      this._status = opts.voicemailDetected ? "no_answer" : "completed";
+    }
+    if (!this._outcome) {
+      if (opts.voicemailDetected) {
+        this._outcome = "voicemail";
+      } else if (this._status === "no_answer") {
+        this._outcome = "not_interested";
+      } else if (this._status === "completed" && opts.durationSeconds > 5) {
+        this._outcome = "contacted";
+      }
+    }
+    await this._persist();
+  }
+  async _persist() {
+    const patch = {
+      technical_status: this._status,
+      // Keep legacy status in sync so existing UI code never breaks
+      status: TECH_TO_LEGACY[this._status] ?? this._status,
+    };
+    if (this._outcome !== null) patch.business_outcome = this._outcome;
+    if (this._endReason !== null) patch.end_reason = this._endReason;
+    if (this._answeredAt !== null)
+      patch.answered_at = this._answeredAt.toISOString();
+    if (this._endedAt !== null) patch.ended_at = this._endedAt.toISOString();
+    try {
+      const { error } = await this.supabase
+        .from("calls")
+        .update(patch)
+        .eq("retell_call_id", this.roomName);
+      if (error) {
+        console.error("[lifecycle] persist failed:", error.message);
+      }
+    } catch (err) {
+      console.error("[lifecycle] persist error:", String(err));
+    }
+  }
+};
+
+// agent/persistence/call-events-repository.ts
+async function recordCallEvent(
+  supabase,
+  callRoom,
+  workspaceId,
+  eventType,
+  payload = {},
+) {
+  try {
+    const { error } = await supabase.from("call_events").insert({
+      call_room: callRoom,
+      workspace_id: workspaceId,
+      event_type: eventType,
+      payload,
+    });
+    if (error) {
+      console.warn("[call-events] insert failed:", error.message, {
+        event_type: eventType,
+        call_room: callRoom,
+      });
+    }
+  } catch (err) {
+    console.warn("[call-events] unexpected error:", String(err));
+  }
+}
+function makeEventRecorder(supabase, callRoom, workspaceId) {
+  return (eventType, payload) => {
+    void recordCallEvent(
+      supabase,
+      callRoom,
+      workspaceId,
+      eventType,
+      payload ?? {},
+    );
+  };
+}
+
+// lib/billing/provider-pricing.ts
+async function lookupProviderCosts(supabase) {
+  const { data } = await supabase
+    .from("provider_costs")
+    .select(
+      "twilio_outbound_per_min,twilio_inbound_per_min,livekit_per_min,stt_per_min,llm_per_1k_tokens,tts_per_1k_chars",
+    )
+    .eq("label", "default")
+    .maybeSingle();
+  return data ?? null;
+}
+function priceTelephonyMinutes(minutes, direction, costs) {
+  const cents =
+    costs?.[
+      direction === "outbound"
+        ? "twilio_outbound_per_min"
+        : "twilio_inbound_per_min"
+    ];
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(minutes * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceLiveKitMinutes(minutes, costs) {
+  const cents = costs?.livekit_per_min;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(minutes * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceSTTMinutes(minutes, costs) {
+  const cents = costs?.stt_per_min;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(minutes * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceTTSChars(chars, costs) {
+  const cents = costs?.tts_per_1k_chars;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100 / 1e3;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(chars * unitCost),
+    pricing_source: "configured",
+  };
+}
+function priceLLMTokens(tokens, costs) {
+  const cents = costs?.llm_per_1k_tokens;
+  if (typeof cents !== "number")
+    return {
+      unit_cost_usd: null,
+      total_cost_usd: null,
+      pricing_source: "unknown",
+    };
+  const unitCost = cents / 100 / 1e3;
+  return {
+    unit_cost_usd: unitCost,
+    total_cost_usd: round6(tokens * unitCost),
+    pricing_source: "configured",
+  };
+}
+function round6(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+// agent/persistence/billing-tracker.ts
+var DEDUPE_WINDOW_MS = 5e3;
+var BillingTracker = class {
+  constructor(room, workspaceId, agentId) {
+    this._usage = [];
+    // TTS provider name — updated at session construction if a fallback was used.
+    this._ttsProvider = "cartesia";
+    // LLM provider name — updated at session construction if a fallback was used.
+    // Determines the provider field on the LLM cost row so Groq vs OpenAI costs
+    // are tracked separately when fallback activates.
+    this._llmProvider = "groq";
+    // TTS: two separate source buckets flushed into a single cost event at call-end.
+    this._manualSayChars = 0;
+    // from trackedSay() / explicit session.say() injections
+    this._manualSayCount = 0;
+    this._pipelineChars = 0;
+    // from ConversationItemAdded (LLM-generated responses)
+    this._pipelineCount = 0;
+    // Dedup registry: maps a short key to pending manual-say units.
+    // Consumed by trackPipelineTTS() when ConversationItemAdded fires for the same text.
+    this._pendingManual = /* @__PURE__ */ new Map();
+    // LLM tokens are estimated once at call-end; accumulated for completeness.
+    this._llmTokensTotal = 0;
+    this._room = room;
+    this._workspaceId = workspaceId;
+    this._agentId = agentId ?? null;
+  }
+  // Called right after TTS provider construction to record which provider is active.
+  setTTSProvider(provider) {
+    this._ttsProvider = provider;
+  }
+  // Called right after LLM provider construction to record which provider is active.
+  // When Groq fallback to OpenAI occurs, this ensures the cost row uses "openai"
+  // as provider so billing reflects the actual API that incurred charges.
+  setLLMProvider(provider) {
+    this._llmProvider = provider;
+  }
+  // Pure, synchronous estimate of accumulated call cost so far.
+  // Used by the budget circuit breaker to decide whether to terminate the call.
+  // Returns 0 when costs are not configured (pricing_source=unknown scenarios).
+  getEstimatedCurrentCostUSD(elapsedSeconds, costs) {
+    if (!costs) return 0;
+    const elapsedMin = elapsedSeconds / 60;
+    const telephonyCents =
+      elapsedMin *
+      Math.max(
+        costs.twilio_inbound_per_min ?? 0,
+        costs.twilio_outbound_per_min ?? 0,
+      );
+    const livekitCents = elapsedMin * (costs.livekit_per_min ?? 0);
+    const sttCents = elapsedMin * (costs.stt_per_min ?? 0);
+    const pendingChars = Array.from(this._pendingManual.values()).reduce(
+      (sum, p) => sum + p.chars * p.count,
+      0,
+    );
+    const ttsChars = this._manualSayChars + this._pipelineChars + pendingChars;
+    const ttsCents = (ttsChars / 1e3) * (costs.tts_per_1k_chars ?? 0);
+    const llmCents =
+      (this._llmTokensTotal / 1e3) * (costs.llm_per_1k_tokens ?? 0);
+    return (
+      (telephonyCents + livekitCents + sttCents + ttsCents + llmCents) / 100
+    );
+  }
+  trackTelephony(durationSeconds, direction) {
+    this._usage.push({
+      provider: "twilio",
+      cost_type: "telephony",
+      quantity: durationSeconds / 60,
+      unit: "minutes",
+      metadata: {
+        direction,
+        estimation_method: "call_duration_seconds",
+        confidence: "medium",
+        quantity_source: "real",
+        duration_seconds: durationSeconds,
+        pricing_unit: "usd_per_minute",
+      },
+    });
+  }
+  trackLiveKit(durationSeconds) {
+    this._usage.push({
+      provider: "livekit",
+      cost_type: "livekit_media",
+      quantity: durationSeconds / 60,
+      unit: "minutes",
+      metadata: {
+        estimation_method: "call_duration_seconds_rounded_to_minutes",
+        confidence: "medium",
+        quantity_source: "real",
+        duration_seconds: durationSeconds,
+        pricing_unit: "usd_per_minute",
+      },
+    });
+  }
+  trackSTT(durationSeconds) {
+    this._usage.push({
+      provider: "deepgram",
+      cost_type: "stt",
+      quantity: durationSeconds / 60,
+      unit: "minutes",
+      metadata: {
+        estimation_method: "call_duration_seconds",
+        confidence: "medium",
+        quantity_source: "real",
+        duration_seconds: durationSeconds,
+        pricing_unit: "usd_per_minute",
+      },
+    });
+  }
+  // Called by trackedSay() BEFORE calling session.say(text).
+  // Registers the text as a pending manual injection so that when
+  // ConversationItemAdded fires for the same text, it is attributed to
+  // the manual_session_say source bucket rather than the pipeline bucket.
+  trackManualSay(text) {
+    const chars = text.length;
+    if (chars <= 0) return;
+    const key = this._dedupeKey(text);
+    const existing = this._pendingManual.get(key);
+    if (existing) {
+      existing.count++;
+      existing.ts = Date.now();
+    } else {
+      this._pendingManual.set(key, { count: 1, chars, ts: Date.now() });
+    }
+  }
+  // Called from ConversationItemAdded for role=assistant items.
+  // Deduplicates against pending manual entries; if a match is found within
+  // DEDUPE_WINDOW_MS the chars are routed to _manualSayChars (not double-counted).
+  // Non-matching items are LLM pipeline responses → _pipelineChars.
+  trackPipelineTTS(text) {
+    const chars = text.length;
+    if (chars <= 0) return;
+    const key = this._dedupeKey(text);
+    const pending = this._pendingManual.get(key);
+    if (
+      pending &&
+      pending.count > 0 &&
+      Date.now() - pending.ts < DEDUPE_WINDOW_MS
+    ) {
+      pending.count--;
+      if (pending.count === 0) this._pendingManual.delete(key);
+      this._manualSayChars += chars;
+      this._manualSayCount++;
+    } else {
+      this._pipelineChars += chars;
+      this._pipelineCount++;
+    }
+  }
+  // Accumulates estimated LLM token counts (estimated from transcript length).
+  // A single consolidated cost event is emitted at computeAndPersist time.
+  trackLLMTokens(estimatedTokens) {
+    if (estimatedTokens <= 0) return;
+    this._llmTokensTotal += estimatedTokens;
+  }
+  async computeAndPersist(callId, supabase) {
+    for (const [, p] of this._pendingManual) {
+      if (p.count > 0) {
+        this._manualSayChars += p.chars * p.count;
+        this._manualSayCount += p.count;
+      }
+    }
+    this._pendingManual.clear();
+    const totalTtsChars = this._manualSayChars + this._pipelineChars;
+    if (totalTtsChars > 0) {
+      const pipelineVisibility =
+        this._pipelineCount > 0
+          ? "captured"
+          : this._manualSayCount > 0
+            ? "manual_only"
+            : "none";
+      this._usage.push({
+        provider: this._ttsProvider,
+        cost_type: "tts",
+        quantity: totalTtsChars,
+        unit: "characters",
+        metadata: {
+          estimation_method: "conversation_item_added_with_manual_say_dedup",
+          confidence: "medium",
+          quantity_source: "estimated",
+          pricing_unit: "usd_per_1k_characters",
+          tts_pipeline_visibility: pipelineVisibility,
+          sources: {
+            manual_session_say: {
+              characters: this._manualSayChars,
+              say_count: this._manualSayCount,
+            },
+            agent_pipeline_tts: {
+              characters: this._pipelineChars,
+              message_count: this._pipelineCount,
+            },
+          },
+        },
+      });
+    }
+    if (this._llmTokensTotal > 0) {
+      this._usage.push({
+        provider: this._llmProvider,
+        cost_type: "llm",
+        quantity: this._llmTokensTotal,
+        unit: "tokens",
+        metadata: {
+          estimation_method: "transcript_chars_divided_by_3",
+          confidence: "low",
+          quantity_source: "estimated",
+          pricing_unit: "usd_per_1k_tokens",
+          provider_source:
+            this._llmProvider === "groq" ? "primary" : "fallback",
+        },
+      });
+    }
+    if (this._usage.length === 0) return;
+    try {
+      const costs = await lookupProviderCosts(supabase);
+      const rows = [];
+      let pricedCount = 0;
+      let unknownCount = 0;
+      let totalCostUsd = 0;
+      for (const u of this._usage) {
+        const priced = this._priceUsage(u, costs);
+        if (priced.total_cost_usd === null) {
+          unknownCount++;
+        } else {
+          pricedCount++;
+          totalCostUsd += priced.total_cost_usd;
+        }
+        rows.push({
+          call_id: callId,
+          workspace_id: this._workspaceId,
+          agent_id: this._agentId,
+          call_room: this._room,
+          provider: u.provider,
+          cost_type: u.cost_type,
+          quantity: u.quantity,
+          unit: u.unit,
+          unit_cost_usd: priced.unit_cost_usd,
+          total_cost_usd: priced.total_cost_usd,
+          currency: "usd",
+          pricing_source: priced.pricing_source,
+          // Merge per-record estimation metadata with any pricing-time metadata
+          metadata: { ...u.metadata, ...priced.pricingMeta },
+        });
+      }
+      const { error: insertErr } = await supabase
+        .from("call_cost_events")
+        .insert(rows);
+      if (insertErr) {
+        console.warn("[billing-tracker] insert failed:", insertErr.message);
+        if (callId) {
+          await supabase
+            .from("calls")
+            .update({ cost_status: "failed" })
+            .eq("id", callId);
+        }
+        return;
+      }
+      if (callId) {
+        const breakdown = buildBreakdown(rows);
+        const costStatus =
+          pricedCount === 0
+            ? "not_calculated"
+            : unknownCount > 0
+              ? "partial"
+              : "estimated";
+        await supabase
+          .from("calls")
+          .update({
+            cost_usd: pricedCount > 0 ? round62(totalCostUsd) : 0,
+            cost_breakdown: breakdown,
+            cost_status: costStatus,
+          })
+          .eq("id", callId);
+      }
+    } catch (err) {
+      console.warn("[billing-tracker] computeAndPersist error:", String(err));
+    }
+  }
+  // Safety backfill: sets call_id on any cost events written before the calls
+  // row existed. In normal flow cost events already have call_id set, but this
+  // guard handles edge-cases (e.g. DB contention during upsert).
+  async backfillCallId(callId, supabase) {
+    try {
+      const { error } = await supabase
+        .from("call_cost_events")
+        .update({ call_id: callId })
+        .eq("call_room", this._room)
+        .eq("workspace_id", this._workspaceId)
+        .is("call_id", null);
+      if (!error) {
+        console.info(
+          `[billing-tracker] billing.cost_events_backfilled room=${this._room} call_id=${callId}`,
+        );
+      }
+    } catch (err) {
+      console.warn("[billing-tracker] backfillCallId error:", String(err));
+    }
+  }
+  // Short dedupe key based on character count + first 32 normalized chars.
+  // Avoids storing full text in memory while being discriminating enough for
+  // the short phrases injected via session.say() (greetings, fillers, farewells).
+  _dedupeKey(text) {
+    return `${text.length}:${text.slice(0, 32).toLowerCase().replace(/\s+/g, " ").trim()}`;
+  }
+  _priceUsage(u, costs) {
+    let base;
+    let pricingMeta = {};
+    switch (u.cost_type) {
+      case "telephony": {
+        const dir = u.metadata["direction"];
+        base = priceTelephonyMinutes(u.quantity, dir, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents:
+              costs?.[
+                dir === "outbound"
+                  ? "twilio_outbound_per_min"
+                  : "twilio_inbound_per_min"
+              ] ?? null,
+            calculation: `${u.quantity.toFixed(4)} min \xD7 $${base.unit_cost_usd.toFixed(8)}/min`,
+          };
+        }
+        break;
+      }
+      case "livekit_media": {
+        base = priceLiveKitMinutes(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.livekit_per_min ?? null,
+            calculation: `${u.quantity.toFixed(4)} min \xD7 $${base.unit_cost_usd.toFixed(8)}/min`,
+          };
+        }
+        break;
+      }
+      case "stt": {
+        base = priceSTTMinutes(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.stt_per_min ?? null,
+            calculation: `${u.quantity.toFixed(4)} min \xD7 $${base.unit_cost_usd.toFixed(8)}/min`,
+          };
+        }
+        break;
+      }
+      case "tts": {
+        base = priceTTSChars(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.tts_per_1k_chars ?? null,
+            calculation: `${u.quantity} chars \xD7 $${base.unit_cost_usd.toFixed(10)}/char`,
+          };
+        }
+        break;
+      }
+      case "llm": {
+        base = priceLLMTokens(u.quantity, costs);
+        if (base.unit_cost_usd !== null) {
+          pricingMeta = {
+            raw_rate_cents: costs?.llm_per_1k_tokens ?? null,
+            calculation: `${u.quantity} tokens \xD7 $${base.unit_cost_usd.toFixed(10)}/token`,
+          };
+        }
+        break;
+      }
+      default:
+        base = {
+          unit_cost_usd: null,
+          total_cost_usd: null,
+          pricing_source: "unknown",
+        };
+    }
+    return { ...base, pricingMeta };
+  }
+};
+function buildBreakdown(rows) {
+  const out = {};
+  for (const r of rows) {
+    out[r["cost_type"]] = {
+      provider: r["provider"],
+      quantity: r["quantity"],
+      unit: r["unit"],
+      total_cost_usd: r["total_cost_usd"],
+      pricing_source: r["pricing_source"],
+    };
+  }
+  return out;
+}
+function round62(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+// agent/providers/tts-provider-router.ts
+import { TTS as CartesiaTTS } from "@livekit/agents-plugin-cartesia";
+import { TTS as OpenAITTS } from "@livekit/agents-plugin-openai";
+var EMERGENCY_PHRASES = {
+  tts_timeout: "Un momento, por favor.",
+  provider_failure: "Disculpe, estamos experimentando problemas t\xE9cnicos.",
+  circuit_breaker:
+    "I'm sorry, your account has reached its credit limit. The call will end now. Goodbye!",
+  insufficient_funds:
+    "I'm sorry, your account has insufficient balance. Please top up to continue. Goodbye!",
+};
+function createTTSProvider(config2) {
+  const cartesiaFactory =
+    config2._cartesiaFactory ?? ((opts) => new CartesiaTTS(opts));
+  const openaiFactory =
+    config2._openaiFactory ?? ((opts) => new OpenAITTS(opts));
+  if (config2.cartesiaApiKey) {
+    try {
+      const opts = {
+        model: config2.ttsModel ?? "sonic-multilingual",
+        voice: config2.voiceId,
+        apiKey: config2.cartesiaApiKey,
+        language: config2.language ?? "es",
+        chunkTimeout: config2.chunkTimeout ?? 8e3,
+      };
+      if (config2.emotion && config2.emotion.length > 0) {
+        opts["emotion"] = config2.emotion;
+      }
+      const tts = cartesiaFactory(opts);
+      return { tts, providerName: "cartesia", fallbackUsed: false };
+    } catch (err) {
+      console.warn(
+        "[tts-router] CartesiaTTS constructor failed, trying OpenAI fallback:",
+        String(err),
+      );
+    }
+  }
+  if (config2.openaiApiKey) {
+    try {
+      const tts = openaiFactory({
+        model: "tts-1",
+        // lower latency than tts-1-hd; sufficient for real-time voice
+        voice: "nova",
+        // closest neutral assistant voice
+        apiKey: config2.openaiApiKey,
+      });
+      const reason = config2.cartesiaApiKey
+        ? "cartesia_constructor_failed"
+        : "cartesia_api_key_missing";
+      return { tts, providerName: "openai", fallbackUsed: true, reason };
+    } catch (err) {
+      console.warn(
+        "[tts-router] OpenAITTS constructor also failed \u2014 no TTS provider available:",
+        String(err),
+      );
+    }
+  }
+  console.error(
+    "[tts-router] No TTS provider could be constructed. Cartesia and OpenAI both failed or unconfigured.",
+  );
+  return null;
+}
+
+// lib/prompts/compiler.ts
+function compileSystemPrompt(basePrompt, variables) {
+  if (!basePrompt) return basePrompt;
+  return basePrompt.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key) => variables[key] ?? `{{${key}}}`,
+  );
+}
+function buildSystemVariables(
+  extraVars,
+  locale = "es-MX",
+  timezone = "America/Mexico_City",
+) {
+  const now = /* @__PURE__ */ new Date();
+  const fmt = (opts) =>
+    now.toLocaleString(locale, { timeZone: timezone, ...opts });
+  const base = {
+    current_date: fmt({ year: "numeric", month: "long", day: "numeric" }),
+    current_time: fmt({ hour: "2-digit", minute: "2-digit" }),
+    current_datetime: fmt({
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    current_year: String(now.getFullYear()),
+    current_month: fmt({ month: "long" }),
+    current_day: fmt({ weekday: "long" }),
+  };
+  if (extraVars && Object.keys(extraVars).length > 0) {
+    return { ...base, ...extraVars };
+  }
+  return base;
+}
+function extractMetadataVars(config2) {
+  if (!config2 || typeof config2 !== "object") return {};
+  const result = {};
+  for (const [k, v] of Object.entries(config2)) {
+    if (typeof v === "string") result[k] = v;
+  }
+  return result;
+}
+
+// agent/providers/llm-provider-router.ts
+import { LLM } from "@livekit/agents-plugin-openai";
+var GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+var DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+var DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+function createLLMProvider(config2) {
+  const groqFactory =
+    config2._groqFactory ?? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((opts) => new LLM(opts));
+  const openaiFactory =
+    config2._openaiFactory ?? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((opts) => new LLM(opts));
+  if (config2.groqApiKey) {
+    try {
+      const llm3 = groqFactory({
+        model: config2.groqModel ?? DEFAULT_GROQ_MODEL,
+        apiKey: config2.groqApiKey,
+        baseURL: GROQ_BASE_URL,
+      });
+      return { llm: llm3, providerName: "groq", fallbackUsed: false };
+    } catch (err) {
+      const reason = `groq_constructor_failed: ${String(err).slice(0, 120)}`;
+      return _tryOpenAI(config2, openaiFactory, reason);
+    }
+  }
+  return _tryOpenAI(config2, openaiFactory, "groq_key_missing");
+}
+function _tryOpenAI(config2, factory, fallbackReason) {
+  if (!config2.openaiApiKey) return null;
+  try {
+    const llm3 = factory({
+      model: config2.openaiModel ?? DEFAULT_OPENAI_MODEL,
+      apiKey: config2.openaiApiKey,
+      // No baseURL override — uses OpenAI native endpoint
+    });
+    return {
+      llm: llm3,
+      providerName: "openai",
+      fallbackUsed: true,
+      reason: fallbackReason,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// lib/jobs/post-call-jobs.ts
+async function enqueuePostCallJobsForCall(input) {
+  const { workspaceId, callId, roomName, agentId, jobs, supabase } = input;
+  const errors = [];
+  const rows = jobs.map((j) => ({
+    workspace_id: workspaceId,
+    call_id: callId,
+    room_name: roomName ?? null,
+    agent_id: agentId ?? null,
+    job_type: j.job_type,
+    priority: j.priority ?? 100,
+    max_attempts: j.max_attempts ?? 5,
+    payload: j.payload ?? {},
+    run_after:
+      j.run_after?.toISOString() ?? /* @__PURE__ */ new Date().toISOString(),
+  }));
+  try {
+    const { data, error } = await supabase.rpc(
+      "enqueue_post_call_jobs_idempotent",
+      { p_jobs: rows },
+    );
+    if (error) {
+      errors.push(error.message);
+      return { enqueued: 0, skipped: jobs.length, errors };
+    }
+    const inserted = data ?? [];
+    return {
+      enqueued: inserted.length,
+      skipped: jobs.length - inserted.length,
+      errors,
+    };
+  } catch (err) {
+    errors.push(String(err));
+    return { enqueued: 0, skipped: jobs.length, errors };
+  }
+}
+
+// agent/worker_core.ts
 import { createServer } from "node:http";
 var envPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../.env.local",
 );
 if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+var TRANSIENT_CODES = /* @__PURE__ */ new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENOTCONN",
+  "ECONNABORTED",
+]);
+process.on("uncaughtException", (err) => {
+  const code = err.code ?? "";
+  if (TRANSIENT_CODES.has(code)) {
+    console.warn(
+      `[worker] Transient socket error suppressed (${code}): ${err.message}`,
+    );
+    return;
+  }
+  console.error("[worker] FATAL uncaught exception \u2014 exiting:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "[worker] Unhandled Promise rejection (non-fatal):",
+    String(reason),
+  );
+});
+var _origSocketConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function (...args) {
+  this.once("connect", () => {
+    try {
+      this.setKeepAlive(true, 15e3);
+    } catch {}
+  });
+  return _origSocketConnect.apply(this, args);
+};
 function buildFlowPrompt(flowJson) {
   if (!flowJson || typeof flowJson !== "object") return null;
   const { nodes, edges } = flowJson;
@@ -45572,13 +46580,15 @@ function buildStateMachine(config2) {
     },
   };
 }
-function buildDynamicTool(t) {
+function buildDynamicTool(t, billing) {
   return llm2.tool({
     description: t.description || t.name,
     parameters: t.parameter_schema,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     execute: async (args, opts) => {
-      opts.ctx.session.say("One moment, let me check that for you.");
+      const sayText = "One moment, let me check that for you.";
+      billing?.trackManualSay(sayText);
+      opts.ctx.session.say(sayText);
       try {
         const res = await Promise.race([
           fetch(t.server_url, {
@@ -45598,7 +46608,7 @@ function buildDynamicTool(t) {
     },
   });
 }
-function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey) {
+function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey, billing) {
   return llm2.tool({
     description:
       "Search the knowledge base for information relevant to the user's question. Use when you need specific facts, policies, product details, or procedures.",
@@ -45615,7 +46625,9 @@ function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey) {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     execute: async (args, opts) => {
-      opts.ctx.session.say("Let me look that up for you.");
+      const sayText = "Let me look that up for you.";
+      billing?.trackManualSay(sayText);
+      opts.ctx.session.say(sayText);
       try {
         const embRes = await Promise.race([
           fetch("https://api.openai.com/v1/embeddings", {
@@ -45681,10 +46693,50 @@ function buildRagTool(workspaceId, openaiKey, sbUrl, sbKey) {
   });
 }
 function injectVariables(template, vars) {
-  return template.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key) => vars[key] ?? `{{${key}}}`,
-  );
+  return compileSystemPrompt(template, vars);
+}
+async function _resolveRoutingContext(inboundPhoneId, supabase) {
+  const empty = {
+    agentId: null,
+    systemPrompt: null,
+    voiceId: null,
+    voiceEmotion: null,
+    phoneVars: {},
+    transferTargetPhone: null,
+  };
+  if (!inboundPhoneId) return empty;
+  try {
+    const { data: phoneRow, error: phoneErr } = await supabase
+      .from("phone_numbers")
+      .select("agent_id, metadata_config, transfer_target_phone")
+      .eq("id", inboundPhoneId)
+      .maybeSingle();
+    if (phoneErr || !phoneRow) return empty;
+    const phone = phoneRow;
+    const phoneVars = extractMetadataVars(phone.metadata_config);
+    if (!phone.agent_id)
+      return {
+        ...empty,
+        phoneVars,
+        transferTargetPhone: phone.transfer_target_phone ?? null,
+      };
+    const { data: agentRow } = await supabase
+      .from("agents")
+      .select("system_prompt, voice_id, voice_emotion")
+      .eq("id", phone.agent_id)
+      .maybeSingle();
+    const agent = agentRow;
+    return {
+      agentId: phone.agent_id,
+      systemPrompt: agent?.system_prompt ?? null,
+      voiceId: agent?.voice_id ?? null,
+      voiceEmotion: agent?.voice_emotion ?? null,
+      phoneVars,
+      transferTargetPhone: phone.transfer_target_phone ?? null,
+    };
+  } catch {
+    return empty;
+  }
 }
 function getSupabaseAdmin() {
   const url = process.env["NEXT_PUBLIC_SUPABASE_URL"];
@@ -45695,6 +46747,7 @@ function getSupabaseAdmin() {
 var worker_core_default = defineAgent({
   entry: async (ctx) => {
     await ctx.connect();
+    let agentLanguage = "es";
     const dgKey = process.env["DEEPGRAM_API_KEY"] ?? "";
     const cartKey = process.env["CARTESIA_API_KEY"] ?? "";
     const groqKey2 = process.env["GROQ_API_KEY"] ?? "";
@@ -45721,8 +46774,8 @@ var worker_core_default = defineAgent({
         LIVEKIT_URL: process.env["LIVEKIT_URL"] ?? "MISSING",
         SUPABASE_URL_set: !!process.env["NEXT_PUBLIC_SUPABASE_URL"],
         SUPABASE_SRK_set: !!process.env["SUPABASE_SERVICE_ROLE_KEY"],
-        // Deepgram connection URL that will be attempted
-        deepgram_url: `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&encoding=linear16&vad_events=true&interim_results=true&endpointing=false`,
+        // Deepgram connection URL that will be attempted (language resolved after metadata parse)
+        deepgram_url: `wss://api.deepgram.com/v1/listen?model=nova-2&language=${agentLanguage}&encoding=linear16&vad_events=true&interim_results=true&endpointing=300`,
       }),
     );
     let systemPrompt =
@@ -45735,10 +46788,19 @@ var worker_core_default = defineAgent({
     let agentId = null;
     let callDirection = "inbound";
     let transferNumber = null;
+    let _transferredToHuman = false;
+    let twilioCallSid = null;
     let flowJson = null;
     let flowConfig = null;
     let ambientSound = null;
     let ambientSoundVolume = 1;
+    let crmFunnel = null;
+    let crmLeadId = null;
+    let crmCountry = null;
+    let crmCampaign = null;
+    let callEndedWebhookUrl = null;
+    let inboundPhoneId = null;
+    let _campaignLeadId = null;
     try {
       const meta = JSON.parse(ctx.room.metadata ?? "{}");
       if (meta.system_prompt) systemPrompt = meta.system_prompt;
@@ -45762,8 +46824,30 @@ var worker_core_default = defineAgent({
         const vars = meta.dynamic_variables;
         systemPrompt = injectVariables(systemPrompt, vars);
         if (firstMessage) firstMessage = injectVariables(firstMessage, vars);
+        crmFunnel = crmFunnel ?? vars["Funnel"] ?? null;
+        crmLeadId = crmLeadId ?? vars["LeadId"] ?? null;
+        crmCountry = crmCountry ?? vars["Country"] ?? null;
+        crmCampaign = crmCampaign ?? vars["Campaign"] ?? null;
       }
+      if (meta.Funnel) crmFunnel = meta.Funnel;
+      if (meta.LeadId) crmLeadId = meta.LeadId;
+      if (meta.Country) crmCountry = meta.Country;
+      if (meta.Campaign) crmCampaign = meta.Campaign;
+      if (meta.webhook_url) callEndedWebhookUrl = meta.webhook_url;
+      if (meta.language) agentLanguage = meta.language;
+      if (meta.inbound_phone_id) inboundPhoneId = meta.inbound_phone_id;
+      _campaignLeadId = meta.contact_id ?? meta.campaign_lead_id ?? null;
     } catch {}
+    if (crmFunnel || crmLeadId || crmCountry || crmCampaign) {
+      systemPrompt += [
+        "\n\n## CRM Context",
+        `Funnel: ${crmFunnel ?? "N/A"}`,
+        `LeadId: ${crmLeadId ?? "N/A"}`,
+        `Country: ${crmCountry ?? "N/A"}`,
+        `Campaign: ${crmCampaign ?? "N/A"}`,
+        "Use this context to personalize your responses. Never reveal the LeadId to the caller.",
+      ].join("\n");
+    }
     const roomName = ctx.room.name ?? "";
     const roomMatch = roomName.match(/^(?:agent|sip-agent)-([0-9a-f-]+)/i);
     if (!agentId && roomMatch) agentId = roomMatch[1];
@@ -45771,6 +46855,111 @@ var worker_core_default = defineAgent({
     const openaiKey = process.env["OPENAI_API_KEY"];
     const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"] ?? "";
     const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+    const _lifecycleSupabase = getSupabaseAdmin();
+    const lifecycle =
+      _lifecycleSupabase && workspaceId
+        ? new CallLifecycleManager(roomName, workspaceId, _lifecycleSupabase)
+        : null;
+    const emit =
+      _lifecycleSupabase && workspaceId
+        ? makeEventRecorder(_lifecycleSupabase, roomName, workspaceId)
+        : (_type, _payload) => {};
+    const billing =
+      _lifecycleSupabase && workspaceId && agentId
+        ? new BillingTracker(roomName, workspaceId, agentId)
+        : null;
+    let availableWorkspaceBalanceCents = Number.MAX_SAFE_INTEGER;
+    let cachedProviderCosts = null;
+    let _circuitBreakerTriggered = false;
+    let callStartedAt = 0;
+    if (inboundPhoneId && _lifecycleSupabase) {
+      const routingCtx = await _resolveRoutingContext(
+        inboundPhoneId,
+        _lifecycleSupabase,
+      );
+      if (routingCtx.agentId || Object.keys(routingCtx.phoneVars).length > 0) {
+        const compiledVars = buildSystemVariables(routingCtx.phoneVars);
+        systemPrompt = compileSystemPrompt(systemPrompt, compiledVars);
+        if (firstMessage)
+          firstMessage = compileSystemPrompt(firstMessage, compiledVars);
+        if (routingCtx.agentId && !agentId) agentId = routingCtx.agentId;
+        if (routingCtx.voiceId && !voiceId) voiceId = routingCtx.voiceId;
+        if (routingCtx.voiceEmotion && !voiceEmotion)
+          voiceEmotion = routingCtx.voiceEmotion;
+        if (routingCtx.transferTargetPhone && !transferNumber)
+          transferNumber = routingCtx.transferTargetPhone;
+        void emit("routing.context_resolved", {
+          inbound_phone_id: inboundPhoneId,
+          phone_vars_count: Object.keys(routingCtx.phoneVars).length,
+          agent_override: !!routingCtx.agentId,
+        });
+      } else {
+        const sysVars = buildSystemVariables();
+        systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
+        if (firstMessage)
+          firstMessage = compileSystemPrompt(firstMessage, sysVars);
+        void emit("routing.context_fallback", {
+          inbound_phone_id: inboundPhoneId,
+          reason: "phone_not_found",
+        });
+      }
+    } else {
+      const sysVars = buildSystemVariables();
+      systemPrompt = compileSystemPrompt(systemPrompt, sysVars);
+      if (firstMessage)
+        firstMessage = compileSystemPrompt(firstMessage, sysVars);
+    }
+    if (_campaignLeadId && _lifecycleSupabase) {
+      try {
+        const { data: leadRow } = await _lifecycleSupabase
+          .from("campaign_contacts")
+          .select("name, variables")
+          .eq("id", _campaignLeadId)
+          .maybeSingle();
+        if (leadRow) {
+          const lr = leadRow;
+          const leadVars = { ...(lr.variables ?? {}) };
+          if (lr.name) {
+            const firstName = lr.name.split(" ")[0] ?? lr.name;
+            leadVars["lead_first_name"] = firstName;
+            leadVars["lead_full_name"] = lr.name;
+          }
+          if (Object.keys(leadVars).length > 0) {
+            systemPrompt = compileSystemPrompt(systemPrompt, leadVars);
+            if (firstMessage)
+              firstMessage = compileSystemPrompt(firstMessage, leadVars);
+            void emit("campaign.lead_context_injected", {
+              contact_id: _campaignLeadId,
+              vars_count: Object.keys(leadVars).length,
+            });
+          }
+        }
+      } catch {}
+    }
+    if (_lifecycleSupabase && roomName) {
+      try {
+        const { data: callRecord } = await _lifecycleSupabase
+          .from("calls")
+          .select("routing_data")
+          .eq("retell_call_id", roomName)
+          .maybeSingle();
+        const rd = callRecord?.routing_data;
+        if (rd && typeof rd["twilio_call_sid"] === "string") {
+          twilioCallSid = rd["twilio_call_sid"];
+        }
+      } catch {}
+    }
+    void lifecycle?.transitionTo("in_progress").catch(() => null);
+    void emit("call.initiated", {
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      direction: callDirection,
+    });
+    void emit("livekit.room_joined", {
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      room: roomName,
+    });
     const pronunciation = await loadPronunciationConfig(
       agentId,
       supabaseUrl,
@@ -45821,7 +47010,8 @@ var worker_core_default = defineAgent({
       "[worker.diag] stt.init",
       JSON.stringify({
         model: "nova-2",
-        language: "en",
+        language: agentLanguage,
+        endpointing: 300,
         api_key_present: !!dgApiKey,
         api_key_length: dgApiKey?.length ?? 0,
         api_key_prefix: dgApiKey ? dgApiKey.slice(0, 4) : "MISSING",
@@ -45830,7 +47020,10 @@ var worker_core_default = defineAgent({
     const stt = new STT({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: "nova-2",
-      language: "es",
+      language: agentLanguage,
+      // 300 ms endpointing prevents premature turn-end on mobile connections
+      // while staying responsive on stable lines (plugin default 25 ms is too aggressive).
+      endpointing: 300,
       apiKey: dgApiKey,
     });
     stt.on("error", (err) => {
@@ -45843,16 +47036,55 @@ var worker_core_default = defineAgent({
         }),
       );
     });
-    if (!groqKey) {
-      console.error(
-        "[worker.diag] CRITICAL: GROQ_API_KEY not set \u2014 every LLM call will return 401 and leave session stuck in Thinking",
-      );
-    }
-    const lm = new LLM({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      apiKey: groqKey ?? "",
-      baseURL: "https://api.groq.com/openai/v1",
+    const llmRouterResult = createLLMProvider({
+      groqApiKey: groqKey ?? void 0,
+      openaiApiKey: openaiKey ?? void 0,
     });
+    if (!llmRouterResult) {
+      void emit("llm.provider_constructor_failed", {
+        reason: "all_providers_failed",
+        groq_key_present: !!groqKey,
+        openai_key_present: !!openaiKey,
+        agent_id: agentId,
+        room: roomName,
+      });
+      console.error(
+        "[worker.llm] No LLM provider could be constructed \u2014 aborting session",
+        { groq_key_present: !!groqKey, openai_key_present: !!openaiKey },
+      );
+      void lifecycle
+        ?.transitionTo("failed", "llm_provider_failure")
+        .catch(() => null);
+      return;
+    }
+    if (llmRouterResult.fallbackUsed) {
+      void emit("llm.fallback_selected", {
+        provider: llmRouterResult.providerName,
+        reason: llmRouterResult.reason,
+        agent_id: agentId,
+        room: roomName,
+      });
+      void emit("llm.provider_constructor_failed", {
+        reason: llmRouterResult.reason ?? "groq_failed",
+        agent_id: agentId,
+        room: roomName,
+      });
+      console.warn(
+        "[worker.llm] Groq unavailable \u2014 using OpenAI fallback",
+        {
+          reason: llmRouterResult.reason,
+        },
+      );
+    } else {
+      void emit("llm.provider_selected", {
+        provider: llmRouterResult.providerName,
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        agent_id: agentId,
+        room: roomName,
+      });
+    }
+    billing?.setLLMProvider(llmRouterResult.providerName);
+    const lm = llmRouterResult.llm;
     const EMOTION_MAP = {
       calm: ["positivity:low"],
       sympathetic: ["sadness:low"],
@@ -45862,34 +47094,58 @@ var worker_core_default = defineAgent({
       fearful: ["fearfulness:high"],
       surprised: ["surprise:positive:high"],
     };
-    const ttsInitOpts = {
-      model: "sonic-3",
-      voice: voiceId,
-      apiKey: process.env["CARTESIA_API_KEY"],
-      language: "es",
-      ...(voiceEmotion && EMOTION_MAP[voiceEmotion]
-        ? { emotion: EMOTION_MAP[voiceEmotion] }
-        : {}),
-    };
-    console.log("[DEBUG_CARTESIA]", {
-      model: ttsInitOpts.model,
-      voice: ttsInitOpts.voice,
-      language: ttsInitOpts.language,
-      emotion: ttsInitOpts.emotion ?? null,
-      apiKeySet: !!process.env["CARTESIA_API_KEY"],
-      apiKeyPrefix: (process.env["CARTESIA_API_KEY"] ?? "").slice(0, 4),
+    const ttsRouterResult = createTTSProvider({
+      cartesiaApiKey: process.env["CARTESIA_API_KEY"],
+      openaiApiKey: process.env["OPENAI_API_KEY"],
+      voiceId,
+      language: agentLanguage ?? "es",
+      ttsModel: "sonic-multilingual",
+      // sonic-multilingual generates chunks with longer inter-chunk gaps than sonic-3.
+      // The plugin default (5000 ms) cuts the stream prematurely, causing the agent
+      // to go silent mid-sentence. 8 s gives the model enough breathing room.
+      chunkTimeout: 8e3,
+      emotion:
+        voiceEmotion && EMOTION_MAP[voiceEmotion]
+          ? EMOTION_MAP[voiceEmotion]
+          : null,
     });
-    let cartesiaTTS;
-    try {
-      cartesiaTTS = new CartesiaTTS(ttsInitOpts);
-    } catch (ttsInitErr) {
+    if (!ttsRouterResult) {
+      void emit("tts.provider_constructor_failed", {
+        reason: "all_providers_failed",
+        agent_id: agentId,
+        room: roomName,
+      });
       console.error(
-        "[worker.tts] CartesiaTTS constructor threw \u2014 aborting session:",
-        ttsInitErr,
+        "[worker.tts] No TTS provider could be constructed \u2014 aborting session",
       );
-      throw ttsInitErr;
+      void lifecycle?.transitionTo("failed").catch(() => null);
+      return;
     }
-    const tts = cartesiaTTS;
+    console.log("[DEBUG_TTS_ROUTER]", {
+      providerName: ttsRouterResult.providerName,
+      fallbackUsed: ttsRouterResult.fallbackUsed,
+      reason: ttsRouterResult.reason ?? null,
+      cartesiaKeySet: !!process.env["CARTESIA_API_KEY"],
+      cartesiaKeyPrefix: (process.env["CARTESIA_API_KEY"] ?? "").slice(0, 4),
+    });
+    if (ttsRouterResult.fallbackUsed) {
+      void emit("tts.fallback_selected", {
+        provider: ttsRouterResult.providerName,
+        reason: ttsRouterResult.reason,
+        agent_id: agentId,
+      });
+      void emit("tts.provider_constructor_failed", {
+        reason: ttsRouterResult.reason ?? "cartesia_failed",
+        agent_id: agentId,
+      });
+    } else {
+      void emit("tts.provider_selected", {
+        provider: ttsRouterResult.providerName,
+        agent_id: agentId,
+      });
+    }
+    billing?.setTTSProvider(ttsRouterResult.providerName);
+    const tts = ttsRouterResult.tts;
     const flowPrompt = isFlowConfig2(flowConfig)
       ? null
       : buildFlowPrompt(flowJson);
@@ -45899,12 +47155,18 @@ var worker_core_default = defineAgent({
     const dynamicTools = {};
     for (const t of agentToolRows) {
       try {
-        dynamicTools[t.name] = buildDynamicTool(t);
+        dynamicTools[t.name] = buildDynamicTool(t, billing);
       } catch {}
     }
     const ragTool =
       workspaceId && openaiKey && supabaseUrl && supabaseKey
-        ? buildRagTool(workspaceId, openaiKey, supabaseUrl, supabaseKey)
+        ? buildRagTool(
+            workspaceId,
+            openaiKey,
+            supabaseUrl,
+            supabaseKey,
+            billing,
+          )
         : null;
     const endCallTool = llm2.tool({
       description: `Hang up and end the call. Call this when: the conversation goal is complete, the user says goodbye or "that's all I needed", the flow script reaches [END], the user is unresponsive, or the user explicitly wants to stop. Include a natural, warm farewell in the farewell parameter.`,
@@ -45940,6 +47202,7 @@ var worker_core_default = defineAgent({
           room: roomName,
         });
         try {
+          billing?.trackManualSay(args.farewell);
           await opts.ctx.session.say(args.farewell, {
             allowInterruptions: false,
           });
@@ -46099,6 +47362,7 @@ var worker_core_default = defineAgent({
                 targetNode.data.farewell ??
                 "Thank you for calling. Have a great day!";
               try {
+                billing?.trackManualSay(farewell);
                 await opts.ctx.session.say(farewell, {
                   allowInterruptions: false,
                 });
@@ -46124,7 +47388,9 @@ var worker_core_default = defineAgent({
                 targetNode.data.transfer_number ?? transferNumber ?? null;
               if (tn && agentRef.current) {
                 try {
-                  opts.ctx.session.say("One moment, let me transfer you now.");
+                  const transferSay = "One moment, let me transfer you now.";
+                  billing?.trackManualSay(transferSay);
+                  opts.ctx.session.say(transferSay);
                 } catch {}
               }
               sm.setCurrentNodeId(edge.target);
@@ -46231,13 +47497,29 @@ var worker_core_default = defineAgent({
         ...buildTools({
           enableTransfer: true,
           enableOrders: false,
-          // ── 3. Pass call context for SIP transfer ─────────────────────────
+          // ── 3. Pass call context for SIP REFER + Twilio redirect ──────────
           roomName,
           transferNumber:
-            transferNumber ?? process.env["SUPPORT_TRANSFER_NUMBER"] ?? null,
+            transferNumber ??
+            process.env["SUPPORT_TRANSFER_NUMBER"] ??
+            process.env["VOICEOS_GLOBAL_TRANSFER_FALLBACK"] ??
+            null,
           livekitWsUrl: process.env["LIVEKIT_URL"] ?? "",
           livekitApiKey: process.env["LIVEKIT_API_KEY"] ?? "",
           livekitApiSecret: process.env["LIVEKIT_API_SECRET"] ?? "",
+          // Twilio hot-redirect (Fase 12) — only present for Twilio-originated calls
+          twilioCallSid,
+          twilioAccountSid: process.env["TWILIO_ACCOUNT_SID"] ?? null,
+          twilioAuthToken: process.env["TWILIO_AUTH_TOKEN"] ?? null,
+          onTransferInitiated: ({ reason, targetNumber }) => {
+            _transferredToHuman = true;
+            lifecycle?.setOutcome("transferred_to_human");
+            void emit("call.transferred", {
+              reason,
+              target: targetNumber,
+              transfer_method: twilioCallSid ? "twilio_redirect" : "sip_refer",
+            });
+          },
         }),
         // Pilar B: workspace-defined custom HTTP tools
         ...dynamicTools,
@@ -46292,6 +47574,52 @@ var worker_core_default = defineAgent({
       }
     };
     const session = new voice.AgentSession({ stt, llm: lm, tts });
+    const _evaluateBudgetCircuitBreaker = async () => {
+      if (_circuitBreakerTriggered) return;
+      if (callStartedAt === 0) return;
+      if (availableWorkspaceBalanceCents === Number.MAX_SAFE_INTEGER) return;
+      const elapsedSeconds = (Date.now() - callStartedAt) / 1e3;
+      const estimatedUSD = billing
+        ? billing.getEstimatedCurrentCostUSD(
+            elapsedSeconds,
+            cachedProviderCosts,
+          )
+        : 0;
+      const availableUSD = availableWorkspaceBalanceCents / 100;
+      if (estimatedUSD < availableUSD) return;
+      _circuitBreakerTriggered = true;
+      console.warn(
+        "[worker.circuit_breaker] Budget limit reached \u2014 terminating call",
+        {
+          estimated_usd: estimatedUSD,
+          available_usd: availableUSD,
+          workspace_id: workspaceId,
+          room: roomName,
+        },
+      );
+      void emit("billing.circuit_breaker_triggered", {
+        estimated_usd: estimatedUSD,
+        available_usd: availableUSD,
+        workspace_id: workspaceId,
+        agent_id: agentId,
+        room: roomName,
+      });
+      void lifecycle?.transitionTo("failed").catch(() => null);
+      const phrase = EMERGENCY_PHRASES["circuit_breaker"];
+      billing?.trackManualSay(phrase);
+      try {
+        await session.say(phrase, { allowInterruptions: false });
+      } catch {}
+      try {
+        session.interrupt({ force: true });
+      } catch {}
+      _doDeleteRoom();
+    };
+    const trackedSay = (text, options) => {
+      billing?.trackManualSay(text);
+      void _evaluateBudgetCircuitBreaker();
+      return session.say(text, options);
+    };
     const _doDeleteRoom = () => {
       const wsUrl = process.env["LIVEKIT_URL"] ?? "";
       const httpUrl = wsUrl
@@ -46314,6 +47642,70 @@ var worker_core_default = defineAgent({
     let _hangupTimer = null;
     let _silenceArmed = false;
     let _ambientAbort = null;
+    let _voicemailDetected = false;
+    let _silencePhase = "greeting";
+    const SILENCE_POLICIES = {
+      greeting: {
+        repromptMs: 5e3,
+        hangupMs: 6e3,
+        repromptText: "\xBFHola? \xBFMe escuchas bien?",
+        hangupText:
+          "Parece que tenemos problemas de audio. Te llamaremos luego.",
+      },
+      normal: {
+        repromptMs: 12e3,
+        hangupMs: 8e3,
+        repromptText: "\xBFSigues ah\xED?",
+        hangupText: "Parece que no hay respuesta. Hasta luego.",
+      },
+    };
+    let _speakingWatchdog = null;
+    let _thinkingWd1 = null;
+    let _thinkingWd2 = null;
+    let _thinkingWd3 = null;
+    let _thinkingSlow = false;
+    let _ttfbWd1 = null;
+    let _ttfbWd2 = null;
+    let _ttfbWd3 = null;
+    let _isThinkingInterventionActive = false;
+    const SPEAKING_WATCHDOG_MS = 15e3;
+    const _clearThinkingWatchdogs = () => {
+      if (_thinkingWd1) {
+        clearTimeout(_thinkingWd1);
+        _thinkingWd1 = null;
+      }
+      if (_thinkingWd2) {
+        clearTimeout(_thinkingWd2);
+        _thinkingWd2 = null;
+      }
+      if (_thinkingWd3) {
+        clearTimeout(_thinkingWd3);
+        _thinkingWd3 = null;
+      }
+      _thinkingSlow = false;
+    };
+    const _clearTtfbWatchdogs = () => {
+      if (_ttfbWd1) {
+        clearTimeout(_ttfbWd1);
+        _ttfbWd1 = null;
+      }
+      if (_ttfbWd2) {
+        clearTimeout(_ttfbWd2);
+        _ttfbWd2 = null;
+      }
+      if (_ttfbWd3) {
+        clearTimeout(_ttfbWd3);
+        _ttfbWd3 = null;
+      }
+    };
+    const _clearWatchdogs = () => {
+      if (_speakingWatchdog) {
+        clearTimeout(_speakingWatchdog);
+        _speakingWatchdog = null;
+      }
+      _clearThinkingWatchdogs();
+      _clearTtfbWatchdogs();
+    };
     let _wasInterrupted = false;
     let _bargeInAt = null;
     let _endpointingReduced = false;
@@ -46331,25 +47723,30 @@ var worker_core_default = defineAgent({
     const _armSilenceTimer = () => {
       _clearSilenceTimers();
       if (!_silenceArmed) return;
+      const policy = SILENCE_POLICIES[_silencePhase];
       _silenceTimer = setTimeout(() => {
         _silenceTimer = null;
-        void session.say("\xBFHola? \xBFSigues ah\xED?").then(null, () => null);
+        void trackedSay(policy.repromptText).then(null, () => null);
         _hangupTimer = setTimeout(() => {
           _hangupTimer = null;
           _silenceArmed = false;
-          void session
-            .say("Parece que hay problemas de audio. Hasta luego.", {
-              allowInterruptions: false,
-            })
-            .then(_doDeleteRoom, _doDeleteRoom);
-        }, 3500);
-      }, 4500);
+          lifecycle?.setOutcome("silence_timeout");
+          void lifecycle?.transitionTo("completed", "silence_timeout");
+          void emit("call.silence_timeout", {
+            agent_id: agentId,
+            phase: _silencePhase,
+          });
+          void trackedSay(policy.hangupText, {
+            allowInterruptions: false,
+          }).then(_doDeleteRoom, _doDeleteRoom);
+        }, policy.hangupMs);
+      }, policy.repromptMs);
     };
     ctx.room.on("disconnected", async () => {
       const reason = ctx.room.disconnectReason;
       if (reason === "ROOM_DELETED" || reason === "SERVER_SHUTDOWN") {
         try {
-          await session.say(
+          await trackedSay(
             "I'm sorry, we need to end our call now due to account limits. Please contact support to continue.",
           );
         } catch {}
@@ -46361,6 +47758,8 @@ var worker_core_default = defineAgent({
     let ttsSpan = startSpan("tts.first_chunk");
     const NEGATIVE_INTENT_RE =
       /no\s+me\s+interesa|no\s+(vuelva?s?\s+a\s+)?llam|deja\s+de\s+llamar|no\s+quiero\s+(que\s+me\s+llam|m[aá]s\s+llamadas)|quit\s+calling|stop\s+calling|remove\s+(me\s+)?from\s+(your\s+)?list|not\s+interested|do\s+not\s+call|don'?t\s+(ever\s+)?call\s+(me|again)|fuck\s+off|piss\s+off|no\s+llames\s+m[aá]s|no\s+molest/i;
+    const VOICEMAIL_RE =
+      /deja\s+(tu\s+)?mensaje|leave\s+(a\s+)?message|buzz?[oó]n\s+de\s+voz|voice\s*mail|at\s+the\s+tone|después\s+del\s+(tono|pitido)|press\s+\d+\s+to|marca\s+\d+\s+para|no\s+(est[aá]\s+)?disponible\s+en\s+este\s+momento|not\s+available\s+right\s+now|can'?t\s+(come\s+to\s+the\s+)?phone\s+right\s+now|please\s+leave\s+(a\s+)?message|deje\s+(su\s+)?mensaje/i;
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       const typed = ev;
       const text = typed.transcript ?? "";
@@ -46373,6 +47772,15 @@ var worker_core_default = defineAgent({
           partialText.length >= 4 &&
           !isFillerOnly(partialText)
         ) {
+          console.log(
+            "[worker.state] [VAD Interruption Triggered]",
+            JSON.stringify({
+              ts: /* @__PURE__ */ new Date().toISOString(),
+              partial: partialText.slice(0, 60),
+              agent_id: agentId,
+            }),
+          );
+          _clearWatchdogs();
           void session.interrupt({ force: true }).await.catch(() => null);
           _wasInterrupted = true;
           _bargeInAt = Date.now();
@@ -46402,7 +47810,22 @@ var worker_core_default = defineAgent({
         _armSilenceTimer();
         return;
       }
+      if (_silencePhase === "greeting") {
+        _silencePhase = "normal";
+        lifecycle?.markAnswered();
+        void emit("call.answered", {
+          agent_id: agentId,
+          elapsed_ms: Date.now() - callStartedAt,
+          transcript_preview: trimmed.slice(0, 60),
+        });
+      }
       if (NEGATIVE_INTENT_RE.test(trimmed)) {
+        lifecycle?.setOutcome("dnc");
+        void lifecycle?.transitionTo("cancelled", "dnc_detected");
+        void emit("call.dnc_detected", {
+          agent_id: agentId,
+          text: trimmed.slice(0, 80),
+        });
         log("info", {
           message: "negative_intent.fast_hangup",
           text: trimmed,
@@ -46414,6 +47837,29 @@ var worker_core_default = defineAgent({
         void session
           .say("Entendido, adi\xF3s.", { allowInterruptions: false })
           .then(_doDeleteRoom, _doDeleteRoom);
+        return;
+      }
+      if (
+        !_voicemailDetected &&
+        Date.now() - callStartedAt < 3e4 &&
+        VOICEMAIL_RE.test(trimmed)
+      ) {
+        _voicemailDetected = true;
+        lifecycle?.setOutcome("voicemail");
+        void lifecycle?.transitionTo("no_answer", "voicemail_detected");
+        void emit("call.voicemail_detected", {
+          agent_id: agentId,
+          elapsed_ms: Date.now() - callStartedAt,
+          text: trimmed.slice(0, 80),
+        });
+        log("info", {
+          message: "voicemail.detected",
+          text: trimmed,
+          agent_id: agentId,
+        });
+        _silenceArmed = false;
+        _clearSilenceTimers();
+        void _doDeleteRoom();
         return;
       }
       const result = endSpan(sttSpan, {
@@ -46430,10 +47876,166 @@ var worker_core_default = defineAgent({
       checkLatencyThreshold(llmResult);
       llmSpan = startSpan("llm.first_token");
       ttsSpan = startSpan("tts.first_chunk");
+      _clearTtfbWatchdogs();
+      _ttfbWd1 = setTimeout(() => {
+        _ttfbWd1 = null;
+        if (session.agentState === "speaking") return;
+        void emit("watchdog.ttfb_phase1", {
+          agent_id: agentId,
+          room: roomName,
+        });
+        console.warn(
+          "[worker.watchdog] TTFB phase-1 (1500ms) \u2014 tts.first_audio_slow",
+          {
+            agent_id: agentId,
+          },
+        );
+      }, 1500);
+      _ttfbWd2 = setTimeout(() => {
+        _ttfbWd2 = null;
+        if (session.agentState === "speaking") return;
+        void emit("watchdog.ttfb_phase2", {
+          agent_id: agentId,
+          room: roomName,
+        });
+        void emit("tts.provider_degraded", {
+          provider: ttsRouterResult.providerName,
+          elapsed_ms: 2500,
+          agent_id: agentId,
+          room: roomName,
+        });
+        if (ttsRouterResult.fallbackUsed) {
+          void emit("tts.fallback_attempted", {
+            provider: ttsRouterResult.providerName,
+            reason: "already_active",
+            agent_id: agentId,
+          });
+        } else {
+          void emit("tts.fallback_unavailable", {
+            reason: "mid_session_swap_not_supported",
+            agent_id: agentId,
+          });
+        }
+        console.warn(
+          "[worker.watchdog] TTFB phase-2 (2500ms) \u2014 tts.provider_degraded",
+          { agent_id: agentId, provider: ttsRouterResult.providerName },
+        );
+      }, 2500);
+      _ttfbWd3 = setTimeout(() => {
+        _ttfbWd3 = null;
+        if (session.agentState === "speaking") return;
+        void emit("watchdog.ttfb_phase3", {
+          agent_id: agentId,
+          room: roomName,
+        });
+        void emit("tts.provider_down", {
+          provider: ttsRouterResult.providerName,
+          elapsed_ms: 4e3,
+          agent_id: agentId,
+          room: roomName,
+        });
+        console.error(
+          "[worker.watchdog] TTFB phase-3 (4000ms) \u2014 tts.provider_down, silent interrupt",
+          { agent_id: agentId, room: roomName },
+        );
+        try {
+          session.interrupt({ force: true });
+        } catch {}
+      }, 4e3);
     });
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
       const { oldState, newState } = ev;
+      console.log(
+        "[worker.state]",
+        JSON.stringify({
+          ts: /* @__PURE__ */ new Date().toISOString(),
+          from: oldState,
+          to: newState,
+          agent_id: agentId,
+        }),
+      );
+      if (newState === "thinking") {
+        _clearWatchdogs();
+        _thinkingWd1 = setTimeout(() => {
+          _thinkingWd1 = null;
+          if (session.agentState !== "thinking") return;
+          _thinkingSlow = true;
+          void emit("watchdog.thinking_phase1", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          void emit("llm.provider_degraded", {
+            provider: llmRouterResult.providerName,
+            elapsed_ms: 4e3,
+            agent_id: agentId,
+            room: roomName,
+          });
+          console.warn(
+            "[worker.watchdog] thinking phase-1 (4s) \u2014 llm.slow",
+            {
+              agent_id: agentId,
+              provider: llmRouterResult.providerName,
+            },
+          );
+        }, 4e3);
+        _thinkingWd2 = setTimeout(() => {
+          _thinkingWd2 = null;
+          if (session.agentState !== "thinking") return;
+          void emit("watchdog.thinking_phase2", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          void emit("llm.runtime_fallback_unavailable", {
+            provider: llmRouterResult.providerName,
+            reason: "mid_session_swap_not_supported",
+            elapsed_ms: 7e3,
+            agent_id: agentId,
+            room: roomName,
+          });
+          console.warn(
+            "[worker.watchdog] thinking phase-2 (7s) \u2014 filler phrase",
+            {
+              agent_id: agentId,
+            },
+          );
+          void trackedSay("Un momento\u2026").then(null, () => null);
+        }, 7e3);
+        _thinkingWd3 = setTimeout(() => {
+          _thinkingWd3 = null;
+          if (session.agentState !== "thinking") return;
+          void emit("watchdog.thinking_phase3", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          void emit("llm.provider_down", {
+            provider: llmRouterResult.providerName,
+            elapsed_ms: 1e4,
+            agent_id: agentId,
+            room: roomName,
+          });
+          console.error(
+            "[worker.watchdog] thinking phase-3 (10s) \u2014 llm.timeout, silent interrupt",
+            {
+              agent_id: agentId,
+              room: roomName,
+              provider: llmRouterResult.providerName,
+            },
+          );
+          _isThinkingInterventionActive = true;
+          try {
+            session.interrupt({ force: true });
+          } catch {}
+          setTimeout(() => {
+            _isThinkingInterventionActive = false;
+          }, 2e3);
+        }, 1e4);
+      }
       if (newState === "speaking") {
+        void emit("assistant.speech_started", {
+          agent_id: agentId,
+          room: roomName,
+        });
+        _clearWatchdogs();
         const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
         checkLatencyThreshold(ttsResult);
         ttsSpan = startSpan("tts.first_chunk");
@@ -46462,20 +48064,62 @@ var worker_core_default = defineAgent({
             });
           }
         }
+        _speakingWatchdog = setTimeout(() => {
+          _speakingWatchdog = null;
+          if (session.agentState !== "speaking") return;
+          console.error(
+            "[worker.watchdog] Speaking watchdog fired \u2014 TTS stream hung, silent recovery",
+            {
+              agent_id: agentId,
+              room: roomName,
+            },
+          );
+          const recoveryKill = setTimeout(() => {
+            if (session.agentState === "speaking") {
+              console.error(
+                "[worker.watchdog] Silent recovery timed out \u2014 deleting room",
+                { agent_id: agentId },
+              );
+              _doDeleteRoom();
+            }
+          }, 3e3);
+          session.interrupt({ force: true });
+          void new Promise((r) => setTimeout(r, 3100)).then(() =>
+            clearTimeout(recoveryKill),
+          );
+          console.log(
+            "[worker.watchdog] [Speech Aborted Cleanly] \u2014 interrupt sent, awaiting state transition",
+          );
+        }, SPEAKING_WATCHDOG_MS);
       }
-      if (newState === "listening" && oldState === "speaking") {
-        _speakLockoutUntil = 0;
-        if (_wasInterrupted) {
-          _wasInterrupted = false;
+      if (newState === "listening") {
+        _clearWatchdogs();
+        if (oldState === "speaking") {
+          void emit("assistant.speech_ended", {
+            agent_id: agentId,
+            room: roomName,
+          });
+          _speakLockoutUntil = 0;
+          if (_wasInterrupted) {
+            _wasInterrupted = false;
+          }
+          if (_bargeInAt !== null) {
+            _bargeInAt = null;
+          }
+          if (_isThinkingInterventionActive) {
+            _isThinkingInterventionActive = false;
+            setTimeout(_armSilenceTimer, 1500);
+          } else {
+            _armSilenceTimer();
+          }
+          console.log("[worker.watchdog] [Agent State Reset to Idle]", {
+            agent_id: agentId,
+          });
         }
-        if (_bargeInAt !== null) {
-          _bargeInAt = null;
-        }
-        _armSilenceTimer();
       }
     });
     const transcriptLines = [];
-    const callStartedAt = Date.now();
+    callStartedAt = Date.now();
     log("info", {
       message: "call.started",
       agent_id: agentId,
@@ -46506,7 +48150,7 @@ var worker_core_default = defineAgent({
             clearInterval(balanceCheckInterval);
             balanceCheckInterval = null;
             try {
-              await session.say(
+              await trackedSay(
                 "I'm sorry, your account has reached its minute limit. Please upgrade your plan to continue. Goodbye!",
                 { allowInterruptions: false },
               );
@@ -46543,24 +48187,35 @@ var worker_core_default = defineAgent({
       if (text.trim()) {
         const speaker = role === "assistant" ? agentName : "User";
         transcriptLines.push(`${speaker}: ${text.trim()}`);
+        if (role === "assistant") {
+          billing?.trackPipelineTTS(text.trim());
+          void _evaluateBudgetCircuitBreaker();
+        }
       }
     });
     session.on(voice.AgentSessionEventTypes.Close, async (ev) => {
       backchannel.destroy();
       _silenceArmed = false;
       _clearSilenceTimers();
+      _clearWatchdogs();
       _ambientAbort?.abort();
       if (balanceCheckInterval) {
         clearInterval(balanceCheckInterval);
         balanceCheckInterval = null;
       }
+      const durationSeconds = Math.round((Date.now() - callStartedAt) / 1e3);
+      const closeReason = ev?.reason;
       log("info", {
         message: "call.ended",
         agent_id: agentId,
         workspace_id: workspaceId,
         room: roomName,
-        duration_seconds: Math.round((Date.now() - callStartedAt) / 1e3),
-        close_reason: ev?.reason,
+        duration_seconds: durationSeconds,
+        close_reason: closeReason,
+      });
+      await lifecycle?.finalize({
+        voicemailDetected: _voicemailDetected,
+        durationSeconds,
       });
       const supabase = getSupabaseAdmin();
       if (!supabase) {
@@ -46572,8 +48227,16 @@ var worker_core_default = defineAgent({
         return;
       }
       if (!agentId || !workspaceId) return;
-      const durationSeconds = Math.round((Date.now() - callStartedAt) / 1e3);
       const transcript = transcriptLines.join("\n");
+      const finalTechnicalStatus = lifecycle?.status ?? "completed";
+      const legacyStatus =
+        finalTechnicalStatus === "no_answer"
+          ? "no_answer"
+          : finalTechnicalStatus === "cancelled"
+            ? "cancelled"
+            : finalTechnicalStatus === "failed"
+              ? "failed"
+              : "completed";
       await supabase.from("calls").upsert(
         {
           workspace_id: workspaceId,
@@ -46581,19 +48244,220 @@ var worker_core_default = defineAgent({
           retell_call_id: roomName,
           direction: callDirection,
           duration_seconds: durationSeconds,
-          status: "completed",
+          status: legacyStatus,
+          technical_status: finalTechnicalStatus,
+          ...(lifecycle?.outcome
+            ? { business_outcome: lifecycle.outcome }
+            : {}),
+          ...(lifecycle?.endReason ? { end_reason: lifecycle.endReason } : {}),
+          ...(lifecycle?.answeredAt
+            ? { answered_at: lifecycle.answeredAt.toISOString() }
+            : {}),
+          ...(lifecycle?.endedAt
+            ? { ended_at: lifecycle.endedAt.toISOString() }
+            : {}),
           transcript: transcript || null,
           cost_usd: 0,
         },
         { onConflict: "retell_call_id", ignoreDuplicates: false },
       );
+      let _callId = null;
+      try {
+        const { data: callIdRow } = await supabase
+          .from("calls")
+          .select("id")
+          .eq("retell_call_id", roomName)
+          .maybeSingle();
+        _callId = callIdRow?.id ?? null;
+      } catch {}
+      if (_callId) {
+        try {
+          await supabase
+            .from("call_events")
+            .update({ call_id: _callId })
+            .eq("call_room", roomName)
+            .eq("workspace_id", workspaceId)
+            .is("call_id", null);
+          log("info", {
+            message: "call_events.backfilled",
+            call_id: _callId,
+            room: roomName,
+          });
+        } catch (backfillErr) {
+          console.warn(
+            "[call-events] call_id backfill failed:",
+            String(backfillErr),
+          );
+        }
+      }
       await supabase
         .rpc("release_call_slot", { p_workspace_id: workspaceId })
         .then(
           () => null,
           () => null,
         );
+      void emit("call.ended", {
+        agent_id: agentId,
+        duration_seconds: durationSeconds,
+        technical_status: finalTechnicalStatus,
+        business_outcome: lifecycle?.outcome ?? null,
+        close_reason: closeReason ?? null,
+      });
+      if (billing) {
+        try {
+          billing.trackTelephony(durationSeconds, callDirection);
+          billing.trackLiveKit(durationSeconds);
+          billing.trackSTT(durationSeconds);
+          const transcriptChars = transcriptLines.join("").length;
+          if (transcriptChars > 0) {
+            billing.trackLLMTokens(Math.round(transcriptChars / 3));
+          }
+          await billing.computeAndPersist(_callId, supabase);
+          if (_callId) {
+            await billing.backfillCallId(_callId, supabase);
+            void emit("billing.cost_events_backfilled", {
+              call_id: _callId,
+              room: roomName,
+            });
+          }
+        } catch (costErr) {
+          console.warn("[billing] cost tracking error:", String(costErr));
+        }
+      }
+      try {
+        if (_callId && workspaceId) {
+          let webhookUrl = callEndedWebhookUrl;
+          if (!webhookUrl) {
+            const { data: wsRow } = await supabase
+              .from("workspaces")
+              .select("webhook_url")
+              .eq("id", workspaceId)
+              .maybeSingle();
+            webhookUrl = wsRow?.webhook_url ?? null;
+          }
+          const jobList = [
+            {
+              job_type: "crm_extraction",
+              priority: 50,
+              payload: {
+                transcript_available: transcript.trim().length > 0,
+                business_outcome: lifecycle?.outcome ?? null,
+                technical_status: finalTechnicalStatus,
+                crm_fields: {
+                  Funnel: crmFunnel,
+                  LeadId: crmLeadId,
+                  Country: crmCountry,
+                  Campaign: crmCampaign,
+                },
+                call_duration_seconds: durationSeconds,
+              },
+            },
+            {
+              job_type: "qa_analysis",
+              priority: 80,
+              payload: { source: "post_call_job" },
+            },
+            {
+              job_type: "integration_dispatch",
+              priority: 90,
+              payload: { source: "post_call_job" },
+            },
+            ...(webhookUrl
+              ? [
+                  {
+                    job_type: "outbound_webhook",
+                    priority: 100,
+                    payload: {
+                      event: "call.completed",
+                      webhook_url_source: callEndedWebhookUrl
+                        ? "metadata"
+                        : "workspace",
+                      webhook_url: webhookUrl,
+                      include_costs: true,
+                      include_analysis: true,
+                    },
+                  },
+                ]
+              : []),
+          ];
+          await enqueuePostCallJobsForCall({
+            workspaceId,
+            callId: _callId,
+            roomName,
+            agentId: agentId ?? void 0,
+            jobs: jobList,
+            supabase,
+          });
+          void emit("post_call_jobs.enqueued", {
+            call_id: _callId,
+            job_count: jobList.length,
+          });
+          if (!webhookUrl) {
+            void emit("webhook.skipped", {
+              reason: "no_webhook_url",
+              workspace_id: workspaceId,
+            });
+          }
+        }
+      } catch (enqueueErr) {
+        console.error("[post-call-jobs] enqueue failed:", String(enqueueErr));
+        void emit("post_call_jobs.enqueue_failed", {
+          error: String(enqueueErr).slice(0, 200),
+          room: roomName,
+        });
+      }
     });
+    if (workspaceId && _lifecycleSupabase) {
+      try {
+        const [billingRes, costsRes] = await Promise.allSettled([
+          _lifecycleSupabase.rpc("get_workspace_billing_status", {
+            p_workspace_id: workspaceId,
+          }),
+          lookupProviderCosts(_lifecycleSupabase),
+        ]);
+        if (billingRes.status === "fulfilled" && !billingRes.value.error) {
+          const bs = billingRes.value.data;
+          if (bs?.is_frozen) {
+            console.warn(
+              "[worker.billing] Pre-flight failed \u2014 workspace frozen:",
+              {
+                billing_status: bs.billing_status,
+                balance_cents: bs.balance_cents,
+                reason: bs.reason,
+              },
+            );
+            void emit("billing.preflight_failed", {
+              reason: bs.reason ?? bs.billing_status,
+              balance_cents: bs.balance_cents,
+              workspace_id: workspaceId,
+            });
+            void lifecycle?.transitionTo("failed").catch(() => null);
+            _doDeleteRoom();
+            return;
+          }
+          if (typeof bs?.balance_cents === "number") {
+            availableWorkspaceBalanceCents = bs.balance_cents;
+          }
+          void emit("billing.preflight_passed", {
+            balance_cents: bs?.balance_cents,
+            workspace_id: workspaceId,
+          });
+        } else if (billingRes.status === "rejected") {
+          console.warn(
+            "[worker.billing] Pre-flight RPC error (non-fatal):",
+            billingRes.reason,
+          );
+        }
+        if (costsRes.status === "fulfilled") {
+          cachedProviderCosts = costsRes.value;
+        }
+      } catch (err) {
+        console.warn(
+          "[worker.billing] Pre-flight check threw (non-fatal):",
+          String(err),
+        );
+      }
+    }
     console.log(
       "[worker.diag] session.starting",
       JSON.stringify({
@@ -46603,7 +48467,8 @@ var worker_core_default = defineAgent({
         room: ctx.room.name,
         first_message_set: !!firstMessage,
         voice_id: voiceId,
-        cartesia_key_present: !!process.env["CARTESIA_API_KEY"],
+        tts_provider: ttsRouterResult.providerName,
+        tts_fallback_used: ttsRouterResult.fallbackUsed,
         groq_key_present: !!groqKey,
         openai_key_present: !!openaiKey,
       }),
@@ -46630,7 +48495,7 @@ var worker_core_default = defineAgent({
         greeting_preview: greeting.slice(0, 80),
       }),
     );
-    await session.say(greeting);
+    await trackedSay(greeting);
     _silenceArmed = true;
   },
 });
@@ -46733,12 +48598,22 @@ if (_selfUrl) {
     9 * 60 * 1e3,
   );
 }
-cli.runApp(
-  new ServerOptions({
-    agent: fileURLToPath(import.meta.url),
-    wsURL: process.env["LIVEKIT_URL"] ?? "",
-    apiKey: process.env["LIVEKIT_API_KEY"],
-    apiSecret: process.env["LIVEKIT_API_SECRET"],
-  }),
-);
+void (async () => {
+  try {
+    await runStartupCleanup();
+  } catch (err) {
+    console.error(
+      "[startup-cleanup] Unexpected error (non-fatal):",
+      String(err),
+    );
+  }
+  cli.runApp(
+    new ServerOptions({
+      agent: fileURLToPath(import.meta.url),
+      wsURL: process.env["LIVEKIT_URL"] ?? "",
+      apiKey: process.env["LIVEKIT_API_KEY"],
+      apiSecret: process.env["LIVEKIT_API_SECRET"],
+    }),
+  );
+})();
 export { worker_core_default as default };

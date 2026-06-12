@@ -46962,6 +46962,11 @@ var worker_core_default = (0, import_agents2.defineAgent)({
       workspace_id: workspaceId,
       direction: callDirection,
     });
+    void emit("livekit.room_joined", {
+      agent_id: agentId,
+      workspace_id: workspaceId,
+      room: roomName,
+    });
     const pronunciation = await loadPronunciationConfig(
       agentId,
       supabaseUrl,
@@ -48045,6 +48050,10 @@ var worker_core_default = (0, import_agents2.defineAgent)({
           }, 1e4);
         }
         if (newState === "speaking") {
+          void emit("assistant.speech_started", {
+            agent_id: agentId,
+            room: roomName,
+          });
           _clearWatchdogs();
           const ttsResult = endSpan(ttsSpan, { agent_id: agentId });
           checkLatencyThreshold(ttsResult);
@@ -48105,6 +48114,10 @@ var worker_core_default = (0, import_agents2.defineAgent)({
         if (newState === "listening") {
           _clearWatchdogs();
           if (oldState === "speaking") {
+            void emit("assistant.speech_ended", {
+              agent_id: agentId,
+              room: roomName,
+            });
             _speakLockoutUntil = 0;
             if (_wasInterrupted) {
               _wasInterrupted = false;
