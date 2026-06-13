@@ -252,7 +252,7 @@ QA CENTER — FASE 2
 SPEAKER DIARIZATION + CUSTOMER MEMORY FOUNDATION
 ================================================================================
 Fecha de auditoría: 2026-06-13
-Estado: PENDIENTE DE APROBACIÓN
+Estado: COMPLETADA — Fase 2A completada y desplegada 2026-06-13
 ================================================================================
 
 
@@ -897,7 +897,7 @@ FASE 2A — SPEAKER DIARIZATION CON DEEPGRAM
 PLAN TÉCNICO PREVIO A IMPLEMENTACIÓN
 ================================================================================
 Fecha: 2026-06-13
-Estado: PENDIENTE DE APROBACIÓN
+Estado: COMPLETADA — commit 60a9fea — Vercel Ready 2026-06-13
 
 
 ARCHIVOS A MODIFICAR
@@ -1180,7 +1180,509 @@ CHECKLIST DE IMPLEMENTACIÓN (Fase 2A)
   [x] npx tsc --noEmit — 0 errores (build limpio)
   [ ] Agregar DEEPGRAM_API_KEY a Vercel env vars (instrucción al usuario)
   [x] Commit abde01f — push OK
-  [~] Vercel deploy — en progreso
+  [x] Vercel deploy — Ready (commit 60a9fea con hardening)
+  [x] Actualizar este .txt con estado final
+  [!] DEEPGRAM_API_KEY — agregar manualmente en Vercel Dashboard (sin key usa Groq fallback)
+
+
+AUDITORÍA FINAL FASE 2A
+───────────────────────────────────────────────────────────────────────────────
+  Fecha         : 2026-06-13
+  Resultado     : GO — sin riesgos críticos
+  Bug corregido : M1 — buildFormattedTranscript: Array.isArray guard añadido
+                        (evitaba TypeError + stuck "analyzing" con JSONB malformado)
+  Hardening     : text ?? "", (u.start ?? 0) * 1000 en utterances del webhook
+  Commit final  : 60a9fea — Vercel Ready 03:18 UTC
+
+
+================================================================================
+FASE 2B — CUSTOMER MEMORY FOUNDATION
+PLAN TÉCNICO PREVIO A IMPLEMENTACIÓN
+================================================================================
+Fecha: 2026-06-13
+Estado: PENDIENTE DE APROBACIÓN
+Restricción: No implementar hasta aprobación explícita.
+
+
+OBJETIVO
+───────────────────────────────────────────────────────────────────────────────
+
+  Construir la capa de memoria contextual por cliente: identificar quién
+  llamó, agrupar sus llamadas en un thread de conversación continua, y
+  preservar los compromisos, intenciones y estado de relación entre sesiones.
+
+  Esta base habilita los 5 nuevos scores de Fase 2C (Journey Score,
+  Follow-Up Compliance, Intent Progression, Conversion Attribution,
+  Customer Relationship) sin exponerlos todavía en la UI.
+
+  Restricciones explícitas de Fase 2B:
+  · No tocar dashboards
+  · No tocar Agent Profiles
+  · No tocar Coaching Reports
+  · No refactorizar fuera de QA Center
+  · No modificar tablas existentes salvo FK references
+
+
+PUNTO 1 — TABLAS NECESARIAS
+───────────────────────────────────────────────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  1. qac_customers                                                       │
+  │     Registro canónico por cliente dentro de un workspace.               │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Columnas clave:                                                        │
+  │    id                UUID PK                                            │
+  │    workspace_id       UUID NOT NULL FK → workspaces(id)                 │
+  │    canonical_phone    TEXT           — número normalizado E.164          │
+  │    canonical_email    TEXT           — email normalizado o null          │
+  │    display_name       TEXT           — mejor nombre conocido             │
+  │    first_seen_at      TIMESTAMPTZ    — fecha de la primera llamada       │
+  │    last_seen_at       TIMESTAMPTZ    — última interacción                │
+  │    total_calls        INT DEFAULT 0                                      │
+  │    lifetime_sentiment TEXT CHECK ∈ ('positive','neutral','negative')     │
+  │    notes              TEXT           — notas manuales del agente         │
+  │    metadata           JSONB DEFAULT '{}'                                 │
+  │    created_at         TIMESTAMPTZ DEFAULT now()                          │
+  │    updated_at         TIMESTAMPTZ DEFAULT now()                          │
+  │                                                                         │
+  │  Constraint:  UNIQUE(workspace_id, canonical_phone) — un cliente        │
+  │               canónico por número por workspace                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  2. qac_call_threads                                                    │
+  │     Agrupa llamadas relacionadas de un cliente en un arco narrativo.    │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Columnas clave:                                                        │
+  │    id                UUID PK                                            │
+  │    workspace_id       UUID NOT NULL FK → workspaces(id)                 │
+  │    customer_id        UUID NOT NULL FK → qac_customers(id)              │
+  │    title              TEXT           — "Negociación contrato Q2" etc.   │
+  │    status             TEXT CHECK ∈ ('open','resolved','escalated',      │
+  │                                     'abandoned')                        │
+  │    intent             TEXT           — intención principal del cliente   │
+  │    outcome            TEXT           — resultado final del thread        │
+  │    call_count         INT DEFAULT 0                                      │
+  │    first_call_at      TIMESTAMPTZ                                        │
+  │    last_call_at       TIMESTAMPTZ                                        │
+  │    resolved_at        TIMESTAMPTZ                                        │
+  │    metadata           JSONB DEFAULT '{}'                                 │
+  │    created_at / updated_at                                               │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  3. qac_customer_journey                                                │
+  │     Un registro por llamada que pertenece a un customer + thread.       │
+  │     Puente entre qac_interactions y el modelo de memoria.               │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Columnas clave:                                                        │
+  │    id                UUID PK                                            │
+  │    workspace_id       UUID NOT NULL FK → workspaces(id)                 │
+  │    customer_id        UUID NOT NULL FK → qac_customers(id)              │
+  │    thread_id          UUID            FK → qac_call_threads(id)         │
+  │    interaction_id     UUID NOT NULL FK → qac_interactions(id)           │
+  │    sequence_number    INT            — orden dentro del thread           │
+  │    intent_at_call     TEXT           — intención del cliente en esa llam│
+  │    sentiment_at_call  TEXT CHECK ∈ ('positive','neutral','negative')     │
+  │    key_topics         TEXT[]         — temas clave extraídos del LLM     │
+  │    unresolved_items   TEXT[]         — pendientes sin resolver           │
+  │    created_at         TIMESTAMPTZ DEFAULT now()                          │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  4. qac_follow_up_commitments                                           │
+  │     Compromisos explícitos detectados por el LLM durante el análisis.   │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Columnas clave:                                                        │
+  │    id                UUID PK                                            │
+  │    workspace_id       UUID NOT NULL FK → workspaces(id)                 │
+  │    interaction_id     UUID NOT NULL FK → qac_interactions(id)           │
+  │    customer_id        UUID            FK → qac_customers(id)            │
+  │    committed_by       TEXT CHECK ∈ ('agent','customer')                 │
+  │    commitment_text    TEXT NOT NULL   — descripción del compromiso       │
+  │    due_date           DATE            — fecha prometida o null           │
+  │    status             TEXT CHECK ∈ ('pending','fulfilled','missed',      │
+  │                                     'cancelled')                        │
+  │    fulfilled_at       TIMESTAMPTZ                                        │
+  │    verified_in_call   UUID            FK → qac_interactions(id)         │
+  │    created_at / updated_at                                               │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  5. qac_journey_insights                                                │
+  │     Insights periódicos generados por el LLM sobre el journey completo. │
+  │     Una fila por customer por análisis batch.                           │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Columnas clave:                                                        │
+  │    id                UUID PK                                            │
+  │    workspace_id       UUID NOT NULL FK → workspaces(id)                 │
+  │    customer_id        UUID NOT NULL FK → qac_customers(id)              │
+  │    thread_id          UUID            FK → qac_call_threads(id)         │
+  │    insight_type       TEXT CHECK ∈ ('journey_summary','churn_risk',     │
+  │                                     'upsell_signal','complaint_pattern',│
+  │                                     'loyalty_signal')                   │
+  │    content            TEXT NOT NULL                                      │
+  │    confidence         NUMERIC(3,2)   — 0.00 a 1.00                      │
+  │    generated_at       TIMESTAMPTZ DEFAULT now()                          │
+  │    expires_at         TIMESTAMPTZ    — para invalidación automática      │
+  │    metadata           JSONB DEFAULT '{}'                                 │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+
+PUNTO 2 — RELACIONES
+───────────────────────────────────────────────────────────────────────────────
+
+  workspaces
+    │
+    ├─ qac_customers (1:N)
+    │    ├─ qac_call_threads (1:N) ← un cliente puede tener varios threads
+    │    │    └─ qac_customer_journey (1:N) ← cada llamada del thread
+    │    │         └─ qac_interactions (N:1) ← la llamada real
+    │    ├─ qac_customer_journey (1:N) ← también directo (sin thread aún)
+    │    ├─ qac_follow_up_commitments (1:N)
+    │    └─ qac_journey_insights (1:N)
+    │
+    └─ qac_interactions (existente)
+         └─ qac_customer_journey (1:1 max)  ← una llamada → un journey entry
+
+  Regla: `qac_customer_journey.interaction_id` es UNIQUE
+  → Una llamada pertenece a máximo un customer_journey entry
+  → Un customer puede tener múltiples journey entries (múltiples llamadas)
+
+
+PUNTO 3 — MIGRACIONES PROPUESTAS
+───────────────────────────────────────────────────────────────────────────────
+
+  Migration 064: qac_customers y qac_call_threads
+  ───────────────────────────────────────────────
+  · CREATE TABLE qac_customers (...)
+  · CREATE TABLE qac_call_threads (...)
+  · UNIQUE INDEX: (workspace_id, canonical_phone) en qac_customers
+  · RLS: enable + policies (read/write scoped a workspace_members)
+  · Triggers updated_at en ambas tablas
+
+  Migration 065: qac_customer_journey y qac_follow_up_commitments
+  ──────────────────────────────────────────────────────────────────
+  · CREATE TABLE qac_customer_journey (...)
+  · CREATE TABLE qac_follow_up_commitments (...)
+  · UNIQUE: qac_customer_journey(interaction_id)
+  · FK ON DELETE CASCADE desde qac_interactions
+  · RLS en ambas tablas
+
+  Migration 066: qac_journey_insights + FK backfill en qac_interactions
+  ───────────────────────────────────────────────────────────────────────
+  · CREATE TABLE qac_journey_insights (...)
+  · ADD COLUMN IF NOT EXISTS customer_id UUID FK → qac_customers(id)
+    en qac_interactions (nullable, backfill vía pipeline futuro)
+  · Índice parcial: qac_interactions WHERE customer_id IS NOT NULL
+
+  Separación en 3 migraciones permite aplicarlas en fases y hacer rollback
+  granular si es necesario.
+
+
+PUNTO 4 — CUSTOMER IDENTITY RESOLUTION
+───────────────────────────────────────────────────────────────────────────────
+
+  Fuentes de identidad (en orden de confianza):
+
+  1. customer_phone (extractor del webhook, normalizado E.164)
+     → Fuente primaria. Más del 95% de las llamadas de call center tienen ANI.
+     → Normalización: strip espacios, guiones, paréntesis; añadir country code
+       si falta (configurable por workspace con un default_country_code).
+
+  2. customer_email (si el webhook payload incluye el campo)
+     → Fuente secundaria. Útil para omni-channel futuro.
+
+  3. customer_name (campo existente en qac_interactions)
+     → Fuente terciaria. Complementa display_name pero no identifica.
+
+  Algoritmo de resolución:
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  resolveOrCreateCustomer(workspaceId, phone?, email?, name?)           │
+  │                                                                         │
+  │  1. Si phone → normalizar a E.164                                       │
+  │  2. Buscar qac_customers WHERE workspace_id=X AND canonical_phone=norm  │
+  │  3. Si existe → retornar customer_id                                    │
+  │  4. Si no existe → INSERT qac_customers                                 │
+  │     · canonical_phone = normalizado                                     │
+  │     · display_name = customer_name ?? "Unknown"                         │
+  │  5. Si no hay phone pero hay email → mismo flujo con canonical_email    │
+  │  6. Si ninguno → no se crea cliente (interaction queda sin customer_id) │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Upsert atómico: INSERT ... ON CONFLICT (workspace_id, canonical_phone)
+  DO UPDATE SET last_seen_at = now(), display_name = COALESCE(...) evita
+  race conditions y duplicate entries.
+
+  Casos edge:
+  · Número con/sin prefijo internacional → normalización resuelve duplicados
+  · Mismo cliente con phones diferentes (móvil + fijo) → puede generar 2
+    clientes distintos. Fusión manual vía UI futura (fuera de Fase 2B).
+  · Clientes sin phone (chat, email-only) → customer_id NULL permitido.
+
+
+PUNTO 5 — AGRUPACIÓN DE LLAMADAS EN THREADS
+───────────────────────────────────────────────────────────────────────────────
+
+  Un thread representa un "caso" o "negociación" continua. No todas las
+  llamadas de un cliente son el mismo thread (puede llamar por 2 temas
+  distintos al mismo tiempo).
+
+  Estrategia de agrupación (por prioridad):
+
+  1. Thread_id explícito en webhook payload
+     → Algunas plataformas (Genesys, Salesforce) envían un case_id.
+     → Si el payload tiene call_thread_id o case_id, usar ese.
+
+  2. Heurística temporal por intent
+     → Si el customer ya tiene un thread OPEN y la última llamada fue hace
+        menos de N días (configurable, default: 30 días), agrupar en ese
+        thread SI el intent_at_call es compatible.
+     → Si el intent cambia radicalmente → crear nuevo thread.
+
+  3. Thread catch-all por defecto
+     → Si no se puede determinar, agrupar en el thread OPEN más reciente
+        del cliente. Si no hay ninguno → crear nuevo thread.
+
+  Implementación:
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  resolveOrCreateThread(workspaceId, customerId, callIntent?)           │
+  │                                                                         │
+  │  1. Buscar threads WHERE status='open' AND last_call_at > cutoff       │
+  │  2. Si existe uno → retornar thread_id                                  │
+  │  3. Si existen varios → seleccionar el más reciente                     │
+  │  4. Si ninguno → INSERT nuevo thread con intent=callIntent              │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  El intent del thread se actualiza vía LLM en cada llamada analizada.
+  El status se actualiza a 'resolved' cuando el call_outcome es 'resolved'
+  o 'sold'.
+
+
+PUNTO 6 — DATOS USADOS COMO MEMORIA
+───────────────────────────────────────────────────────────────────────────────
+
+  Qué se preserva entre sesiones:
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Capa 1: Identidad (qac_customers)                                     │
+  │  · Número canónico, nombre mejor conocido                               │
+  │  · Sentimiento acumulado a lo largo del tiempo                          │
+  │  · Total de llamadas, primera y última interacción                      │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Capa 2: Contexto por thread (qac_call_threads + qac_customer_journey) │
+  │  · Intent original del thread y cómo ha evolucionado                   │
+  │  · Temas clave por llamada (key_topics TEXT[])                          │
+  │  · Items sin resolver al final de cada llamada (unresolved_items)       │
+  │  · Sentimiento en cada punto del journey                                │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Capa 3: Compromisos (qac_follow_up_commitments)                       │
+  │  · Qué prometió el agente ("te llamo mañana", "te envío el contrato")  │
+  │  · Qué prometió el cliente ("lo pienso y llamo", "mando el pago")      │
+  │  · Estado: pending / fulfilled / missed                                 │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Capa 4: Insights sintéticos (qac_journey_insights)                    │
+  │  · Resúmenes del journey completo generados periódicamente              │
+  │  · Señales de churn, upsell, lealtad                                   │
+  │  · Input para los 5 nuevos scores de Fase 2C                           │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  En la práctica, cuando un agente recibe una llamada de un cliente conocido,
+  el pipeline puede recuperar:
+    - Resumen del último thread: "3 llamadas sobre cancelación, aún pendiente"
+    - Compromisos incumplidos: "agente prometió callback el martes pasado"
+    - Sentimiento histórico: deterioro progresivo desde hace 2 meses
+  … y pasárselo como contexto al LLM para un análisis más preciso.
+
+
+PUNTO 7 — AISLAMIENTO CROSS-TENANT
+───────────────────────────────────────────────────────────────────────────────
+
+  Las 5 tablas nuevas replican el mismo patrón RLS de toda la plataforma:
+
+  1. workspace_id NOT NULL en todas las tablas
+     → Sin excepción. No existe fila sin workspace.
+
+  2. RLS habilitado con 3 políticas por tabla:
+     · SELECT: auth.uid() IN (SELECT user_id FROM workspace_members
+                               WHERE workspace_id = t.workspace_id)
+     · INSERT: misma condición
+     · UPDATE: misma condición
+
+  3. createAdminClient() (service role) solo en rutas del servidor
+     → Nunca en client-side. Igual que todo el QAC actual.
+
+  4. Consultas siempre filtradas por workspace_id
+     → En resolveOrCreateCustomer: WHERE workspace_id = $ws AND ...
+     → El customer de workspace A nunca es visible desde workspace B.
+
+  5. canonical_phone es UNIQUE(workspace_id, canonical_phone)
+     → El mismo número puede existir como clientes distintos en
+        workspaces distintos. No hay cross-tenant leakage en identity.
+
+  6. qac_call_threads.customer_id FK con workspace_id redundante
+     → Permite queries eficientes sin JOINs innecesarios y elimina
+        la posibilidad de que un thread de workspace A apunte a un
+        customer de workspace B.
+
+
+PUNTO 8 — PARTES DEL PIPELINE QUE SE TOCARÁN
+───────────────────────────────────────────────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  webhooks/[token]/route.ts                                              │
+  │  MODIFICACIÓN: después del INSERT de qac_interactions, añadir:          │
+  │    1. resolveOrCreateCustomer(workspaceId, phone, customerName)         │
+  │    2. Si customer_id → UPDATE qac_interactions SET customer_id = $id   │
+  │    3. No bloquear el response — hacerlo fire-and-forget o awaited       │
+  │       antes del runQAAnalysis                                           │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  analyze/route.ts                                                       │
+  │  MODIFICACIÓN: después de salvar evaluation, añadir:                    │
+  │    1. resolveOrCreateThread(workspaceId, customerId, summary.customer_  │
+  │       intent)                                                           │
+  │    2. INSERT qac_customer_journey(...)                                  │
+  │    3. Si hay compromisos detectados por el LLM → INSERT qac_follow_up_ │
+  │       commitments (requiere nuevo campo en CoachingResult o nuevo       │
+  │       prompt paralelo)                                                  │
+  │  Todos los INSERTs son fire-and-forget (no bloquean el response 200)   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  lib/qac-customer.ts  (NUEVO)                                          │
+  │  Funciones puras: resolveOrCreateCustomer(), resolveOrCreateThread()    │
+  │  Sin lógica de UI. Sin side effects externos.                           │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  qac_interactions — ADD COLUMN customer_id UUID FK → qac_customers     │
+  │  (migration 066)                                                        │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  NO se toca:
+  · Dashboard (ninguno)
+  · Agent Profiles
+  · Coaching Reports UI
+  · Leaderboard
+  · Audit Log UI
+  · RLS existentes
+  · Webhook routing logic
+
+
+PUNTO 9 — RIESGOS
+───────────────────────────────────────────────────────────────────────────────
+
+  ┌──────────┬─────────────────────────────────────────────────────────────┐
+  │ Nivel    │ Descripción y mitigación                                    │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ ALTO     │ Phone normalization falla para números internacionales sin  │
+  │          │ country code (p.ej. "0034..." vs "+34..."). Sin normaliza-  │
+  │          │ ción consistente, el mismo cliente genera múltiples filas.  │
+  │          │ Mitigación: usar librería phonenumber-js o validación E.164 │
+  │          │ estricta; rechazar números no normalizables sin crash.       │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ ALTO     │ resolveOrCreateCustomer() con race condition: dos webhooks  │
+  │          │ simultáneos del mismo número pueden INSERT duplicado antes  │
+  │          │ de que el UNIQUE constraint rechace el segundo.             │
+  │          │ Mitigación: INSERT ... ON CONFLICT DO UPDATE (upsert        │
+  │          │ atómico). PostgreSQL garantiza atomicidad.                  │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ MEDIO    │ Thread grouping heurística puede agrupar calls no           │
+  │          │ relacionados (p.ej. cliente llama por facturación y luego   │
+  │          │ por soporte técnico, ambos en el mismo thread abierto).     │
+  │          │ Mitigación: límite temporal configurable (default 30 días)  │
+  │          │ + intent matching básico. Fusión/split manual en Fase 2C.   │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ MEDIO    │ qac_follow_up_commitments requiere que el LLM detecte       │
+  │          │ compromisos en el transcript. Falsos negativos son          │
+  │          │ esperados (el LLM no detecta todos). No es bloqueante pero  │
+  │          │ reduce el valor del Follow-Up Compliance Score.             │
+  │          │ Mitigación: prompt dedicado, ejemplos few-shot.             │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ MEDIO    │ ADD COLUMN customer_id en qac_interactions en migration 066 │
+  │          │ es retroactivo solo parcialmente: llamadas históricas sin   │
+  │          │ phone no se linkean a ningún cliente. El dashboard futuro   │
+  │          │ debe manejar customer_id = NULL como caso normal.           │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ BAJO     │ qac_journey_insights crece con cada análisis batch. Sin     │
+  │          │ TTL o paginación puede convertirse en una tabla grande.     │
+  │          │ Mitigación: expires_at column + job de limpieza futuro.     │
+  ├──────────┼─────────────────────────────────────────────────────────────┤
+  │ BAJO     │ DiarizedTranscript duplicada en dos archivos (riesgo ya     │
+  │          │ documentado en Fase 2A). Al implementar lib/qac-customer.ts │
+  │          │ se puede resolver moviendo tipos a lib/ compartido.         │
+  └──────────┴─────────────────────────────────────────────────────────────┘
+
+
+PUNTO 10 — ORDEN DE IMPLEMENTACIÓN
+───────────────────────────────────────────────────────────────────────────────
+
+  Fase 2B se implementa en 4 pasos secuenciales, cada uno desplegable
+  de forma independiente y reversible:
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  PASO 1 — Migrations 064 + 065 + 066                                   │
+  │  · Crear las 5 tablas con RLS                                          │
+  │  · ADD COLUMN customer_id en qac_interactions                          │
+  │  · Verificar en Supabase que columnas y constraints existen             │
+  │  · No toca código todavía                                               │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  PASO 2 — lib/qac-customer.ts                                          │
+  │  · resolveOrCreateCustomer() con upsert atómico                        │
+  │  · normalizePhone() con validación E.164                               │
+  │  · resolveOrCreateThread() con heurística temporal                     │
+  │  · Tests unitarios locales (sin server)                                │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  PASO 3 — Integrar en webhooks/[token]/route.ts                        │
+  │  · Llamar resolveOrCreateCustomer() fire-and-forget post-insert        │
+  │  · UPDATE qac_interactions.customer_id                                 │
+  │  · No cambiar flujo de response ni tiempos de respuesta                │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  PASO 4 — Integrar en analyze/route.ts                                 │
+  │  · resolveOrCreateThread() usando customer_id de la interaction        │
+  │  · INSERT qac_customer_journey con datos del análisis                  │
+  │  · Prompt adicional para detectar follow-up commitments                │
+  │  · INSERT qac_follow_up_commitments                                    │
+  │  · Todo fire-and-forget, sin bloquear el response del análisis         │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Validación al final de cada paso:
+  · npx tsc --noEmit
+  · Test de integración local con script scripts/test-qac-customer.ts
+  · Commit independiente por paso
+
+
+CHECKLIST DE IMPLEMENTACIÓN (Fase 2B)
+───────────────────────────────────────────────────────────────────────────────
+  [ ] Aprobación recibida
+  [ ] Migration 064 — qac_customers + qac_call_threads
+  [ ] Migration 065 — qac_customer_journey + qac_follow_up_commitments
+  [ ] Migration 066 — qac_journey_insights + customer_id en qac_interactions
+  [ ] Aplicar migrations en Supabase
+  [ ] lib/qac-customer.ts — resolveOrCreateCustomer() + normalizePhone()
+  [ ] lib/qac-customer.ts — resolveOrCreateThread()
+  [ ] webhooks/[token]/route.ts — identity resolution post-insert
+  [ ] analyze/route.ts — thread + journey + commitments
+  [ ] npx tsc --noEmit — 0 errores
+  [ ] Scripts de validación locales
+  [ ] Commit + push
+  [ ] Vercel deploy
   [ ] Actualizar este .txt con estado final
 
 
