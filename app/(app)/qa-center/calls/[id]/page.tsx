@@ -109,11 +109,26 @@ interface QACInteraction {
   created_at: string;
   language?: string | null;
   customer_id?: string | null;
+  customer_name?: string | null;
   campaign?: string | null;
   transcript?: string | null;
   audio_url?: string | null;
   metadata?: Record<string, unknown>;
+  review_status: string;
+  reviewer_notes?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
   qac_evaluations: QACEvaluation[];
+}
+
+interface QACComment {
+  id: string;
+  comment: string;
+  user_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -786,6 +801,287 @@ function CallReviewSkeleton() {
   );
 }
 
+// ─── Review Status Panel ──────────────────────────────────────────────────────
+
+const REVIEW_STATUSES = [
+  "pending_review",
+  "in_review",
+  "reviewed",
+  "approved",
+  "disputed",
+] as const;
+
+const REVIEW_STATUS_LABEL: Record<string, string> = {
+  pending_review: "Pending Review",
+  in_review: "In Review",
+  reviewed: "Reviewed",
+  approved: "Approved",
+  disputed: "Disputed",
+};
+
+const REVIEW_STATUS_COLOR: Record<string, string> = {
+  pending_review: "text-gray-500 bg-gray-100 border-gray-200",
+  in_review: "text-blue-700 bg-blue-50 border-blue-200",
+  reviewed: "text-indigo-700 bg-indigo-50 border-indigo-200",
+  approved: "text-green-700 bg-green-50 border-green-200",
+  disputed: "text-red-700 bg-red-50 border-red-200",
+};
+
+function ReviewPanel({
+  interaction,
+  onUpdated,
+}: {
+  interaction: QACInteraction;
+  onUpdated: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [status, setStatus] = useState(interaction.review_status);
+  const [notes, setNotes] = useState(interaction.reviewer_notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/qac/interactions/${interaction.id}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_status: status,
+          reviewer_notes: notes,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update review");
+      setEditing(false);
+      onUpdated();
+      toast.success("Review updated");
+    } catch {
+      toast.error("Failed to save review status");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const colorCls = REVIEW_STATUS_COLOR[interaction.review_status] ?? "text-gray-500 bg-gray-100 border-gray-200";
+
+  return (
+    <Card className="border-[#efefef]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-[#6b6b6b]" />
+            Review
+          </span>
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="text-xs text-[#6b6b6b] hover:text-[#111] border border-[#e0e0e0] rounded-lg px-2 py-0.5 hover:border-[#111] transition-colors"
+            >
+              Edit
+            </button>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {editing ? (
+          <>
+            <div>
+              <label className="block text-[10px] font-medium text-[#9b9b9b] uppercase tracking-wider mb-1.5">
+                Status
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-lg border border-[#e0e0e0] bg-white px-3 py-1.5 text-sm text-[#111] focus:outline-none focus:ring-1 focus:ring-[#111]"
+              >
+                {REVIEW_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {REVIEW_STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-medium text-[#9b9b9b] uppercase tracking-wider mb-1.5">
+                Reviewer Notes
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                className="w-full rounded-lg border border-[#e0e0e0] bg-white px-3 py-2 text-sm text-[#111] focus:outline-none focus:ring-1 focus:ring-[#111] resize-none"
+                placeholder="Add reviewer notes…"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void save()}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-lg bg-[#111] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#333] disabled:opacity-50 transition-colors"
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setEditing(false);
+                  setStatus(interaction.review_status);
+                  setNotes(interaction.reviewer_notes ?? "");
+                }}
+                className="rounded-lg border border-[#e0e0e0] px-3 py-1.5 text-xs text-[#6b6b6b] hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${colorCls}`}
+            >
+              {REVIEW_STATUS_LABEL[interaction.review_status] ?? interaction.review_status}
+            </span>
+            {interaction.reviewer_notes && (
+              <p className="text-xs text-[#555] leading-relaxed">
+                {interaction.reviewer_notes}
+              </p>
+            )}
+            {interaction.reviewed_at && (
+              <p className="text-[10px] text-[#9b9b9b]">
+                Reviewed {format(new Date(interaction.reviewed_at), "MMM d, yyyy HH:mm")}
+              </p>
+            )}
+            {interaction.approved_at && (
+              <p className="text-[10px] text-[#9b9b9b]">
+                Approved {format(new Date(interaction.approved_at), "MMM d, yyyy HH:mm")}
+              </p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── QA Comments Panel ────────────────────────────────────────────────────────
+
+function CommentsPanel({ interactionId }: { interactionId: string }) {
+  const [comments, setComments] = useState<QACComment[]>([]);
+  const [loadingComments, setLoadingComments] = useState(true);
+  const [newComment, setNewComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchComments = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/qac/interactions/${interactionId}/comments`);
+      if (!res.ok) return;
+      setComments(await res.json());
+    } finally {
+      setLoadingComments(false);
+    }
+  }, [interactionId]);
+
+  useEffect(() => {
+    void fetchComments();
+  }, [fetchComments]);
+
+  async function submit() {
+    const text = newComment.trim();
+    if (!text || submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/qac/interactions/${interactionId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: text }),
+      });
+      if (!res.ok) throw new Error("Failed to add comment");
+      setNewComment("");
+      await fetchComments();
+    } catch {
+      toast.error("Failed to add comment");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function fmtRelative(d: string) {
+    const diff = Date.now() - new Date(d).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  return (
+    <Card className="border-[#efefef]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-[#6b6b6b]" />
+          QA Comments
+          {comments.length > 0 && (
+            <span className="text-xs font-normal text-[#9b9b9b]">
+              ({comments.length})
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loadingComments ? (
+          <div className="py-4 text-center">
+            <Loader2 className="h-4 w-4 animate-spin text-[#9b9b9b] mx-auto" />
+          </div>
+        ) : comments.length === 0 ? (
+          <p className="text-xs text-[#9b9b9b] text-center py-3">
+            No comments yet
+          </p>
+        ) : (
+          <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+            {comments.map((c) => (
+              <div key={c.id} className="rounded-xl bg-[#f8f8f8] border border-[#efefef] p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 w-5 rounded-full bg-[#e0e0e0] flex items-center justify-center">
+                    <User className="h-3 w-3 text-[#6b6b6b]" />
+                  </div>
+                  <span className="text-[10px] text-[#9b9b9b]">
+                    {fmtRelative(c.created_at)}
+                  </span>
+                </div>
+                <p className="text-xs text-[#444] leading-relaxed">{c.comment}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add comment */}
+        <div className="space-y-2">
+          <textarea
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
+            }}
+            rows={2}
+            maxLength={2000}
+            placeholder="Add a QA comment… (⌘↵ to submit)"
+            className="w-full rounded-lg border border-[#e0e0e0] bg-white px-3 py-2 text-xs text-[#111] focus:outline-none focus:ring-1 focus:ring-[#111] resize-none placeholder:text-[#9b9b9b]"
+          />
+          <button
+            onClick={() => void submit()}
+            disabled={!newComment.trim() || submitting}
+            className="flex items-center gap-1.5 rounded-lg bg-[#111] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#333] disabled:opacity-40 transition-colors"
+          >
+            {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            Add Comment
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CallReviewPage({
@@ -978,6 +1274,14 @@ export default function CallReviewPage({
           )}
         </div>
       </div>
+
+      {/* ── Review + Comments always visible ─────────────────────────────── */}
+      {!evaluation && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <ReviewPanel interaction={interaction} onUpdated={() => void fetchInteraction()} />
+          <CommentsPanel interactionId={interaction.id} />
+        </div>
+      )}
 
       {/* ── No analysis yet ─────────────────────────────────────────────── */}
       {!evaluation && !isAnalyzing && (
@@ -1300,6 +1604,12 @@ export default function CallReviewPage({
                   </CardContent>
                 </Card>
               )}
+
+              {/* Review Status */}
+              <ReviewPanel interaction={interaction} onUpdated={() => void fetchInteraction()} />
+
+              {/* QA Comments */}
+              <CommentsPanel interactionId={interaction.id} />
             </div>
           </div>
 

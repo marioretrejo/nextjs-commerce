@@ -191,6 +191,27 @@ export function Sidebar({
                 module: "compliance",
                 sub: true,
               },
+              {
+                href: "/qa-center/agents",
+                labelKey: "agentProfiles",
+                icon: Users,
+                module: "compliance",
+                sub: true,
+              },
+              {
+                href: "/qa-center/coaching",
+                labelKey: "coaching",
+                icon: BookOpen,
+                module: "compliance",
+                sub: true,
+              },
+              {
+                href: "/qa-center/audit",
+                labelKey: "auditLog",
+                icon: ShieldCheck,
+                module: "compliance",
+                sub: true,
+              },
             ]
           : []),
         {

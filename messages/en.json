@@ -22,7 +22,10 @@
     "design": "Design",
     "leaderboard": "Leaderboard",
     "agentAssist": "Agent Assist",
-    "voiceLab": "Voice Lab"
+    "voiceLab": "Voice Lab",
+    "agentProfiles": "Agent Profiles",
+    "coaching": "Coaching",
+    "auditLog": "Audit Log"
   },
   "common": {
     "save": "Save",

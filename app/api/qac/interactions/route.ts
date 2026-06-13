@@ -6,6 +6,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { writeAuditLog } from "@/lib/qac-audit";
 
 async function getWorkspace(userId: string) {
   const admin = createAdminClient();
@@ -139,6 +140,15 @@ export async function POST(req: Request) {
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+
+  writeAuditLog({
+    workspace_id: workspace.id,
+    user_id: user.id,
+    action: "interaction.create",
+    entity_type: "interaction",
+    entity_id: data.id,
+    details: { agent_name: data.agent_name, channel: data.channel },
+  });
 
   return NextResponse.json(data, { status: 201 });
 }

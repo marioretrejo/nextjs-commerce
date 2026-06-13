@@ -1,8 +1,7 @@
 /**
- * QA Center — Rules API
- * Own rules engine, separate from compliance_rules.
- * qac_rules include regulation references (FDCPA, TCPA, GDPR…)
- * and map to the 5 QA dimensions (opening, compliance, objection_handling, closing, empathy).
+ * QA Center — Call Review Comments API
+ * GET  /api/qac/interactions/[id]/comments — list QA comments
+ * POST /api/qac/interactions/[id]/comments — add a QA comment
  */
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,10 +15,21 @@ async function resolveWorkspace(userId: string) {
     .select("id")
     .eq("owner_id", userId)
     .single();
-  return data as { id: string } | null;
+  if (data) return data as { id: string };
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .single();
+  return member ? { id: member.workspace_id } : null;
 }
 
-export async function GET() {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,17 +43,23 @@ export async function GET() {
 
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("qac_rules")
-    .select("*")
+    .from("qac_review_comments")
+    .select("id, comment, user_id, created_at, updated_at")
+    .eq("interaction_id", id)
     .eq("workspace_id", ws.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+
   return NextResponse.json(data ?? []);
 }
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
   const supabase = await createClient();
   const {
     data: { user },
@@ -55,45 +71,40 @@ export async function POST(req: Request) {
   if (!ws)
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
-  const body = (await req.json()) as {
-    name: string;
-    description: string;
-    category?: string;
-    severity?: string;
-    regulation?: string;
-  };
+  const body = (await req.json()) as { comment: string };
+  const comment = body.comment?.trim();
 
-  if (!body.name?.trim())
-    return NextResponse.json({ error: "name is required" }, { status: 400 });
-  if (!body.description?.trim())
+  if (!comment)
+    return NextResponse.json({ error: "comment is required" }, { status: 400 });
+  if (comment.length > 2000)
     return NextResponse.json(
-      { error: "description is required" },
+      { error: "comment must be ≤ 2000 characters" },
       { status: 400 },
     );
 
-  const VALID_CATEGORIES = new Set([
-    "compliance",
-    "quality",
-    "disclosure",
-    "prohibited",
-    "coaching",
-  ]);
-  const VALID_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
-
   const admin = createAdminClient();
+
+  // Verify interaction belongs to workspace
+  const { data: interaction } = await admin
+    .from("qac_interactions")
+    .select("id")
+    .eq("id", id)
+    .eq("workspace_id", ws.id)
+    .single();
+
+  if (!interaction)
+    return NextResponse.json(
+      { error: "Interaction not found" },
+      { status: 404 },
+    );
+
   const { data, error } = await admin
-    .from("qac_rules")
+    .from("qac_review_comments")
     .insert({
       workspace_id: ws.id,
-      name: body.name.trim(),
-      description: body.description.trim(),
-      category: VALID_CATEGORIES.has(body.category ?? "")
-        ? body.category
-        : "quality",
-      severity: VALID_SEVERITIES.has(body.severity ?? "")
-        ? body.severity
-        : "medium",
-      regulation: body.regulation?.trim() || null,
+      interaction_id: id,
+      user_id: user.id,
+      comment,
     })
     .select()
     .single();
@@ -104,10 +115,10 @@ export async function POST(req: Request) {
   writeAuditLog({
     workspace_id: ws.id,
     user_id: user.id,
-    action: "rule.create",
-    entity_type: "rule",
+    action: "comment.create",
+    entity_type: "review_comment",
     entity_id: data.id,
-    details: { name: data.name },
+    details: { interaction_id: id },
   });
 
   return NextResponse.json(data, { status: 201 });

@@ -22,7 +22,10 @@
     "design": "Diseño",
     "leaderboard": "Clasificación",
     "agentAssist": "Asistente de Agente",
-    "voiceLab": "Laboratorio de Voz"
+    "voiceLab": "Laboratorio de Voz",
+    "agentProfiles": "Perfiles de Agente",
+    "coaching": "Coaching",
+    "auditLog": "Registro de Auditoría"
   },
   "common": {
     "save": "Guardar",

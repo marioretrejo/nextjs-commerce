@@ -1,0 +1,213 @@
+================================================================================
+QA CENTER — PLAN FASE 1
+================================================================================
+Fecha: 2026-06-13
+Proyecto: nextjs-commerce / QA Center
+Rama: claude/voiceos-saas-build-D8nrY
+================================================================================
+
+
+CORRECCIÓN IMPORTANTE
+───────────────────────────────────────────────────────────────────────────────
+Los 2 bugs del plan anterior YA NO EXISTEN:
+- El filtro de overall_score ya usa la sintaxis correcta de PostgREST.
+- El throw en leaderboard ya está implementado.
+No hay nada que corregir en esos archivos.
+
+
+ESTADO REAL CONFIRMADO (Auditoría 2026-06-13)
+───────────────────────────────────────────────────────────────────────────────
+
+Módulo              | BD              | API           | UI            | Estado
+--------------------|-----------------|---------------|---------------|-------
+Audit Log           | ✅ Tabla completa| ❌ Sin GET    | ❌ Sin viewer | 40%
+Agent Profiles      | ✅ Tabla completa| ❌ Sin CRUD   | ❌ Sin UI     | 20%
+Coaching Reports    | ✅ Tabla completa| ❌ Sin GET    | ✅ Parcial    | 60%
+Call Review         | ✅ Existe        | ✅ Solo lectura| ✅ Completo  | 80%
+
+Nota: La tabla qac_agent_profiles, qac_coaching_reports y qac_audit_logs ya
+existen en supabase/migrations/042_qac_enterprise.sql con RLS habilitado.
+
+
+================================================================================
+LO QUE SE VA A CONSTRUIR
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+MÓDULO 1 — AUDIT LOG
+────────────────────────────────────────────────────────────────────────────────
+
+Schema: Sin cambios (tabla ya existe).
+
+Nuevos writes a instrumentar (operaciones actualmente no auditadas):
+  - Rule create / update / delete
+  - Interaction create / delete
+  - Review status change
+
+API nueva:
+  GET /api/qac/audit-logs
+    Params: ?page, ?limit, ?action, ?entity_type, ?user_id, ?from, ?to
+    Retorna: { data: AuditLog[], total, page }
+
+UI nueva: /qa-center/audit
+  - Tabla paginada con filtros (acción, tipo entidad, fecha)
+  - Timeline visual de eventos
+  - Exportación CSV
+
+
+────────────────────────────────────────────────────────────────────────────────
+MÓDULO 2 — AGENT PROFILES
+────────────────────────────────────────────────────────────────────────────────
+
+Schema: Sin cambios (tabla qac_agent_profiles ya existe).
+
+APIs nuevas:
+  GET    /api/qac/agents
+    → Lista de agentes con stats: avg_score, call_count, last_call_at
+
+  POST   /api/qac/agents
+    → Crear nuevo perfil de agente
+
+  GET    /api/qac/agents/[id]
+    → Detalle del agente + historial de llamadas + métricas + coaching asociado
+
+  PATCH  /api/qac/agents/[id]
+    → Actualizar perfil (nombre, email, team, role, hire_date, is_active)
+
+  DELETE /api/qac/agents/[id]
+    → Desactivar agente (soft delete: is_active = false)
+
+UI nueva:
+  /qa-center/agents
+    - Lista de agentes: nombre, equipo, score promedio, llamadas evaluadas, último contacto
+    - Botón crear agente
+    - Toggle activo/inactivo
+
+  /qa-center/agents/[id]
+    - Header: nombre, equipo, score promedio, badge activo/inactivo
+    - Historial de llamadas evaluadas (tabla con link a call review)
+    - Score histórico (gráfico de tendencia)
+    - Coaching asociado (lista de coaching reports)
+    - Formulario de edición inline
+
+
+────────────────────────────────────────────────────────────────────────────────
+MÓDULO 3 — COACHING REPORTS
+────────────────────────────────────────────────────────────────────────────────
+
+Schema: Sin cambios (tabla qac_coaching_reports ya existe).
+
+APIs nuevas:
+  GET /api/qac/coaching
+    Params: ?agent_id, ?from, ?to, ?min_priority
+    Retorna: { data: CoachingReport[], total }
+
+  GET /api/qac/coaching/[id]
+    Retorna: CoachingReport + interaction completa + datos del agente
+
+UI nueva: /qa-center/coaching
+  - Lista de reportes de coaching por agente (filtrable por agente, fecha, prioridad)
+  - Card por reporte: agente, priority_score, top 2 debilidades, fecha
+  - Vista detalle expandible
+  - Exportación PDF por agente
+
+
+────────────────────────────────────────────────────────────────────────────────
+MÓDULO 4 — CALL REVIEW (workflow supervisor)
+────────────────────────────────────────────────────────────────────────────────
+
+Schema — 2 cambios mínimos:
+
+  1. En tabla qac_interactions — nuevo campo:
+     ALTER TABLE qac_interactions
+       ADD COLUMN review_status TEXT DEFAULT 'pending_review'
+       CHECK (review_status IN (
+         'pending_review',
+         'in_review',
+         'reviewed',
+         'approved',
+         'disputed'
+       ));
+
+  2. Nueva tabla qac_review_comments:
+     CREATE TABLE qac_review_comments (
+       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       workspace_id    UUID NOT NULL REFERENCES workspaces(id),
+       interaction_id  UUID NOT NULL REFERENCES qac_interactions(id),
+       user_id         UUID REFERENCES auth.users(id),
+       comment         TEXT NOT NULL,
+       created_at      TIMESTAMPTZ DEFAULT NOW()
+     );
+
+APIs nuevas:
+  PATCH /api/qac/interactions/[id]/review
+    Body: { review_status, reviewer_notes? }
+
+  GET   /api/qac/interactions/[id]/comments
+    Retorna: lista de comentarios con user info
+
+  POST  /api/qac/interactions/[id]/comments
+    Body: { comment }
+
+UI — en /qa-center/calls/[id] existente (sin romper lo actual):
+  - Badge de estado en cabecera (Pendiente / En revisión / Revisado / Aprobado / Disputado)
+  - Dropdown para cambiar estado (solo admins/managers)
+  - Panel de comentarios QA con historial y timestamp
+  - Botón "Exportar revisión" (PDF)
+
+
+================================================================================
+IMPACTO EN EL SISTEMA
+================================================================================
+
+Área                      | ¿Se toca? | Detalle
+--------------------------|-----------|------------------------------------------
+Agente de llamadas IA     | ❌ No     | Cero cambios
+Pipeline VoiceOS          | ❌ No     | Cero cambios
+Auth / workspaces         | ❌ No     | Solo lectura de contexto
+QA Center existente       | ✅ Solo   | No se modifica lógica existente, solo
+                          | adiciones | se agregan nuevas rutas y componentes
+Base de datos             | ✅ Mínimo | 1 columna nueva + 1 tabla nueva
+
+
+================================================================================
+ORDEN DE IMPLEMENTACIÓN
+================================================================================
+
+Paso  | Descripción
+------|----------------------------------------------------------------------
+  1   | Migration SQL: review_status column + tabla qac_review_comments
+  2   | API: GET /api/qac/audit-logs (con filtros y paginación)
+  3   | API: CRUD /api/qac/agents + /api/qac/agents/[id]
+  4   | API: GET /api/qac/coaching + /api/qac/coaching/[id]
+  5   | API: PATCH review + GET/POST comments en /api/qac/interactions/[id]/...
+  6   | UI:  /qa-center/audit (página nueva)
+  7   | UI:  /qa-center/agents + /qa-center/agents/[id] (páginas nuevas)
+  8   | UI:  /qa-center/coaching (página nueva)
+  9   | UI:  Widgets de comentarios + review_status en calls/[id]
+ 10   | Nav: Links de navegación en sidebar/nav de QA Center
+
+Archivos nuevos estimados: 10-12
+Archivos modificados: 2-3 (calls/[id]/page.tsx, interactions/route.ts, sidebar)
+Riesgo de ruptura de funcionalidad existente: Nulo
+
+
+================================================================================
+ESTADO DEL DOCUMENTO
+================================================================================
+[ ] Fase 1 — Aprobación pendiente
+[ ] Paso 1 — Migration SQL
+[ ] Paso 2 — API Audit Logs
+[ ] Paso 3 — API Agent Profiles
+[ ] Paso 4 — API Coaching Reports
+[ ] Paso 5 — API Review + Comments
+[ ] Paso 6 — UI Audit Log
+[ ] Paso 7 — UI Agent Profiles
+[ ] Paso 8 — UI Coaching Reports
+[ ] Paso 9 — UI Call Review widgets
+[ ] Paso 10 — Navegación
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================

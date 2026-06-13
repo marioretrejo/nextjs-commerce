@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { writeAuditLog } from "@/lib/qac-audit";
 
 async function resolveWorkspace(userId: string) {
   const admin = createAdminClient();
@@ -64,6 +65,16 @@ export async function PATCH(
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+
+  writeAuditLog({
+    workspace_id: ws.id,
+    user_id: user.id,
+    action: "rule.update",
+    entity_type: "rule",
+    entity_id: id,
+    details: { fields: Object.keys(update) },
+  });
+
   return NextResponse.json(data);
 }
 
@@ -92,5 +103,14 @@ export async function DELETE(
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+
+  writeAuditLog({
+    workspace_id: ws.id,
+    user_id: user.id,
+    action: "rule.delete",
+    entity_type: "rule",
+    entity_id: id,
+  });
+
   return NextResponse.json({ ok: true });
 }

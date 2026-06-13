@@ -37,6 +37,7 @@ export async function GET(
       id, agent_name, agent_id, channel, direction, duration_s, status,
       transcript, audio_url, language, customer_id, campaign_id, outcome,
       risk_level, overall_sentiment, created_at, metadata,
+      review_status, reviewer_notes, reviewed_by, reviewed_at, approved_by, approved_at, customer_name,
       qac_evaluations (
         id, overall_score, risk_score, tone, summary, criteria_scores,
         compliance_score, sales_score, soft_skills_score, conversation_score,
