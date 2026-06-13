@@ -112,6 +112,7 @@ interface QACInteraction {
   customer_name?: string | null;
   campaign?: string | null;
   transcript?: string | null;
+  diarized_transcript?: unknown;
   audio_url?: string | null;
   metadata?: Record<string, unknown>;
   review_status: string;
@@ -519,6 +520,212 @@ function HighlightedTranscript({
         })}
       </div>
     </TooltipProvider>
+  );
+}
+
+// ─── Diarized Transcript ─────────────────────────────────────────────────────
+
+interface QACDiarizedTranscriptSegment {
+  speaker?: string | null;
+  text?: string | null;
+  start_ms?: number | null;
+  end_ms?: number | null;
+  confidence?: number | null;
+}
+
+function parseDiarizedSegments(
+  raw: unknown,
+): QACDiarizedTranscriptSegment[] | null {
+  const obj = raw as Record<string, unknown>;
+  const utterances = Array.isArray(raw)
+    ? (raw as QACDiarizedTranscriptSegment[])
+    : raw && typeof raw === "object" && Array.isArray(obj["utterances"])
+      ? (obj["utterances"] as QACDiarizedTranscriptSegment[])
+      : null;
+  return utterances && utterances.length > 0 ? utterances : null;
+}
+
+const SPEAKER_COLORS: Array<{ pill: string; bar: string }> = [
+  { pill: "bg-blue-100 text-blue-700 border-blue-200", bar: "bg-blue-300" },
+  {
+    pill: "bg-purple-100 text-purple-700 border-purple-200",
+    bar: "bg-purple-300",
+  },
+  {
+    pill: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    bar: "bg-emerald-300",
+  },
+  {
+    pill: "bg-amber-100 text-amber-700 border-amber-200",
+    bar: "bg-amber-300",
+  },
+];
+
+function formatTimestamp(ms?: number | null): string {
+  if (ms == null) return "";
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function resolveSpeakerLabel(sp?: string | null): string {
+  if (!sp || sp === "unknown") return "Unknown";
+  if (/^\d+$/.test(sp)) return `Speaker ${parseInt(sp, 10) + 1}`;
+  if (sp.startsWith("speaker_"))
+    return `Speaker ${parseInt(sp.replace("speaker_", ""), 10) + 1}`;
+  return sp;
+}
+
+function DiarizedTranscriptView({
+  segments,
+}: {
+  segments: QACDiarizedTranscriptSegment[];
+}) {
+  const speakerOrder: string[] = [];
+  for (const seg of segments) {
+    const sp = seg.speaker ?? "unknown";
+    if (!speakerOrder.includes(sp)) speakerOrder.push(sp);
+  }
+
+  return (
+    <div className="space-y-4">
+      {segments.map((seg, i) => {
+        const text = (seg.text ?? "").trim();
+        if (!text) return null;
+        const sp = seg.speaker ?? "unknown";
+        const colorIdx = speakerOrder.indexOf(sp) % SPEAKER_COLORS.length;
+        const color = SPEAKER_COLORS[colorIdx]!;
+        const timeStart = formatTimestamp(seg.start_ms);
+        const timeEnd = formatTimestamp(seg.end_ms);
+        const timeLabel = timeStart
+          ? timeEnd
+            ? `${timeStart} – ${timeEnd}`
+            : timeStart
+          : null;
+
+        return (
+          <div key={i} className="flex gap-3 items-start">
+            <div className="flex-shrink-0 w-[88px] pt-0.5 text-right">
+              <span
+                className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${color.pill}`}
+              >
+                {resolveSpeakerLabel(sp)}
+              </span>
+              {timeLabel && (
+                <p className="text-[10px] text-[#b0b0b0] mt-0.5 tabular-nums">
+                  {timeLabel}
+                </p>
+              )}
+            </div>
+            <div className={`flex-1 border-l-2 ${color.bar} pl-3 pb-0.5`}>
+              <p className="text-[13px] leading-relaxed text-[#333]">{text}</p>
+              {seg.confidence != null && (
+                <p className="text-[10px] text-[#c0c0c0] mt-0.5 font-mono">
+                  {Math.round(seg.confidence * 100)}%
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TranscriptCard({
+  transcript,
+  diarizedRaw,
+  flags,
+  criticalFlags,
+  highFlags,
+}: {
+  transcript?: string | null;
+  diarizedRaw?: unknown;
+  flags: QACFlag[];
+  criticalFlags: QACFlag[];
+  highFlags: QACFlag[];
+}) {
+  const segments = parseDiarizedSegments(diarizedRaw);
+  const [mode, setMode] = useState<"diarized" | "plain">(
+    segments ? "diarized" : "plain",
+  );
+
+  return (
+    <Card className="border-[#efefef]">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-[#6b6b6b]" />
+            Transcript
+            {segments && (
+              <span className="text-[10px] font-normal text-[#9b9b9b]">
+                · diarized
+              </span>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2 flex-wrap">
+            {segments && (
+              <div className="flex items-center rounded-md border border-[#e8e8e8] overflow-hidden text-[11px]">
+                <button
+                  onClick={() => setMode("diarized")}
+                  className={`px-2.5 py-1 transition-colors ${
+                    mode === "diarized"
+                      ? "bg-[#f5f5f5] text-[#111] font-semibold"
+                      : "text-[#9b9b9b] hover:text-[#555]"
+                  }`}
+                >
+                  By Speaker
+                </button>
+                <button
+                  onClick={() => setMode("plain")}
+                  className={`px-2.5 py-1 transition-colors border-l border-[#e8e8e8] ${
+                    mode === "plain"
+                      ? "bg-[#f5f5f5] text-[#111] font-semibold"
+                      : "text-[#9b9b9b] hover:text-[#555]"
+                  }`}
+                >
+                  Plain
+                </button>
+              </div>
+            )}
+            {criticalFlags.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-100 rounded-full px-2 py-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                {criticalFlags.length} Critical
+              </span>
+            )}
+            {highFlags.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-700 bg-orange-50 border border-orange-100 rounded-full px-2 py-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                {highFlags.length} High
+              </span>
+            )}
+          </div>
+        </div>
+        {flags.length > 0 && mode === "plain" && (
+          <p className="text-[11px] text-[#9b9b9b] mt-1">
+            Highlighted text contains violations — click to see details.
+          </p>
+        )}
+      </CardHeader>
+      <CardContent>
+        {mode === "diarized" && segments ? (
+          <div className="max-h-[560px] overflow-y-auto pr-1">
+            <DiarizedTranscriptView segments={segments} />
+          </div>
+        ) : transcript ? (
+          <div className="max-h-[560px] overflow-y-auto pr-1">
+            <HighlightedTranscript transcript={transcript} flags={flags} />
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <MessageSquare className="h-8 w-8 text-[#e0e0e0] mx-auto mb-2" />
+            <p className="text-sm text-[#9b9b9b]">Transcript not available</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1391,55 +1598,13 @@ export default function CallReviewPage({
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
             {/* LEFT — Transcript */}
             <div className="lg:col-span-3 space-y-4">
-              <Card className="border-[#efefef]">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-[#6b6b6b]" />
-                      Transcript
-                    </CardTitle>
-                    {flags.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        {criticalFlags.length > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-100 rounded-full px-2 py-0.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                            {criticalFlags.length} Critical
-                          </span>
-                        )}
-                        {highFlags.length > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-700 bg-orange-50 border border-orange-100 rounded-full px-2 py-0.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-                            {highFlags.length} High
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {flags.length > 0 && (
-                    <p className="text-[11px] text-[#9b9b9b] mt-1">
-                      Highlighted text contains violations — click to see
-                      details.
-                    </p>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  {interaction.transcript ? (
-                    <div className="max-h-[560px] overflow-y-auto pr-1">
-                      <HighlightedTranscript
-                        transcript={interaction.transcript}
-                        flags={flags}
-                      />
-                    </div>
-                  ) : (
-                    <div className="py-8 text-center">
-                      <MessageSquare className="h-8 w-8 text-[#e0e0e0] mx-auto mb-2" />
-                      <p className="text-sm text-[#9b9b9b]">
-                        Transcript not available
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <TranscriptCard
+                transcript={interaction.transcript}
+                diarizedRaw={interaction.diarized_transcript}
+                flags={flags}
+                criticalFlags={criticalFlags}
+                highFlags={highFlags}
+              />
 
               {/* Sentiment Timeline */}
               {evaluation.sentiment_timeline &&
