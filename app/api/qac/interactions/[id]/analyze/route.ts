@@ -152,9 +152,10 @@ function buildFormattedTranscript(
   plainTranscript: string,
   diarized: DiarizedTranscript | null,
 ): string {
-  if (!diarized || diarized.utterances.length === 0) return plainTranscript;
+  if (!diarized || !Array.isArray(diarized.utterances) || diarized.utterances.length === 0)
+    return plainTranscript;
   return diarized.utterances
-    .map((u) => `[Speaker ${u.speaker}]: ${u.text}`)
+    .map((u) => `[Speaker ${u.speaker}]: ${u.text ?? ""}`)
     .join("\n");
 }
 

@@ -294,9 +294,9 @@ async function transcribeWithDiarization(
           const utterances = rawUtterances.map((u) => ({
             speaker: String(u.speaker),
             speaker_type: "unknown" as const,
-            text: u.transcript,
-            start_ms: Math.round(u.start * 1000),
-            end_ms: Math.round(u.end * 1000),
+            text: u.transcript ?? "",
+            start_ms: Math.round((u.start ?? 0) * 1000),
+            end_ms: Math.round((u.end ?? 0) * 1000),
             confidence: u.confidence ?? 0,
           }));
 
