@@ -893,5 +893,297 @@ ESTADO FASE 2
 
 
 ================================================================================
+FASE 2A — SPEAKER DIARIZATION CON DEEPGRAM
+PLAN TÉCNICO PREVIO A IMPLEMENTACIÓN
+================================================================================
+Fecha: 2026-06-13
+Estado: PENDIENTE DE APROBACIÓN
+
+
+ARCHIVOS A MODIFICAR
+───────────────────────────────────────────────────────────────────────────────
+
+  Archivo                                            Tipo        Qué cambia
+  ─────────────────────────────────────────────────────────────────────────────
+  app/api/qac/webhooks/[token]/route.ts              MODIFICAR   Reemplazar
+                                                                  función
+                                                                  transcribeAudio()
+                                                                  con lógica
+                                                                  Deepgram +
+                                                                  fallback Groq
+  app/api/qac/interactions/[id]/analyze/route.ts     MODIFICAR   Usar
+                                                                  diarized_transcript
+                                                                  cuando exista
+                                                                  para construir
+                                                                  transcript
+                                                                  formateado para
+                                                                  el LLM
+  supabase/migrations/063_qac_diarization.sql        NUEVO       2 columnas nuevas
+
+  Sin cambios en: calls/[id] UI, dashboard, coaching, audit logs, leaderboard,
+  RLS policies, auth, auto_analyze logic, runQAAnalysis(), routing.
+
+
+MIGRATION 063 PROPUESTA
+───────────────────────────────────────────────────────────────────────────────
+
+  -- Migration 063: QA Center Phase 2A — Speaker Diarization
+  -- Adds diarized transcript storage and speaker attribution to flags.
+  -- Fully idempotent (ADD COLUMN IF NOT EXISTS).
+
+  ALTER TABLE qac_interactions
+    ADD COLUMN IF NOT EXISTS diarized_transcript JSONB;
+
+  -- speaker attribution per flag (agent | customer | unknown)
+  ALTER TABLE qac_flags
+    ADD COLUMN IF NOT EXISTS speaker TEXT
+      CHECK (speaker IN ('agent', 'customer', 'unknown'));
+
+  -- Index: workspace queries filtering by whether diarization exists
+  CREATE INDEX IF NOT EXISTS qac_interactions_diarized_idx
+    ON qac_interactions(workspace_id, created_at DESC)
+    WHERE diarized_transcript IS NOT NULL;
+
+  Tablas afectadas: qac_interactions, qac_flags
+  Tablas NO tocadas: qac_evaluations, qac_review_comments, qac_rules,
+                     qac_agent_profiles, qac_coaching_reports, qac_audit_logs
+
+
+ESTRUCTURA diarized_transcript (JSONB)
+───────────────────────────────────────────────────────────────────────────────
+
+  {
+    "provider":   "deepgram",
+    "model":      "nova-3",
+    "language":   "es",          -- idioma detectado o configurado
+    "utterances": [
+      {
+        "speaker":       "0",      -- ID de hablante del proveedor ("0", "1"…)
+        "speaker_type":  "unknown", -- "agent" | "customer" | "unknown"
+        "text":          "Buenas tardes, mi nombre es Carlos…",
+        "start_ms":      0,
+        "end_ms":        3200,
+        "confidence":    0.94
+      },
+      {
+        "speaker":       "1",
+        "speaker_type":  "unknown",
+        "text":          "Hola, estoy llamando por mi cuenta.",
+        "start_ms":      3400,
+        "end_ms":        5800,
+        "confidence":    0.91
+      }
+    ]
+  }
+
+  Nota sobre speaker_type:
+  · Se almacena como "unknown" por defecto.
+  · En llamadas inbound: Speaker 0 suele ser el cliente (quien llama primero),
+    Speaker 1 suele ser el agente (quien responde).
+  · En llamadas outbound: Speaker 0 suele ser el agente (quien origina).
+  · Sin embargo, esto no es fiable sin más contexto, así que se deja "unknown"
+    y se reserva la inferencia para Fase 2B cuando exista qac_customers.
+
+
+TRANSCRIPT FORMATEADO PARA EL LLM (análisis)
+───────────────────────────────────────────────────────────────────────────────
+
+  Cuando diarized_transcript existe, el analysis engine construye este formato:
+
+  Con 2 speakers (caso más común):
+    "Speaker 0: Buenas tardes, mi nombre es Carlos, ¿en qué le puedo ayudar?
+     Speaker 1: Hola, estoy llamando por mi cuenta.
+     Speaker 0: Sí, dígame señor, ¿cuál es su consulta?"
+
+  Con etiquetas inferidas (si direction = 'inbound' y 2 speakers):
+    "Agent: Buenas tardes, mi nombre es Carlos, ¿en qué le puedo ayudar?
+     Customer: Hola, estoy llamando por mi cuenta."
+
+  NOTA: Se usa "Agent/Customer" solo si hay exactamente 2 hablantes detectados
+  Y la dirección de la llamada es conocida. En cualquier otro caso → "Speaker N".
+
+  Fallback (sin diarization, como hoy):
+    Transcript plano sin etiquetas. El LLM recibe el texto tal cual.
+
+
+LÓGICA DE TRANSCRIPCIÓN (webhook handler)
+───────────────────────────────────────────────────────────────────────────────
+
+  transcribeWithDiarization(recordingUrl, credentials, lang)
+    │
+    ├─ 1. Intentar Deepgram nova-3 (diarize=true, smart_format=true,
+    │      punctuate=true, language=lang)
+    │      ↓
+    │      Respuesta OK
+    │       → parsear utterances []
+    │       → construir transcript plano (join de texts)
+    │       → construir diarized_transcript JSONB
+    │       → return { transcript, diarized_transcript }
+    │      ↓
+    │      Respuesta FAIL (timeout, 4xx, 5xx, clave ausente)
+    │       → log error con código
+    │       → FALLBACK ──►
+    │
+    └─ 2. Fallback: Groq Whisper (lógica actual sin cambios)
+           ↓
+           Respuesta OK
+            → return { transcript, diarized_transcript: null }
+           ↓
+           Respuesta FAIL
+            → return { transcript: null, diarized_transcript: null }
+
+  En el INSERT a qac_interactions:
+    · transcript: siempre el texto plano (de Deepgram o Groq)
+    · diarized_transcript: JSONB si Deepgram OK, NULL si fallback
+
+  INVARIANTE: transcript nunca es null si la transcripción tuvo éxito.
+  El campo diarized_transcript es aditivo — null es válido y esperado.
+
+
+VARIABLES DE ENTORNO NECESARIAS
+───────────────────────────────────────────────────────────────────────────────
+
+  Variable             Nueva    Descripción
+  ─────────────────────────────────────────────────────────────────────────────
+  DEEPGRAM_API_KEY     ✅ NUEVA  API key de Deepgram (https://console.deepgram.com)
+  GROQ_API_KEY         existente Se mantiene — usado para fallback + LLM analysis
+
+  Si DEEPGRAM_API_KEY no está configurada:
+    · El sistema salta directamente a Groq Whisper (fallback automático)
+    · diarized_transcript queda como null
+    · No hay errores ni crashes — degradación graceful
+
+  Dónde agregar en Vercel:
+    Settings → Environment Variables → DEEPGRAM_API_KEY → Production + Preview
+
+
+PLAN DE FALLBACK DETALLADO
+───────────────────────────────────────────────────────────────────────────────
+
+  Escenario                           Resultado transcript    diarized
+  ─────────────────────────────────────────────────────────────────────────────
+  Deepgram OK                         texto plano (de DG)     JSONB con utterances
+  Deepgram falla (HTTP error)         texto plano (de Groq)   null
+  Deepgram timeout (>30s)             texto plano (de Groq)   null
+  DEEPGRAM_API_KEY ausente            texto plano (de Groq)   null
+  Deepgram OK pero 0 utterances       texto plano (de DG)     null (descartado)
+  Deepgram OK, Groq también falla     null → interacción sin   null
+                                      transcript (igual que hoy)
+  Webhook ya trae transcript          transcript del webhook   null (no transcribe)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Invariante de backward compat:
+  · El campo transcript SIEMPRE es texto plano (igual que hoy).
+  · qac_interactions.transcript sigue siendo NOT NULL en el análisis.
+  · Analysis engine tiene acceso al mismo campo que antes.
+  · diarized_transcript es SIEMPRE aditivo — null no rompe nada.
+
+
+ACTUALIZACIÓN AL ANALYSIS ENGINE
+───────────────────────────────────────────────────────────────────────────────
+
+  Cambio mínimo en analyze/route.ts:
+
+  Antes (actual):
+    const transcript = interaction.transcript;
+    // pasa directamente al LLM
+
+  Después:
+    const diarized = interaction.diarized_transcript;
+    const transcriptForLLM = buildFormattedTranscript(
+      interaction.transcript,
+      diarized,
+      interaction.direction
+    );
+    // pasa transcriptForLLM al LLM (mismos prompts, sin cambios)
+
+  buildFormattedTranscript():
+    · Si diarized es null → retorna transcript plano (sin cambios)
+    · Si diarized tiene utterances → construye "Speaker N: texto\n..."
+      o "Agent/Customer: texto\n..." según heurística de direction
+    · Respeta el límite actual de 10,000 chars por slice
+
+  TODOS los prompts del LLM reciben el mismo parámetro "transcript".
+  CERO cambios en los prompts de compliance, sales, soft skills, etc.
+  Solo cambia la FUENTE del texto, no el análisis.
+
+  El campo speaker en qac_flags se popula cuando el LLM puede inferir
+  el hablante de la violación dado el transcript diarizado.
+  (El LLM ya devuelve timestamp_s — agregar speaker al JSON de vuelta
+  requiere un cambio mínimo en el schema de respuesta de compliance.)
+
+
+RIESGOS
+───────────────────────────────────────────────────────────────────────────────
+
+  Riesgo                          Impacto   Probabilidad  Mitigación
+  ─────────────────────────────────────────────────────────────────────────────
+  Deepgram no disponible          Alto      Baja          Fallback automático
+                                                          a Groq Whisper
+  DEEPGRAM_API_KEY no configurada Alto      Media         Fallback automático,
+                                                          no crash
+  Speaker mapping incorrecto      Bajo      Media         Labels "Speaker N"
+                                                          por defecto, no
+                                                          agent/customer hardcoded
+  Aumento de latencia webhook     Medio     Baja          Deepgram ~30-60s
+                                                          para audio de 5 min
+                                                          vs Groq ~10-15s
+                                                          (auto_analyze es async,
+                                                          usuario no espera)
+  Costo inesperado                Bajo      Baja          $0.26/hr es predecible,
+                                                          no hay sorpresas
+  Audio format no soportado       Bajo      Muy baja      Deepgram acepta los
+                                                          mismos formatos que
+                                                          Groq (mp3, wav, etc.)
+  Transcript más largo (diarizado) Bajo     Baja          Slice a 10,000 chars
+                                                          ya existente lo controla
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Riesgo CERO para:
+  · Call Review UI (no toca)
+  · Dashboard (no toca)
+  · Coaching reports (no toca)
+  · Audit logs (no toca)
+  · Leaderboard (no toca)
+  · RLS policies (no toca)
+  · Auth / workspaces (no toca)
+
+
+COSTO ESTIMADO ACTUALIZADO (Fase 2A)
+───────────────────────────────────────────────────────────────────────────────
+
+  Componente                   Antes (Fase 1)    Fase 2A
+  ─────────────────────────────────────────────────────────────────────────────
+  Transcripción (Groq Whisper) ~$0.01/hr         $0.00/hr (solo fallback)
+  Transcripción (Deepgram)     —                 $0.258/hr ($0.0043/min)
+  Análisis LLM (Groq LLaMA)    ~$0.01/hr         ~$0.012/hr (transcript
+                                                  ligeramente más largo)
+  ─────────────────────────────────────────────────────────────────────────────
+  Total por hora de audio       ~$0.02/hr         ~$0.27/hr
+  ─────────────────────────────────────────────────────────────────────────────
+  100 hrs/mes                   ~$2/mes           ~$27/mes
+  500 hrs/mes                   ~$10/mes          ~$135/mes
+  1,000 hrs/mes                 ~$20/mes          ~$270/mes
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Nota: Si Deepgram falla y usa fallback Groq para el 100% de las llamadas,
+  el costo vuelve a ~$0.02/hr.
+
+
+CHECKLIST DE IMPLEMENTACIÓN (Fase 2A)
+───────────────────────────────────────────────────────────────────────────────
+  [ ] Aprobación recibida
+  [ ] Migration 063_qac_diarization.sql
+  [ ] Aplicar migration en Supabase
+  [ ] webhooks/[token]/route.ts — función transcribeWithDiarization()
+  [ ] analyze/route.ts — buildFormattedTranscript() + speaker en flags
+  [ ] npx tsc --noEmit — cero errores
+  [ ] Agregar DEEPGRAM_API_KEY a Vercel env vars (instrucción al usuario)
+  [ ] Commit + push
+  [ ] Vercel deploy
+  [ ] Actualizar este .txt con estado final
+
+
+================================================================================
 FIN DEL DOCUMENTO
 ================================================================================
