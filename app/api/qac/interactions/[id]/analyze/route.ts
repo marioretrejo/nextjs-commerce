@@ -16,6 +16,22 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 
+// ─── Diarized transcript type (mirrors webhooks/[token]/route.ts) ─────────────
+
+interface DiarizedTranscript {
+  provider: "deepgram";
+  model: "nova-3";
+  language: string;
+  utterances: Array<{
+    speaker: string;
+    speaker_type: "unknown";
+    text: string;
+    start_ms: number;
+    end_ms: number;
+    confidence: number;
+  }>;
+}
+
 // ─── Groq helper ──────────────────────────────────────────────────────────────
 
 const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
@@ -73,6 +89,7 @@ interface ComplianceResult {
       | "prohibited_word"
       | "risk_statement";
     severity: "low" | "medium" | "high" | "critical";
+    speaker: "agent" | "customer" | "unknown" | null;
     timestamp_s: number | null;
     snippet: string;
     regulation: string | null;
@@ -129,6 +146,18 @@ interface CoachingResult {
   priority_score: number;
 }
 
+// ─── Formatted transcript builder ────────────────────────────────────────────
+
+function buildFormattedTranscript(
+  plainTranscript: string,
+  diarized: DiarizedTranscript | null,
+): string {
+  if (!diarized || diarized.utterances.length === 0) return plainTranscript;
+  return diarized.utterances
+    .map((u) => `[Speaker ${u.speaker}]: ${u.text}`)
+    .join("\n");
+}
+
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
 function buildCompliancePrompt(transcript: string, rules: QACRule[]): string {
@@ -162,6 +191,7 @@ Return ONLY a JSON object with EXACTLY these fields:
     {
       "type": one of "promise"|"misleading"|"unauthorized_claim"|"missing_disclosure"|"prohibited_word"|"risk_statement",
       "severity": one of "low"|"medium"|"high"|"critical",
+      "speaker": one of "agent"|"customer"|"unknown" (who made this statement — infer from context),
       "timestamp_s": integer seconds into the call (null if unknown),
       "snippet": exact quote ≤60 words from the transcript,
       "regulation": regulation reference string (e.g. "FDCPA §807(11)") or null,
@@ -474,7 +504,7 @@ export async function POST(
   // ── Verify interaction belongs to this workspace ───────────────────────────
   const { data: intRaw } = await admin
     .from("qac_interactions")
-    .select("id, workspace_id, transcript, status, agent_id, agent_name")
+    .select("id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name")
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single();
@@ -483,6 +513,7 @@ export async function POST(
     id: string;
     workspace_id: string;
     transcript: string;
+    diarized_transcript: unknown;
     status: string;
     agent_id: string | null;
     agent_name: string;
@@ -534,18 +565,20 @@ export async function POST(
 
   const rules = (rulesData ?? []) as QACRule[];
   const transcript = interaction.transcript;
+  const diarized = interaction.diarized_transcript as DiarizedTranscript | null;
+  const formattedTranscript = buildFormattedTranscript(transcript, diarized);
 
   // ── 5 parallel Groq calls ─────────────────────────────────────────────────
   const [complianceRaw, salesRaw, softSkillsRaw, conversationRaw, summaryRaw] =
     await Promise.all([
       groqJSON<ComplianceResult>(
-        buildCompliancePrompt(transcript, rules),
+        buildCompliancePrompt(formattedTranscript, rules),
         1500,
       ),
-      groqJSON<SalesResult>(buildSalesPrompt(transcript), 1024),
-      groqJSON<SoftSkillsResult>(buildSoftSkillsPrompt(transcript), 800),
-      groqJSON<ConversationResult>(buildConversationPrompt(transcript), 800),
-      groqJSON<SummaryResult>(buildSummaryPrompt(transcript), 1500),
+      groqJSON<SalesResult>(buildSalesPrompt(formattedTranscript), 1024),
+      groqJSON<SoftSkillsResult>(buildSoftSkillsPrompt(formattedTranscript), 800),
+      groqJSON<ConversationResult>(buildConversationPrompt(formattedTranscript), 800),
+      groqJSON<SummaryResult>(buildSummaryPrompt(formattedTranscript), 1500),
     ]);
 
   // Apply defaults for any failed calls
@@ -600,7 +633,7 @@ export async function POST(
   // ── Sequential coaching call (uses all 5 results) ─────────────────────────
   const coachingRaw = await groqJSON<CoachingResult>(
     buildCoachingPrompt(
-      transcript,
+      formattedTranscript,
       compliance,
       sales,
       softSkills,
@@ -689,6 +722,7 @@ export async function POST(
     "risk_statement",
   ]);
   const VALID_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
+  const VALID_SPEAKERS = new Set(["agent", "customer", "unknown"]);
 
   if (compliance.violations.length > 0) {
     const { error: flagErr } = await admin.from("qac_flags").insert(
@@ -697,6 +731,7 @@ export async function POST(
         workspace_id: workspaceId,
         category: "compliance" as const,
         severity: VALID_SEVERITIES.has(v.severity) ? v.severity : "medium",
+        speaker: VALID_SPEAKERS.has(v.speaker ?? "") ? v.speaker : null,
         label: v.explanation?.slice(0, 120) ?? "Compliance violation",
         transcript_fragment: v.snippet?.slice(0, 500) ?? null,
         regulation: v.regulation ?? null,
