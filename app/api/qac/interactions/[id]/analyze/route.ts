@@ -528,7 +528,7 @@ export async function POST(
     );
   }
   // ── Atomic lock: only succeed if status is NOT already 'analyzing' ─────────
-  const { data: lockData } = await admin
+  const { data: lockData, error: lockErr } = await admin
     .from("qac_interactions")
     .update({ status: "analyzing" })
     .eq("id", id)
@@ -536,6 +536,13 @@ export async function POST(
     .select("id")
     .maybeSingle();
 
+  if (lockErr) {
+    console.error("[qac-analyze] Failed to acquire analysis lock:", lockErr.message);
+    return NextResponse.json(
+      { error: "Failed to acquire analysis lock" },
+      { status: 500 },
+    );
+  }
   if (!lockData) {
     return NextResponse.json(
       { error: "Analysis already in progress" },
