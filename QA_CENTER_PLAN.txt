@@ -209,5 +209,689 @@ ESTADO DEL DOCUMENTO
 [ ] Paso 10 — Navegación
 
 ================================================================================
+ESTADO FASE 1 — COMPLETADA Y DESPLEGADA
+================================================================================
+Fecha de deploy: 2026-06-13
+Commit: 4634394
+Vercel: DEPLOYED ✅
+Migración 062: APLICADA ✅ (Supabase blyzfuwwxwpuihrjdpuh)
+
+Archivos entregados:
+  supabase/migrations/062_qac_phase1.sql
+  lib/qac-audit.ts
+  app/api/qac/audit-logs/route.ts
+  app/api/qac/agents/route.ts
+  app/api/qac/agents/[id]/route.ts
+  app/api/qac/coaching/route.ts
+  app/api/qac/coaching/[id]/route.ts
+  app/api/qac/interactions/[id]/review/route.ts
+  app/api/qac/interactions/[id]/comments/route.ts
+  app/(app)/qa-center/audit/page.tsx
+  app/(app)/qa-center/agents/page.tsx
+  app/(app)/qa-center/agents/[id]/page.tsx
+  app/(app)/qa-center/coaching/page.tsx
+  app/(app)/qa-center/coaching/[id]/page.tsx
+  components/layout/sidebar.tsx (3 nuevos links)
+  messages/en.json / es.json (3 nuevas keys)
+
+[x] Fase 1 — COMPLETADA
+[x] Paso 1  — Migration SQL
+[x] Paso 2  — API Audit Logs
+[x] Paso 3  — API Agent Profiles
+[x] Paso 4  — API Coaching Reports
+[x] Paso 5  — API Review + Comments
+[x] Paso 6  — UI Audit Log
+[x] Paso 7  — UI Agent Profiles
+[x] Paso 8  — UI Coaching Reports
+[x] Paso 9  — UI Call Review widgets
+[x] Paso 10 — Navegación
+
+
+================================================================================
+QA CENTER — FASE 2
+SPEAKER DIARIZATION + CUSTOMER MEMORY FOUNDATION
+================================================================================
+Fecha de auditoría: 2026-06-13
+Estado: PENDIENTE DE APROBACIÓN
+================================================================================
+
+
+================================================================================
+ENTREGABLE 1 — AUDITORÍA DE DIARIZACIÓN
+================================================================================
+
+FLUJO ACTUAL DEL PIPELINE
+───────────────────────────────────────────────────────────────────────────────
+
+  VoIP Platform
+       │
+       ▼ POST /api/qac/webhooks/[token]
+  ┌─────────────────────────────────────┐
+  │ Webhook Handler                     │
+  │ app/api/qac/webhooks/[token]/route.ts│
+  │                                     │
+  │  1. Field mapping engine            │
+  │     (recording_url, agent, phone…)  │
+  │  2. Download audio (fetch + buffer) │
+  │  3. ─► Groq Whisper API ◄─         │
+  │     POST /openai/v1/audio/          │
+  │          transcriptions             │
+  │     model: whisper-large-v3-turbo   │
+  │     → returns: { text: "…" }        │
+  │     (texto plano, sin speakers)     │
+  │  4. INSERT qac_interactions         │
+  │     status: "pending"               │
+  │  5. (si auto_analyze) ──►           │
+  └─────────────────────────────────────┘
+       │
+       ▼ POST /api/qac/interactions/[id]/analyze
+  ┌─────────────────────────────────────┐
+  │ Analysis Engine                     │
+  │ app/api/qac/interactions/[id]/      │
+  │ analyze/route.ts                    │
+  │                                     │
+  │  Groq LLaMA-4 Scout (5 paralelas    │
+  │  + 1 coaching secuencial):          │
+  │  ├─ Compliance analysis             │
+  │  ├─ Sales effectiveness             │
+  │  ├─ Soft skills                     │
+  │  ├─ Conversation dynamics           │
+  │  ├─ Summary + sentiment timeline    │
+  │  └─ Coaching synthesis              │
+  │                                     │
+  │  Persiste en:                       │
+  │  ├─ qac_evaluations                 │
+  │  ├─ qac_flags (por violación)       │
+  │  └─ qac_coaching_reports            │
+  └─────────────────────────────────────┘
+
+
+ARCHIVOS INVOLUCRADOS
+───────────────────────────────────────────────────────────────────────────────
+
+  Archivo                                          Rol
+  ─────────────────────────────────────────────────────────────────────────────
+  app/api/qac/webhooks/[token]/route.ts            Ingesta, audio download,
+                                                   transcripción
+  app/api/qac/interactions/[id]/analyze/route.ts   Motor de análisis
+  lib/qac-audit.ts                                 Audit log
+  supabase/migrations/040–062                      Schema completo
+
+
+PROVEEDOR DE TRANSCRIPCIÓN ACTUAL
+───────────────────────────────────────────────────────────────────────────────
+
+  Proveedor:  Groq Whisper API
+  Modelo:     whisper-large-v3-turbo
+  Endpoint:   https://api.groq.com/openai/v1/audio/transcriptions
+  Respuesta:  { text: "texto plano" }  ← string simple, sin estructura
+
+  Formatos aceptados: MP3, WAV, OGG, M4A, FLAC
+
+
+ESTADO DE TIMESTAMPS Y SPEAKER LABELS
+───────────────────────────────────────────────────────────────────────────────
+
+  Campo                         Dónde               Contenido
+  ─────────────────────────────────────────────────────────────────────────────
+  transcript                    qac_interactions     Texto plano sin marcadores
+  timestamp_s                   qac_flags            Segundo aprox. de violación
+                                                     (LLM-inferido, no real)
+  start_ms / end_ms             qac_flags            Ventana ms (opcional)
+  sentiment_timeline[].at_pct   qac_evaluations      % avance en llamada (0–100)
+  duration_s                    qac_interactions     Duración total
+
+  Speaker labels: NO EXISTEN EN NINGUNA PARTE DEL PIPELINE.
+
+  El transcript luce así actualmente:
+  "Buenas tardes, mi nombre es Carlos, ¿en qué le puedo ayudar?
+  Hola, estoy llamando por mi cuenta. Sí, dígame señor..."
+
+  → Sin indicación de quién habla en cada turno.
+
+
+CAMBIOS MÍNIMOS NECESARIOS
+───────────────────────────────────────────────────────────────────────────────
+
+  En webhook route:
+    · Reemplazar Groq Whisper por proveedor con diarización
+    · Parsear utterances: [{ speaker, text, start_ms, end_ms }]
+    · Generar transcript legible (backward compat) + diarized_transcript JSONB
+
+  En schema:
+    · ADD COLUMN diarized_transcript JSONB en qac_interactions
+    · ADD COLUMN speaker TEXT en qac_flags  (agent|customer|unknown)
+    · Extender sentiment_timeline con speaker field
+
+  En analysis engine:
+    · Pasar transcript con formato "Agent: ...\nCustomer: ..."
+    · LLM mejora compliance y soft skills con contexto de hablantes
+
+  Sin cambios en: RLS, auth, webhook token, auto_analyze, qac_evaluations
+
+
+RIESGOS
+───────────────────────────────────────────────────────────────────────────────
+
+  Riesgo                                  Impacto    Mitigación
+  ─────────────────────────────────────────────────────────────────────────────
+  Cambio proveedor rompe backward compat  Medio      Mantener transcript plano
+                                                     + agregar diarized nuevo
+  Latencia mayor en transcripción         Bajo       +1–3s para archivo 5 min
+  Costo aumenta vs Groq Whisper           Medio      $0.26/hr Deepgram vs ~$0
+  Mislabeling de hablantes                Medio      Usar agent_name del webhook
+  Llamadas multiparty (conferencias)      Bajo       Speaker 2+ → "unknown"
+
+
+================================================================================
+ENTREGABLE 2 — COMPARATIVA TÉCNICA DE PROVEEDORES
+================================================================================
+
+1. ASSEMBLYAI
+───────────────────────────────────────────────────────────────────────────────
+  Diarización:     ✅  speaker_labels: true → utterances[].speaker (A, B, C…)
+  Timestamps:      ✅  word-level: words[].start / words[].end en ms
+  Precisión:       ✅✅ Modelo "best" (universal-2) top-3 del mercado
+  Latencia:        ~45–90s para 5 min (async)
+  Costo/hora:      $0.37/hr (best) · $0.20/hr (nano)
+  Integración:     REST API · SDK Node.js oficial
+  Escalabilidad:   ✅  Cloud-hosted, 200 req concurrentes
+  Pros:            Mejor diarización · Excelente español · SDK maduro
+  Contras:         El más caro · API key adicional
+
+  Respuesta:
+  {
+    "utterances": [
+      { "speaker": "A", "text": "Buenas tardes…", "start": 0,    "end": 3200 },
+      { "speaker": "B", "text": "Hola, estoy…",  "start": 3400, "end": 5800 }
+    ]
+  }
+
+
+2. DEEPGRAM
+───────────────────────────────────────────────────────────────────────────────
+  Diarización:     ✅  diarize=true → words[].speaker (0, 1, 2…)
+  Timestamps:      ✅  word-level: words[].start / words[].end en segundos (float)
+  Precisión:       ✅✅ nova-3 — excelente en español
+  Latencia:        ~20–40s para 5 min (más rápido que AssemblyAI)
+  Costo/hora:      $0.26/hr (pre-recorded, nova-3)
+  Integración:     REST API · SDK @deepgram/sdk para Node.js
+  Escalabilidad:   ✅  Enterprise-grade, SLA disponible
+  Pros:            30% más barato que AssemblyAI · Más rápido · SDK Node.js nativo
+  Contras:         Diarización en dialectos regionales ligeramente inferior
+
+
+3. GROQ (ACTUAL) + COMPLEMENTO LLM
+───────────────────────────────────────────────────────────────────────────────
+  Diarización:     ❌  whisper-large-v3-turbo no devuelve speaker labels
+  Timestamps:      ⚠️  Solo segment-level con verbose_json (no word-level)
+  Diarización alt: Post-procesar con LLaMA para etiquetar hablantes por patrones
+  Precisión:       ⚠️  Baja — LLM puede inferir roles pero falla en turnos rápidos
+  Latencia:        Groq muy rápido, pero 2 pasos (transcribe → diarize)
+  Costo/hora:      ~$0.02/hr total (casi gratis)
+  Integración:     ✅  Ya integrado — costo de cambio mínimo
+  Escalabilidad:   ✅  Groq es muy escalable
+  Pros:            Costo casi cero · Ya existe en el pipeline
+  Contras:         Diarización no fiable · Sin word timestamps · No apto
+                   para compliance real
+
+
+4. OPEN-SOURCE (Pyannote + WhisperX)
+───────────────────────────────────────────────────────────────────────────────
+  Diarización:     ✅  pyannote/speaker-diarization-3.1 — state-of-the-art
+  Timestamps:      ✅  word-level con WhisperX
+  Precisión:       ✅✅ Comparable a AssemblyAI en condiciones controladas
+  Latencia:        GPU: ~10s/5min · CPU: 2–5 min/5min
+  Costo/hora:      $0.00 (self-hosted) · $0.05–0.10/hr (GPU cloud)
+  Integración:     ❌  Requiere microservicio Python separado
+  Escalabilidad:   ⚠️  Requiere gestión de infraestructura propia
+  Pros:            Costo más bajo a escala · Control total · Sin vendor lock-in
+  Contras:         Microservicio Python · GPU para latencia aceptable
+                   No apto para Vercel serverless
+
+
+TABLA RESUMEN
+───────────────────────────────────────────────────────────────────────────────
+
+  Dimensión             AssemblyAI   Deepgram   Groq+LLM   Open-Source
+  ─────────────────────────────────────────────────────────────────────────────
+  Diarización real        ✅✅          ✅✅        ⚠️           ✅✅
+  Word timestamps         ✅           ✅          ❌           ✅
+  Precisión español       ✅✅          ✅✅        ⚠️           ✅
+  Latencia                Medio        Rápido     Muy rápido   Lento sin GPU
+  Costo/hora              $0.37        $0.26      ~$0.03       ~$0–0.10
+  Integración Next.js     ✅           ✅          ✅ existe     ❌ microservicio
+  Escalabilidad           ✅           ✅          ✅           ⚠️
+
+
+RECOMENDACIÓN FINAL
+───────────────────────────────────────────────────────────────────────────────
+
+  → Deepgram nova-3 con diarize=true
+
+  Razones:
+  1. Mejor relación costo/precisión del mercado
+  2. SDK Node.js de primera clase — integración limpia en Next.js API route
+  3. Word-level timestamps + diarización en una sola llamada
+  4. 30% más barato que AssemblyAI con precisión comparable
+  5. Impacto quirúrgico: solo reemplaza la llamada a Groq Whisper
+
+
+================================================================================
+ENTREGABLE 3 — DISEÑO CUSTOMER MEMORY FOUNDATION
+================================================================================
+
+ENTIDADES Y RELACIONES
+───────────────────────────────────────────────────────────────────────────────
+
+  workspace_id (aislamiento multi-tenant absoluto)
+       │
+       ├──► qac_customers            ← identidad maestra del cliente
+       │         │
+       │         ├──► qac_call_threads        ← hilo de llamadas relacionadas
+       │         │         │
+       │         │         └──► qac_interactions (existente)
+       │         │
+       │         ├──► qac_customer_journey     ← estado del viaje del cliente
+       │         │
+       │         ├──► qac_follow_up_commitments ← compromisos hechos en llamadas
+       │         │
+       │         └──► qac_journey_insights     ← insights generados por IA
+       │
+       └──► qac_interactions (existente, FK customer_id)
+
+
+TABLA: qac_customers
+───────────────────────────────────────────────────────────────────────────────
+  Propósito: Identidad consolidada del cliente. Un mismo cliente puede llamar
+  varias veces desde distintos números o con distintos IDs externos.
+
+  Columna            Tipo              Nullable  Descripción
+  ─────────────────────────────────────────────────────────────────────────────
+  id                 UUID PK           NO        Generado
+  workspace_id       UUID FK           NO        Aislamiento tenant
+  customer_phone     TEXT              YES       E.164 normalizado
+  customer_id        TEXT              YES       ID externo del CRM
+  name               TEXT              YES
+  email              TEXT              YES
+  first_call_at      TIMESTAMPTZ       YES
+  last_call_at       TIMESTAMPTZ       YES
+  total_calls        INT DEFAULT 0     NO
+  is_merged          BOOLEAN DEFAULT F NO        Unificado con otro registro
+  merged_into        UUID FK self       YES
+  metadata           JSONB DEFAULT {}  NO
+  created_at         TIMESTAMPTZ       NO        DEFAULT NOW()
+  updated_at         TIMESTAMPTZ       NO        DEFAULT NOW()
+
+  Índices:
+  · UNIQUE (workspace_id, customer_phone) WHERE customer_phone IS NOT NULL
+    AND is_merged = false
+  · UNIQUE (workspace_id, customer_id) WHERE customer_id IS NOT NULL
+    AND is_merged = false
+  · GIN (to_tsvector('simple', coalesce(name, ''))) — búsqueda full-text
+
+  Consultas frecuentes:
+  · WHERE workspace_id = $1 AND customer_phone = $2  → buscar por teléfono
+  · WHERE workspace_id = $1 AND customer_id = $2     → buscar por ID externo
+  · ORDER BY last_call_at DESC                       → clientes más recientes
+
+
+TABLA: qac_call_threads
+───────────────────────────────────────────────────────────────────────────────
+  Propósito: Agrupa llamadas relacionadas. Ej: todos los intentos de cobro de
+  una deuda, o el proceso de venta de un producto a un cliente específico.
+
+  Columna            Tipo              Nullable  Descripción
+  ─────────────────────────────────────────────────────────────────────────────
+  id                 UUID PK           NO
+  workspace_id       UUID FK           NO
+  customer_id        UUID FK           NO        → qac_customers
+  campaign_id        UUID FK           YES       → campaigns
+  thread_type        TEXT CHECK        NO        sales|collections|support|
+                                                  onboarding|general
+  status             TEXT CHECK        NO        active|resolved|abandoned|
+                                                  converted
+  opened_at          TIMESTAMPTZ       NO        DEFAULT NOW()
+  closed_at          TIMESTAMPTZ       YES
+  call_count         INT DEFAULT 0     NO
+  last_call_at       TIMESTAMPTZ       YES
+  resolution_notes   TEXT              YES
+  metadata           JSONB DEFAULT {}  NO
+  created_at         TIMESTAMPTZ       NO
+
+  FK futura: qac_interactions.thread_id → qac_call_threads(id) (nullable)
+
+  Índices:
+  · (customer_id, created_at DESC)
+  · (workspace_id, campaign_id, status)
+
+
+TABLA: qac_customer_journey
+───────────────────────────────────────────────────────────────────────────────
+  Propósito: Estado actual del viaje del cliente. Un registro por
+  cliente+campaña (upsert). Rastrear etapa del funnel, intent detectado,
+  y trayectoria entre llamadas.
+
+  Columna                   Tipo               Nullable  Descripción
+  ─────────────────────────────────────────────────────────────────────────────
+  id                        UUID PK            NO
+  workspace_id              UUID FK            NO
+  customer_id               UUID FK            NO        → qac_customers
+  campaign_id               UUID FK            YES       → campaigns
+
+  stage                     TEXT CHECK         NO        initial_contact |
+                                                          interested |
+                                                          objecting |
+                                                          negotiating |
+                                                          committed |
+                                                          converted |
+                                                          lost | churned |
+                                                          reactivated
+  previous_stage            TEXT               YES
+  stage_changed_at          TIMESTAMPTZ        NO        DEFAULT NOW()
+
+  current_intent            TEXT               YES       "quiere pagar en cuotas"
+  intent_confidence         NUMERIC(4,3)       YES       0.000–1.000
+  intent_history            JSONB DEFAULT []   NO        [{intent, at, call_id}]
+
+  journey_score             NUMERIC(5,2)       YES       0–100
+  intent_progression_score  NUMERIC(5,2)       YES       0–100
+  relationship_score        NUMERIC(5,2)       YES       0–100
+
+  known_objections          JSONB DEFAULT []   NO        objeciones expresadas
+  expressed_interests       JSONB Default []   NO        intereses detectados
+  risk_flags                JSONB Default []   NO        flags acumulados
+
+  last_call_id              UUID FK            YES       → qac_interactions
+  last_call_at              TIMESTAMPTZ        YES
+  next_action               TEXT               YES       acción recomendada
+  next_action_due_at        TIMESTAMPTZ        YES
+
+  created_at                TIMESTAMPTZ        NO
+  updated_at                TIMESTAMPTZ        NO
+
+  Índices:
+  · UNIQUE (workspace_id, customer_id, coalesce(campaign_id::text, 'null'))
+  · (workspace_id, stage, last_call_at DESC)
+  · (workspace_id, journey_score DESC NULLS LAST)
+
+
+TABLA: qac_follow_up_commitments
+───────────────────────────────────────────────────────────────────────────────
+  Propósito: Compromisos hechos durante llamadas. "El agente prometió llamar
+  el jueves". "El cliente dijo que pagaría el viernes". Rastrear cumplimiento.
+
+  Columna            Tipo              Nullable  Descripción
+  ─────────────────────────────────────────────────────────────────────────────
+  id                 UUID PK           NO
+  workspace_id       UUID FK           NO
+  customer_id        UUID FK           NO        → qac_customers
+  interaction_id     UUID FK           NO        → qac_interactions
+  thread_id          UUID FK           YES       → qac_call_threads
+
+  commitment_type    TEXT CHECK        NO        callback | payment |
+                                                  document_send | escalation |
+                                                  info_lookup |
+                                                  follow_up_call | other
+  committed_by       TEXT CHECK        NO        agent | customer | both
+  commitment_text    TEXT              NO        descripción del compromiso
+  transcript_quote   TEXT              YES       fragmento exacto del transcript
+
+  status             TEXT CHECK        NO        pending | fulfilled | missed |
+                                                  cancelled | partial
+  due_at             TIMESTAMPTZ       YES       cuándo se prometió
+  fulfilled_at       TIMESTAMPTZ       YES       cuándo se cumplió
+  fulfilled_in       UUID FK           YES       → qac_interactions (donde cumplió)
+
+  created_at         TIMESTAMPTZ       NO
+  updated_at         TIMESTAMPTZ       NO
+
+  Índices:
+  · (customer_id, status, due_at)
+  · (workspace_id, status, due_at) WHERE status = 'pending'
+  · (interaction_id)
+
+
+TABLA: qac_journey_insights
+───────────────────────────────────────────────────────────────────────────────
+  Propósito: Insights generados por IA sobre el journey completo de un cliente
+  (cross-call). Se regeneran después de cada llamada nueva.
+
+  Columna            Tipo              Nullable  Descripción
+  ─────────────────────────────────────────────────────────────────────────────
+  id                 UUID PK           NO
+  workspace_id       UUID FK           NO
+  customer_id        UUID FK           NO        → qac_customers
+  journey_id         UUID FK           YES       → qac_customer_journey
+  generated_after    UUID FK           YES       → qac_interactions (trigger)
+
+  insight_type       TEXT CHECK        NO        pattern | risk | opportunity |
+                                                  objection_pattern |
+                                                  sentiment_shift |
+                                                  recommendation | anomaly
+  severity           TEXT CHECK        NO        info | warning | critical
+  title              TEXT              NO
+  content            TEXT              NO
+  evidence           JSONB Default []  NO        [{call_id, quote, timestamp_s}]
+  confidence         NUMERIC(4,3)      YES       0.000–1.000
+  is_actioned        BOOLEAN Default F NO
+  actioned_at        TIMESTAMPTZ       YES
+
+  created_at         TIMESTAMPTZ       NO
+
+  Índices:
+  · (customer_id, created_at DESC)
+  · (workspace_id, insight_type, severity, is_actioned) WHERE is_actioned = false
+
+
+REGLAS DE AISLAMIENTO MULTI-TENANT
+───────────────────────────────────────────────────────────────────────────────
+  · Toda tabla: workspace_id NOT NULL
+  · Ninguna FK cruza workspaces
+  · RLS en todas con USING (workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    ))
+  · Identificadores de resolución de identidad:
+    - workspace_id   (siempre presente)
+    - customer_phone (E.164 normalizado)
+    - customer_id    (ID externo CRM, si existe)
+    - campaign_id    (segmentación de journey)
+
+
+================================================================================
+NUEVOS SCORES — DISEÑO (SIN IMPLEMENTAR)
+================================================================================
+
+1. JOURNEY SCORE (0–100)
+───────────────────────────────────────────────────────────────────────────────
+  Mide qué tan avanzado está el cliente en el proceso objetivo.
+
+  journey_score = (
+    stage_weight[stage]           × 0.40  -- etapa del funnel
+    + intent_confidence           × 0.25  -- certeza del intent detectado
+    + engagement_trend            × 0.20  -- tendencia engagement entre llamadas
+    + commitment_fulfillment_rate × 0.15  -- % compromisos cumplidos
+  )
+
+  stage_weight:
+    initial_contact = 10
+    interested      = 30
+    objecting       = 20  (retroceso temporal, no penalizar fuerte)
+    negotiating     = 50
+    committed       = 75
+    converted       = 100
+    lost / churned  = 0
+
+
+2. FOLLOW-UP COMPLIANCE SCORE (0–100)
+───────────────────────────────────────────────────────────────────────────────
+  Mide qué tan bien el equipo cumple sus compromisos con el cliente.
+
+  follow_up_score = (
+    fulfilled_on_time / total_commitments_due × 100
+  ) × decay_factor(days_late)
+
+  Penalización por tardanza:
+    0 días late  → × 1.0
+    1 día late   → × 0.8
+    2+ días late → × 0.5
+    Never        → × 0.0
+
+  Segmentado por: agent, campaign, workspace.
+
+
+3. INTENT PROGRESSION SCORE (0–100)
+───────────────────────────────────────────────────────────────────────────────
+  Mide si el intent del cliente avanza hacia la conversión entre llamadas.
+
+  intent_progression = direction_score × consistency_score
+
+  direction_score:
+    intent_history[n].stage > [n-1].stage → +20 por paso progresivo
+    regresión                              → -15 por paso
+
+  consistency_score:
+    mismo intent 3+ llamadas seguidas → × 1.2 (señal sólida)
+    intent cambia cada llamada         → × 0.7 (señal débil)
+
+
+4. CONVERSION ATTRIBUTION SCORE (0–100)
+───────────────────────────────────────────────────────────────────────────────
+  Atribuye crédito de la conversión a los touchpoints correctos.
+  Modelo: Time-Decay + Position weighting.
+
+  Primera llamada:     20% del crédito
+  Última llamada:      40% del crédito
+  Llamadas intermedias: 40% restante con decay exponencial
+                        (más reciente = más peso)
+
+  quality_multiplier por llamada:
+    overall_score >= 80    → × 1.3
+    objection resolved     → × 1.2
+    commitment extracted   → × 1.1
+
+
+5. CUSTOMER RELATIONSHIP SCORE (0–100)
+───────────────────────────────────────────────────────────────────────────────
+  Score compuesto que resume la salud de la relación con el cliente.
+
+  relationship_score = (
+    journey_score              × 0.30
+    + follow_up_compliance     × 0.25
+    + intent_progression       × 0.20
+    + avg_interaction_quality  × 0.15  -- promedio overall_score en llamadas
+    + sentiment_trend          × 0.10  -- mejora de sentimiento 1ra vs última
+  )
+
+
+================================================================================
+RECOMENDACIÓN TÉCNICA FINAL
+================================================================================
+
+PROVEEDOR DE DIARIZACIÓN
+───────────────────────────────────────────────────────────────────────────────
+  → Deepgram nova-3 con diarize=true
+  · $0.26/hr audio
+  · Word-level timestamps + diarización en una sola llamada
+  · SDK @deepgram/sdk Node.js nativo
+  · Impacto quirúrgico: 1 función en webhook handler
+
+
+ARQUITECTURA PROPUESTA (Fase 2)
+───────────────────────────────────────────────────────────────────────────────
+
+  Webhook Handler (existente)
+       │
+       ▼ CAMBIO A: Groq Whisper → Deepgram nova-3 (diarize=true)
+       │
+       │ Nueva respuesta:
+       │ utterances: [{ speaker: "0"|"1", text, start_ms, end_ms }]
+       │
+       │ Generar:
+       │  · transcript: "Agent: Hola...\nCustomer: Sí..." (backward compat)
+       │  · diarized_transcript: JSONB con utterances estructuradas
+       │
+       ▼ NUEVO B: Resolver customer identity
+       │ customer_phone → qac_customers (upsert)
+       │
+       ▼ NUEVO C: Asignar thread
+       │ campaign_id + customer_id → qac_call_threads (upsert)
+       │
+       ▼ EXISTENTE D: INSERT qac_interactions
+       │ + nuevos campos: thread_id, customer_id (FK), diarized_transcript
+       │
+       ▼ Analysis Engine (existente, mejora mínima)
+       │ Pasar diarized_transcript con formato "Agent: ...\nCustomer: ..."
+       │ → LLM mejora compliance y soft skills con contexto de hablantes
+       │
+       ▼ NUEVO E: Post-analysis hook
+         · Extraer follow-up commitments (1 LLM call adicional)
+         · Actualizar qac_customer_journey (stage + scores)
+         · Generar qac_journey_insights (si >= 2 llamadas del cliente)
+         · Calcular y persistir nuevos scores
+
+
+COSTO ESTIMADO
+───────────────────────────────────────────────────────────────────────────────
+
+  Componente                 Antes (Fase 1)    Fase 2
+  ─────────────────────────────────────────────────────────────────────────────
+  Transcripción (Groq)       ~$0.00–0.02/hr    eliminado
+  Transcripción (Deepgram)   —                 $0.26/hr
+  Análisis LLM (Groq LLaMA)  ~$0.01/hr         ~$0.015/hr (+1 call commitments)
+  Total por hora de audio    ~$0.02/hr          ~$0.275/hr
+  ─────────────────────────────────────────────────────────────────────────────
+  100 hrs/mes                ~$2/mes            ~$27.50/mes
+  1,000 hrs/mes              ~$20/mes           ~$275/mes
+
+
+PLAN DE IMPLEMENTACIÓN
+───────────────────────────────────────────────────────────────────────────────
+
+  Paso A — Diarización (prerequisito de todo lo demás)
+  ─────────────────────────────────────────────────────
+  · webhooks/[token]/route.ts → reemplazar Groq Whisper por Deepgram
+  · Migration 063: diarized_transcript JSONB en qac_interactions
+                   customer_id FK en qac_interactions
+                   thread_id FK en qac_interactions
+                   speaker TEXT en qac_flags
+  · Actualizar prompt del analysis engine
+
+  Paso B — Customer Identity Resolution
+  ─────────────────────────────────────
+  · Migration 064: CREATE TABLE qac_customers
+  · Webhook: upsert customer al ingestar cada llamada
+  · GET /api/qac/customers — list + search endpoint
+
+  Paso C — Call Threads + Journey
+  ────────────────────────────────
+  · Migration 065: CREATE TABLE qac_call_threads
+                   CREATE TABLE qac_customer_journey
+                   CREATE TABLE qac_follow_up_commitments
+                   CREATE TABLE qac_journey_insights
+  · Post-analysis hook: extraer commitments (LLM call adicional)
+  · Journey updater: actualizar stage + scores tras cada análisis
+
+  Paso D — Scores
+  ───────────────
+  · Implementar cálculo en post-analysis hook
+  · Índices para leaderboard con nuevos scores
+
+
+================================================================================
+ESTADO FASE 2
+================================================================================
+[ ] Aprobación recibida
+[ ] Paso A — Diarización (Deepgram + migration 063)
+[ ] Paso B — Customer Identity (qac_customers + migration 064)
+[ ] Paso C — Journey + Threads (migration 065)
+[ ] Paso D — Scores
+[ ] TypeScript check
+[ ] Commit + push
+[ ] Migración Supabase
+
+
+================================================================================
 FIN DEL DOCUMENTO
 ================================================================================
