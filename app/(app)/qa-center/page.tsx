@@ -40,6 +40,7 @@ import {
   Plus,
   Search,
   Settings2,
+  Shield,
   ShieldAlert,
   TrendingDown,
   TrendingUp,
@@ -1120,6 +1121,13 @@ export default function QACenterPage() {
             </span>
           </div>
         )}
+        <Link
+          href="/qa-center/audit"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] px-3 py-1.5 text-xs font-medium text-[#555] hover:border-[#111] hover:text-[#111] transition-colors shrink-0"
+        >
+          <Shield className="h-3.5 w-3.5" />
+          Audit Log
+        </Link>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

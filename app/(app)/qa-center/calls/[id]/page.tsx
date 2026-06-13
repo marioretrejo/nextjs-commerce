@@ -27,6 +27,7 @@ import {
   Phone,
   Play,
   PlayCircle,
+  Shield,
   ShieldAlert,
   TrendingUp,
   User,
@@ -131,6 +132,24 @@ interface QACComment {
   created_at: string;
   updated_at: string;
 }
+
+interface QACAuditLog {
+  id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  details: Record<string, unknown> | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  analyze: "Analysis run",
+  "review_status.change": "Review status changed",
+  "comment.create": "Comment added",
+  "interaction.create": "Interaction created",
+  "interaction.delete": "Interaction deleted",
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1302,6 +1321,7 @@ export default function CallReviewPage({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<QACAuditLog[]>([]);
 
   const fetchInteraction = useCallback(async () => {
     try {
@@ -1324,6 +1344,23 @@ export default function CallReviewPage({
   useEffect(() => {
     void fetchInteraction();
   }, [fetchInteraction]);
+
+  const fetchAuditLogs = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/qac/audit-logs?entity_type=interaction&entity_id=${id}&limit=10`,
+      );
+      if (!res.ok) return; // 403 for non-admins — silently absent
+      const json = (await res.json()) as { data: QACAuditLog[] };
+      setAuditLogs(json.data ?? []);
+    } catch {
+      // non-critical — audit trail is supplementary
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void fetchAuditLogs();
+  }, [fetchAuditLogs]);
 
   async function handleAnalyze() {
     if (!interaction) return;
@@ -1875,6 +1912,52 @@ export default function CallReviewPage({
               </div>
             </CardContent>
           </Card>
+
+          {auditLogs.length > 0 && (
+            <Card className="border-[#efefef]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-[#6b6b6b]" />
+                    Audit Trail
+                  </span>
+                  <Link
+                    href="/qa-center/audit"
+                    className="text-[11px] text-[#9b9b9b] hover:text-[#555] font-normal flex items-center gap-1"
+                  >
+                    View all
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {auditLogs.map((log) => {
+                    const detail =
+                      log.action === "review_status.change" && log.details
+                        ? `${String((log.details as { from?: string }).from ?? "")} → ${String((log.details as { to?: string }).to ?? "")}`
+                        : null;
+                    return (
+                      <div
+                        key={log.id}
+                        className="flex items-baseline gap-2.5 text-xs"
+                      >
+                        <span className="text-[#b0b0b0] tabular-nums shrink-0">
+                          {format(new Date(log.created_at), "MMM d HH:mm")}
+                        </span>
+                        <span className="font-medium text-[#333]">
+                          {AUDIT_ACTION_LABELS[log.action] ?? log.action}
+                        </span>
+                        {detail && (
+                          <span className="text-[#9b9b9b]">{detail}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>
