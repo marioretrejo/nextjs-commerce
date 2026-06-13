@@ -882,13 +882,13 @@ PLAN DE IMPLEMENTACIÓN
 ================================================================================
 ESTADO FASE 2
 ================================================================================
-[ ] Aprobación recibida
+[x] Aprobación recibida
 [ ] Paso A — Diarización (Deepgram + migration 063)
 [ ] Paso B — Customer Identity (qac_customers + migration 064)
 [ ] Paso C — Journey + Threads (migration 065)
 [ ] Paso D — Scores
 [ ] TypeScript check
-[ ] Commit + push
+[x] Commit abde01f — push OK
 [ ] Migración Supabase
 
 
@@ -1172,15 +1172,15 @@ COSTO ESTIMADO ACTUALIZADO (Fase 2A)
 
 CHECKLIST DE IMPLEMENTACIÓN (Fase 2A)
 ───────────────────────────────────────────────────────────────────────────────
-  [ ] Aprobación recibida
-  [ ] Migration 063_qac_diarization.sql
-  [ ] Aplicar migration en Supabase
-  [ ] webhooks/[token]/route.ts — función transcribeWithDiarization()
-  [ ] analyze/route.ts — buildFormattedTranscript() + speaker en flags
-  [ ] npx tsc --noEmit — cero errores
+  [x] Aprobación recibida
+  [x] Migration 063_qac_diarization.sql
+  [x] Aplicar migration en Supabase (proyecto blyzfuwwxwpuihrjdpuh)
+  [x] webhooks/[token]/route.ts — transcribeWithDiarization() implementada
+  [x] analyze/route.ts — buildFormattedTranscript() + speaker en flags
+  [x] npx tsc --noEmit — 0 errores (build limpio)
   [ ] Agregar DEEPGRAM_API_KEY a Vercel env vars (instrucción al usuario)
-  [ ] Commit + push
-  [ ] Vercel deploy
+  [x] Commit abde01f — push OK
+  [~] Vercel deploy — en progreso
   [ ] Actualizar este .txt con estado final
 
 
