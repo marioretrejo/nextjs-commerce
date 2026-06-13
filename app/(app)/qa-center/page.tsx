@@ -1122,6 +1122,13 @@ export default function QACenterPage() {
           </div>
         )}
         <Link
+          href="/qa-center/agents"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] px-3 py-1.5 text-xs font-medium text-[#555] hover:border-[#111] hover:text-[#111] transition-colors shrink-0"
+        >
+          <Users2 className="h-3.5 w-3.5" />
+          Agents
+        </Link>
+        <Link
           href="/qa-center/audit"
           className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] px-3 py-1.5 text-xs font-medium text-[#555] hover:border-[#111] hover:text-[#111] transition-colors shrink-0"
         >
@@ -1830,9 +1837,17 @@ export default function QACenterPage() {
                 Performance breakdown per agent — sorted by lowest score first
               </p>
             </div>
-            <span className="text-xs text-[#9b9b9b]">
-              {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[#9b9b9b]">
+                {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}
+              </span>
+              <Link
+                href="/qa-center/agents"
+                className="inline-flex items-center gap-1 text-xs font-medium text-[#555] hover:text-[#111] transition-colors"
+              >
+                View all →
+              </Link>
+            </div>
           </div>
           <Card>
             <CardContent className="p-0">
