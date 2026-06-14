@@ -19,6 +19,8 @@
  * Default mappings cover Twilio, Squaretalk, Voiso, and generic SIP platforms.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizePhone, upsertCustomer } from "@/lib/qac-customer";
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 // ─── Default field mappings (used when workspace hasn't customised) ────────────
@@ -560,5 +562,45 @@ export async function POST(
     );
   }
 
+  after(() =>
+    enrichCustomer(
+      integration.workspace_id,
+      interactionId,
+      fromNumber ?? null,
+      customerName ?? null,
+    ).catch((err) =>
+      console.error("[qac-webhook] customer enrichment failed", err),
+    ),
+  );
+
   return NextResponse.json({ ok: true, interaction_id: interactionId });
+}
+
+async function enrichCustomer(
+  workspaceId: string,
+  interactionId: string,
+  rawPhone: string | null,
+  displayName: string | null,
+): Promise<void> {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) return;
+
+  const customer = await upsertCustomer({
+    workspace_id: workspaceId,
+    canonical_phone: phone,
+    canonical_email: null,
+    display_name: displayName ?? undefined,
+  });
+
+  if (!customer) return;
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("qac_interactions")
+    .update({ customer_id: customer.id })
+    .eq("id", interactionId);
+
+  if (error) {
+    console.error("[qac-webhook] Failed to link customer_id:", error.message);
+  }
 }
