@@ -21,12 +21,11 @@ import {
 interface CoachingDetail {
   id: string;
   agent_id: string | null;
-  agent_name: string | null;
-  priority: string;
+  priority_score: number;
   strengths: string[] | null;
-  improvements: string[] | null;
-  action_items: string[] | null;
-  manager_summary: string | null;
+  weaknesses: string[] | null;
+  recommended_training: string[] | null;
+  coaching_plan: string | null;
   created_at: string;
   agent_profile: {
     id: string;
@@ -76,6 +75,13 @@ const REVIEW_COLOR: Record<string, string> = {
   approved: "text-emerald-400 bg-emerald-400/10",
   disputed: "text-red-400 bg-red-400/10",
 };
+
+function priorityLabel(score: number): string {
+  if (score >= 80) return "urgent";
+  if (score >= 65) return "high";
+  if (score >= 50) return "medium";
+  return "low";
+}
 
 function fmtDuration(s: number | null) {
   if (!s) return "—";
@@ -192,14 +198,14 @@ export default function CoachingDetailPage({
                 Coaching Report
               </h1>
               <p className="text-sm text-gray-400">
-                {report.agent_name ?? "Unknown Agent"} · {fmtDate(report.created_at)}
+                {report.qac_interactions?.agent_name ?? "Unknown Agent"} · {fmtDate(report.created_at)}
               </p>
             </div>
           </div>
           <span
-            className={`rounded border px-3 py-1 text-sm capitalize ${PRIORITY_COLOR[report.priority] ?? "text-gray-400 bg-gray-700/50 border-gray-700"}`}
+            className={`rounded border px-3 py-1 text-sm capitalize ${PRIORITY_COLOR[priorityLabel(report.priority_score)] ?? "text-gray-400 bg-gray-700/50 border-gray-700"}`}
           >
-            {report.priority} priority
+            {priorityLabel(report.priority_score)} priority
           </span>
         </div>
       </div>
@@ -292,11 +298,16 @@ export default function CoachingDetailPage({
           </div>
         )}
 
-        {/* Manager Summary */}
-        {report.manager_summary && (
+        {/* Coaching Plan */}
+        {report.coaching_plan ? (
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium text-gray-400">Manager Summary</h2>
-            <p className="text-sm leading-relaxed text-gray-300">{report.manager_summary}</p>
+            <h2 className="mb-3 text-sm font-medium text-gray-400">Coaching Plan</h2>
+            <p className="text-sm leading-relaxed text-gray-300">{report.coaching_plan}</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
+            <h2 className="mb-3 text-sm font-medium text-gray-400">Coaching Plan</h2>
+            <p className="text-sm text-gray-600">No coaching plan available.</p>
           </div>
         )}
 
@@ -326,15 +337,15 @@ export default function CoachingDetailPage({
           </div>
         )}
 
-        {/* Improvements */}
-        {report.improvements && report.improvements.length > 0 && (
+        {/* Weaknesses */}
+        {report.weaknesses && report.weaknesses.length > 0 && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-amber-400">
               <AlertCircle className="h-4 w-4" />
               Areas to Improve
             </h2>
             <ul className="space-y-2">
-              {report.improvements.map((s, i) => (
+              {report.weaknesses.map((s, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
                   <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
                   {s}
@@ -344,12 +355,12 @@ export default function CoachingDetailPage({
           </div>
         )}
 
-        {/* Action Items */}
-        {report.action_items && report.action_items.length > 0 && (
+        {/* Recommended Training */}
+        {report.recommended_training && report.recommended_training.length > 0 && (
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
-            <h2 className="mb-3 text-sm font-medium text-blue-400">Action Items</h2>
+            <h2 className="mb-3 text-sm font-medium text-blue-400">Recommended Training</h2>
             <ul className="space-y-2">
-              {report.action_items.map((s, i) => (
+              {report.recommended_training.map((s, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
                   <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-blue-400/40 text-xs text-blue-400">
                     {i + 1}

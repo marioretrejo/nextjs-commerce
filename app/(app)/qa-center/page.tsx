@@ -1129,6 +1129,13 @@ export default function QACenterPage() {
           Agents
         </Link>
         <Link
+          href="/qa-center/coaching"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] px-3 py-1.5 text-xs font-medium text-[#555] hover:border-[#111] hover:text-[#111] transition-colors shrink-0"
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          Coaching
+        </Link>
+        <Link
           href="/qa-center/audit"
           className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] px-3 py-1.5 text-xs font-medium text-[#555] hover:border-[#111] hover:text-[#111] transition-colors shrink-0"
         >

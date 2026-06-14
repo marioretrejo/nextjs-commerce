@@ -18,15 +18,15 @@ import {
 interface CoachingReport {
   id: string;
   agent_id: string | null;
-  agent_name: string | null;
-  priority: string;
+  interaction_id: string | null;
+  priority_score: number;
   strengths: string[] | null;
-  improvements: string[] | null;
-  action_items: string[] | null;
-  manager_summary: string | null;
+  weaknesses: string[] | null;
+  recommended_training: string[] | null;
+  coaching_plan: string | null;
   created_at: string;
   qac_interactions: {
-    id: string;
+    agent_name: string | null;
     channel: string;
     risk_level: string | null;
     created_at: string;
@@ -52,6 +52,13 @@ const RISK_COLOR: Record<string, string> = {
   medium: "text-amber-400 bg-amber-400/10",
   low: "text-emerald-400 bg-emerald-400/10",
 };
+
+function priorityLabel(score: number): string {
+  if (score >= 80) return "urgent";
+  if (score >= 65) return "high";
+  if (score >= 50) return "medium";
+  return "low";
+}
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString(undefined, {
@@ -90,7 +97,15 @@ export default function CoachingPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "20" });
-      if (filterPriority) params.set("min_priority", filterPriority);
+      const priorityThresholds: Record<string, number> = {
+        urgent: 80,
+        high: 65,
+        medium: 50,
+        low: 0,
+      };
+      if (filterPriority && filterPriority in priorityThresholds) {
+        params.set("min_priority", String(priorityThresholds[filterPriority]));
+      }
       if (filterFrom) params.set("from", filterFrom);
       if (filterTo) params.set("to", filterTo);
 
@@ -117,18 +132,18 @@ export default function CoachingPage() {
   function exportCSV() {
     if (!reports.length) return;
     const headers = [
-      "id", "agent_name", "agent_id", "priority", "strengths", "improvements",
-      "action_items", "manager_summary", "created_at",
+      "id", "agent_name", "agent_id", "priority_score", "strengths", "weaknesses",
+      "recommended_training", "coaching_plan", "created_at",
     ];
     const rows = reports.map((r) => [
       r.id,
-      r.agent_name ?? "",
+      r.qac_interactions?.agent_name ?? "",
       r.agent_id ?? "",
-      r.priority,
+      String(r.priority_score),
       (r.strengths ?? []).join("; "),
-      (r.improvements ?? []).join("; "),
-      (r.action_items ?? []).join("; "),
-      r.manager_summary ?? "",
+      (r.weaknesses ?? []).join("; "),
+      (r.recommended_training ?? []).join("; "),
+      r.coaching_plan ?? "",
       r.created_at,
     ]);
     const csv = [headers, ...rows]
@@ -265,12 +280,12 @@ export default function CoachingPage() {
                       {/* Top row */}
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`rounded border px-2 py-0.5 text-xs capitalize ${PRIORITY_COLOR[r.priority] ?? "text-gray-400 bg-gray-700/50 border-gray-700"}`}
+                          className={`rounded border px-2 py-0.5 text-xs capitalize ${PRIORITY_COLOR[priorityLabel(r.priority_score)] ?? "text-gray-400 bg-gray-700/50 border-gray-700"}`}
                         >
-                          {r.priority}
+                          {priorityLabel(r.priority_score)}
                         </span>
-                        {r.agent_name && (
-                          <span className="text-sm font-medium text-gray-200">{r.agent_name}</span>
+                        {r.qac_interactions?.agent_name && (
+                          <span className="text-sm font-medium text-gray-200">{r.qac_interactions.agent_name}</span>
                         )}
                         {r.qac_interactions?.risk_level && (
                           <span
@@ -291,10 +306,10 @@ export default function CoachingPage() {
                         )}
                       </div>
 
-                      {/* Manager summary */}
-                      {r.manager_summary && (
+                      {/* Coaching plan */}
+                      {r.coaching_plan && (
                         <p className="mt-2 text-sm text-gray-400 line-clamp-2">
-                          {r.manager_summary}
+                          {r.coaching_plan}
                         </p>
                       )}
 
@@ -317,18 +332,18 @@ export default function CoachingPage() {
                             </ul>
                           </div>
                         )}
-                        {r.improvements && r.improvements.length > 0 && (
+                        {r.weaknesses && r.weaknesses.length > 0 && (
                           <div>
-                            <p className="mb-1 text-xs text-amber-400">Improvements</p>
+                            <p className="mb-1 text-xs text-amber-400">Weaknesses</p>
                             <ul className="space-y-0.5">
-                              {r.improvements.slice(0, 2).map((s, i) => (
+                              {r.weaknesses.slice(0, 2).map((s, i) => (
                                 <li key={i} className="text-xs text-gray-500">
                                   · {s}
                                 </li>
                               ))}
-                              {r.improvements.length > 2 && (
+                              {r.weaknesses.length > 2 && (
                                 <li className="text-xs text-gray-600">
-                                  +{r.improvements.length - 2} more
+                                  +{r.weaknesses.length - 2} more
                                 </li>
                               )}
                             </ul>
