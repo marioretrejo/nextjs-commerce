@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
+  Activity,
   ArrowLeft,
   Calendar,
   Loader2,
   Mail,
   Phone,
   MessageSquare,
+  TrendingDown,
   TrendingUp,
   Zap,
 } from "lucide-react";
@@ -49,6 +51,15 @@ interface Insight {
   expires_at: string | null;
 }
 
+interface CustomerScores {
+  health_score: number;
+  call_quality_score: number | null;
+  sentiment_trend: "improving" | "stable" | "declining" | "unknown";
+  unresolved_pressure: number;
+  engagement_score: number;
+  customer_risk: "low" | "medium" | "high" | "critical";
+}
+
 interface CustomerDetail {
   id: string;
   display_name: string;
@@ -62,6 +73,7 @@ interface CustomerDetail {
   recent_interactions: Interaction[];
   journey: JourneyEntry[];
   insights: Insight[];
+  scores: CustomerScores;
 }
 
 function formatDate(iso: string) {
@@ -133,7 +145,32 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const score0 = customer.recent_interactions[0]?.qac_evaluations?.[0]?.overall_score ?? null;
+  const { scores } = customer;
+
+  function healthColor(score: number) {
+    if (score >= 70) return "text-green-400";
+    if (score >= 50) return "text-yellow-400";
+    return "text-red-400";
+  }
+
+  function riskColor(r: string) {
+    if (r === "low") return "text-green-400";
+    if (r === "medium") return "text-yellow-400";
+    if (r === "high") return "text-orange-400";
+    return "text-red-400";
+  }
+
+  function trendIcon(t: string) {
+    if (t === "improving") return <TrendingUp className="h-3.5 w-3.5 text-green-400" />;
+    if (t === "declining") return <TrendingDown className="h-3.5 w-3.5 text-red-400" />;
+    return null;
+  }
+
+  function trendColor(t: string) {
+    if (t === "improving") return "text-green-400";
+    if (t === "declining") return "text-red-400";
+    return "text-gray-400";
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -202,6 +239,77 @@ export default function CustomerDetailPage() {
             </p>
           )}
         </div>
+
+        {/* Customer Health */}
+        <section className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="h-4 w-4 text-indigo-400" />
+            <h2 className="text-sm font-semibold text-white">Customer Health</h2>
+            <span className="text-xs text-gray-500">
+              based on {customer.total_calls} call{customer.total_calls !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* Health Score */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Health Score</p>
+              <p className={`text-2xl font-bold ${healthColor(scores.health_score)}`}>
+                {scores.health_score}
+                <span className="text-sm font-normal text-gray-500">/100</span>
+              </p>
+            </div>
+
+            {/* Call Quality */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Call Quality</p>
+              {scores.call_quality_score != null ? (
+                <p className={`text-2xl font-bold ${healthColor(scores.call_quality_score)}`}>
+                  {scores.call_quality_score}
+                  <span className="text-sm font-normal text-gray-500">/100</span>
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">No evaluations</p>
+              )}
+            </div>
+
+            {/* Engagement */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Engagement</p>
+              <p className={`text-2xl font-bold ${healthColor(scores.engagement_score)}`}>
+                {scores.engagement_score}
+                <span className="text-sm font-normal text-gray-500">/100</span>
+              </p>
+            </div>
+
+            {/* Sentiment Trend */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Sentiment Trend</p>
+              <div className="flex items-center gap-1.5 mt-1">
+                {trendIcon(scores.sentiment_trend)}
+                <p className={`text-sm font-semibold capitalize ${trendColor(scores.sentiment_trend)}`}>
+                  {scores.sentiment_trend}
+                </p>
+              </div>
+            </div>
+
+            {/* Risk Level */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Risk Level</p>
+              <p className={`text-sm font-bold capitalize ${riskColor(scores.customer_risk)}`}>
+                {scores.customer_risk}
+              </p>
+            </div>
+
+            {/* Unresolved Pressure */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Open Items</p>
+              <p className={`text-2xl font-bold ${scores.unresolved_pressure > 50 ? "text-red-400" : scores.unresolved_pressure > 20 ? "text-yellow-400" : "text-green-400"}`}>
+                {scores.unresolved_pressure}
+                <span className="text-sm font-normal text-gray-500">/100</span>
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* Active Insights */}
         {customer.insights.length > 0 && (
