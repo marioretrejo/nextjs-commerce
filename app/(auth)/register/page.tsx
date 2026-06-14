@@ -7,13 +7,15 @@ import { registerAction, type AuthActionState } from "@/app/actions/auth";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 const initialState: AuthActionState = { status: "idle" };
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite_token");
   const [state, formAction, isPending] = useActionState(
     registerAction,
     initialState,
@@ -31,7 +33,7 @@ export default function RegisterPage() {
     }
     if (state.status === "success") {
       router.refresh();
-      router.push(state.redirectTo);
+      router.push(inviteToken ? `/invite/${inviteToken}` : state.redirectTo);
     }
   }, [state, router]);
 

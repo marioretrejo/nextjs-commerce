@@ -39,13 +39,27 @@ export async function POST(req: Request) {
 
   const { data: ws } = await supabase
     .from("workspaces")
-    .select("id, name")
+    .select("id, name, owner_id")
     .eq("id", wsId)
     .single();
   if (!ws) return apiError("Workspace not found", 404);
 
-  const workspace = ws as { id: string; name: string };
+  const workspace = ws as { id: string; name: string; owner_id: string };
   const admin = createAdminClient();
+
+  // Fix B: Only workspace owner or active admin can invite
+  const isOwner = workspace.owner_id === user.id;
+  if (!isOwner) {
+    const { data: callerMember } = await admin
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", wsId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    const isAdmin = (callerMember as { role: string } | null)?.role === "admin";
+    if (!isAdmin) return apiError("Forbidden", 403);
+  }
 
   // Check if user already exists
   const { data: existingUser } = await admin
@@ -57,29 +71,78 @@ export async function POST(req: Request) {
   const inviteeId = (existingUser as { id: string } | null)?.id ?? null;
   const inviteToken = crypto.randomUUID();
 
-  const { data, error } = await admin
-    .from("workspace_members")
-    .upsert(
-      {
-        workspace_id: wsId,
-        user_id: inviteeId,
-        role: role ?? "editor",
-        status: inviteeId ? "active" : "pending",
-        invite_email: inviteeId ? null : email,
-        invited_by: user.id,
-        invite_token: inviteeId ? null : inviteToken,
-      },
-      { onConflict: "workspace_id,user_id" },
-    )
-    .select()
-    .single();
+  let memberData: Record<string, unknown>;
 
-  if (error) {
-    console.error("[team/invite] upsert error:", error);
-    return apiError("Internal server error", 500);
+  if (inviteeId) {
+    // Known user: upsert on (workspace_id, user_id) — no invite_token needed
+    const { data, error } = await admin
+      .from("workspace_members")
+      .upsert(
+        {
+          workspace_id: wsId,
+          user_id: inviteeId,
+          role: role ?? "editor",
+          status: "active",
+        },
+        { onConflict: "workspace_id,user_id" },
+      )
+      .select()
+      .single();
+    if (error) {
+      console.error("[team/invite] upsert error:", error);
+      return apiError("Internal server error", 500);
+    }
+    memberData = data as Record<string, unknown>;
+  } else {
+    // Fix C: Check for existing pending invite by email to avoid duplicates
+    const { data: existingInvite } = await admin
+      .from("workspace_members")
+      .select("id")
+      .eq("workspace_id", wsId)
+      .eq("invite_email", email)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (existingInvite) {
+      // Fix D: Re-invite — refresh token, role, and timestamp
+      const { data, error } = await admin
+        .from("workspace_members")
+        .update({
+          invite_token: inviteToken,
+          role: role ?? "editor",
+          invited_at: new Date().toISOString(),
+        })
+        .eq("id", (existingInvite as { id: string }).id)
+        .select()
+        .single();
+      if (error) {
+        console.error("[team/invite] update error:", error);
+        return apiError("Internal server error", 500);
+      }
+      memberData = data as Record<string, unknown>;
+    } else {
+      // Fix D: New invite — plain INSERT (no upsert, user_id is null)
+      const { data, error } = await admin
+        .from("workspace_members")
+        .insert({
+          workspace_id: wsId,
+          user_id: null,
+          role: role ?? "editor",
+          status: "pending",
+          invite_email: email,
+          invite_token: inviteToken,
+        })
+        .select()
+        .single();
+      if (error) {
+        console.error("[team/invite] insert error:", error);
+        return apiError("Internal server error", 500);
+      }
+      memberData = data as Record<string, unknown>;
+    }
   }
 
-  // Send invite email for new (pending) members
+  // Send invite email for pending (non-existing) members
   const inviterName =
     (user.user_metadata?.["full_name"] as string | undefined) ??
     user.email ??
@@ -112,5 +175,5 @@ export async function POST(req: Request) {
     metadata: { invited_email: email, role, workspace_name: workspace.name },
   });
 
-  return apiOk(data, 201);
+  return apiOk(memberData, 201);
 }
