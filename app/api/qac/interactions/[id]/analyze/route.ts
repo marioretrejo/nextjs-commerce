@@ -14,7 +14,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 // ─── Diarized transcript type (mirrors webhooks/[token]/route.ts) ─────────────
 
@@ -505,7 +505,7 @@ export async function POST(
   // ── Verify interaction belongs to this workspace ───────────────────────────
   const { data: intRaw } = await admin
     .from("qac_interactions")
-    .select("id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name")
+    .select("id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name, customer_id")
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single();
@@ -518,6 +518,7 @@ export async function POST(
     status: string;
     agent_id: string | null;
     agent_name: string;
+    customer_id: string | null;
   };
   const interaction = intRaw as InteractionRow | null;
 
@@ -783,6 +784,64 @@ export async function POST(
       "[qac-analyze] Coaching report insert failed:",
       coachErr.message,
     );
+
+  // ── Post-response: customer journey + insights (non-blocking) ───────────────
+  after(async () => {
+    if (!interaction.customer_id) return;
+    try {
+      const adminPost = createAdminClient();
+
+      // Count prior journey entries for this customer to determine sequence_number
+      const { count } = await adminPost
+        .from("qac_customer_journey")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("customer_id", interaction.customer_id);
+
+      const priorCount = count ?? 0;
+
+      // Insert journey entry for this call
+      const { error: journeyErr } = await adminPost
+        .from("qac_customer_journey")
+        .insert({
+          workspace_id: workspaceId,
+          customer_id: interaction.customer_id,
+          interaction_id: id,
+          sequence_number: priorCount + 1,
+          intent_at_call:
+            summary.customer_intent !== "Unknown"
+              ? summary.customer_intent
+              : null,
+          sentiment_at_call: (["positive", "neutral", "negative"] as const).includes(
+            summary.overall_sentiment as "positive" | "neutral" | "negative",
+          )
+            ? summary.overall_sentiment
+            : "neutral",
+          key_topics: summary.key_moments.slice(0, 10),
+          unresolved_items: summary.objections.slice(0, 10),
+        });
+      if (journeyErr)
+        console.error("[qac-analyze] journey insert failed:", journeyErr.message);
+
+      // Generate a cross-call insight only from the 2nd call onward
+      if (priorCount < 1) return;
+      if (!summary.summary || summary.summary === "Analysis unavailable.") return;
+
+      const { error: insightErr } = await adminPost
+        .from("qac_journey_insights")
+        .insert({
+          workspace_id: workspaceId,
+          customer_id: interaction.customer_id,
+          insight_type: "journey_summary",
+          content: summary.summary,
+          confidence: 0.75,
+        });
+      if (insightErr)
+        console.error("[qac-analyze] insight insert failed:", insightErr.message);
+    } catch (err) {
+      console.error("[qac-analyze] customer journey after() block failed:", err);
+    }
+  });
 
   return NextResponse.json({
     ok: true,
