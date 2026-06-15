@@ -6,6 +6,7 @@ import {
   Bell,
   BookOpen,
   Bot,
+  Building2,
   Code2,
   Cpu,
   FlaskConical,
@@ -71,6 +72,7 @@ interface SidebarProps {
   visibleModules?: string[];
   hasComplianceQa?: boolean;
   hasDesignAccess?: boolean;
+  isQaAdmin?: boolean;
 }
 
 export function Sidebar({
@@ -79,6 +81,7 @@ export function Sidebar({
   visibleModules,
   hasComplianceQa = false,
   hasDesignAccess = false,
+  isQaAdmin = false,
 }: SidebarProps) {
   const pathname = usePathname();
   const t = useTranslations("nav");
@@ -212,6 +215,17 @@ export function Sidebar({
                 module: "compliance",
                 sub: true,
               },
+              ...(isQaAdmin
+                ? [
+                    {
+                      href: "/qa-center/settings/departments",
+                      labelKey: "Departamentos QA",
+                      icon: Building2,
+                      module: "compliance",
+                      sub: true,
+                    },
+                  ]
+                : []),
             ]
           : []),
         {
