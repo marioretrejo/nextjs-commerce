@@ -545,7 +545,7 @@ export async function POST(
   // ── Verify interaction belongs to this workspace ───────────────────────────
   const { data: intRaw } = await admin
     .from("qac_interactions")
-    .select("id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name, customer_id")
+    .select("id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name, customer_id, department_id")
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single();
@@ -559,6 +559,7 @@ export async function POST(
     agent_id: string | null;
     agent_name: string;
     customer_id: string | null;
+    department_id: string | null;
   };
   const interaction = intRaw as InteractionRow | null;
 
@@ -613,21 +614,64 @@ export async function POST(
     .eq("is_active", true);
 
   const rules = (rulesData ?? []) as QACRule[];
+
+  // ── Fetch department profile (optional — null falls back to global defaults) ─
+  // Only runs if the interaction was assigned a department during ingestion.
+  // If the department is inactive or not found, deptContext and deptRubric stay
+  // at their defaults (empty string / null) → behavior identical to pre-Phase-5.
+  type DeptRow = { qa_prompt: string | null; scoring_rubric: unknown };
+  let deptContext = "";
+  let deptRubric: Record<string, number> | null = null;
+
+  if (interaction.department_id) {
+    const { data: deptData } = await admin
+      .from("qac_departments")
+      .select("qa_prompt, scoring_rubric")
+      .eq("id", interaction.department_id)
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true)
+      .single();
+
+    const dept = deptData as DeptRow | null;
+    if (dept) {
+      if (dept.qa_prompt) {
+        deptContext = `DEPARTMENT CONTEXT:\n${dept.qa_prompt.trim()}\n\n`;
+      }
+
+      // Validate rubric: object with the 4 expected numeric keys summing ~100
+      const r = dept.scoring_rubric as Record<string, unknown> | null;
+      if (r && typeof r === "object") {
+        const c = Number(r["compliance"]);
+        const s = Number(r["sales"]);
+        const sk = Number(r["soft_skills"]);
+        const cv = Number(r["conversation"]);
+        if (!isNaN(c) && !isNaN(s) && !isNaN(sk) && !isNaN(cv)) {
+          const total = c + s + sk + cv;
+          if (Math.abs(total - 100) <= 2) {
+            deptRubric = { compliance: c, sales: s, soft_skills: sk, conversation: cv };
+          }
+        }
+      }
+    }
+  }
+
   const transcript = interaction.transcript;
   const diarized = interaction.diarized_transcript as DiarizedTranscript | null;
   const formattedTranscript = buildFormattedTranscript(transcript, diarized);
 
   // ── 5 parallel Groq calls ─────────────────────────────────────────────────
+  // deptContext is prepended when a department profile exists; empty string
+  // when not, so the prompts are identical to the pre-Phase-5 behavior.
   const [complianceRaw, salesRaw, softSkillsRaw, conversationRaw, summaryRaw] =
     await Promise.all([
       groqJSON<ComplianceResult>(
-        buildCompliancePrompt(formattedTranscript, rules),
+        deptContext + buildCompliancePrompt(formattedTranscript, rules),
         1500,
       ),
-      groqJSON<SalesResult>(buildSalesPrompt(formattedTranscript), 1024),
-      groqJSON<SoftSkillsResult>(buildSoftSkillsPrompt(formattedTranscript), 800),
-      groqJSON<ConversationResult>(buildConversationPrompt(formattedTranscript), 800),
-      groqJSON<SummaryResult>(buildSummaryPrompt(formattedTranscript), 1500),
+      groqJSON<SalesResult>(deptContext + buildSalesPrompt(formattedTranscript), 1024),
+      groqJSON<SoftSkillsResult>(deptContext + buildSoftSkillsPrompt(formattedTranscript), 800),
+      groqJSON<ConversationResult>(deptContext + buildConversationPrompt(formattedTranscript), 800),
+      groqJSON<SummaryResult>(deptContext + buildSummaryPrompt(formattedTranscript), 1500),
     ]);
 
   // Apply defaults for any failed calls
@@ -671,12 +715,20 @@ export async function POST(
   if (!["positive", "neutral", "negative"].includes(summary.overall_sentiment))
     summary.overall_sentiment = "neutral";
 
-  const overallScore = calcOverallScore(
-    compliance.score,
-    sales.overall,
-    softSkills.overall,
-    conversation.overall,
-  );
+  // Use department scoring_rubric weights when valid; fallback to global defaults.
+  const overallScore = deptRubric
+    ? Math.round(
+        compliance.score  * (deptRubric["compliance"]!  / 100) +
+        sales.overall     * (deptRubric["sales"]!       / 100) +
+        softSkills.overall * (deptRubric["soft_skills"]! / 100) +
+        conversation.overall * (deptRubric["conversation"]! / 100),
+      )
+    : calcOverallScore(
+        compliance.score,
+        sales.overall,
+        softSkills.overall,
+        conversation.overall,
+      );
   const riskLevel = calcRiskLevel(overallScore);
 
   // ── Sequential coaching call (uses all 5 results) ─────────────────────────
