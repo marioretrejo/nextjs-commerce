@@ -266,6 +266,67 @@ async function runQAAnalysis(interactionId: string, workspaceId: string) {
   }
 }
 
+// ─── Department resolver ──────────────────────────────────────────────────────
+
+function toSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function escapeLike(s: string): string {
+  // Escape SQL LIKE special chars to prevent wildcard injection
+  return s.replace(/[%_\\]/g, "\\$&");
+}
+
+async function resolveDepartmentId(
+  adminClient: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  departmentName: string | null,
+  agentExtension: string | null,
+): Promise<string | null> {
+  // 1. Match by department_name: slug exact first, then name ilike
+  if (departmentName) {
+    const slug = toSlug(departmentName);
+    if (slug.length > 0) {
+      const { data: bySlug } = await adminClient
+        .from("qac_departments")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("slug", slug)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (bySlug) return (bySlug as { id: string }).id;
+    }
+
+    const safeName = escapeLike(departmentName.trim());
+    if (safeName.length > 0) {
+      const { data: byName } = await adminClient
+        .from("qac_departments")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .ilike("name", safeName)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (byName) return (byName as { id: string }).id;
+    }
+  }
+
+  // 2. Fallback: match by agent_extension
+  if (agentExtension) {
+    const { data: byExt } = await adminClient
+      .from("qac_department_extensions")
+      .select("department_id")
+      .eq("workspace_id", workspaceId)
+      .eq("agent_extension", agentExtension.trim())
+      .maybeSingle();
+    if (byExt) return (byExt as { department_id: string }).department_id;
+  }
+
+  return null;
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(
@@ -418,6 +479,24 @@ export async function POST(
       : {};
   const sourcePayload = sanitizePayload(rawPayloadObj);
 
+  // ── Resolve department ─────────────────────────────────────────────────────
+  // Try department_name (from provider's agent_type / queue field) first,
+  // then fall back to agent_extension mapping. Null means no match — the
+  // interaction is still saved and analyzed using global default rules.
+  const departmentId = await resolveDepartmentId(
+    admin,
+    integration.workspace_id,
+    normalized.department_name,
+    normalized.agent_extension,
+  ).catch((err) => {
+    console.error("[qac-webhook] Department resolution error:", err);
+    return null;
+  });
+
+  if (departmentId) {
+    console.info("[qac-webhook] Department resolved:", departmentId);
+  }
+
   // ── Persist interaction ────────────────────────────────────────────────────
   const { data: interactionData, error: intErr } = await admin
     .from("qac_interactions")
@@ -447,6 +526,7 @@ export async function POST(
           : null,
       started_at: normalized.started_at ?? null,
       department_name: normalized.department_name ?? null,
+      department_id: departmentId,
       agent_extension: normalized.agent_extension ?? null,
       source_payload: sourcePayload,
       status: "pending",
