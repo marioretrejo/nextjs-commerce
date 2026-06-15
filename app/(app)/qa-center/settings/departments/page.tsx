@@ -179,7 +179,6 @@ export default function DepartmentsPage() {
   function updateForm(patch: Partial<FormData>) {
     setForm((prev) => {
       const next = { ...prev, ...patch };
-      // Auto-generate slug from name only when creating
       if ("name" in patch && !editingId) {
         next.slug = toSlug(next.name);
       }
@@ -358,23 +357,23 @@ export default function DepartmentsPage() {
   const totalOk = Math.abs(total - 100) <= 1;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="min-h-screen bg-white text-gray-900">
       {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4">
+      <div className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
               href="/qa-center"
-              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
-            <div className="rounded-lg bg-violet-500/10 p-2">
-              <Settings2 className="h-5 w-5 text-violet-400" />
+            <div className="rounded-lg bg-violet-100 p-2">
+              <Settings2 className="h-5 w-5 text-violet-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-white">Departamentos QA</h1>
-              <p className="text-sm text-gray-400">
+              <h1 className="text-lg font-semibold text-gray-900">Departamentos QA</h1>
+              <p className="text-sm text-gray-500">
                 Configura reglas de análisis por departamento para llamadas VoIP externas
               </p>
             </div>
@@ -390,11 +389,11 @@ export default function DepartmentsPage() {
       </div>
 
       {/* Info banner */}
-      <div className="border-b border-gray-800 bg-violet-500/5 px-6 py-3">
-        <p className="text-sm text-violet-300">
+      <div className="border-b border-gray-200 bg-violet-50 px-6 py-3">
+        <p className="text-sm text-violet-700">
           Cada departamento configurado aquí controla cómo se analiza automáticamente cada llamada recibida
           desde proveedores VoIP (Squaretalk, Twilio, Aircall, etc.). La detección de departamento usa el
-          campo <code className="rounded bg-violet-900/40 px-1 py-0.5 text-xs">agent_type</code> del
+          campo <code className="rounded bg-violet-100 px-1 py-0.5 text-xs text-violet-700">agent_type</code> del
           proveedor o el mapeo de extensiones a continuación.
         </p>
       </div>
@@ -403,13 +402,13 @@ export default function DepartmentsPage() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
           </div>
         )}
 
         {/* Error */}
         {!loading && error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+          <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-600">
             {error}
             <button
               onClick={() => void fetchDepartments()}
@@ -422,10 +421,10 @@ export default function DepartmentsPage() {
 
         {/* Empty state */}
         {!loading && !error && departments.length === 0 && (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-700 py-20 text-center">
-            <Building2 className="mb-3 h-10 w-10 text-gray-600" />
-            <p className="font-medium text-gray-400">No hay departamentos configurados</p>
-            <p className="mt-1 text-sm text-gray-600">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 py-20 text-center">
+            <Building2 className="mb-3 h-10 w-10 text-gray-300" />
+            <p className="font-medium text-gray-500">No hay departamentos configurados</p>
+            <p className="mt-1 text-sm text-gray-400">
               Crea un departamento para asignar reglas de QA específicas a cada equipo.
             </p>
             <button
@@ -450,32 +449,32 @@ export default function DepartmentsPage() {
               return (
                 <div
                   key={dept.id}
-                  className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900"
+                  className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
                 >
                   {/* Department header row */}
                   <div className="flex items-start justify-between gap-4 p-4">
                     <div className="flex items-start gap-3 min-w-0">
-                      <div className="mt-0.5 rounded-lg bg-violet-500/10 p-1.5 shrink-0">
-                        <Building2 className="h-4 w-4 text-violet-400" />
+                      <div className="mt-0.5 rounded-lg bg-violet-100 p-1.5 shrink-0">
+                        <Building2 className="h-4 w-4 text-violet-600" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-white">{dept.name}</span>
-                          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-400">
+                          <span className="font-semibold text-gray-900">{dept.name}</span>
+                          <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                             {dept.slug}
                           </code>
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                               dept.is_active
-                                ? "bg-emerald-400/10 text-emerald-400"
-                                : "bg-gray-700 text-gray-400"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-gray-100 text-gray-500"
                             }`}
                           >
                             {dept.is_active ? "Activo" : "Inactivo"}
                           </span>
                         </div>
                         {dept.description && (
-                          <p className="mt-0.5 text-sm text-gray-400">{dept.description}</p>
+                          <p className="mt-0.5 text-sm text-gray-500">{dept.description}</p>
                         )}
                         {/* Scoring rubric summary */}
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -484,8 +483,8 @@ export default function DepartmentsPage() {
                               key={k}
                               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
                                 (dept.critical_criteria ?? []).includes(k)
-                                  ? "bg-amber-400/10 text-amber-400"
-                                  : "bg-gray-800 text-gray-400"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-gray-100 text-gray-600"
                               }`}
                             >
                               {CRITERIA_LABELS[k]}: {r[k]}%
@@ -502,7 +501,7 @@ export default function DepartmentsPage() {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => toggleExtensions(dept.id)}
-                        className="flex items-center gap-1 rounded-lg border border-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:border-gray-600 hover:text-white"
+                        className="flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-900"
                       >
                         <Phone className="h-3.5 w-3.5" />
                         Extensiones
@@ -514,7 +513,7 @@ export default function DepartmentsPage() {
                       </button>
                       <button
                         onClick={() => openEdit(dept)}
-                        className="rounded-lg border border-gray-700 px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:border-gray-600 hover:text-white"
+                        className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-900"
                       >
                         Editar
                       </button>
@@ -522,8 +521,8 @@ export default function DepartmentsPage() {
                         onClick={() => void handleToggleActive(dept)}
                         className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
                           dept.is_active
-                            ? "border-red-800 text-red-400 hover:border-red-600"
-                            : "border-emerald-800 text-emerald-400 hover:border-emerald-600"
+                            ? "border-red-300 text-red-600 hover:border-red-400"
+                            : "border-emerald-300 text-emerald-600 hover:border-emerald-400"
                         }`}
                       >
                         {dept.is_active ? "Desactivar" : "Activar"}
@@ -533,13 +532,13 @@ export default function DepartmentsPage() {
 
                   {/* Extensions panel */}
                   {isExpanded && (
-                    <div className="border-t border-gray-800 bg-gray-950/50 p-4">
-                      <p className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                    <div className="border-t border-gray-200 bg-gray-50 p-4">
+                      <p className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-400">
                         Extensiones asignadas
                       </p>
 
                       {isLoadingExt && (
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
                           <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
                         </div>
                       )}
@@ -547,9 +546,9 @@ export default function DepartmentsPage() {
                       {!isLoadingExt && (
                         <>
                           {deptExtensions.length === 0 && (
-                            <p className="mb-3 text-sm text-gray-600">
+                            <p className="mb-3 text-sm text-gray-400">
                               Sin extensiones asignadas. Las llamadas se detectan por{" "}
-                              <code className="text-xs">agent_type</code> del proveedor.
+                              <code className="text-xs text-gray-500">agent_type</code> del proveedor.
                             </p>
                           )}
                           {deptExtensions.length > 0 && (
@@ -557,15 +556,15 @@ export default function DepartmentsPage() {
                               {deptExtensions.map((ext) => (
                                 <div
                                   key={ext.id}
-                                  className="flex items-center justify-between rounded-lg bg-gray-900 px-3 py-2"
+                                  className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2"
                                 >
                                   <div className="flex items-center gap-2">
-                                    <Phone className="h-3.5 w-3.5 text-gray-500" />
-                                    <span className="text-sm font-mono text-white">
+                                    <Phone className="h-3.5 w-3.5 text-gray-400" />
+                                    <span className="text-sm font-mono text-gray-900">
                                       {ext.agent_extension}
                                     </span>
                                     {ext.agent_name && (
-                                      <span className="text-sm text-gray-400">
+                                      <span className="text-sm text-gray-500">
                                         — {ext.agent_name}
                                       </span>
                                     )}
@@ -574,7 +573,7 @@ export default function DepartmentsPage() {
                                     onClick={() =>
                                       void handleDeleteExtension(dept.id, ext.agent_extension)
                                     }
-                                    className="rounded p-1 text-gray-600 transition-colors hover:text-red-400"
+                                    className="rounded p-1 text-gray-400 transition-colors hover:text-red-500"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
@@ -592,7 +591,7 @@ export default function DepartmentsPage() {
                               onChange={(e) =>
                                 setNewExt((p) => ({ ...p, agent_extension: e.target.value }))
                               }
-                              className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                              className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                             />
                             <input
                               type="text"
@@ -601,7 +600,7 @@ export default function DepartmentsPage() {
                               onChange={(e) =>
                                 setNewExt((p) => ({ ...p, agent_name: e.target.value }))
                               }
-                              className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                              className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                             />
                             <button
                               onClick={() => void handleAddExtension(dept.id)}
@@ -629,16 +628,16 @@ export default function DepartmentsPage() {
 
       {/* ── Create / Edit modal ─────────────────────────────────────────────── */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 shadow-2xl max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-2xl max-h-[90vh]">
             {/* Modal header */}
-            <div className="flex items-center justify-between border-b border-gray-800 px-6 py-4">
-              <h2 className="text-lg font-semibold text-white">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {editingId ? "Editar departamento" : "Nuevo departamento"}
               </h2>
               <button
                 onClick={closeForm}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -647,39 +646,39 @@ export default function DepartmentsPage() {
             <form onSubmit={(e) => void handleSave(e)} className="space-y-5 p-6">
               {/* Name */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
-                  Nombre <span className="text-red-400">*</span>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Nombre <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => updateForm({ name: e.target.value })}
                   placeholder="ej. Ventas, Soporte, Cobranzas"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                   required
                 />
               </div>
 
               {/* Slug */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
-                  Slug <span className="text-red-400">*</span>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Slug <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={form.slug}
                   onChange={(e) => updateForm({ slug: e.target.value.toLowerCase() })}
                   placeholder="ventas"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 font-mono text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-400">
                   Solo minúsculas, números y guiones. Usado para detectar el departamento desde el proveedor.
                 </p>
               </div>
 
               {/* Description */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
                   Descripción
                 </label>
                 <input
@@ -687,13 +686,13 @@ export default function DepartmentsPage() {
                   value={form.description}
                   onChange={(e) => updateForm({ description: e.target.value })}
                   placeholder="Descripción breve del departamento"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
               </div>
 
               {/* QA Prompt */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
                   Prompt QA del departamento
                 </label>
                 <textarea
@@ -701,9 +700,9 @@ export default function DepartmentsPage() {
                   onChange={(e) => updateForm({ qa_prompt: e.target.value })}
                   rows={4}
                   placeholder="Instrucciones específicas para la IA al analizar llamadas de este departamento. Si se deja vacío, se usará el prompt global estándar."
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none resize-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-400">
                   Si está vacío, se usa el prompt global. Usa este campo para dar contexto específico: enfoque
                   en cierre de ventas, manejo de objeciones, cumplimiento FDCPA, etc.
                 </p>
@@ -712,12 +711,12 @@ export default function DepartmentsPage() {
               {/* Scoring rubric */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-300">
-                    Pesos de scoring <span className="text-red-400">*</span>
+                  <label className="text-sm font-medium text-gray-700">
+                    Pesos de scoring <span className="text-red-500">*</span>
                   </label>
                   <span
                     className={`text-sm font-semibold ${
-                      totalOk ? "text-emerald-400" : "text-red-400"
+                      totalOk ? "text-emerald-600" : "text-red-600"
                     }`}
                   >
                     Total: {total}%
@@ -727,7 +726,7 @@ export default function DepartmentsPage() {
                 <div className="space-y-2">
                   {CRITERIA_KEYS.map((k) => (
                     <div key={k} className="flex items-center gap-3">
-                      <span className="w-40 text-sm text-gray-400">{CRITERIA_LABELS[k]}</span>
+                      <span className="w-40 text-sm text-gray-600">{CRITERIA_LABELS[k]}</span>
                       <input
                         type="number"
                         min={0}
@@ -736,10 +735,10 @@ export default function DepartmentsPage() {
                         onChange={(e) =>
                           updateForm({ [k]: Math.max(0, Math.min(100, Number(e.target.value))) })
                         }
-                        className="w-20 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-center text-sm text-white focus:border-violet-500 focus:outline-none"
+                        className="w-20 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-center text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                       />
-                      <span className="text-sm text-gray-500">%</span>
-                      <div className="flex-1 rounded-full bg-gray-800 h-1.5">
+                      <span className="text-sm text-gray-400">%</span>
+                      <div className="flex-1 rounded-full bg-gray-200 h-1.5">
                         <div
                           className="h-1.5 rounded-full bg-violet-500 transition-all"
                           style={{ width: `${Math.min(100, form[k])}%` }}
@@ -749,7 +748,7 @@ export default function DepartmentsPage() {
                   ))}
                 </div>
                 {!totalOk && (
-                  <p className="mt-2 text-xs text-red-400">
+                  <p className="mt-2 text-xs text-red-500">
                     Los pesos deben sumar exactamente 100%. Suma actual: {total}%
                   </p>
                 )}
@@ -757,10 +756,10 @@ export default function DepartmentsPage() {
 
               {/* Critical criteria */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-300">
+                <label className="mb-2 block text-sm font-medium text-gray-700">
                   Criterios críticos
                 </label>
-                <p className="mb-2 text-xs text-gray-500">
+                <p className="mb-2 text-xs text-gray-400">
                   Un score bajo en cualquiera de estos criterios marcará la llamada como riesgo crítico.
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -773,8 +772,8 @@ export default function DepartmentsPage() {
                         onClick={() => toggleCriteria(k)}
                         className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                           selected
-                            ? "border-amber-500 bg-amber-500/10 text-amber-400"
-                            : "border-gray-700 text-gray-400 hover:border-gray-600"
+                            ? "border-amber-500 bg-amber-50 text-amber-700"
+                            : "border-gray-300 text-gray-600 hover:border-gray-400"
                         }`}
                       >
                         {selected && <Check className="h-3.5 w-3.5" />}
@@ -786,10 +785,10 @@ export default function DepartmentsPage() {
               </div>
 
               {/* Active toggle */}
-              <div className="flex items-center justify-between rounded-lg border border-gray-800 px-4 py-3">
+              <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-300">Estado activo</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm font-medium text-gray-700">Estado activo</p>
+                  <p className="text-xs text-gray-400">
                     Solo los departamentos activos se usarán para detección en el webhook.
                   </p>
                 </div>
@@ -797,7 +796,7 @@ export default function DepartmentsPage() {
                   type="button"
                   onClick={() => updateForm({ is_active: !form.is_active })}
                   className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                    form.is_active ? "bg-violet-600" : "bg-gray-700"
+                    form.is_active ? "bg-violet-600" : "bg-gray-300"
                   }`}
                 >
                   <span
@@ -810,17 +809,17 @@ export default function DepartmentsPage() {
 
               {/* Form error */}
               {formError && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-600">
                   {formError}
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3 border-t border-gray-800 pt-4">
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4">
                 <button
                   type="button"
                   onClick={closeForm}
-                  className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-400 transition-colors hover:border-gray-600 hover:text-white"
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-900"
                 >
                   Cancelar
                 </button>
