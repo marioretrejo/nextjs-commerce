@@ -8,114 +8,34 @@
  *
  * Setup:
  *   1. Go to QA Center → Integrations and copy your webhook URL
- *   2. Configure field mappings to match your provider's payload shape
- *   3. Paste the URL as the call-completed / recording-ready callback in your VoIP platform
+ *   2. Set provider_name to match your platform (e.g. "squaretalk")
+ *   3. Configure field mappings if using the generic adapter
+ *   4. Paste the URL as the call-completed / recording-ready callback in your VoIP platform
  *
- * Field mapping engine:
- *   Each VoiceOS field has an ordered list of candidate keys. The extractor tries
- *   each key in order and returns the first non-empty value. Workspace admins can
- *   override mappings via the Integrations UI or PATCH /api/qac/integrations.
+ * Provider adapters (lib/qac/voip-adapters.ts):
+ *   squaretalk — dedicated adapter with full Squaretalk metadata mapping
+ *   generic    — field-mapping engine for Twilio, Voiso, Genesys, custom SIP
  *
- * Default mappings cover Twilio, Squaretalk, Voiso, and generic SIP platforms.
+ * Security:
+ *   - Auth: workspace-scoped secret token in the URL path
+ *   - Recording URLs validated against SSRF blocklist before fetch
+ *   - Sensitive keys (api_key, token, secret, password, …) stripped from source_payload
+ *
+ * Idempotency:
+ *   - Duplicate events (provider retries) are detected by (workspace, provider, external_call_id)
+ *   - Returns 200 with { ok: true, duplicate: true } on repeat delivery
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone, upsertCustomer } from "@/lib/qac-customer";
+import {
+  getAdapter,
+  flattenPayload,
+  sanitizePayload,
+  type NormalizedExternalCall,
+} from "@/lib/qac/voip-adapters";
+import { isSafeUrl } from "@/lib/qac/ssrf";
 import { after } from "next/server";
 import { NextResponse } from "next/server";
-
-// ─── Default field mappings (used when workspace hasn't customised) ────────────
-// Ordered: first non-empty match wins. Keys are case-sensitive — providers vary.
-
-const DEFAULT_MAPPINGS: Record<string, string[]> = {
-  recording_url: [
-    "RecordingUrl",
-    "recording_url",
-    "audioUrl",
-    "audio_url",
-    "recordingUrl",
-    "file_url",
-    "mp3_url",
-    "wav_url",
-  ],
-  agent_name: [
-    "agent_name",
-    "To",
-    "user_name",
-    "extension",
-    "sip_user",
-    "called_number",
-    "callee",
-    "agent",
-    "dst",
-  ],
-  customer_phone: [
-    "From",
-    "caller_id",
-    "customer_phone",
-    "ani",
-    "calling_number",
-    "callerNumber",
-    "src",
-    "clid",
-  ],
-  call_id: [
-    "CallSid",
-    "call_id",
-    "callId",
-    "session_id",
-    "external_call_id",
-    "call_uuid",
-    "uniqueid",
-    "id",
-  ],
-  duration: [
-    "RecordingDuration",
-    "duration",
-    "call_duration",
-    "callDuration",
-    "duration_seconds",
-    "length",
-    "billsec",
-  ],
-  transcript: [
-    "transcript",
-    "transcription",
-    "text",
-    "call_transcript",
-    "body",
-  ],
-  agent_id: [
-    "agent_id",
-    "user_id",
-    "extension_id",
-    "sip_user_id",
-    "agent_ext",
-    "operator_id",
-  ],
-  direction: [
-    "direction",
-    "call_direction",
-    "callDirection",
-    "call_type",
-    "type",
-  ],
-  outcome: [
-    "outcome",
-    "call_outcome",
-    "disposition",
-    "hangup_cause",
-    "status",
-    "lastapp",
-  ],
-  language: ["language", "lang", "transcript_lang", "locale"],
-  customer_name: [
-    "customer_name",
-    "contact_name",
-    "callerName",
-    "caller_name",
-    "customer",
-  ],
-};
 
 // ─── Integration type ─────────────────────────────────────────────────────────
 
@@ -129,67 +49,6 @@ interface QACIntegration {
   is_active: boolean;
   field_mappings: Record<string, string[]> | null;
   provider_name: string | null;
-}
-
-// ─── Universal field extractor ────────────────────────────────────────────────
-
-/**
- * Extract a VoiceOS field from a flat payload using the configured (or default) mappings.
- * Returns the first non-null, non-empty string value found; null otherwise.
- */
-function extract(
-  payload: Record<string, unknown>,
-  field: string,
-  customMappings: Record<string, string[]> | null,
-): string | null {
-  // Merge: custom mappings override default, custom candidates come first
-  const defaults = DEFAULT_MAPPINGS[field] ?? [];
-  const custom = customMappings?.[field] ?? [];
-  const candidates = custom.length > 0 ? [...custom, ...defaults] : defaults;
-
-  for (const key of candidates) {
-    // Exact match
-    const val = payload[key];
-    if (val !== undefined && val !== null && String(val).trim() !== "") {
-      return String(val).trim();
-    }
-    // Case-insensitive fallback (some providers inconsistently capitalise headers)
-    const lower = key.toLowerCase();
-    for (const [k, v] of Object.entries(payload)) {
-      if (
-        k.toLowerCase() === lower &&
-        v !== undefined &&
-        v !== null &&
-        String(v).trim() !== ""
-      ) {
-        return String(v).trim();
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Flatten nested objects one level deep so dot-notation keys like
- * "call.recording_url" work alongside top-level keys.
- */
-function flattenPayload(raw: unknown): Record<string, unknown> {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
-
-  const flat: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
-
-  for (const [k, v] of Object.entries(flat)) {
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-      for (const [nk, nv] of Object.entries(v as Record<string, unknown>)) {
-        flat[`${k}.${nk}`] = nv;
-        // Also hoist nested keys to top-level (providers vary)
-        if (!(nk in flat)) flat[nk] = nv;
-      }
-    }
-  }
-
-  return flat;
 }
 
 // ─── Diarization types ───────────────────────────────────────────────────────
@@ -454,49 +313,84 @@ export async function POST(
     }
   }
 
-  // Flatten nested objects so "call.recording_url" works
+  // Flatten nested objects and dispatch to the correct provider adapter
   const payload = flattenPayload(rawPayload);
-  const mappings = integration.field_mappings;
+  const adapter = getAdapter(integration.provider_name);
+  const normalized: NormalizedExternalCall = adapter.normalize(
+    payload,
+    integration.field_mappings,
+  );
 
-  // ── Extract fields via mapping engine ──────────────────────────────────────
-  const recordingUrl = extract(payload, "recording_url", mappings);
-  const callId = extract(payload, "call_id", mappings);
-  const fromNumber = extract(payload, "customer_phone", mappings);
-  const duration = extract(payload, "duration", mappings);
-  const direction = extract(payload, "direction", mappings);
-  const outcome = extract(payload, "outcome", mappings);
-  const language = extract(payload, "language", mappings) ?? "en";
-  const customerName = extract(payload, "customer_name", mappings);
-  let transcript = extract(payload, "transcript", mappings);
-  let diarizedTranscript: DiarizedTranscript | null = null;
+  // Override provider name with the integration's configured value when set
+  // (GenericAdapter returns "generic"; use the real provider_name for storage)
+  const providerName = integration.provider_name?.toLowerCase().trim() ?? normalized.provider;
 
-  // Agent name: try custom mapping first, then fall back to the per-integration
-  // agent_name_field setting (which maps To/From/etc. for Twilio compatibility)
-  let agentName = extract(payload, "agent_name", mappings);
-  if (!agentName) {
-    const fallbackField = integration.agent_name_field ?? "To";
-    const fallbackVal = payload[fallbackField];
-    agentName = fallbackVal ? String(fallbackVal) : null;
-  }
-  if (!agentName) agentName = callId ?? "Unknown Agent";
+  // Agent name fallback: integration.agent_name_field → external_call_id → "Unknown Agent"
+  const agentName =
+    normalized.agent_name ??
+    ((): string | null => {
+      const fallbackField = integration.agent_name_field ?? "To";
+      const val = payload[fallbackField];
+      return val ? String(val).trim() : null;
+    })() ??
+    normalized.external_call_id ??
+    "Unknown Agent";
 
-  const agentId = extract(payload, "agent_id", mappings);
-
-  // Log extracted values for debugging (masked)
-  console.info("[qac-webhook] Extracted fields:", {
-    provider: integration.provider_name ?? "unknown",
+  // Log extracted fields (no secrets)
+  console.info("[qac-webhook] Normalized call:", {
+    provider: providerName,
     workspace: integration.workspace_id,
-    has_recording: !!recordingUrl,
-    has_transcript: !!transcript,
+    external_call_id: normalized.external_call_id,
+    has_recording: !!normalized.recording_url,
+    has_transcript: !!normalized.transcript,
     agent: agentName,
-    duration,
-    language,
+    direction: normalized.direction,
+    duration_s: normalized.duration_seconds,
+    department: normalized.department_name,
   });
 
+  // ── SSRF protection on recording URL ──────────────────────────────────────
+  let safeRecordingUrl = normalized.recording_url;
+  if (safeRecordingUrl && !isSafeUrl(safeRecordingUrl)) {
+    console.warn(
+      "[qac-webhook] Recording URL blocked by SSRF check:",
+      safeRecordingUrl,
+    );
+    safeRecordingUrl = null;
+  }
+
+  // ── Idempotency — reject duplicate events from provider retries ───────────
+  if (normalized.external_call_id && providerName !== "generic") {
+    const { data: existing } = await admin
+      .from("qac_interactions")
+      .select("id")
+      .eq("workspace_id", integration.workspace_id)
+      .eq("provider", providerName)
+      .eq("external_call_id", normalized.external_call_id)
+      .maybeSingle();
+
+    if (existing) {
+      console.info(
+        "[qac-webhook] Duplicate event ignored:",
+        providerName,
+        normalized.external_call_id,
+      );
+      return NextResponse.json({
+        ok: true,
+        interaction_id: (existing as { id: string }).id,
+        duplicate: true,
+      });
+    }
+  }
+
   // ── Transcription ──────────────────────────────────────────────────────────
-  if (!transcript && recordingUrl) {
+  let transcript = normalized.transcript;
+  let diarizedTranscript: DiarizedTranscript | null = null;
+  const language = normalized.language;
+
+  if (!transcript && safeRecordingUrl) {
     const result = await transcribeWithDiarization(
-      recordingUrl,
+      safeRecordingUrl,
       integration.twilio_account_sid,
       integration.twilio_auth_token,
       language,
@@ -506,18 +400,23 @@ export async function POST(
   }
 
   if (!transcript || transcript.trim().length < 20) {
-    console.warn("[qac-webhook] No usable transcript for call:", callId);
-    // Return 200 so the provider doesn't retry endlessly
+    console.warn(
+      "[qac-webhook] No usable transcript for call:",
+      normalized.external_call_id,
+    );
     return NextResponse.json({ ok: false, reason: "no_transcript" });
   }
 
-  // Normalise direction to 'inbound'/'outbound'/'unknown'
-  let normDirection: "inbound" | "outbound" = "inbound";
-  if (direction) {
-    const d = direction.toLowerCase();
-    if (d.includes("out") || d === "outbound" || d === "egress")
-      normDirection = "outbound";
-  }
+  // Normalise direction to schema values
+  const normDirection: "inbound" | "outbound" =
+    normalized.direction ?? "inbound";
+
+  // Sanitize source payload for storage (strips api_key, secrets, etc.)
+  const rawPayloadObj =
+    typeof rawPayload === "object" && rawPayload !== null
+      ? (rawPayload as Record<string, unknown>)
+      : {};
+  const sourcePayload = sanitizePayload(rawPayloadObj);
 
   // ── Persist interaction ────────────────────────────────────────────────────
   const { data: interactionData, error: intErr } = await admin
@@ -525,22 +424,38 @@ export async function POST(
     .insert({
       workspace_id: integration.workspace_id,
       agent_name: String(agentName).slice(0, 200),
-      agent_id: agentId ?? callId ?? null,
+      agent_id: normalized.agent_id ?? normalized.external_call_id ?? null,
       channel: "call",
       direction: normDirection,
       transcript: transcript.trim(),
       diarized_transcript: diarizedTranscript ?? null,
-      duration_s: duration ? Math.round(Number(duration)) : null,
-      audio_url: recordingUrl ?? null,
+      duration_s:
+        normalized.duration_seconds != null
+          ? Math.round(normalized.duration_seconds)
+          : null,
+      audio_url: safeRecordingUrl ?? null,
       language,
-      customer_phone: fromNumber ?? null,
-      customer_name: customerName ?? null,
-      outcome: outcome ?? null,
+      customer_phone: normalized.customer_phone ?? null,
+      customer_name: normalized.customer_name ?? null,
+      outcome: normalized.disposition ?? null,
+      // External VoIP fields (migration 067)
+      external_call_id: normalized.external_call_id ?? null,
+      provider: providerName,
+      talk_time_s:
+        normalized.talk_time_seconds != null
+          ? Math.round(normalized.talk_time_seconds)
+          : null,
+      started_at: normalized.started_at ?? null,
+      department_name: normalized.department_name ?? null,
+      agent_extension: normalized.agent_extension ?? null,
+      source_payload: sourcePayload,
       status: "pending",
       metadata: {
-        source: integration.provider_name ?? "webhook",
-        call_id: callId,
-        raw_keys: Object.keys(payload).slice(0, 30), // first 30 keys for debugging
+        source: providerName,
+        call_id: normalized.external_call_id,
+        unit_id: normalized.unit_id ?? undefined,
+        unit_org_id: normalized.unit_org_id ?? undefined,
+        raw_keys: Object.keys(payload).slice(0, 30),
       },
     })
     .select("id")
@@ -566,8 +481,8 @@ export async function POST(
     enrichCustomer(
       integration.workspace_id,
       interactionId,
-      fromNumber ?? null,
-      customerName ?? null,
+      normalized.customer_phone ?? null,
+      normalized.customer_name ?? null,
     ).catch((err) =>
       console.error("[qac-webhook] customer enrichment failed", err),
     ),
