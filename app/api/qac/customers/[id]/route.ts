@@ -162,6 +162,17 @@ export async function GET(
     .order("generated_at", { ascending: false })
     .limit(10);
 
+  // Follow-up commitments for this customer (last 20, all statuses)
+  const { data: commitments } = await admin
+    .from("qac_follow_up_commitments")
+    .select(
+      "id, committed_by, commitment_text, due_date, status, fulfilled_at, created_at",
+    )
+    .eq("workspace_id", ws.id)
+    .eq("customer_id", id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
   const scores = computeScores(
     customer,
     (interactions ?? []) as Array<{ qac_evaluations: Array<{ overall_score: number | null }> | null }>,
@@ -177,6 +188,7 @@ export async function GET(
     recent_interactions: interactions ?? [],
     journey: journey ?? [],
     insights: insights ?? [],
+    commitments: commitments ?? [],
     scores,
   });
 }

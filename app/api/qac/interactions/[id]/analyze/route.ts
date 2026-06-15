@@ -146,6 +146,16 @@ interface CoachingResult {
   priority_score: number;
 }
 
+interface CommitmentItem {
+  committed_by: "agent" | "customer";
+  text: string;
+  due_date: string | null;
+}
+
+interface CommitmentsResult {
+  items: CommitmentItem[];
+}
+
 // ─── Formatted transcript builder ────────────────────────────────────────────
 
 function buildFormattedTranscript(
@@ -340,6 +350,36 @@ Based on all evidence above, return ONLY a JSON object with EXACTLY these fields
   "coaching_plan": string (3-5 sentences: a concrete, prioritized coaching action plan for the agent's manager),
   "priority_score": integer 0-100 (urgency of coaching needed — 100 = immediate action required, 0 = no coaching needed)
 }
+
+Respond with ONLY raw JSON.`;
+}
+
+function buildCommitmentsPrompt(transcript: string): string {
+  return `You are a compliance analyst extracting explicit follow-up commitments from a call transcript.
+
+TRANSCRIPT:
+${transcript.slice(0, 6000)}
+
+A commitment is an explicit, verbal promise made by an agent OR customer to take a specific action after the call.
+Examples: "I'll call you back on Tuesday", "I'll send you the contract today", "Let me think about it and I'll let you know".
+Do NOT invent commitments. Only extract what is textually supported.
+
+Return ONLY a JSON object with EXACTLY this structure:
+{
+  "items": [
+    {
+      "committed_by": "agent" or "customer",
+      "text": "exact or paraphrased commitment text (1-200 chars)",
+      "due_date": "YYYY-MM-DD" or null
+    }
+  ]
+}
+
+Rules:
+- If no commitments exist, return { "items": [] }
+- Maximum 5 items
+- due_date must be a valid date string in YYYY-MM-DD format, or null
+- Only include commitments with clear textual evidence
 
 Respond with ONLY raw JSON.`;
 }
@@ -785,11 +825,45 @@ export async function POST(
       coachErr.message,
     );
 
-  // ── Post-response: customer journey + insights (non-blocking) ───────────────
+  // ── Post-response: commitments + customer journey + insights (non-blocking) ──
   after(async () => {
-    if (!interaction.customer_id) return;
     try {
       const adminPost = createAdminClient();
+
+      // Extract follow-up commitments (runs for all interactions, customer_id nullable)
+      const rawCommitments = await groqJSON<CommitmentsResult>(
+        buildCommitmentsPrompt(formattedTranscript),
+        512,
+      );
+      const VALID_COMMITTED_BY = new Set(["agent", "customer"]);
+      const validItems = ((rawCommitments?.items) ?? [])
+        .filter(
+          (c) =>
+            VALID_COMMITTED_BY.has(c.committed_by) &&
+            typeof c.text === "string" &&
+            c.text.trim().length > 0 &&
+            (c.due_date === null || /^\d{4}-\d{2}-\d{2}$/.test(c.due_date)),
+        )
+        .slice(0, 5);
+
+      if (validItems.length > 0) {
+        const commitmentRows = validItems.map((c) => ({
+          workspace_id: workspaceId,
+          interaction_id: id,
+          customer_id: interaction.customer_id ?? null,
+          committed_by: c.committed_by,
+          commitment_text: c.text.slice(0, 1000),
+          due_date: c.due_date ?? null,
+          status: "pending" as const,
+        }));
+        const { error: commitErr } = await adminPost
+          .from("qac_follow_up_commitments")
+          .insert(commitmentRows);
+        if (commitErr)
+          console.error("[qac-analyze] commitments insert failed:", commitErr.message);
+      }
+
+      if (!interaction.customer_id) return;
 
       // Count prior journey entries for this customer to determine sequence_number
       const { count } = await adminPost
