@@ -11,6 +11,7 @@ import {
   Cpu,
   FlaskConical,
   Headphones,
+  ListChecks,
   Mic,
   CreditCard,
   DollarSign,
@@ -221,6 +222,17 @@ export function Sidebar({
                       href: "/qa-center/settings/departments",
                       labelKey: "Departamentos QA",
                       icon: Building2,
+                      module: "compliance",
+                      sub: true,
+                    },
+                  ]
+                : []),
+              ...(isSuperadmin
+                ? [
+                    {
+                      href: "/qa-center/settings/compliance",
+                      labelKey: "compliance",
+                      icon: ListChecks,
                       module: "compliance",
                       sub: true,
                     },
