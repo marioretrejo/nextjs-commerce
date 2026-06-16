@@ -44,6 +44,7 @@ interface IntegrationDef {
   name: string;
   description: string;
   logo: string;
+  logoSrc?: string;
   docsUrl?: string;
   isWebhook?: boolean;
   comingSoon?: boolean;
@@ -60,7 +61,8 @@ const INTEGRATIONS: IntegrationDef[] = [
     name: "Telegram",
     description:
       "Receive call summaries and dispositions as Telegram messages after each call ends.",
-    logo: "✈️",
+    logo: "TG",
+    logoSrc: "/telegram-logo.svg",
     form: [
       {
         id: "bot_token",
@@ -267,11 +269,16 @@ function CredentialCard({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div
-              className={`w-10 h-10 rounded-lg border flex items-center justify-center text-sm font-bold
+              className={`w-10 h-10 rounded-lg border flex items-center justify-center text-sm font-bold overflow-hidden
               ${isConnected ? "bg-emerald-50 border-emerald-200" : "bg-[#f5f5f5] border-[#e0e0e0]"}
-              ${logoIsEmoji ? "text-xl" : "text-[#0a0a0a] text-xs"}`}
+              ${!def.logoSrc && logoIsEmoji ? "text-xl" : "text-[#0a0a0a] text-xs"}`}
             >
-              {def.logo}
+              {def.logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={def.logoSrc} alt={def.name} className="w-7 h-7 object-contain" />
+              ) : (
+                def.logo
+              )}
             </div>
             <div>
               <CardTitle className="text-sm">{def.name}</CardTitle>
@@ -417,10 +424,15 @@ function GenericCard({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div
-              className={`w-10 h-10 rounded-lg bg-[#f5f5f5] border border-[#e0e0e0] flex items-center justify-center
-              ${logoIsEmoji ? "text-xl" : "text-xs font-bold text-[#0a0a0a]"}`}
+              className={`w-10 h-10 rounded-lg bg-[#f5f5f5] border border-[#e0e0e0] flex items-center justify-center overflow-hidden
+              ${!def.logoSrc && logoIsEmoji ? "text-xl" : "text-xs font-bold text-[#0a0a0a]"}`}
             >
-              {def.logo}
+              {def.logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={def.logoSrc} alt={def.name} className="w-7 h-7 object-contain" />
+              ) : (
+                def.logo
+              )}
             </div>
             <div>
               <CardTitle className="text-sm">{def.name}</CardTitle>

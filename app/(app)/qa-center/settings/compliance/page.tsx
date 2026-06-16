@@ -10,7 +10,6 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  Bot,
   CheckCircle2,
   ChevronDown,
   Loader2,
@@ -576,7 +575,8 @@ function TelegramHelpModal({ onClose }: { onClose: () => void }) {
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-[#efefef]">
           <h2 className="font-bold text-[#111] flex items-center gap-2">
-            <Bot className="h-4 w-4 text-[#6b6b6b]" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/telegram-logo.svg" alt="Telegram" className="h-4 w-4" />
             Cómo configurar Telegram
           </h2>
           <button onClick={onClose} className="text-[#9b9b9b] hover:text-[#111]">
@@ -771,7 +771,8 @@ function TelegramSection() {
       <Card className="border-[#e0e0e0]">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Send className="h-4 w-4 text-[#6b6b6b]" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/telegram-logo.svg" alt="Telegram" className="h-5 w-5" />
             Notificaciones Telegram
           </CardTitle>
           <p className="text-xs text-[#555] mt-0.5">
