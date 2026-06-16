@@ -133,6 +133,14 @@ interface QACStats {
   topRiskAgents: { name: string; interactions: number; avg_risk: number }[];
 }
 
+interface ViolationsStats {
+  total: number;
+  critical: number;
+  warning: number;
+  topRules: { rule_name: string; count: number }[];
+  topAgents: { agent_name: string; count: number }[];
+}
+
 // ─── Config maps ──────────────────────────────────────────────────────────────
 
 const SEV: Record<
@@ -869,6 +877,7 @@ function QACRulesManager() {
 export default function QACenterPage() {
   const [interactions, setInteractions] = useState<QACInteraction[]>([]);
   const [stats, setStats] = useState<QACStats | null>(null);
+  const [violationsStats, setViolationsStats] = useState<ViolationsStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
 
@@ -927,9 +936,10 @@ export default function QACenterPage() {
       risk = filterRisk,
     ) => {
       const url = buildInteractionsUrl(agent, status, range, risk);
-      const [intRes, statsRes] = await Promise.all([
+      const [intRes, statsRes, vStatsRes] = await Promise.all([
         fetch(url),
         fetch("/api/qac/stats"),
+        fetch("/api/qac/violations/stats"),
       ]);
       if (intRes.ok) {
         const d = (await intRes.json()) as {
@@ -940,6 +950,7 @@ export default function QACenterPage() {
         setTotalCount(d.total ?? 0);
       }
       if (statsRes.ok) setStats((await statsRes.json()) as QACStats);
+      if (vStatsRes.ok) setViolationsStats((await vStatsRes.json()) as ViolationsStats);
       setLoading(false);
     },
     [filterAgent, filterStatus, filterRange, filterRisk, buildInteractionsUrl],
@@ -1389,6 +1400,103 @@ export default function QACenterPage() {
               </Card>
             )}
           </div>
+
+          {/* Violations this week */}
+          {violationsStats !== null && (
+            <Card className="border-[#efefef]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-[#6b6b6b]" />
+                  Violaciones esta semana
+                </CardTitle>
+                <CardDescription>
+                  Reglas de compliance violadas en los últimos 7 días
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {violationsStats.total === 0 ? (
+                  <div className="flex items-center gap-2 text-sm text-[#555] bg-[#fafafa] rounded-xl p-3 border border-[#efefef]">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    Sin violaciones de compliance esta semana.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Summary pills */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-1.5 rounded-full border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1.5">
+                        <span className="text-sm font-bold text-[#111]">{violationsStats.total}</span>
+                        <span className="text-xs text-[#6b6b6b]">total</span>
+                      </div>
+                      {violationsStats.critical > 0 && (
+                        <div className="flex items-center gap-1.5 rounded-full border border-transparent bg-[#111] px-3 py-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                          <span className="text-sm font-bold text-white">{violationsStats.critical}</span>
+                          <span className="text-xs text-white/80">críticas</span>
+                        </div>
+                      )}
+                      {violationsStats.warning > 0 && (
+                        <div className="flex items-center gap-1.5 rounded-full border border-[#e0e0e0] bg-[#f0f0f0] px-3 py-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#9b9b9b]" />
+                          <span className="text-sm font-bold text-[#555]">{violationsStats.warning}</span>
+                          <span className="text-xs text-[#555]">warnings</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Top rules */}
+                      {violationsStats.topRules.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-[#9b9b9b] uppercase tracking-widest mb-2">
+                            Reglas más violadas
+                          </p>
+                          <div className="space-y-1.5">
+                            {violationsStats.topRules.map((r, i) => (
+                              <div key={r.rule_name} className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-[#c0c0c0] w-4 shrink-0">
+                                  {i + 1}
+                                </span>
+                                <span className="text-xs text-[#333] flex-1 truncate">
+                                  {r.rule_name}
+                                </span>
+                                <span className="text-xs font-semibold text-[#555] shrink-0">
+                                  {r.count}×
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Top agents */}
+                      {violationsStats.topAgents.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-[#9b9b9b] uppercase tracking-widest mb-2">
+                            Agentes con más violaciones
+                          </p>
+                          <div className="space-y-1.5">
+                            {violationsStats.topAgents.map((a, i) => (
+                              <div key={a.agent_name} className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-[#c0c0c0] w-4 shrink-0">
+                                  {i + 1}
+                                </span>
+                                <span className="text-xs text-[#333] flex-1 truncate">
+                                  {a.agent_name}
+                                </span>
+                                <span className="text-xs font-semibold text-[#111] shrink-0">
+                                  {a.count} violac.
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Before/After comparison (Sedric-style insight) */}
           {s && s.totalInteractions === 0 && (

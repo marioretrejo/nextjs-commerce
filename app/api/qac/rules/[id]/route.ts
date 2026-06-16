@@ -39,6 +39,8 @@ export async function PATCH(
     "coaching",
   ]);
   const VALID_SEVERITIES = new Set(["low", "medium", "high", "critical"]);
+  const VALID_SCOPES = new Set(["global", "department"]);
+  const VALID_ALERT_SEVERITIES = new Set(["critical", "warning"]);
 
   const update: Record<string, unknown> = {};
   if ("name" in body && typeof body.name === "string")
@@ -53,6 +55,25 @@ export async function PATCH(
     update.regulation = (body.regulation as string)?.trim() || null;
   if ("is_active" in body && typeof body.is_active === "boolean")
     update.is_active = body.is_active;
+  if ("scope" in body && VALID_SCOPES.has(body.scope as string))
+    update.scope = body.scope;
+  if ("department_id" in body)
+    update.department_id = body.department_id ?? null;
+  if (
+    "alert_severity" in body &&
+    VALID_ALERT_SEVERITIES.has(body.alert_severity as string)
+  )
+    update.alert_severity = body.alert_severity;
+  if ("examples" in body && Array.isArray(body.examples))
+    update.examples = (body.examples as unknown[]).filter(
+      (e) => typeof e === "string",
+    );
+  if ("counter_examples" in body && Array.isArray(body.counter_examples))
+    update.counter_examples = (body.counter_examples as unknown[]).filter(
+      (e) => typeof e === "string",
+    );
+  if ("sort_order" in body && typeof body.sort_order === "number")
+    update.sort_order = body.sort_order;
 
   const admin = createAdminClient();
   const { data, error } = await admin

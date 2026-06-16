@@ -125,6 +125,16 @@ interface QACInteraction {
   qac_evaluations: QACEvaluation[];
 }
 
+interface ComplianceViolation {
+  id: string;
+  severity: "critical" | "warning";
+  rule_name: string;
+  fragment: string | null;
+  confidence: number | null;
+  is_false_positive: boolean;
+  created_at: string;
+}
+
 interface QACComment {
   id: string;
   comment: string;
@@ -1322,6 +1332,8 @@ export default function CallReviewPage({
   const [notFound, setNotFound] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [auditLogs, setAuditLogs] = useState<QACAuditLog[]>([]);
+  const [complianceViolations, setComplianceViolations] = useState<ComplianceViolation[]>([]);
+  const [markingFp, setMarkingFp] = useState<string | null>(null);
 
   const fetchInteraction = useCallback(async () => {
     try {
@@ -1361,6 +1373,39 @@ export default function CallReviewPage({
   useEffect(() => {
     void fetchAuditLogs();
   }, [fetchAuditLogs]);
+
+  const fetchViolations = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/qac/interactions/${id}/violations`);
+      if (!res.ok) return;
+      const data = (await res.json()) as ComplianceViolation[];
+      setComplianceViolations(data);
+    } catch {
+      // non-critical
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void fetchViolations();
+  }, [fetchViolations]);
+
+  async function markFalsePositive(violationId: string) {
+    setMarkingFp(violationId);
+    try {
+      const res = await fetch(`/api/qac/violations/${violationId}/false-positive`, {
+        method: "PUT",
+      });
+      if (!res.ok) throw new Error("Failed to mark as false positive");
+      setComplianceViolations((prev) =>
+        prev.map((v) => (v.id === violationId ? { ...v, is_false_positive: true } : v)),
+      );
+      toast.success("Marcado como falso positivo");
+    } catch {
+      toast.error("Error al marcar como falso positivo");
+    } finally {
+      setMarkingFp(null);
+    }
+  }
 
   async function handleAnalyze() {
     if (!interaction) return;
@@ -1577,6 +1622,24 @@ export default function CallReviewPage({
       {/* ── Audio player ────────────────────────────────────────────────── */}
       {interaction.audio_url && <AudioPlayer url={interaction.audio_url} />}
 
+      {/* ── Critical compliance banner ───────────────────────────────── */}
+      {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl bg-[#fafafa] border border-[#111] px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-[#111] shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-[#111]">
+              {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length} alerta
+              {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length !== 1 ? "s" : ""} crítica
+              {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length !== 1 ? "s" : ""} de compliance detectada
+              {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-[#111] mt-0.5">
+              Esta llamada contiene violaciones de reglas críticas. Revisa la sección de Alertas de Compliance abajo.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Score gauges row ────────────────────────────────────────────── */}
       {evaluation && (
         <>
@@ -1663,6 +1726,114 @@ export default function CallReviewPage({
 
             {/* RIGHT — Analysis panels */}
             <div className="lg:col-span-2 space-y-4">
+              {/* Compliance Alerts */}
+              <Card className="border-[#efefef]">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-[#6b6b6b]" />
+                      Alertas de Compliance
+                    </span>
+                    {complianceViolations.filter((v) => !v.is_false_positive).length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#111] text-white border-transparent rounded-full px-2 py-0.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                            {complianceViolations.filter((v) => v.severity === "critical" && !v.is_false_positive).length} Critical
+                          </span>
+                        )}
+                        {complianceViolations.filter((v) => v.severity === "warning" && !v.is_false_positive).length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#f0f0f0] text-[#555] border border-[#e0e0e0] rounded-full px-2 py-0.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#9b9b9b]" />
+                            {complianceViolations.filter((v) => v.severity === "warning" && !v.is_false_positive).length} Warning
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {complianceViolations.filter((v) => !v.is_false_positive).length === 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-[#555] bg-[#fafafa] rounded-xl p-3 border border-[#efefef]">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      Sin alertas de compliance — todas las reglas cumplidas.
+                    </div>
+                  ) : (
+                    complianceViolations
+                      .filter((v) => !v.is_false_positive)
+                      .sort((a, b) => (a.severity === "critical" ? -1 : b.severity === "critical" ? 1 : 0))
+                      .map((violation) => {
+                        const isCritical = violation.severity === "critical";
+                        return (
+                          <div
+                            key={violation.id}
+                            className={`rounded-xl border p-3 space-y-2 ${
+                              isCritical
+                                ? "bg-[#fafafa] border-[#111]"
+                                : "bg-white border-[#e0e0e0]"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2 min-w-0">
+                                <span
+                                  className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${
+                                    isCritical ? "bg-[#111]" : "bg-[#9b9b9b]"
+                                  }`}
+                                />
+                                <div className="min-w-0">
+                                  <span
+                                    className={`text-[10px] font-bold uppercase tracking-wide ${
+                                      isCritical ? "text-[#111]" : "text-[#9b9b9b]"
+                                    }`}
+                                  >
+                                    {isCritical ? "Critical" : "Warning"}
+                                  </span>
+                                  <p
+                                    className={`text-sm font-semibold mt-0.5 ${
+                                      isCritical ? "text-[#111]" : "text-[#555]"
+                                    }`}
+                                  >
+                                    {violation.rule_name}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => void markFalsePositive(violation.id)}
+                                disabled={markingFp === violation.id}
+                                className="shrink-0 text-[10px] font-medium px-2 py-1 rounded-lg border transition-colors border-[#e0e0e0] text-[#6b6b6b] hover:border-[#111] hover:text-[#111] disabled:opacity-50"
+                              >
+                                {markingFp === violation.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Falso positivo"
+                                )}
+                              </button>
+                            </div>
+                            {violation.fragment && (
+                              <blockquote
+                                className="border-l-2 pl-2 text-xs italic text-[#555] border-[#e0e0e0]"
+                              >
+                                &ldquo;{violation.fragment}&rdquo;
+                              </blockquote>
+                            )}
+                            {violation.confidence !== null && (
+                              <p className="text-[10px] text-[#9b9b9b]">
+                                Confianza: {Math.round(violation.confidence * 100)}%
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
+                  )}
+                  {complianceViolations.some((v) => v.is_false_positive) && (
+                    <p className="text-[10px] text-[#9b9b9b]">
+                      {complianceViolations.filter((v) => v.is_false_positive).length} marcada
+                      {complianceViolations.filter((v) => v.is_false_positive).length !== 1 ? "s" : ""} como falso positivo
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Violations */}
               <Card className="border-[#efefef]">
                 <CardHeader className="pb-3">

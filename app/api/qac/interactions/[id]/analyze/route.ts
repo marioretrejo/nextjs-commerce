@@ -15,6 +15,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse, after } from "next/server";
+import { sendComplianceCriticalAlert } from "@/lib/notifications/telegram";
 
 // ─── Diarized transcript type (mirrors webhooks/[token]/route.ts) ─────────────
 
@@ -384,7 +385,7 @@ Rules:
 Respond with ONLY raw JSON.`;
 }
 
-// ─── Rule type ────────────────────────────────────────────────────────────────
+// ─── Rule types ───────────────────────────────────────────────────────────────
 
 interface QACRule {
   name: string;
@@ -392,6 +393,89 @@ interface QACRule {
   category: string;
   severity: string;
   regulation: string | null;
+}
+
+interface ViolationRule {
+  id: string;
+  name: string;
+  description: string;
+  alert_severity: string;
+  examples: unknown;
+  counter_examples: unknown;
+}
+
+// ─── Violations prompt + result ───────────────────────────────────────────────
+
+interface ViolationResultItem {
+  rule_name: string;
+  fragment: string;
+  timestamp_seconds: number | null;
+  severity: "critical" | "warning";
+  confidence: number;
+  explanation: string;
+}
+
+interface ViolationResult {
+  violations: ViolationResultItem[];
+}
+
+function buildViolationsPrompt(
+  transcript: string,
+  globalRules: ViolationRule[],
+  deptRules: ViolationRule[],
+  deptName: string | null,
+): string {
+  if (globalRules.length === 0 && deptRules.length === 0) return "";
+
+  function formatRule(r: ViolationRule): string {
+    const exArr = Array.isArray(r.examples) ? (r.examples as string[]) : [];
+    const ctArr = Array.isArray(r.counter_examples) ? (r.counter_examples as string[]) : [];
+    const sev = (r.alert_severity ?? "warning").toUpperCase();
+    let out = `[${sev}] ${r.name}: ${r.description}`;
+    if (exArr.length > 0)
+      out += `\n  Examples of violation: ${exArr.join("; ")}`;
+    if (ctArr.length > 0)
+      out += `\n  NOT a violation if: ${ctArr.join("; ")}`;
+    return out;
+  }
+
+  const parts: string[] = [];
+  if (globalRules.length > 0) {
+    parts.push(
+      `GLOBAL RULES (apply to all calls):\n${globalRules.map((r, i) => `${i + 1}. ${formatRule(r)}`).join("\n\n")}`,
+    );
+  }
+  if (deptRules.length > 0) {
+    parts.push(
+      `DEPARTMENT RULES${deptName ? ` (${deptName})` : ""}:\n${deptRules.map((r, i) => `${i + 1}. ${formatRule(r)}`).join("\n\n")}`,
+    );
+  }
+
+  return `You are a compliance rule checker for a call center. Check this transcript against the specific rules listed below.
+
+${parts.join("\n\n")}
+
+TRANSCRIPT:
+${transcript.slice(0, 8000)}
+
+For each rule that is VIOLATED, add one entry to the violations array. Only flag real violations evidenced by the transcript.
+
+Return ONLY a JSON object:
+{
+  "violations": [
+    {
+      "rule_name": "exact rule name from the list above",
+      "fragment": "exact quote from transcript (max 120 chars)",
+      "timestamp_seconds": null or integer seconds into the call,
+      "severity": "critical" or "warning",
+      "confidence": 0.0 to 1.0,
+      "explanation": "one sentence why this is a violation of the stated rule"
+    }
+  ]
+}
+
+If no rules are violated, return {"violations": []}.
+Respond with ONLY raw JSON.`;
 }
 
 // ─── Defaults (used when a parallel call fails) ───────────────────────────────
@@ -615,18 +699,44 @@ export async function POST(
 
   const rules = (rulesData ?? []) as QACRule[];
 
+  // Load scoped violation rules (global + department) for the new violations prompt
+  const [{ data: globalViolationRulesData }, deptViolationRulesResult] =
+    await Promise.all([
+      admin
+        .from("qac_rules")
+        .select("id, name, description, alert_severity, examples, counter_examples")
+        .eq("workspace_id", workspaceId)
+        .eq("is_active", true)
+        .eq("scope", "global")
+        .order("sort_order", { ascending: true }),
+      interaction.department_id
+        ? admin
+            .from("qac_rules")
+            .select("id, name, description, alert_severity, examples, counter_examples")
+            .eq("workspace_id", workspaceId)
+            .eq("is_active", true)
+            .eq("scope", "department")
+            .eq("department_id", interaction.department_id)
+            .order("sort_order", { ascending: true })
+        : Promise.resolve({ data: [] as ViolationRule[] }),
+    ]);
+
+  const globalViolationRules = (globalViolationRulesData ?? []) as ViolationRule[];
+  const deptViolationRules = ((deptViolationRulesResult as { data: ViolationRule[] | null }).data ?? []) as ViolationRule[];
+
   // ── Fetch department profile (optional — null falls back to global defaults) ─
   // Only runs if the interaction was assigned a department during ingestion.
   // If the department is inactive or not found, deptContext and deptRubric stay
   // at their defaults (empty string / null) → behavior identical to pre-Phase-5.
-  type DeptRow = { qa_prompt: string | null; scoring_rubric: unknown };
+  type DeptRow = { qa_prompt: string | null; scoring_rubric: unknown; name: string | null };
   let deptContext = "";
   let deptRubric: Record<string, number> | null = null;
+  let deptName: string | null = null;
 
   if (interaction.department_id) {
     const { data: deptData } = await admin
       .from("qac_departments")
-      .select("qa_prompt, scoring_rubric")
+      .select("qa_prompt, scoring_rubric, name")
       .eq("id", interaction.department_id)
       .eq("workspace_id", workspaceId)
       .eq("is_active", true)
@@ -634,6 +744,8 @@ export async function POST(
 
     const dept = deptData as DeptRow | null;
     if (dept) {
+      deptName = dept.name ?? null;
+
       if (dept.qa_prompt) {
         deptContext = `DEPARTMENT CONTEXT:\n${dept.qa_prompt.trim()}\n\n`;
       }
@@ -659,10 +771,18 @@ export async function POST(
   const diarized = interaction.diarized_transcript as DiarizedTranscript | null;
   const formattedTranscript = buildFormattedTranscript(transcript, diarized);
 
-  // ── 5 parallel Groq calls ─────────────────────────────────────────────────
+  // ── 6 parallel Groq calls ─────────────────────────────────────────────────
   // deptContext is prepended when a department profile exists; empty string
   // when not, so the prompts are identical to the pre-Phase-5 behavior.
-  const [complianceRaw, salesRaw, softSkillsRaw, conversationRaw, summaryRaw] =
+  // The 6th call checks transcript against user-defined compliance rules.
+  const violationsPrompt = buildViolationsPrompt(
+    formattedTranscript,
+    globalViolationRules,
+    deptViolationRules,
+    deptName,
+  );
+
+  const [complianceRaw, salesRaw, softSkillsRaw, conversationRaw, summaryRaw, violationsRaw] =
     await Promise.all([
       groqJSON<ComplianceResult>(
         deptContext + buildCompliancePrompt(formattedTranscript, rules),
@@ -672,6 +792,9 @@ export async function POST(
       groqJSON<SoftSkillsResult>(deptContext + buildSoftSkillsPrompt(formattedTranscript), 800),
       groqJSON<ConversationResult>(deptContext + buildConversationPrompt(formattedTranscript), 800),
       groqJSON<SummaryResult>(deptContext + buildSummaryPrompt(formattedTranscript), 1500),
+      violationsPrompt
+        ? groqJSON<ViolationResult>(violationsPrompt, 2000)
+        : Promise.resolve(null),
     ]);
 
   // Apply defaults for any failed calls
@@ -729,7 +852,26 @@ export async function POST(
         softSkills.overall,
         conversation.overall,
       );
-  const riskLevel = calcRiskLevel(overallScore);
+
+  // Validate and sanitize user-defined violations
+  const rawViolations = (violationsRaw?.violations ?? []).filter(
+    (v) =>
+      typeof v.rule_name === "string" &&
+      v.rule_name.trim().length > 0 &&
+      typeof v.fragment === "string" &&
+      v.fragment.trim().length > 0 &&
+      ["critical", "warning"].includes(v.severity) &&
+      typeof v.confidence === "number" &&
+      v.confidence >= 0.3, // minimum confidence threshold
+  );
+
+  // If any user-defined critical violations detected, override risk level
+  const hasCriticalViolations = rawViolations.some(
+    (v) => v.severity === "critical",
+  );
+  const riskLevel = hasCriticalViolations
+    ? "critical"
+    : calcRiskLevel(overallScore);
 
   // ── Sequential coaching call (uses all 5 results) ─────────────────────────
   const coachingRaw = await groqJSON<CoachingResult>(
@@ -877,6 +1019,53 @@ export async function POST(
       coachErr.message,
     );
 
+  // ── Save user-defined compliance violations ───────────────────────────────
+  if (rawViolations.length > 0) {
+    const ruleNameToId = new Map(
+      [...globalViolationRules, ...deptViolationRules].map((r) => [r.name, r.id]),
+    );
+    const { error: violErr } = await admin
+      .from("qac_compliance_violations")
+      .insert(
+        rawViolations.map((v) => ({
+          interaction_id: id,
+          workspace_id: workspaceId,
+          department_id: interaction.department_id ?? null,
+          rule_id: ruleNameToId.get(v.rule_name) ?? null,
+          rule_name: v.rule_name.slice(0, 200),
+          fragment: v.fragment.slice(0, 500),
+          timestamp_seconds:
+            typeof v.timestamp_seconds === "number" ? v.timestamp_seconds : null,
+          severity: v.severity,
+          confidence: Math.max(0, Math.min(1, v.confidence)),
+          explanation:
+            typeof v.explanation === "string"
+              ? v.explanation.slice(0, 500)
+              : null,
+        })),
+      );
+    if (violErr)
+      console.error("[qac-analyze] Compliance violations insert failed:", violErr.message);
+  }
+
+  // ── Telegram alerts for critical violations (fire-and-forget) ─────────────
+  const criticalViolations = rawViolations.filter(
+    (v) => v.severity === "critical",
+  );
+  if (criticalViolations.length > 0) {
+    after(async () => {
+      for (const violation of criticalViolations) {
+        await sendComplianceCriticalAlert({
+          workspaceId,
+          interactionId: id,
+          agentName: interaction.agent_name ?? "Unknown Agent",
+          ruleName: violation.rule_name,
+          departmentName: deptName,
+        });
+      }
+    });
+  }
+
   // ── Post-response: commitments + customer journey + insights (non-blocking) ──
   after(async () => {
     try {
@@ -979,6 +1168,8 @@ export async function POST(
     soft_skills_score: softSkills.overall,
     conversation_score: conversation.overall,
     violations: compliance.violations.length,
+    compliance_violations: rawViolations.length,
+    critical_violations: criticalViolations.length,
     sentiment: summary.overall_sentiment,
     coaching_priority: coaching.priority_score,
   });

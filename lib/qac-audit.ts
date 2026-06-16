@@ -21,7 +21,8 @@ export type QACAuditAction =
   | "coaching_report.view"
   | "coaching_report.generated"
   | "review_status.change"
-  | "comment.create";
+  | "comment.create"
+  | "violation.false_positive";
 
 export type QACEntityType =
   | "interaction"
@@ -30,7 +31,8 @@ export type QACEntityType =
   | "flag"
   | "agent"
   | "coaching_report"
-  | "review_comment";
+  | "review_comment"
+  | "compliance_violation";
 
 export interface QACAuditEntry {
   workspace_id: string;
