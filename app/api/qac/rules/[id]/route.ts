@@ -2,16 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/qac-audit";
-
-async function resolveWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("owner_id", userId)
-    .single();
-  return data as { id: string } | null;
-}
+import { resolveQacWorkspace as resolveWorkspace } from "@/lib/qac-workspace";
 
 export async function PATCH(
   req: Request,

@@ -2,19 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/qac-audit";
-
-async function resolveWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("owner_id", userId)
-    .single();
-  return data as { id: string } | null;
-}
+import { resolveQacWorkspace as resolveWorkspace } from "@/lib/qac-workspace";
 
 export async function PUT(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -29,6 +20,14 @@ export async function PUT(
   if (!ws)
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
+  let reason: string | null = null;
+  try {
+    const body = (await req.json()) as { reason?: string };
+    reason = body.reason?.trim() || null;
+  } catch {
+    // reason is optional
+  }
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("qac_compliance_violations")
@@ -36,6 +35,7 @@ export async function PUT(
       is_false_positive: true,
       reviewed_by: user.id,
       reviewed_at: new Date().toISOString(),
+      reviewed_reason: reason,
     })
     .eq("id", id)
     .eq("workspace_id", ws.id)
@@ -51,6 +51,7 @@ export async function PUT(
     action: "violation.false_positive",
     entity_type: "compliance_violation",
     entity_id: id,
+    details: reason ? { reason } : undefined,
   });
 
   return NextResponse.json(data);

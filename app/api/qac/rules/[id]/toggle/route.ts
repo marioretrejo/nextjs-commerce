@@ -1,16 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
-
-async function resolveWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("owner_id", userId)
-    .single();
-  return data as { id: string } | null;
-}
+import { resolveQacWorkspace as resolveWorkspace } from "@/lib/qac-workspace";
 
 export async function POST(
   _req: Request,

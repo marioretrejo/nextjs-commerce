@@ -1,16 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
-
-async function resolveWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("owner_id", userId)
-    .single();
-  return data as { id: string } | null;
-}
+import { resolveQacWorkspace as resolveWorkspace } from "@/lib/qac-workspace";
 
 export async function GET(
   _req: Request,
@@ -27,6 +18,8 @@ export async function GET(
   const ws = await resolveWorkspace(user.id);
   if (!ws)
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  if (!ws.has_compliance_qa)
+    return NextResponse.json({ error: "Compliance module not enabled" }, { status: 403 });
 
   const admin = createAdminClient();
   const { data, error } = await admin

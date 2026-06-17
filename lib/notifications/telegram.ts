@@ -8,14 +8,17 @@ interface TelegramViolationPayload {
   departmentName: string | null;
 }
 
+const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between alerts per workspace
+
 async function getTelegramConfig(workspaceId: string): Promise<{
   botToken: string;
   chatId: string;
+  settings: Record<string, unknown>;
 } | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("integrations")
-    .select("credentials, status")
+    .select("credentials, status, settings")
     .eq("workspace_id", workspaceId)
     .eq("type", "telegram_qa")
     .eq("status", "connected")
@@ -23,14 +26,28 @@ async function getTelegramConfig(workspaceId: string): Promise<{
 
   if (error || !data) return null;
 
-  const creds = (data as { credentials: Record<string, unknown> }).credentials;
-  const botToken = creds?.bot_token;
-  const chatId = creds?.chat_id;
+  const row = data as {
+    credentials: Record<string, unknown>;
+    settings: Record<string, unknown> | null;
+  };
+  const botToken = row.credentials?.bot_token;
+  const chatId = row.credentials?.chat_id;
 
   if (typeof botToken !== "string" || typeof chatId !== "string") return null;
   if (!botToken || !chatId) return null;
 
-  return { botToken, chatId };
+  return { botToken, chatId, settings: row.settings ?? {} };
+}
+
+async function updateLastAlertAt(workspaceId: string): Promise<void> {
+  const admin = createAdminClient();
+  await admin
+    .from("integrations")
+    .update({
+      settings: { last_critical_alert_at: new Date().toISOString() },
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("type", "telegram_qa");
 }
 
 function escapeMarkdown(text: string): string {
@@ -43,6 +60,13 @@ export async function sendComplianceCriticalAlert(
   try {
     const config = await getTelegramConfig(payload.workspaceId);
     if (!config) return;
+
+    // Throttle: skip if an alert was sent within the cooldown window
+    const lastSentAt = config.settings?.last_critical_alert_at;
+    if (typeof lastSentAt === "string") {
+      const elapsed = Date.now() - new Date(lastSentAt).getTime();
+      if (elapsed < ALERT_COOLDOWN_MS) return;
+    }
 
     const appUrl =
       process.env["NEXT_PUBLIC_APP_URL"] ?? "https://app.voiceos.com";
@@ -73,13 +97,11 @@ export async function sendComplianceCriticalAlert(
       },
     );
 
-    if (!response.ok) {
+    if (response.ok) {
+      await updateLastAlertAt(payload.workspaceId);
+    } else {
       const body = await response.text();
-      console.error(
-        "[Telegram] sendMessage failed:",
-        response.status,
-        body,
-      );
+      console.error("[Telegram] sendMessage failed:", response.status, body);
     }
   } catch (err) {
     console.error("[Telegram] Alert failed silently:", err);

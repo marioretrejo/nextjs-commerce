@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { resolveQacWorkspace } from "@/lib/qac-workspace";
 
 export async function GET() {
   const supabase = await createClient();
@@ -10,15 +11,11 @@ export async function GET() {
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const admin = createAdminClient();
-  const { data: wsData } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("owner_id", user.id)
-    .single();
-  const ws = wsData as { id: string } | null;
+  const ws = await resolveQacWorkspace(user.id);
   if (!ws)
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+
+  const admin = createAdminClient();
 
   const [
     { count: totalInteractions },

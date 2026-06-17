@@ -1,16 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { resolveQacWorkspace } from "@/lib/qac-workspace";
 
-async function getWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("workspaces")
-    .select("id, has_compliance_qa, owner_id")
-    .eq("owner_id", userId)
-    .single();
-  return data as { id: string; has_compliance_qa: boolean } | null;
-}
+const getWorkspace = resolveQacWorkspace;
 
 export async function GET(
   _req: Request,

@@ -7,20 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/qac-audit";
+import { resolveQacWorkspace, escapeLike } from "@/lib/qac-workspace";
 
-async function getWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("workspaces")
-    .select("id, has_compliance_qa, owner_id")
-    .eq("owner_id", userId)
-    .single();
-  return data as {
-    id: string;
-    has_compliance_qa: boolean;
-    owner_id: string;
-  } | null;
-}
+const getWorkspace = resolveQacWorkspace;
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -66,7 +55,7 @@ export async function GET(req: Request) {
     .range(offset, offset + limit - 1);
 
   if (status) query = query.eq("status", status);
-  if (agent) query = query.ilike("agent_name", `%${agent}%`);
+  if (agent) query = query.ilike("agent_name", `%${escapeLike(agent)}%`);
   if (dateFrom) query = query.gte("created_at", dateFrom);
   if (dateTo) query = query.lte("created_at", dateTo);
   if (riskLevel) query = query.eq("risk_level", riskLevel);
