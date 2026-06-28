@@ -15,7 +15,18 @@ const REQUIRED_ENV_VARS = [
   "STRIPE_SECRET_KEY",
 ];
 
-export async function GET() {
+export async function GET(req: Request) {
+  // This endpoint exposes env-var presence and session/cookie diagnostics, so it
+  // must not be publicly reachable. Gate it behind the shared debug secret (same
+  // pattern as the other /api/debug/* routes); fail closed if it isn't set.
+  const expected = process.env["DIRECT_ACCESS_SECRET"];
+  const provided =
+    new URL(req.url).searchParams.get("secret") ??
+    req.headers.get("x-debug-secret");
+  if (!expected || provided !== expected) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+
   const cookieStore = await cookies();
   const allCookies = cookieStore.getAll();
   const supabaseCookies = allCookies

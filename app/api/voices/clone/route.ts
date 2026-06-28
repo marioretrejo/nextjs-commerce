@@ -57,6 +57,35 @@ export async function POST(req: Request) {
     );
   }
 
+  // Validate the upload before forwarding to Cartesia: reject oversized or
+  // wrong-type files up front rather than failing deep in the provider call.
+  const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+  const ALLOWED_TYPES = [
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/m4a",
+  ];
+  if (file.size === 0) {
+    return NextResponse.json({ error: "Audio file is empty" }, { status: 400 });
+  }
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json(
+      { error: "Audio file exceeds the 25 MB limit" },
+      { status: 400 },
+    );
+  }
+  if (file.type && !ALLOWED_TYPES.includes(file.type.toLowerCase())) {
+    return NextResponse.json(
+      { error: `Unsupported audio type: ${file.type}. Use mp3, wav, or m4a.` },
+      { status: 400 },
+    );
+  }
+
   const admin = createAdminClient();
 
   // Insert a 'cloning' placeholder so the UI shows progress immediately

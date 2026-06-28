@@ -118,14 +118,22 @@ $$;
 -- service_role (superuser) bypasses GRANT/REVOKE so this is safe.
 -- ─────────────────────────────────────────────────────────────────────────────
 
-REVOKE EXECUTE ON FUNCTION public.check_workspace_balance(uuid, numeric)    FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.finalize_call_billing(uuid, numeric)       FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.release_call_slot(uuid)                   FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.try_claim_call_slot(uuid)                 FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.increment_workspace_minutes(uuid, numeric) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.increment_workspace_balance(uuid, integer) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.increment_agent_total_calls(uuid)          FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.write_audit_log(uuid,text,text,text,uuid,uuid,jsonb,text) FROM PUBLIC;
+-- NOTE: Several of these functions were historically created out-of-band and
+-- are (re)defined in migrations 044 (try_claim_call_slot) and 072 (the rest),
+-- which sort AFTER this file. On a fresh `db reset` they don't exist yet when
+-- this runs, so each REVOKE targeting a possibly-absent function is wrapped to
+-- tolerate `undefined_function`. On an already-migrated database these succeed.
+DO $$
+BEGIN
+  BEGIN REVOKE EXECUTE ON FUNCTION public.check_workspace_balance(uuid, numeric)     FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.finalize_call_billing(uuid, numeric)       FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.release_call_slot(uuid)                     FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.try_claim_call_slot(uuid)                   FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.increment_workspace_minutes(uuid, numeric)  FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.increment_workspace_balance(uuid, integer)  FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.increment_agent_total_calls(uuid)           FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN REVOKE EXECUTE ON FUNCTION public.write_audit_log(uuid,text,text,text,uuid,uuid,jsonb,text) FROM PUBLIC; EXCEPTION WHEN undefined_function THEN NULL; END;
+END $$;
 REVOKE EXECUTE ON FUNCTION public.record_webhook_delivery(uuid, text, integer) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.match_document_chunks(public.vector, uuid, double precision, integer) FROM PUBLIC;
 -- Re-grant match_document_chunks to authenticated (used by dashboard RAG queries)
@@ -176,29 +184,19 @@ $$;
 ALTER FUNCTION public.handle_new_user()
   SET search_path = public, pg_catalog;
 
-ALTER FUNCTION public.check_workspace_balance(uuid, numeric)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.finalize_call_billing(uuid, numeric)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.release_call_slot(uuid)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.try_claim_call_slot(uuid)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.increment_workspace_minutes(uuid, numeric)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.increment_workspace_balance(uuid, integer)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.increment_agent_total_calls(uuid)
-  SET search_path = public, pg_catalog;
-
-ALTER FUNCTION public.write_audit_log(uuid, text, text, text, uuid, uuid, jsonb, text)
-  SET search_path = public, pg_catalog;
+-- Functions (re)created in migrations 044/072 may not exist yet on a fresh
+-- reset; tolerate their absence here (they set the correct search_path on create).
+DO $$
+BEGIN
+  BEGIN ALTER FUNCTION public.check_workspace_balance(uuid, numeric)     SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.finalize_call_billing(uuid, numeric)       SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.release_call_slot(uuid)                     SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.try_claim_call_slot(uuid)                   SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.increment_workspace_minutes(uuid, numeric)  SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.increment_workspace_balance(uuid, integer)  SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.increment_agent_total_calls(uuid)           SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+  BEGIN ALTER FUNCTION public.write_audit_log(uuid, text, text, text, uuid, uuid, jsonb, text) SET search_path = public, pg_catalog; EXCEPTION WHEN undefined_function THEN NULL; END;
+END $$;
 
 ALTER FUNCTION public.record_webhook_delivery(uuid, text, integer)
   SET search_path = public, pg_catalog;

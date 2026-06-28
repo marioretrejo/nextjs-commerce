@@ -91,11 +91,22 @@ async function fireTelegram(
   if (!bot_token || !chat_id) return;
 
   const text = buildNotificationText(p);
-  await fetch(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id, text, parse_mode: "Markdown" }),
-  });
+  const res = await fetch(
+    `https://api.telegram.org/bot${bot_token}/sendMessage`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id, text, parse_mode: "Markdown" }),
+    },
+  );
+  // Surface delivery failures (revoked token, bad chat_id, Telegram 4xx) instead
+  // of silently dropping the alert — otherwise customers miss notifications.
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `Telegram sendMessage failed (${res.status}): ${detail.slice(0, 200)}`,
+    );
+  }
 }
 
 async function fireTeams(
@@ -315,27 +326,41 @@ export async function dispatchPostCallEvents(
 
   const handlers: Promise<unknown>[] = [];
 
+  // Log (but don't throw) on a failed send so a misconfigured integration is
+  // visible in the server logs instead of vanishing silently.
+  const logFail = (type: string) => (err: unknown) => {
+    console.error(
+      `[dispatcher] ${type} delivery failed:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  };
+
   for (const integration of integrations) {
     const creds = (integration.credentials ?? {}) as Record<string, string>;
     const webhookUrl = integration.webhook_url ?? creds["webhook_url"] ?? "";
 
     switch (integration.type) {
       case "telegram":
-        handlers.push(fireTelegram(creds, payload).catch(() => null));
+        handlers.push(fireTelegram(creds, payload).catch(logFail("telegram")));
         break;
       case "teams":
-        handlers.push(fireTeams(webhookUrl, payload).catch(() => null));
+        handlers.push(fireTeams(webhookUrl, payload).catch(logFail("teams")));
         break;
       case "n8n":
-        handlers.push(fireN8n(webhookUrl, payload).catch(() => null));
+        handlers.push(fireN8n(webhookUrl, payload).catch(logFail("n8n")));
         break;
       case "google_calendar":
-        handlers.push(fireGoogleCalendar(creds, payload).catch(() => null));
+        handlers.push(
+          fireGoogleCalendar(creds, payload).catch(logFail("google_calendar")),
+        );
         break;
       case "webhook": {
         const events = (integration.webhook_events ?? []) as string[];
         handlers.push(
-          fireCustomWebhook(webhookUrl, events, payload).catch(() => null),
+          fireCustomWebhook(webhookUrl, events, payload).catch(
+            logFail("webhook"),
+          ),
         );
         break;
       }

@@ -39,10 +39,13 @@ export const getUserWorkspaces = cache(async (): Promise<Workspace[]> => {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
+  // No explicit owner filter: RLS already returns exactly the workspaces this
+  // user may see — ones they own AND ones they're an active member of. Filtering
+  // by owner_id here wrongly hid team members' workspaces (a member who doesn't
+  // own a workspace got an empty list and was bounced to onboarding).
   const { data } = await supabase
     .from("workspaces")
     .select("*")
-    .eq("owner_id", user.id)
     .order("created_at", { ascending: true });
 
   return (data as Workspace[]) ?? [];

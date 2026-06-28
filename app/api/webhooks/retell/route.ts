@@ -33,14 +33,14 @@ function verifySignature(
   signature: string,
   secret: string,
 ): boolean {
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(body)
-    .digest("hex");
-  return crypto.timingSafeEqual(
-    Buffer.from(`sha256=${expected}`),
-    Buffer.from(signature),
+  const expected = Buffer.from(
+    `sha256=${crypto.createHmac("sha256", secret).update(body).digest("hex")}`,
   );
+  const received = Buffer.from(signature);
+  // timingSafeEqual throws on length mismatch — guard so a malformed header
+  // returns a clean 401 instead of an uncaught 500.
+  if (expected.length !== received.length) return false;
+  return crypto.timingSafeEqual(expected, received);
 }
 
 export async function POST(req: Request) {
@@ -89,40 +89,56 @@ export async function POST(req: Request) {
     else if (s?.includes("negative")) sentiment = "negative";
     else sentiment = "neutral";
 
-    // Insert call record
+    // Upsert call record (idempotent on retell_call_id). Retell sends both
+    // `call_ended` and `call_analyzed` for one call — and retries on failure —
+    // so a plain insert would create duplicate rows. Upsert keeps a single row
+    // and lets the later, richer `call_analyzed` event update summary/sentiment.
     const { data: insertedCall } = await admin
       .from("calls")
-      .insert({
-        workspace_id: agentRow.workspace_id,
-        agent_id: agentRow.id,
-        campaign_id: (call.metadata?.["campaign_id"] as string | null) ?? null,
-        contact_name:
-          (call.metadata?.["contact_name"] as string | null) ?? null,
-        contact_phone: (call.metadata?.["to_number"] as string | null) ?? null,
-        direction: "outbound",
-        duration_seconds: durationSeconds,
-        status: call.call_status,
-        outcome,
-        sentiment,
-        transcript: call.transcript,
-        recording_url: call.recording_url ?? null,
-        summary: analysis?.call_summary ?? null,
-        task_completed: analysis?.call_successful ?? false,
-        extracted_name: (customData["name"] as string | null) ?? null,
-        extracted_email: (customData["email"] as string | null) ?? null,
-        extracted_interest: (customData["interest"] as string | null) ?? null,
-        extracted_objections:
-          (customData["objections"] as string | null) ?? null,
-        retell_call_id: call.call_id,
-        cost_usd: (durationSeconds / 60) * 0.05,
-      })
+      .upsert(
+        {
+          workspace_id: agentRow.workspace_id,
+          agent_id: agentRow.id,
+          campaign_id:
+            (call.metadata?.["campaign_id"] as string | null) ?? null,
+          contact_name:
+            (call.metadata?.["contact_name"] as string | null) ?? null,
+          contact_phone:
+            (call.metadata?.["to_number"] as string | null) ?? null,
+          direction: "outbound",
+          duration_seconds: durationSeconds,
+          status: call.call_status,
+          outcome,
+          sentiment,
+          transcript: call.transcript,
+          recording_url: call.recording_url ?? null,
+          summary: analysis?.call_summary ?? null,
+          task_completed: analysis?.call_successful ?? false,
+          extracted_name: (customData["name"] as string | null) ?? null,
+          extracted_email: (customData["email"] as string | null) ?? null,
+          extracted_interest: (customData["interest"] as string | null) ?? null,
+          extracted_objections:
+            (customData["objections"] as string | null) ?? null,
+          retell_call_id: call.call_id,
+          cost_usd: (durationSeconds / 60) * 0.05,
+        },
+        { onConflict: "retell_call_id", ignoreDuplicates: false },
+      )
       .select()
       .single();
 
-    // Atomic minute update + threshold enforcement (fire-and-forget)
-    updateWorkspaceMinutes(agentRow.workspace_id, durationSeconds).catch(
-      console.error,
-    );
+    // Bill minutes exactly once per call_id. The dedup ledger insert succeeds
+    // only the first time we see this call, so retries / the second Retell event
+    // can't double-charge usage.
+    const { error: billDedupErr } = await admin
+      .from("processed_webhook_events")
+      .insert({ provider: "retell_billing", event_id: call.call_id });
+    if (!billDedupErr) {
+      // Atomic minute update + threshold enforcement (fire-and-forget)
+      updateWorkspaceMinutes(agentRow.workspace_id, durationSeconds).catch(
+        console.error,
+      );
+    }
 
     // Update campaign contact if applicable
     const campaignId = call.metadata?.["campaign_id"] as string | null;
@@ -138,8 +154,9 @@ export async function POST(req: Request) {
     }
 
     // Trigger QA scoring async (fire-and-forget)
-    if (call.transcript && process.env["ANTHROPIC_API_KEY"]) {
-      fetch(`${process.env["NEXT_PUBLIC_APP_URL"]}/api/qa/score`, {
+    const appUrl = process.env["NEXT_PUBLIC_APP_URL"];
+    if (call.transcript && process.env["ANTHROPIC_API_KEY"] && appUrl) {
+      fetch(`${appUrl}/api/qa/score`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

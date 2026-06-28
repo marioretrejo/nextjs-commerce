@@ -7,7 +7,6 @@ import { z } from "zod";
 
 const CheckoutSchema = z.object({
   plan: z.enum(["pro", "scale"]),
-  priceId: z.string().optional(), // direct priceId override
 });
 
 const PRICE_MAP: Record<string, string | undefined> = {
@@ -28,8 +27,11 @@ export async function POST(req: Request) {
   if (!parsed.success)
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { plan, priceId: explicitPriceId } = parsed.data;
-  const priceId = explicitPriceId ?? PRICE_MAP[plan];
+  // Always derive the price server-side from the plan. A caller-supplied price
+  // override previously let a user pick an arbitrary (e.g. cheaper) Stripe price
+  // and still be mapped to a higher plan — a tier-bypass.
+  const { plan } = parsed.data;
+  const priceId = PRICE_MAP[plan];
 
   if (!priceId) {
     return NextResponse.json(

@@ -25,15 +25,21 @@ export async function POST(
     .eq("id", id)
     .single();
 
-  // Minute limit enforcement gate
+  // The lookup runs through the RLS user-client: a null result means the agent
+  // either doesn't exist or belongs to another workspace. Bail out before any
+  // sync/call — otherwise the downstream service-role sync would start a
+  // billable Retell web-call against another tenant's agent (IDOR).
   const workspaceId = (agent as { workspace_id?: string } | null)?.workspace_id;
-  if (workspaceId) {
-    const limit = await checkMinuteLimit(workspaceId);
-    if (!limit.allowed)
-      return NextResponse.json(minuteLimitBlockedResponse(limit), {
-        status: 402,
-      });
+  if (!agent || !workspaceId) {
+    return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
+
+  // Minute limit enforcement gate
+  const limit = await checkMinuteLimit(workspaceId);
+  if (!limit.allowed)
+    return NextResponse.json(minuteLimitBlockedResponse(limit), {
+      status: 402,
+    });
 
   let retellAgentId = (agent as { retell_agent_id: string | null } | null)
     ?.retell_agent_id;

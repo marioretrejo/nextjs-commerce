@@ -151,6 +151,21 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
+  // ── Idempotency: dedup on Stripe's event.id ──────────────────────────────
+  // Stripe retries deliveries (and can deliver duplicates). Without this guard
+  // a retried checkout.session.completed top-up would credit the balance twice.
+  const { error: dedupErr } = await admin
+    .from("processed_webhook_events")
+    .insert({ provider: "stripe", event_id: event.id });
+  if (dedupErr) {
+    if ((dedupErr as { code?: string }).code === "23505") {
+      console.log("[stripe/webhook] duplicate event ignored", event.id);
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    console.error("[stripe/webhook] dedup ledger error", dedupErr.message);
+    return new NextResponse("Idempotency ledger unavailable", { status: 503 });
+  }
+
   try {
     switch (event.type) {
       // ── Subscription lifecycle ────────────────────────────────────────────────
@@ -236,7 +251,10 @@ export async function POST(req: Request) {
 
           if (!workspaceId || !amountCents) break;
 
-          // Try RPC first, fall back to manual increment
+          // Atomic balance credit. The previous read-modify-write fallback was
+          // removed: two concurrent top-ups (or a retry racing the original)
+          // would read the same balance and silently drop one credit. On failure
+          // we throw so the outer catch returns a retryable 5xx.
           const { error: rpcErr } = await admin.rpc(
             "increment_workspace_balance",
             {
@@ -244,24 +262,8 @@ export async function POST(req: Request) {
               p_amount_cents: amountCents,
             },
           );
-
           if (rpcErr) {
-            console.warn(
-              "[stripe/webhook] RPC fallback for balance increment",
-              rpcErr.message,
-            );
-            const { data: current } = await admin
-              .from("workspaces")
-              .select("stripe_balance_cents")
-              .eq("id", workspaceId)
-              .single();
-            const existing =
-              (current as { stripe_balance_cents: number } | null)
-                ?.stripe_balance_cents ?? 0;
-            await admin
-              .from("workspaces")
-              .update({ stripe_balance_cents: existing + amountCents })
-              .eq("id", workspaceId);
+            throw new Error(`balance increment failed: ${rpcErr.message}`);
           }
 
           // Fire-and-forget: record invoice + send receipt email
@@ -428,8 +430,16 @@ export async function POST(req: Request) {
       id: event.id,
       msg,
     });
-    // Return 200 so Stripe does NOT retry — the event was received, the bug is ours to fix
-    return NextResponse.json({ received: true, error: msg }, { status: 200 });
+    // Roll back the idempotency marker so Stripe's retry can reprocess this
+    // event (otherwise the dedup guard would swallow the retry and the work —
+    // e.g. a paid top-up credit — would be permanently lost).
+    await admin
+      .from("processed_webhook_events")
+      .delete()
+      .eq("provider", "stripe")
+      .eq("event_id", event.id);
+    // 500 → Stripe retries with backoff.
+    return NextResponse.json({ received: false, error: msg }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

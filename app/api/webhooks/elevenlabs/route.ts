@@ -33,18 +33,34 @@ function verifySignature(
 export async function POST(req: Request) {
   const rawBody = await req.text();
 
+  // Fail closed: without a configured secret the webhook is unauthenticated and
+  // anyone could POST forged `call_ended` events to inflate a tenant's usage.
   const secret = process.env["ELEVENLABS_WEBHOOK_SECRET"];
-  if (secret) {
-    const signature = req.headers.get("elevenlabs-signature") ?? "";
-    if (!signature || !verifySignature(rawBody, signature, secret)) {
-      return new NextResponse("Invalid signature", { status: 401 });
-    }
+  if (!secret) {
+    return new NextResponse("Webhook secret not configured", { status: 500 });
+  }
+  const signature = req.headers.get("elevenlabs-signature") ?? "";
+  if (!signature || !verifySignature(rawBody, signature, secret)) {
+    return new NextResponse("Invalid signature", { status: 401 });
   }
 
   const body = JSON.parse(rawBody) as ElevenLabsCallEvent;
 
   if (body.event_type === "call_ended" && body.agent_id && body.duration_secs) {
     const admin = createAdminClient();
+
+    // Idempotency: bill each call_id at most once (ElevenLabs may retry).
+    if (body.call_id) {
+      const { error: dedupErr } = await admin
+        .from("processed_webhook_events")
+        .insert({ provider: "elevenlabs_billing", event_id: body.call_id });
+      if (dedupErr) {
+        return NextResponse.json({
+          received: true,
+          duplicate: (dedupErr as { code?: string }).code === "23505",
+        });
+      }
+    }
 
     const { data: agent } = await admin
       .from("agents")

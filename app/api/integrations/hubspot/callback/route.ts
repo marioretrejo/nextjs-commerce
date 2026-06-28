@@ -1,14 +1,23 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
+  const state = searchParams.get("state");
   const appUrl = process.env["NEXT_PUBLIC_APP_URL"];
 
   if (!code)
     return NextResponse.redirect(`${appUrl}/integrations?error=no_code`);
+
+  // CSRF: the state must match the value set on the cookie in the auth step.
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get("hubspot_oauth_state")?.value;
+  if (!state || !expectedState || state !== expectedState) {
+    return NextResponse.redirect(`${appUrl}/integrations?error=invalid_state`);
+  }
 
   const clientId = process.env["HUBSPOT_CLIENT_ID"];
   const clientSecret = process.env["HUBSPOT_CLIENT_SECRET"];

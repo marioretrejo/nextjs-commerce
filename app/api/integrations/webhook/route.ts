@@ -10,10 +10,34 @@ export async function POST(req: Request) {
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json()) as {
-    webhook_url: string;
-    webhook_events: string[];
-  };
+  let body: { webhook_url: string; webhook_events: string[] };
+  try {
+    body = (await req.json()) as {
+      webhook_url: string;
+      webhook_events: string[];
+    };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  // Validate the destination URL: must be parseable and HTTPS. Without this an
+  // attacker (or mistake) could store an http:// or internal-network URL that we
+  // later POST to (SSRF).
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(body.webhook_url);
+  } catch {
+    return NextResponse.json(
+      { error: "webhook_url must be a valid URL" },
+      { status: 400 },
+    );
+  }
+  if (parsedUrl.protocol !== "https:") {
+    return NextResponse.json(
+      { error: "webhook_url must use HTTPS" },
+      { status: 400 },
+    );
+  }
 
   const { data: ws } = await supabase
     .from("workspaces")
