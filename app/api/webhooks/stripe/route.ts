@@ -13,6 +13,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe/client";
 import { sendPaymentFailed, sendTopUpReceipt } from "@/lib/email";
+import { sendWorkspaceAlert } from "@/lib/notifications/telegram";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 
@@ -308,6 +309,9 @@ export async function POST(req: Request) {
       }
 
       // ── Invoices ──────────────────────────────────────────────────────────────
+      // payment_succeeded and paid are equivalent for our purposes (invoice
+      // settled): both record the invoice. Handle them with the same logic.
+      case "invoice.payment_succeeded":
       case "invoice.paid": {
         const inv = event.data.object as Stripe.Invoice;
         const customerId = inv.customer as string;
@@ -375,18 +379,27 @@ export async function POST(req: Request) {
           .from("users")
           .select("id, email")
           .eq("stripe_customer_id", customerId)
-          .single();
-        if (!userRow) break;
-        const u = userRow as { id: string; email: string };
+          .maybeSingle();
+        const u = userRow as { id: string; email: string } | null;
 
-        const { data: wsRow } = await admin
+        // Resolve workspace from the customer directly first (works even if the
+        // user row is missing), then fall back to the owner lookup.
+        const { data: wsByCustomer } = await admin
           .from("workspaces")
           .select("id, name")
-          .eq("owner_id", u.id)
-          .single();
-        const workspaceName =
-          (wsRow as { name: string } | null)?.name ?? "your workspace";
-        const wsId = (wsRow as { id: string } | null)?.id;
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+        let wsRow = wsByCustomer as { id: string; name: string } | null;
+        if (!wsRow && u) {
+          const { data: wsByOwner } = await admin
+            .from("workspaces")
+            .select("id, name")
+            .eq("owner_id", u.id)
+            .maybeSingle();
+          wsRow = wsByOwner as { id: string; name: string } | null;
+        }
+        const workspaceName = wsRow?.name ?? "your workspace";
+        const wsId = wsRow?.id;
         const amountStr = `$${((inv.amount_due ?? 0) / 100).toFixed(2)}`;
         const appUrl =
           process.env["NEXT_PUBLIC_APP_URL"] ?? "https://voiceos.app";
@@ -396,27 +409,34 @@ export async function POST(req: Request) {
           wsId,
         });
 
-        // Suspend workspace until payment is resolved
+        // Suspend workspace until payment is resolved + Telegram alert.
         if (wsId) {
           await admin
             .from("workspaces")
             .update({ billing_status: "suspended_for_nonpayment" })
             .eq("id", wsId);
+          sendWorkspaceAlert(wsId, "💳 Payment failed — workspace suspended", [
+            `🏢 Workspace: ${workspaceName}`,
+            `💸 Amount due: ${amountStr}`,
+            "🔴 Severity: HIGH",
+            "➡️ Action: update the payment method to restore access.",
+          ]).catch(console.error);
         }
 
-        await admin.from("notifications").insert({
-          user_id: u.id,
-          type: "payment_failed",
-          title: "Payment failed",
-          message: `Your payment of ${amountStr} failed. Please update your payment method.`,
-        });
-
-        sendPaymentFailed({
-          to: u.email,
-          workspaceName,
-          amount: amountStr,
-          retryUrl: `${appUrl}/billing`,
-        }).catch(console.error);
+        if (u) {
+          await admin.from("notifications").insert({
+            user_id: u.id,
+            type: "payment_failed",
+            title: "Payment failed",
+            message: `Your payment of ${amountStr} failed. Please update your payment method.`,
+          });
+          sendPaymentFailed({
+            to: u.email,
+            workspaceName,
+            amount: amountStr,
+            retryUrl: `${appUrl}/billing`,
+          }).catch(console.error);
+        }
         break;
       }
 

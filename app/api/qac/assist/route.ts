@@ -115,24 +115,37 @@ export async function POST(req: Request) {
     ? authHeader.slice(7)
     : null;
 
-  if (workspaceToken) {
-    try {
-      const admin = createAdminClient();
-      const { data: integration } = await admin
-        .from("qac_integrations")
-        .select("workspace_id, is_active")
-        .eq("webhook_token", workspaceToken)
-        .single();
+  // Fail closed: this endpoint makes a paid Groq call, so it must require a
+  // valid workspace token. Previously a request with NO Authorization header
+  // skipped validation entirely and proceeded to the LLM — an unauthenticated
+  // cost/abuse vector.
+  if (!workspaceToken) {
+    return NextResponse.json(
+      { error: "Missing workspace token" },
+      { status: 401 },
+    );
+  }
+  try {
+    const admin = createAdminClient();
+    const { data: integration } = await admin
+      .from("qac_integrations")
+      .select("workspace_id, is_active")
+      .eq("webhook_token", workspaceToken)
+      .maybeSingle();
 
-      if (!integration || !(integration as { is_active: boolean }).is_active) {
-        return NextResponse.json(
-          { error: "Invalid or inactive workspace token" },
-          { status: 401 },
-        );
-      }
-    } catch {
-      // If admin client fails (e.g. missing env), fall through — don't block the agent
+    if (!integration || !(integration as { is_active: boolean }).is_active) {
+      return NextResponse.json(
+        { error: "Invalid or inactive workspace token" },
+        { status: 401 },
+      );
     }
+  } catch {
+    // Can't verify the token (e.g. missing service-role env) → reject rather
+    // than allow free LLM use.
+    return NextResponse.json(
+      { error: "Unable to verify workspace token" },
+      { status: 503 },
+    );
   }
 
   // ── Groq call ─────────────────────────────────────────────────────────────

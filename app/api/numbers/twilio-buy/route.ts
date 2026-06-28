@@ -56,6 +56,18 @@ export async function POST(req: Request) {
       `${creds.account_sid}:${creds.auth_token}`,
     ).toString("base64");
 
+    // Configure the inbound webhooks on the number at purchase time, otherwise
+    // a bought number has no VoiceUrl and inbound calls never reach our
+    // /api/webhooks/twilio/incoming handler.
+    const appUrl = process.env["NEXT_PUBLIC_APP_URL"];
+    const buyParams = new URLSearchParams({ PhoneNumber: body.phone_number });
+    if (appUrl) {
+      buyParams.set("VoiceUrl", `${appUrl}/api/webhooks/twilio/incoming`);
+      buyParams.set("VoiceMethod", "POST");
+      buyParams.set("StatusCallback", `${appUrl}/api/webhooks/twilio/status`);
+      buyParams.set("StatusCallbackMethod", "POST");
+    }
+
     const buyRes = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${creds.account_sid}/IncomingPhoneNumbers.json`,
       {
@@ -64,7 +76,7 @@ export async function POST(req: Request) {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: new URLSearchParams({ PhoneNumber: body.phone_number }),
+        body: buyParams,
       },
     );
 

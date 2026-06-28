@@ -83,6 +83,16 @@ export async function POST(req: Request) {
       }),
     });
 
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.error(
+        "QA: Anthropic request failed",
+        res.status,
+        errBody.slice(0, 200),
+      );
+      return NextResponse.json({ ok: true, scored: false });
+    }
+
     const data = (await res.json()) as { content: { text: string }[] };
     let result: { overall?: number } = {};
     try {

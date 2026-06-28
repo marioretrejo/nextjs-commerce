@@ -55,6 +55,20 @@ export async function POST(req: Request) {
     if (!agent) return NextResponse.json({ received: true });
     const workspaceId = (agent as { workspace_id: string }).workspace_id;
 
+    // ── Idempotency: bill each room exactly once ────────────────────────────
+    // LiveKit retries webhook deliveries; finalize_call_billing only guards the
+    // concurrent-update race, NOT a redelivered event. Without this, a retry of
+    // room_finished increments minutes a second time. The room name embeds the
+    // creation timestamp so it is unique per call.
+    const { error: billDedupErr } = await admin
+      .from("processed_webhook_events")
+      .insert({ provider: "livekit_billing", event_id: roomName });
+    if (billDedupErr) {
+      // Already billed (unique violation) or ledger error → ack without
+      // re-billing. The call upsert below is itself idempotent on retell_call_id.
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+
     // ── Atomic billing: single UPDATE that increments minutes AND releases the
     // concurrent slot in one round-trip, preventing the race where two
     // simultaneous room_finished events both read a stale minutes_used value.

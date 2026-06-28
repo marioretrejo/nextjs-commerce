@@ -16,6 +16,7 @@ import {
   shouldValidateTwilio,
 } from "@/lib/twilio/validate";
 import { recordCallEvent } from "@/agent/persistence/call-events-repository";
+import { sendWorkspaceAlert } from "@/lib/notifications/telegram";
 import { NextResponse } from "next/server";
 
 interface CallRow {
@@ -294,6 +295,20 @@ export async function POST(req: Request) {
     if (endReason) terminalUpdate["end_reason"] = endReason;
 
     await admin.from("calls").update(terminalUpdate).eq("id", callRow.id);
+
+    // Fire a Telegram alert when a call ends abnormally (failed/busy/no-answer).
+    if (
+      technicalStatus === "failed" ||
+      technicalStatus === "busy" ||
+      technicalStatus === "no_answer"
+    ) {
+      void sendWorkspaceAlert(callRow.workspace_id, "📵 Call failed", [
+        `📞 Outcome: ${technicalStatus}`,
+        `🆔 CallSid: ${callSid}`,
+        ...(endReason ? [`ℹ️ Reason: ${endReason}`] : []),
+        "🟠 Severity: MEDIUM",
+      ]).catch(() => null);
+    }
 
     // Release active_calls slot — awaited so the serverless function doesn't exit first
     await admin

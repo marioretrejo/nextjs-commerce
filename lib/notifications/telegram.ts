@@ -108,6 +108,55 @@ export async function sendComplianceCriticalAlert(
   }
 }
 
+/**
+ * Generic per-workspace operational alert (payment failed, call failed, etc.).
+ * Fire-and-forget: never throws, logs delivery failures. Uses the workspace's
+ * configured Telegram integration; a no-op if none is connected.
+ */
+export async function sendWorkspaceAlert(
+  workspaceId: string,
+  title: string,
+  detailLines: string[],
+): Promise<void> {
+  try {
+    const config = await getTelegramConfig(workspaceId);
+    if (!config) return;
+
+    const lines = [
+      escapeMarkdown(title),
+      "",
+      ...detailLines.map(escapeMarkdown),
+      "",
+      `🕒 ${escapeMarkdown(new Date().toISOString())}`,
+    ];
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${config.botToken}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: config.chatId,
+          text: lines.join("\n"),
+          parse_mode: "MarkdownV2",
+          disable_web_page_preview: true,
+        }),
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error(
+        "[Telegram] workspace alert failed:",
+        response.status,
+        body,
+      );
+    }
+  } catch (err) {
+    console.error("[Telegram] workspace alert error:", err);
+  }
+}
+
 export async function sendTelegramTestMessage(
   botToken: string,
   chatId: string,
