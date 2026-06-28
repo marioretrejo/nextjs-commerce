@@ -107,7 +107,9 @@ export async function GET(req: Request) {
 
       const avg = (arr: (number | null)[]) => {
         const nums = arr.filter((v): v is number => v != null);
-        return nums.length ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : 0;
+        return nums.length
+          ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length)
+          : 0;
       };
 
       // Sort by created_at for trend
@@ -127,18 +129,34 @@ export async function GET(req: Request) {
         return Array.isArray(ev) ? ev : ev ? [ev] : [];
       });
 
-      const recentAvg = avg(recentEvs.map((e: { overall_score: number }) => e.overall_score));
-      const oldAvg = avg(oldEvs.map((e: { overall_score: number }) => e.overall_score));
+      const recentAvg = avg(
+        recentEvs.map((e: { overall_score: number }) => e.overall_score),
+      );
+      const oldAvg = avg(
+        oldEvs.map((e: { overall_score: number }) => e.overall_score),
+      );
       const diff = recentAvg - oldAvg;
       const trend: "up" | "down" | "stable" =
         diff >= 3 ? "up" : diff <= -3 ? "down" : "stable";
 
       statsMap.set(agentId, {
         call_count: rows.length,
-        avg_score: avg(evals.map((e: { overall_score: number }) => e.overall_score)),
-        avg_compliance: avg(evals.map((e: { compliance_score: number | null }) => e.compliance_score)),
-        avg_sales: avg(evals.map((e: { sales_score: number | null }) => e.sales_score)),
-        avg_soft_skills: avg(evals.map((e: { soft_skills_score: number | null }) => e.soft_skills_score)),
+        avg_score: avg(
+          evals.map((e: { overall_score: number }) => e.overall_score),
+        ),
+        avg_compliance: avg(
+          evals.map(
+            (e: { compliance_score: number | null }) => e.compliance_score,
+          ),
+        ),
+        avg_sales: avg(
+          evals.map((e: { sales_score: number | null }) => e.sales_score),
+        ),
+        avg_soft_skills: avg(
+          evals.map(
+            (e: { soft_skills_score: number | null }) => e.soft_skills_score,
+          ),
+        ),
         avg_risk: avg(evals.map((e: { risk_score: number }) => e.risk_score)),
         last_call_at: sorted[sorted.length - 1]?.created_at ?? null,
         improvement_trend: trend,
@@ -186,7 +204,10 @@ export async function POST(req: Request) {
   };
 
   if (!body.agent_id?.trim())
-    return NextResponse.json({ error: "agent_id is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "agent_id is required" },
+      { status: 400 },
+    );
   if (!body.name?.trim())
     return NextResponse.json({ error: "name is required" }, { status: 400 });
 

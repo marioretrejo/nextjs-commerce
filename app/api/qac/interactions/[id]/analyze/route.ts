@@ -163,7 +163,11 @@ function buildFormattedTranscript(
   plainTranscript: string,
   diarized: DiarizedTranscript | null,
 ): string {
-  if (!diarized || !Array.isArray(diarized.utterances) || diarized.utterances.length === 0)
+  if (
+    !diarized ||
+    !Array.isArray(diarized.utterances) ||
+    diarized.utterances.length === 0
+  )
     return plainTranscript;
   return diarized.utterances
     .map((u) => `[Speaker ${u.speaker}]: ${u.text ?? ""}`)
@@ -429,13 +433,14 @@ function buildViolationsPrompt(
 
   function formatRule(r: ViolationRule): string {
     const exArr = Array.isArray(r.examples) ? (r.examples as string[]) : [];
-    const ctArr = Array.isArray(r.counter_examples) ? (r.counter_examples as string[]) : [];
+    const ctArr = Array.isArray(r.counter_examples)
+      ? (r.counter_examples as string[])
+      : [];
     const sev = (r.alert_severity ?? "warning").toUpperCase();
     let out = `[${sev}] ${r.name}: ${r.description}`;
     if (exArr.length > 0)
       out += `\n  Examples of violation: ${exArr.join("; ")}`;
-    if (ctArr.length > 0)
-      out += `\n  NOT a violation if: ${ctArr.join("; ")}`;
+    if (ctArr.length > 0) out += `\n  NOT a violation if: ${ctArr.join("; ")}`;
     return out;
   }
 
@@ -629,7 +634,9 @@ export async function POST(
   // ── Verify interaction belongs to this workspace ───────────────────────────
   const { data: intRaw } = await admin
     .from("qac_interactions")
-    .select("id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name, customer_id, department_id")
+    .select(
+      "id, workspace_id, transcript, diarized_transcript, status, agent_id, agent_name, customer_id, department_id",
+    )
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single();
@@ -663,7 +670,10 @@ export async function POST(
     .maybeSingle();
 
   if (lockErr) {
-    console.error("[qac-analyze] Failed to acquire analysis lock:", lockErr.message);
+    console.error(
+      "[qac-analyze] Failed to acquire analysis lock:",
+      lockErr.message,
+    );
     return NextResponse.json(
       { error: "Failed to acquire analysis lock" },
       { status: 500 },
@@ -704,7 +714,9 @@ export async function POST(
     await Promise.all([
       admin
         .from("qac_rules")
-        .select("id, name, description, alert_severity, examples, counter_examples")
+        .select(
+          "id, name, description, alert_severity, examples, counter_examples",
+        )
         .eq("workspace_id", workspaceId)
         .eq("is_active", true)
         .eq("scope", "global")
@@ -712,7 +724,9 @@ export async function POST(
       interaction.department_id
         ? admin
             .from("qac_rules")
-            .select("id, name, description, alert_severity, examples, counter_examples")
+            .select(
+              "id, name, description, alert_severity, examples, counter_examples",
+            )
             .eq("workspace_id", workspaceId)
             .eq("is_active", true)
             .eq("scope", "department")
@@ -721,14 +735,21 @@ export async function POST(
         : Promise.resolve({ data: [] as ViolationRule[] }),
     ]);
 
-  const globalViolationRules = (globalViolationRulesData ?? []) as ViolationRule[];
-  const deptViolationRules = ((deptViolationRulesResult as { data: ViolationRule[] | null }).data ?? []) as ViolationRule[];
+  const globalViolationRules = (globalViolationRulesData ??
+    []) as ViolationRule[];
+  const deptViolationRules = ((
+    deptViolationRulesResult as { data: ViolationRule[] | null }
+  ).data ?? []) as ViolationRule[];
 
   // ── Fetch department profile (optional — null falls back to global defaults) ─
   // Only runs if the interaction was assigned a department during ingestion.
   // If the department is inactive or not found, deptContext and deptRubric stay
   // at their defaults (empty string / null) → behavior identical to pre-Phase-5.
-  type DeptRow = { qa_prompt: string | null; scoring_rubric: unknown; name: string | null };
+  type DeptRow = {
+    qa_prompt: string | null;
+    scoring_rubric: unknown;
+    name: string | null;
+  };
   let deptContext = "";
   let deptRubric: Record<string, number> | null = null;
   let deptName: string | null = null;
@@ -760,7 +781,12 @@ export async function POST(
         if (!isNaN(c) && !isNaN(s) && !isNaN(sk) && !isNaN(cv)) {
           const total = c + s + sk + cv;
           if (Math.abs(total - 100) <= 2) {
-            deptRubric = { compliance: c, sales: s, soft_skills: sk, conversation: cv };
+            deptRubric = {
+              compliance: c,
+              sales: s,
+              soft_skills: sk,
+              conversation: cv,
+            };
           }
         }
       }
@@ -782,20 +808,38 @@ export async function POST(
     deptName,
   );
 
-  const [complianceRaw, salesRaw, softSkillsRaw, conversationRaw, summaryRaw, violationsRaw] =
-    await Promise.all([
-      groqJSON<ComplianceResult>(
-        deptContext + buildCompliancePrompt(formattedTranscript, rules),
-        1500,
-      ),
-      groqJSON<SalesResult>(deptContext + buildSalesPrompt(formattedTranscript), 1024),
-      groqJSON<SoftSkillsResult>(deptContext + buildSoftSkillsPrompt(formattedTranscript), 800),
-      groqJSON<ConversationResult>(deptContext + buildConversationPrompt(formattedTranscript), 800),
-      groqJSON<SummaryResult>(deptContext + buildSummaryPrompt(formattedTranscript), 1500),
-      violationsPrompt
-        ? groqJSON<ViolationResult>(violationsPrompt, 2000)
-        : Promise.resolve(null),
-    ]);
+  const [
+    complianceRaw,
+    salesRaw,
+    softSkillsRaw,
+    conversationRaw,
+    summaryRaw,
+    violationsRaw,
+  ] = await Promise.all([
+    groqJSON<ComplianceResult>(
+      deptContext + buildCompliancePrompt(formattedTranscript, rules),
+      1500,
+    ),
+    groqJSON<SalesResult>(
+      deptContext + buildSalesPrompt(formattedTranscript),
+      1024,
+    ),
+    groqJSON<SoftSkillsResult>(
+      deptContext + buildSoftSkillsPrompt(formattedTranscript),
+      800,
+    ),
+    groqJSON<ConversationResult>(
+      deptContext + buildConversationPrompt(formattedTranscript),
+      800,
+    ),
+    groqJSON<SummaryResult>(
+      deptContext + buildSummaryPrompt(formattedTranscript),
+      1500,
+    ),
+    violationsPrompt
+      ? groqJSON<ViolationResult>(violationsPrompt, 2000)
+      : Promise.resolve(null),
+  ]);
 
   // Apply defaults for any failed calls
   const compliance: ComplianceResult = complianceRaw ?? defaultCompliance();
@@ -841,10 +885,10 @@ export async function POST(
   // Use department scoring_rubric weights when valid; fallback to global defaults.
   const overallScore = deptRubric
     ? Math.round(
-        compliance.score  * (deptRubric["compliance"]!  / 100) +
-        sales.overall     * (deptRubric["sales"]!       / 100) +
-        softSkills.overall * (deptRubric["soft_skills"]! / 100) +
-        conversation.overall * (deptRubric["conversation"]! / 100),
+        compliance.score * (deptRubric["compliance"]! / 100) +
+          sales.overall * (deptRubric["sales"]! / 100) +
+          softSkills.overall * (deptRubric["soft_skills"]! / 100) +
+          conversation.overall * (deptRubric["conversation"]! / 100),
       )
     : calcOverallScore(
         compliance.score,
@@ -1022,7 +1066,10 @@ export async function POST(
   // ── Save user-defined compliance violations ───────────────────────────────
   if (rawViolations.length > 0) {
     const ruleNameToId = new Map(
-      [...globalViolationRules, ...deptViolationRules].map((r) => [r.name, r.id]),
+      [...globalViolationRules, ...deptViolationRules].map((r) => [
+        r.name,
+        r.id,
+      ]),
     );
     const { error: violErr } = await admin
       .from("qac_compliance_violations")
@@ -1035,7 +1082,9 @@ export async function POST(
           rule_name: v.rule_name.slice(0, 200),
           fragment: v.fragment.slice(0, 500),
           timestamp_seconds:
-            typeof v.timestamp_seconds === "number" ? v.timestamp_seconds : null,
+            typeof v.timestamp_seconds === "number"
+              ? v.timestamp_seconds
+              : null,
           severity: v.severity,
           confidence: Math.max(0, Math.min(1, v.confidence)),
           explanation:
@@ -1045,7 +1094,10 @@ export async function POST(
         })),
       );
     if (violErr)
-      console.error("[qac-analyze] Compliance violations insert failed:", violErr.message);
+      console.error(
+        "[qac-analyze] Compliance violations insert failed:",
+        violErr.message,
+      );
   }
 
   // ── Telegram alerts for critical violations (fire-and-forget) ─────────────
@@ -1077,7 +1129,7 @@ export async function POST(
         512,
       );
       const VALID_COMMITTED_BY = new Set(["agent", "customer"]);
-      const validItems = ((rawCommitments?.items) ?? [])
+      const validItems = (rawCommitments?.items ?? [])
         .filter(
           (c) =>
             VALID_COMMITTED_BY.has(c.committed_by) &&
@@ -1101,7 +1153,10 @@ export async function POST(
           .from("qac_follow_up_commitments")
           .insert(commitmentRows);
         if (commitErr)
-          console.error("[qac-analyze] commitments insert failed:", commitErr.message);
+          console.error(
+            "[qac-analyze] commitments insert failed:",
+            commitErr.message,
+          );
       }
 
       if (!interaction.customer_id) return;
@@ -1127,7 +1182,9 @@ export async function POST(
             summary.customer_intent !== "Unknown"
               ? summary.customer_intent
               : null,
-          sentiment_at_call: (["positive", "neutral", "negative"] as const).includes(
+          sentiment_at_call: (
+            ["positive", "neutral", "negative"] as const
+          ).includes(
             summary.overall_sentiment as "positive" | "neutral" | "negative",
           )
             ? summary.overall_sentiment
@@ -1136,11 +1193,15 @@ export async function POST(
           unresolved_items: summary.objections.slice(0, 10),
         });
       if (journeyErr)
-        console.error("[qac-analyze] journey insert failed:", journeyErr.message);
+        console.error(
+          "[qac-analyze] journey insert failed:",
+          journeyErr.message,
+        );
 
       // Generate a cross-call insight only from the 2nd call onward
       if (priorCount < 1) return;
-      if (!summary.summary || summary.summary === "Analysis unavailable.") return;
+      if (!summary.summary || summary.summary === "Analysis unavailable.")
+        return;
 
       const { error: insightErr } = await adminPost
         .from("qac_journey_insights")
@@ -1152,9 +1213,15 @@ export async function POST(
           confidence: 0.75,
         });
       if (insightErr)
-        console.error("[qac-analyze] insight insert failed:", insightErr.message);
+        console.error(
+          "[qac-analyze] insight insert failed:",
+          insightErr.message,
+        );
     } catch (err) {
-      console.error("[qac-analyze] customer journey after() block failed:", err);
+      console.error(
+        "[qac-analyze] customer journey after() block failed:",
+        err,
+      );
     }
   });
 

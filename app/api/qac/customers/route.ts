@@ -44,7 +44,12 @@ export async function GET(req: Request) {
     ? Number(url.searchParams.get("offset"))
     : (page - 1) * limit;
 
-  const result = await listCustomers({ workspace_id: ws.id, search, limit, offset });
+  const result = await listCustomers({
+    workspace_id: ws.id,
+    search,
+    limit,
+    offset,
+  });
 
   return NextResponse.json({
     data: result.data,

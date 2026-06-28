@@ -60,8 +60,13 @@ interface FormData {
   is_active: boolean;
 }
 
-const CRITERIA_KEYS = ["compliance", "sales", "soft_skills", "conversation"] as const;
-type CriteriaKey = typeof CRITERIA_KEYS[number];
+const CRITERIA_KEYS = [
+  "compliance",
+  "sales",
+  "soft_skills",
+  "conversation",
+] as const;
+type CriteriaKey = (typeof CRITERIA_KEYS)[number];
 
 const CRITERIA_LABELS: Record<CriteriaKey, string> = {
   compliance: "Compliance",
@@ -131,7 +136,7 @@ export default function DepartmentsPage() {
     try {
       const res = await fetch("/api/qac/departments?include_inactive=true");
       if (!res.ok) throw new Error("Failed to load departments");
-      const data = await res.json() as { departments: Department[] };
+      const data = (await res.json()) as { departments: Department[] };
       setDepartments(data.departments ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -140,7 +145,9 @@ export default function DepartmentsPage() {
     }
   }, []);
 
-  useEffect(() => { void fetchDepartments(); }, [fetchDepartments]);
+  useEffect(() => {
+    void fetchDepartments();
+  }, [fetchDepartments]);
 
   // ── Form helpers ──────────────────────────────────────────────────────────
 
@@ -163,7 +170,9 @@ export default function DepartmentsPage() {
       sales: r.sales,
       soft_skills: r.soft_skills,
       conversation: r.conversation,
-      critical_criteria: Array.isArray(dept.critical_criteria) ? dept.critical_criteria : [],
+      critical_criteria: Array.isArray(dept.critical_criteria)
+        ? dept.critical_criteria
+        : [],
       is_active: dept.is_active,
     });
     setFormError(null);
@@ -247,11 +256,13 @@ export default function DepartmentsPage() {
       });
 
       if (!res.ok) {
-        const j = await res.json().catch(() => ({})) as { error?: string };
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? "Failed to save department");
       }
 
-      toast.success(editingId ? "Departamento actualizado" : "Departamento creado");
+      toast.success(
+        editingId ? "Departamento actualizado" : "Departamento creado",
+      );
       closeForm();
       void fetchDepartments();
     } catch (e) {
@@ -271,7 +282,9 @@ export default function DepartmentsPage() {
         body: JSON.stringify({ is_active: !dept.is_active }),
       });
       if (!res.ok) throw new Error("Failed to update");
-      toast.success(dept.is_active ? "Departamento desactivado" : "Departamento activado");
+      toast.success(
+        dept.is_active ? "Departamento desactivado" : "Departamento activado",
+      );
       void fetchDepartments();
     } catch {
       toast.error("Error al actualizar el departamento");
@@ -285,7 +298,7 @@ export default function DepartmentsPage() {
     try {
       const res = await fetch(`/api/qac/departments/${deptId}/extensions`);
       if (!res.ok) throw new Error("Failed to load");
-      const data = await res.json() as { extensions: Extension[] };
+      const data = (await res.json()) as { extensions: Extension[] };
       setExtensions((prev) => ({ ...prev, [deptId]: data.extensions ?? [] }));
     } catch {
       toast.error("Error al cargar extensiones");
@@ -322,14 +335,16 @@ export default function DepartmentsPage() {
         }),
       });
       if (!res.ok) {
-        const j = await res.json().catch(() => ({})) as { error?: string };
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? "Failed to add");
       }
       setNewExt({ agent_extension: "", agent_name: "" });
       toast.success("Extensión agregada");
       void fetchExtensions(deptId);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al agregar extensión");
+      toast.error(
+        e instanceof Error ? e.message : "Error al agregar extensión",
+      );
     } finally {
       setAddingExt(false);
     }
@@ -372,9 +387,12 @@ export default function DepartmentsPage() {
               <Settings2 className="h-5 w-5 text-violet-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">Departamentos QA</h1>
+              <h1 className="text-lg font-semibold text-gray-900">
+                Departamentos QA
+              </h1>
               <p className="text-sm text-gray-500">
-                Configura reglas de análisis por departamento para llamadas VoIP externas
+                Configura reglas de análisis por departamento para llamadas VoIP
+                externas
               </p>
             </div>
           </div>
@@ -391,10 +409,14 @@ export default function DepartmentsPage() {
       {/* Info banner */}
       <div className="border-b border-gray-200 bg-violet-50 px-6 py-3">
         <p className="text-sm text-violet-700">
-          Cada departamento configurado aquí controla cómo se analiza automáticamente cada llamada recibida
-          desde proveedores VoIP (Squaretalk, Twilio, Aircall, etc.). La detección de departamento usa el
-          campo <code className="rounded bg-violet-100 px-1 py-0.5 text-xs text-violet-700">agent_type</code> del
-          proveedor o el mapeo de extensiones a continuación.
+          Cada departamento configurado aquí controla cómo se analiza
+          automáticamente cada llamada recibida desde proveedores VoIP
+          (Squaretalk, Twilio, Aircall, etc.). La detección de departamento usa
+          el campo{" "}
+          <code className="rounded bg-violet-100 px-1 py-0.5 text-xs text-violet-700">
+            agent_type
+          </code>{" "}
+          del proveedor o el mapeo de extensiones a continuación.
         </p>
       </div>
 
@@ -423,9 +445,12 @@ export default function DepartmentsPage() {
         {!loading && !error && departments.length === 0 && (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 py-20 text-center">
             <Building2 className="mb-3 h-10 w-10 text-gray-300" />
-            <p className="font-medium text-gray-500">No hay departamentos configurados</p>
+            <p className="font-medium text-gray-500">
+              No hay departamentos configurados
+            </p>
             <p className="mt-1 text-sm text-gray-400">
-              Crea un departamento para asignar reglas de QA específicas a cada equipo.
+              Crea un departamento para asignar reglas de QA específicas a cada
+              equipo.
             </p>
             <button
               onClick={openCreate}
@@ -459,7 +484,9 @@ export default function DepartmentsPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-gray-900">{dept.name}</span>
+                          <span className="font-semibold text-gray-900">
+                            {dept.name}
+                          </span>
                           <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                             {dept.slug}
                           </code>
@@ -474,7 +501,9 @@ export default function DepartmentsPage() {
                           </span>
                         </div>
                         {dept.description && (
-                          <p className="mt-0.5 text-sm text-gray-500">{dept.description}</p>
+                          <p className="mt-0.5 text-sm text-gray-500">
+                            {dept.description}
+                          </p>
                         )}
                         {/* Scoring rubric summary */}
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -539,7 +568,8 @@ export default function DepartmentsPage() {
 
                       {isLoadingExt && (
                         <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
+                          <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                          Cargando...
                         </div>
                       )}
 
@@ -547,8 +577,12 @@ export default function DepartmentsPage() {
                         <>
                           {deptExtensions.length === 0 && (
                             <p className="mb-3 text-sm text-gray-400">
-                              Sin extensiones asignadas. Las llamadas se detectan por{" "}
-                              <code className="text-xs text-gray-500">agent_type</code> del proveedor.
+                              Sin extensiones asignadas. Las llamadas se
+                              detectan por{" "}
+                              <code className="text-xs text-gray-500">
+                                agent_type
+                              </code>{" "}
+                              del proveedor.
                             </p>
                           )}
                           {deptExtensions.length > 0 && (
@@ -571,7 +605,10 @@ export default function DepartmentsPage() {
                                   </div>
                                   <button
                                     onClick={() =>
-                                      void handleDeleteExtension(dept.id, ext.agent_extension)
+                                      void handleDeleteExtension(
+                                        dept.id,
+                                        ext.agent_extension,
+                                      )
                                     }
                                     className="rounded p-1 text-gray-400 transition-colors hover:text-red-500"
                                   >
@@ -589,7 +626,10 @@ export default function DepartmentsPage() {
                               placeholder="Extensión (ej. 101)"
                               value={newExt.agent_extension}
                               onChange={(e) =>
-                                setNewExt((p) => ({ ...p, agent_extension: e.target.value }))
+                                setNewExt((p) => ({
+                                  ...p,
+                                  agent_extension: e.target.value,
+                                }))
                               }
                               className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                             />
@@ -598,7 +638,10 @@ export default function DepartmentsPage() {
                               placeholder="Nombre (opcional)"
                               value={newExt.agent_name}
                               onChange={(e) =>
-                                setNewExt((p) => ({ ...p, agent_name: e.target.value }))
+                                setNewExt((p) => ({
+                                  ...p,
+                                  agent_name: e.target.value,
+                                }))
                               }
                               className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                             />
@@ -643,7 +686,10 @@ export default function DepartmentsPage() {
               </button>
             </div>
 
-            <form onSubmit={(e) => void handleSave(e)} className="space-y-5 p-6">
+            <form
+              onSubmit={(e) => void handleSave(e)}
+              className="space-y-5 p-6"
+            >
               {/* Name */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -667,12 +713,15 @@ export default function DepartmentsPage() {
                 <input
                   type="text"
                   value={form.slug}
-                  onChange={(e) => updateForm({ slug: e.target.value.toLowerCase() })}
+                  onChange={(e) =>
+                    updateForm({ slug: e.target.value.toLowerCase() })
+                  }
                   placeholder="ventas"
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
                 <p className="mt-1 text-xs text-gray-400">
-                  Solo minúsculas, números y guiones. Usado para detectar el departamento desde el proveedor.
+                  Solo minúsculas, números y guiones. Usado para detectar el
+                  departamento desde el proveedor.
                 </p>
               </div>
 
@@ -703,8 +752,9 @@ export default function DepartmentsPage() {
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
                 />
                 <p className="mt-1 text-xs text-gray-400">
-                  Si está vacío, se usa el prompt global. Usa este campo para dar contexto específico: enfoque
-                  en cierre de ventas, manejo de objeciones, cumplimiento FDCPA, etc.
+                  Si está vacío, se usa el prompt global. Usa este campo para
+                  dar contexto específico: enfoque en cierre de ventas, manejo
+                  de objeciones, cumplimiento FDCPA, etc.
                 </p>
               </div>
 
@@ -726,14 +776,21 @@ export default function DepartmentsPage() {
                 <div className="space-y-2">
                   {CRITERIA_KEYS.map((k) => (
                     <div key={k} className="flex items-center gap-3">
-                      <span className="w-40 text-sm text-gray-600">{CRITERIA_LABELS[k]}</span>
+                      <span className="w-40 text-sm text-gray-600">
+                        {CRITERIA_LABELS[k]}
+                      </span>
                       <input
                         type="number"
                         min={0}
                         max={100}
                         value={form[k]}
                         onChange={(e) =>
-                          updateForm({ [k]: Math.max(0, Math.min(100, Number(e.target.value))) })
+                          updateForm({
+                            [k]: Math.max(
+                              0,
+                              Math.min(100, Number(e.target.value)),
+                            ),
+                          })
                         }
                         className="w-20 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-center text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                       />
@@ -749,7 +806,8 @@ export default function DepartmentsPage() {
                 </div>
                 {!totalOk && (
                   <p className="mt-2 text-xs text-red-500">
-                    Los pesos deben sumar exactamente 100%. Suma actual: {total}%
+                    Los pesos deben sumar exactamente 100%. Suma actual: {total}
+                    %
                   </p>
                 )}
               </div>
@@ -760,7 +818,8 @@ export default function DepartmentsPage() {
                   Criterios críticos
                 </label>
                 <p className="mb-2 text-xs text-gray-400">
-                  Un score bajo en cualquiera de estos criterios marcará la llamada como riesgo crítico.
+                  Un score bajo en cualquiera de estos criterios marcará la
+                  llamada como riesgo crítico.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {CRITERIA_KEYS.map((k) => {
@@ -787,9 +846,12 @@ export default function DepartmentsPage() {
               {/* Active toggle */}
               <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Estado activo</p>
+                  <p className="text-sm font-medium text-gray-700">
+                    Estado activo
+                  </p>
                   <p className="text-xs text-gray-400">
-                    Solo los departamentos activos se usarán para detección en el webhook.
+                    Solo los departamentos activos se usarán para detección en
+                    el webhook.
                   </p>
                 </div>
                 <button

@@ -49,7 +49,9 @@ function ScoreBadge({ score }: { score: number }) {
         ? "text-amber-400 bg-amber-400/10"
         : "text-red-400 bg-red-400/10";
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${color}`}
+    >
       {score}
     </span>
   );
@@ -108,7 +110,9 @@ export default function AgentProfilesPage() {
     }
   }, [showInactive]);
 
-  useEffect(() => { void fetchAgents(); }, [fetchAgents]);
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
 
   const filtered = agents.filter(
     (a) =>
@@ -139,7 +143,14 @@ export default function AgentProfilesPage() {
         throw new Error(j.error ?? "Failed to create agent");
       }
       setShowCreateModal(false);
-      setForm({ agent_id: "", name: "", email: "", team: "", role: "", hire_date: "" });
+      setForm({
+        agent_id: "",
+        name: "",
+        email: "",
+        team: "",
+        role: "",
+        hire_date: "",
+      });
       void fetchAgents();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Unknown error");
@@ -149,9 +160,16 @@ export default function AgentProfilesPage() {
   }
 
   async function handleDeactivate(agentId: string, name: string) {
-    if (!confirm(`Deactivate agent "${name}"? They will no longer appear in active lists.`)) return;
+    if (
+      !confirm(
+        `Deactivate agent "${name}"? They will no longer appear in active lists.`,
+      )
+    )
+      return;
     try {
-      const res = await fetch(`/api/qac/agents/${agentId}`, { method: "DELETE" });
+      const res = await fetch(`/api/qac/agents/${agentId}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error("Failed to deactivate");
       void fetchAgents();
     } catch (e) {
@@ -169,7 +187,9 @@ export default function AgentProfilesPage() {
               <Users className="h-5 w-5 text-blue-400" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-white">Agent Profiles</h1>
+              <h1 className="text-lg font-semibold text-white">
+                Agent Profiles
+              </h1>
               <p className="text-sm text-gray-400">
                 {agents.filter((a) => a.is_active).length} active agents
               </p>
@@ -260,15 +280,21 @@ export default function AgentProfilesPage() {
                           {agent.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-200">{agent.name}</p>
-                          <p className="text-xs text-gray-500 font-mono">{agent.agent_id}</p>
+                          <p className="font-medium text-gray-200">
+                            {agent.name}
+                          </p>
+                          <p className="text-xs text-gray-500 font-mono">
+                            {agent.agent_id}
+                          </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400">
                       <span>{agent.team ?? "—"}</span>
                       {agent.role && (
-                        <span className="ml-1 text-gray-600">· {agent.role}</span>
+                        <span className="ml-1 text-gray-600">
+                          · {agent.role}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -305,13 +331,17 @@ export default function AgentProfilesPage() {
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-500">
                       {agent.metrics.last_call_at
-                        ? new Date(agent.metrics.last_call_at).toLocaleDateString()
+                        ? new Date(
+                            agent.metrics.last_call_at,
+                          ).toLocaleDateString()
                         : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => router.push(`/qa-center/agents/${agent.id}`)}
+                          onClick={() =>
+                            router.push(`/qa-center/agents/${agent.id}`)
+                          }
                           className="flex items-center gap-1 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1 text-xs text-gray-300 transition hover:bg-gray-700"
                         >
                           View
@@ -319,7 +349,9 @@ export default function AgentProfilesPage() {
                         </button>
                         {agent.is_active && (
                           <button
-                            onClick={() => void handleDeactivate(agent.id, agent.name)}
+                            onClick={() =>
+                              void handleDeactivate(agent.id, agent.name)
+                            }
                             className="rounded-lg border border-gray-700 bg-gray-800 p-1 text-gray-500 transition hover:bg-red-900/20 hover:text-red-400"
                             title="Deactivate"
                           >
@@ -341,7 +373,9 @@ export default function AgentProfilesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">New Agent Profile</h2>
+              <h2 className="text-lg font-semibold text-white">
+                New Agent Profile
+              </h2>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="text-gray-400 hover:text-gray-200"
@@ -365,7 +399,9 @@ export default function AgentProfilesPage() {
                   <input
                     required
                     value={form.agent_id}
-                    onChange={(e) => setForm({ ...form, agent_id: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, agent_id: e.target.value })
+                    }
                     placeholder="EMP-001"
                     className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
@@ -384,7 +420,9 @@ export default function AgentProfilesPage() {
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-400">Email</label>
+                <label className="mb-1.5 block text-xs font-medium text-gray-400">
+                  Email
+                </label>
                 <input
                   type="email"
                   value={form.email}
@@ -395,7 +433,9 @@ export default function AgentProfilesPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-gray-400">Team</label>
+                  <label className="mb-1.5 block text-xs font-medium text-gray-400">
+                    Team
+                  </label>
                   <input
                     value={form.team}
                     onChange={(e) => setForm({ ...form, team: e.target.value })}
@@ -404,7 +444,9 @@ export default function AgentProfilesPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-gray-400">Role</label>
+                  <label className="mb-1.5 block text-xs font-medium text-gray-400">
+                    Role
+                  </label>
                   <input
                     value={form.role}
                     onChange={(e) => setForm({ ...form, role: e.target.value })}
@@ -414,11 +456,15 @@ export default function AgentProfilesPage() {
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-400">Hire Date</label>
+                <label className="mb-1.5 block text-xs font-medium text-gray-400">
+                  Hire Date
+                </label>
                 <input
                   type="date"
                   value={form.hire_date}
-                  onChange={(e) => setForm({ ...form, hire_date: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, hire_date: e.target.value })
+                  }
                   className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>

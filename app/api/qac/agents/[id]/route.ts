@@ -119,11 +119,25 @@ export async function GET(
     profile,
     metrics: {
       call_count: interactions?.length ?? 0,
-      avg_score: avg(evals.map((e) => (e as { overall_score?: number }).overall_score)),
-      avg_compliance: avg(evals.map((e) => (e as { compliance_score?: number | null }).compliance_score)),
-      avg_sales: avg(evals.map((e) => (e as { sales_score?: number | null }).sales_score)),
-      avg_soft_skills: avg(evals.map((e) => (e as { soft_skills_score?: number | null }).soft_skills_score)),
-      avg_risk: avg(evals.map((e) => (e as { risk_score?: number }).risk_score)),
+      avg_score: avg(
+        evals.map((e) => (e as { overall_score?: number }).overall_score),
+      ),
+      avg_compliance: avg(
+        evals.map(
+          (e) => (e as { compliance_score?: number | null }).compliance_score,
+        ),
+      ),
+      avg_sales: avg(
+        evals.map((e) => (e as { sales_score?: number | null }).sales_score),
+      ),
+      avg_soft_skills: avg(
+        evals.map(
+          (e) => (e as { soft_skills_score?: number | null }).soft_skills_score,
+        ),
+      ),
+      avg_risk: avg(
+        evals.map((e) => (e as { risk_score?: number }).risk_score),
+      ),
       score_trend: scoreTrend,
     },
     interactions: interactions ?? [],

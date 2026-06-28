@@ -166,6 +166,7 @@ export default function WorkspaceBrandingPage() {
           />
           {branding.logo_url && (
             <div className="rounded-lg border border-[#e0e0e0] p-4 bg-[#f5f5f5] flex items-center justify-center h-20">
+              {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded logo from arbitrary origin; next/image remote config impractical */}
               <img
                 src={branding.logo_url}
                 alt="Logo preview"

@@ -104,7 +104,9 @@ function formatDuration(s: number | null) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-function riskBadgeVariant(r: string | null): "default" | "secondary" | "destructive" | "outline" {
+function riskBadgeVariant(
+  r: string | null,
+): "default" | "secondary" | "destructive" | "outline" {
   if (!r) return "outline";
   if (r === "critical" || r === "high") return "destructive";
   if (r === "medium") return "secondary";
@@ -131,7 +133,9 @@ export default function CustomerDetailPage() {
         if (!res.ok) throw new Error("Failed to load customer");
         setCustomer(await res.json());
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to load customer");
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load customer",
+        );
       } finally {
         setLoading(false);
       }
@@ -151,7 +155,10 @@ export default function CustomerDetailPage() {
     return (
       <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-3">
         <p className="text-gray-400">Customer not found.</p>
-        <Link href="/qa-center/customers" className="text-indigo-400 text-sm hover:underline">
+        <Link
+          href="/qa-center/customers"
+          className="text-indigo-400 text-sm hover:underline"
+        >
           Back to Customers
         </Link>
       </div>
@@ -174,8 +181,10 @@ export default function CustomerDetailPage() {
   }
 
   function trendIcon(t: string) {
-    if (t === "improving") return <TrendingUp className="h-3.5 w-3.5 text-green-400" />;
-    if (t === "declining") return <TrendingDown className="h-3.5 w-3.5 text-red-400" />;
+    if (t === "improving")
+      return <TrendingUp className="h-3.5 w-3.5 text-green-400" />;
+    if (t === "declining")
+      return <TrendingDown className="h-3.5 w-3.5 text-red-400" />;
     return null;
   }
 
@@ -206,7 +215,9 @@ export default function CustomerDetailPage() {
               {customer.display_name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-semibold text-white">{customer.display_name}</h1>
+              <h1 className="text-xl font-semibold text-white">
+                {customer.display_name}
+              </h1>
               <div className="flex flex-wrap items-center gap-3 mt-1">
                 {customer.canonical_phone && (
                   <span className="inline-flex items-center gap-1 text-sm text-gray-400">
@@ -228,21 +239,29 @@ export default function CustomerDetailPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-5 border-t border-gray-800">
             <div>
               <p className="text-xs text-gray-500">Total Calls</p>
-              <p className="text-xl font-bold text-white">{customer.total_calls}</p>
+              <p className="text-xl font-bold text-white">
+                {customer.total_calls}
+              </p>
             </div>
             <div>
               <p className="text-xs text-gray-500">Sentiment</p>
-              <p className={`text-sm font-semibold capitalize ${sentimentColor(customer.lifetime_sentiment)}`}>
+              <p
+                className={`text-sm font-semibold capitalize ${sentimentColor(customer.lifetime_sentiment)}`}
+              >
                 {customer.lifetime_sentiment ?? "Unknown"}
               </p>
             </div>
             <div>
               <p className="text-xs text-gray-500">First Seen</p>
-              <p className="text-sm text-gray-300">{formatDate(customer.first_seen_at)}</p>
+              <p className="text-sm text-gray-300">
+                {formatDate(customer.first_seen_at)}
+              </p>
             </div>
             <div>
               <p className="text-xs text-gray-500">Last Seen</p>
-              <p className="text-sm text-gray-300">{formatDate(customer.last_seen_at)}</p>
+              <p className="text-sm text-gray-300">
+                {formatDate(customer.last_seen_at)}
+              </p>
             </div>
           </div>
 
@@ -257,16 +276,23 @@ export default function CustomerDetailPage() {
         <section className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <Activity className="h-4 w-4 text-indigo-400" />
-            <h2 className="text-sm font-semibold text-white">Customer Health</h2>
+            <h2 className="text-sm font-semibold text-white">
+              Customer Health
+            </h2>
             <span className="text-xs text-gray-500">
-              based on {customer.total_calls} call{customer.total_calls !== 1 ? "s" : ""}
+              based on {customer.total_calls} call
+              {customer.total_calls !== 1 ? "s" : ""}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {/* Health Score */}
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Health Score</p>
-              <p className={`text-2xl font-bold ${healthColor(scores.health_score)}`}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                Health Score
+              </p>
+              <p
+                className={`text-2xl font-bold ${healthColor(scores.health_score)}`}
+              >
                 {scores.health_score}
                 <span className="text-sm font-normal text-gray-500">/100</span>
               </p>
@@ -274,11 +300,17 @@ export default function CustomerDetailPage() {
 
             {/* Call Quality */}
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Call Quality</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                Call Quality
+              </p>
               {scores.call_quality_score != null ? (
-                <p className={`text-2xl font-bold ${healthColor(scores.call_quality_score)}`}>
+                <p
+                  className={`text-2xl font-bold ${healthColor(scores.call_quality_score)}`}
+                >
                   {scores.call_quality_score}
-                  <span className="text-sm font-normal text-gray-500">/100</span>
+                  <span className="text-sm font-normal text-gray-500">
+                    /100
+                  </span>
                 </p>
               ) : (
                 <p className="text-sm text-gray-600">No evaluations</p>
@@ -287,8 +319,12 @@ export default function CustomerDetailPage() {
 
             {/* Engagement */}
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Engagement</p>
-              <p className={`text-2xl font-bold ${healthColor(scores.engagement_score)}`}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                Engagement
+              </p>
+              <p
+                className={`text-2xl font-bold ${healthColor(scores.engagement_score)}`}
+              >
                 {scores.engagement_score}
                 <span className="text-sm font-normal text-gray-500">/100</span>
               </p>
@@ -296,10 +332,14 @@ export default function CustomerDetailPage() {
 
             {/* Sentiment Trend */}
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Sentiment Trend</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                Sentiment Trend
+              </p>
               <div className="flex items-center gap-1.5 mt-1">
                 {trendIcon(scores.sentiment_trend)}
-                <p className={`text-sm font-semibold capitalize ${trendColor(scores.sentiment_trend)}`}>
+                <p
+                  className={`text-sm font-semibold capitalize ${trendColor(scores.sentiment_trend)}`}
+                >
                   {scores.sentiment_trend}
                 </p>
               </div>
@@ -307,16 +347,24 @@ export default function CustomerDetailPage() {
 
             {/* Risk Level */}
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Risk Level</p>
-              <p className={`text-sm font-bold capitalize ${riskColor(scores.customer_risk)}`}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                Risk Level
+              </p>
+              <p
+                className={`text-sm font-bold capitalize ${riskColor(scores.customer_risk)}`}
+              >
                 {scores.customer_risk}
               </p>
             </div>
 
             {/* Unresolved Pressure */}
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Open Items</p>
-              <p className={`text-2xl font-bold ${scores.unresolved_pressure > 50 ? "text-red-400" : scores.unresolved_pressure > 20 ? "text-yellow-400" : "text-green-400"}`}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                Open Items
+              </p>
+              <p
+                className={`text-2xl font-bold ${scores.unresolved_pressure > 50 ? "text-red-400" : scores.unresolved_pressure > 20 ? "text-yellow-400" : "text-green-400"}`}
+              >
                 {scores.unresolved_pressure}
                 <span className="text-sm font-normal text-gray-500">/100</span>
               </p>
@@ -329,8 +377,12 @@ export default function CustomerDetailPage() {
           <section className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Zap className="h-4 w-4 text-indigo-400" />
-              <h2 className="text-sm font-semibold text-white">Active Insights</h2>
-              <span className="text-xs text-gray-500">({customer.insights.length})</span>
+              <h2 className="text-sm font-semibold text-white">
+                Active Insights
+              </h2>
+              <span className="text-xs text-gray-500">
+                ({customer.insights.length})
+              </span>
             </div>
             <div className="space-y-2">
               {customer.insights.map((ins) => (
@@ -355,7 +407,9 @@ export default function CustomerDetailPage() {
                   </div>
                   <p className="text-[10px] text-gray-600 mt-2">
                     Generated {formatDate(ins.generated_at)}
-                    {ins.expires_at ? ` · Expires ${formatDate(ins.expires_at)}` : ""}
+                    {ins.expires_at
+                      ? ` · Expires ${formatDate(ins.expires_at)}`
+                      : ""}
                   </p>
                 </div>
               ))}
@@ -369,7 +423,9 @@ export default function CustomerDetailPage() {
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="h-4 w-4 text-indigo-400" />
               <h2 className="text-sm font-semibold text-white">Journey</h2>
-              <span className="text-xs text-gray-500">({customer.journey.length} entries)</span>
+              <span className="text-xs text-gray-500">
+                ({customer.journey.length} entries)
+              </span>
             </div>
             <div className="space-y-2">
               {customer.journey.map((j) => (
@@ -378,16 +434,24 @@ export default function CustomerDetailPage() {
                   className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3"
                 >
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="text-xs text-gray-500">#{j.sequence_number}</span>
+                    <span className="text-xs text-gray-500">
+                      #{j.sequence_number}
+                    </span>
                     {j.sentiment_at_call && (
-                      <span className={`text-xs capitalize ${sentimentColor(j.sentiment_at_call)}`}>
+                      <span
+                        className={`text-xs capitalize ${sentimentColor(j.sentiment_at_call)}`}
+                      >
                         {j.sentiment_at_call}
                       </span>
                     )}
-                    <span className="text-xs text-gray-600 ml-auto">{formatDate(j.created_at)}</span>
+                    <span className="text-xs text-gray-600 ml-auto">
+                      {formatDate(j.created_at)}
+                    </span>
                   </div>
                   {j.intent_at_call && (
-                    <p className="text-sm text-gray-300 mb-1.5">{j.intent_at_call}</p>
+                    <p className="text-sm text-gray-300 mb-1.5">
+                      {j.intent_at_call}
+                    </p>
                   )}
                   {j.key_topics && j.key_topics.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -403,10 +467,14 @@ export default function CustomerDetailPage() {
                   )}
                   {j.unresolved_items && j.unresolved_items.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-[10px] text-red-400 font-medium mb-1">Unresolved</p>
+                      <p className="text-[10px] text-red-400 font-medium mb-1">
+                        Unresolved
+                      </p>
                       <ul className="space-y-0.5">
                         {j.unresolved_items.map((u, i) => (
-                          <li key={i} className="text-xs text-gray-400">· {u}</li>
+                          <li key={i} className="text-xs text-gray-400">
+                            · {u}
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -422,8 +490,12 @@ export default function CustomerDetailPage() {
           <section className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <CheckCircle className="h-4 w-4 text-indigo-400" />
-              <h2 className="text-sm font-semibold text-white">Follow-up Commitments</h2>
-              <span className="text-xs text-gray-500">({customer.commitments.length})</span>
+              <h2 className="text-sm font-semibold text-white">
+                Follow-up Commitments
+              </h2>
+              <span className="text-xs text-gray-500">
+                ({customer.commitments.length})
+              </span>
             </div>
             <div className="space-y-2">
               {customer.commitments.map((c) => (
@@ -439,23 +511,29 @@ export default function CustomerDetailPage() {
                             c.status === "fulfilled"
                               ? "bg-green-500/10 text-green-400"
                               : c.status === "missed"
-                              ? "bg-red-500/10 text-red-400"
-                              : c.status === "cancelled"
-                              ? "bg-gray-500/10 text-gray-500"
-                              : "bg-yellow-500/10 text-yellow-400"
+                                ? "bg-red-500/10 text-red-400"
+                                : c.status === "cancelled"
+                                  ? "bg-gray-500/10 text-gray-500"
+                                  : "bg-yellow-500/10 text-yellow-400"
                           }`}
                         >
                           {c.status}
                         </span>
-                        <span className="text-[10px] text-gray-500 capitalize">{c.committed_by}</span>
+                        <span className="text-[10px] text-gray-500 capitalize">
+                          {c.committed_by}
+                        </span>
                       </div>
-                      <p className="text-sm text-gray-200">{c.commitment_text}</p>
+                      <p className="text-sm text-gray-200">
+                        {c.commitment_text}
+                      </p>
                       {c.fulfilled_at && (
                         <p className="text-[10px] text-green-400/70 mt-1.5">
                           Fulfilled {formatDate(c.fulfilled_at)}
                         </p>
                       )}
-                      <p className="text-[10px] text-gray-600 mt-1">Detected {formatDate(c.created_at)}</p>
+                      <p className="text-[10px] text-gray-600 mt-1">
+                        Detected {formatDate(c.created_at)}
+                      </p>
                     </div>
                     {c.due_date && (
                       <div className="shrink-0 flex items-center gap-1 text-xs text-gray-500">
@@ -474,12 +552,18 @@ export default function CustomerDetailPage() {
         <section>
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="h-4 w-4 text-indigo-400" />
-            <h2 className="text-sm font-semibold text-white">Recent Interactions</h2>
-            <span className="text-xs text-gray-500">({customer.recent_interactions.length})</span>
+            <h2 className="text-sm font-semibold text-white">
+              Recent Interactions
+            </h2>
+            <span className="text-xs text-gray-500">
+              ({customer.recent_interactions.length})
+            </span>
           </div>
           {customer.recent_interactions.length === 0 ? (
             <div className="rounded-xl border border-gray-800 bg-gray-900/50 px-4 py-8 text-center">
-              <p className="text-sm text-gray-500">No interactions linked yet.</p>
+              <p className="text-sm text-gray-500">
+                No interactions linked yet.
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -497,20 +581,29 @@ export default function CustomerDetailPage() {
                           {ix.agent_name ?? "Unknown agent"}
                         </p>
                         {ix.channel && (
-                          <span className="text-xs text-gray-500 capitalize">{ix.channel}</span>
+                          <span className="text-xs text-gray-500 capitalize">
+                            {ix.channel}
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <Calendar className="h-3 w-3 text-gray-600" />
-                        <span className="text-xs text-gray-500">{formatDate(ix.created_at)}</span>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(ix.created_at)}
+                        </span>
                         {ix.duration_s != null && (
-                          <span className="text-xs text-gray-600">{formatDuration(ix.duration_s)}</span>
+                          <span className="text-xs text-gray-600">
+                            {formatDuration(ix.duration_s)}
+                          </span>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {ix.risk_level && ix.risk_level !== "low" && (
-                        <Badge variant={riskBadgeVariant(ix.risk_level)} className="text-[10px] capitalize">
+                        <Badge
+                          variant={riskBadgeVariant(ix.risk_level)}
+                          className="text-[10px] capitalize"
+                        >
                           {ix.risk_level}
                         </Badge>
                       )}
@@ -520,8 +613,8 @@ export default function CustomerDetailPage() {
                             score >= 80
                               ? "text-green-400"
                               : score >= 60
-                              ? "text-yellow-400"
-                              : "text-red-400"
+                                ? "text-yellow-400"
+                                : "text-red-400"
                           }`}
                         >
                           {score}

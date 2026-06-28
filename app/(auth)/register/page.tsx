@@ -35,7 +35,7 @@ export default function RegisterPage() {
       router.refresh();
       router.push(inviteToken ? `/invite/${inviteToken}` : state.redirectTo);
     }
-  }, [state, router]);
+  }, [state, router, inviteToken]);
 
   async function handleGoogle() {
     setGoogleLoading(true);

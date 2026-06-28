@@ -1,0 +1,14 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "dist/",
+    "supabase/migrations/",
+    "scraper/",
+    "scripts/"
+  ],
+  "rules": {
+    "react/no-unescaped-entities": "off"
+  }
+}

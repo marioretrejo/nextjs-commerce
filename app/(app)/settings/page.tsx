@@ -346,6 +346,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-4">
                 <Avatar className="w-16 h-16 bg-[#0a0a0a] text-white text-lg font-semibold flex items-center justify-center">
                   {user?.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- user-supplied avatar URL from arbitrary origins; next/image remote config is impractical here
                     <img
                       src={user.avatar_url}
                       alt="Avatar"

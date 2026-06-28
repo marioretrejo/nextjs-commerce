@@ -21,15 +21,23 @@ export async function PUT(req: Request) {
   try {
     const body = (await req.json()) as { ids?: unknown; reason?: string };
     if (!Array.isArray(body.ids) || body.ids.length === 0)
-      return NextResponse.json({ error: "ids array required" }, { status: 400 });
-    ids = body.ids.filter((id): id is string => typeof id === "string").slice(0, 100);
+      return NextResponse.json(
+        { error: "ids array required" },
+        { status: 400 },
+      );
+    ids = body.ids
+      .filter((id): id is string => typeof id === "string")
+      .slice(0, 100);
     reason = body.reason?.trim() || null;
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
   if (ids.length === 0)
-    return NextResponse.json({ error: "No valid IDs provided" }, { status: 400 });
+    return NextResponse.json(
+      { error: "No valid IDs provided" },
+      { status: 400 },
+    );
 
   const admin = createAdminClient();
   const { data, error } = await admin

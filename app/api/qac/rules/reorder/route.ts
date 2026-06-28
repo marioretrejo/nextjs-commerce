@@ -15,10 +15,15 @@ export async function PUT(req: Request) {
   if (!ws)
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
-  const body = (await req.json()) as { items: { id: string; sort_order: number }[] };
+  const body = (await req.json()) as {
+    items: { id: string; sort_order: number }[];
+  };
 
   if (!Array.isArray(body.items) || body.items.length === 0)
-    return NextResponse.json({ error: "items array required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "items array required" },
+      { status: 400 },
+    );
 
   const admin = createAdminClient();
 
@@ -30,7 +35,9 @@ export async function PUT(req: Request) {
     .eq("workspace_id", ws.id)
     .in("id", ids);
 
-  const validIds = new Set((existing ?? []).map((r) => (r as { id: string }).id));
+  const validIds = new Set(
+    (existing ?? []).map((r) => (r as { id: string }).id),
+  );
 
   // Update each valid rule's sort_order
   const updates = body.items.filter((item) => validIds.has(item.id));

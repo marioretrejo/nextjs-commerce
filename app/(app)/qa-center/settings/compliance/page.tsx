@@ -200,7 +200,9 @@ function RuleCard({
               <ChevronDown
                 className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`}
               />
-              {expanded ? "Ocultar" : `Ver ejemplos (${rule.examples.length + rule.counter_examples.length})`}
+              {expanded
+                ? "Ocultar"
+                : `Ver ejemplos (${rule.examples.length + rule.counter_examples.length})`}
             </button>
           )}
         </div>
@@ -318,16 +320,16 @@ function RuleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/30"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-[#efefef]">
           <h2 className="font-bold text-[#111]">
             {editingRule ? "Editar regla" : "Nueva regla"}
           </h2>
-          <button onClick={onClose} className="text-[#9b9b9b] hover:text-[#111]">
+          <button
+            onClick={onClose}
+            className="text-[#9b9b9b] hover:text-[#111]"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -549,7 +551,11 @@ function RuleModal({
         </div>
 
         <div className="flex gap-2 p-5 border-t border-[#efefef]">
-          <Button onClick={() => void save()} disabled={saving} className="gap-1.5">
+          <Button
+            onClick={() => void save()}
+            disabled={saving}
+            className="gap-1.5"
+          >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
@@ -579,7 +585,10 @@ function TelegramHelpModal({ onClose }: { onClose: () => void }) {
             <img src="/telegram-logo.svg" alt="Telegram" className="h-4 w-4" />
             Cómo configurar Telegram
           </h2>
-          <button onClick={onClose} className="text-[#9b9b9b] hover:text-[#111]">
+          <button
+            onClick={onClose}
+            className="text-[#9b9b9b] hover:text-[#111]"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -592,7 +601,7 @@ function TelegramHelpModal({ onClose }: { onClose: () => void }) {
               },
               {
                 n: 2,
-                text: 'Mandá el comando /newbot y seguí los pasos para crear el bot',
+                text: "Mandá el comando /newbot y seguí los pasos para crear el bot",
               },
               {
                 n: 3,
@@ -682,9 +691,14 @@ function TelegramSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bot_token: botToken, chat_id: chatId }),
       });
-      const testData = (await testRes.json()) as { ok: boolean; error?: string };
+      const testData = (await testRes.json()) as {
+        ok: boolean;
+        error?: string;
+      };
       if (!testRes.ok || !testData.ok) {
-        toast.error(friendlyTelegramError(testData.error ?? "Error desconocido"));
+        toast.error(
+          friendlyTelegramError(testData.error ?? "Error desconocido"),
+        );
         return;
       }
 
@@ -760,9 +774,7 @@ function TelegramSection() {
   }
 
   if (loading) {
-    return (
-      <div className="h-32 bg-gray-50 rounded-xl animate-pulse" />
-    );
+    return <div className="h-32 bg-gray-50 rounded-xl animate-pulse" />;
   }
 
   return (
@@ -1025,7 +1037,9 @@ export default function CompliancePage() {
                 : "text-[#9b9b9b] hover:text-[#555]"
             }`}
           >
-            {tab === "global" ? "Global (todas las llamadas)" : "Por Departamento"}
+            {tab === "global"
+              ? "Global (todas las llamadas)"
+              : "Por Departamento"}
           </button>
         ))}
       </div>

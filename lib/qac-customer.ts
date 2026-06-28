@@ -55,7 +55,8 @@ export interface CustomerRow {
 export async function upsertCustomer(
   input: UpsertCustomerInput,
 ): Promise<CustomerRow | null> {
-  const { workspace_id, canonical_phone, canonical_email, display_name } = input;
+  const { workspace_id, canonical_phone, canonical_email, display_name } =
+    input;
   if (!canonical_phone && !canonical_email) return null;
 
   try {
@@ -92,10 +93,13 @@ export async function upsertCustomer(
         updated_at: now,
       };
       // Backfill missing identifiers
-      if (canonical_phone && !existing.canonical_phone) patch["canonical_phone"] = canonical_phone;
-      if (canonical_email && !existing.canonical_email) patch["canonical_email"] = canonical_email;
+      if (canonical_phone && !existing.canonical_phone)
+        patch["canonical_phone"] = canonical_phone;
+      if (canonical_email && !existing.canonical_email)
+        patch["canonical_email"] = canonical_email;
       // Only update display_name if we now have a real one and existing is still the default
-      if (display_name && existing.display_name === "Unknown") patch["display_name"] = display_name;
+      if (display_name && existing.display_name === "Unknown")
+        patch["display_name"] = display_name;
 
       const { data: updated, error } = await admin
         .from("qac_customers")

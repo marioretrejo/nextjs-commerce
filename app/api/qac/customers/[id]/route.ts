@@ -10,8 +10,14 @@ import { getCustomerById } from "@/lib/qac-customer";
 // ─── Score computation (on-read, no migration required) ───────────────────────
 
 function computeScores(
-  customer: { total_calls: number; lifetime_sentiment: string | null; first_seen_at: string },
-  interactions: Array<{ qac_evaluations: Array<{ overall_score: number | null }> | null }>,
+  customer: {
+    total_calls: number;
+    lifetime_sentiment: string | null;
+    first_seen_at: string;
+  },
+  interactions: Array<{
+    qac_evaluations: Array<{ overall_score: number | null }> | null;
+  }>,
   journey: Array<{
     sequence_number: number;
     sentiment_at_call: string | null;
@@ -28,11 +34,14 @@ function computeScores(
       : null;
 
   // sentiment_trend: sort journey ASC (oldest first), compare early vs recent half
-  const ordered = [...journey].sort((a, b) => a.sequence_number - b.sequence_number);
+  const ordered = [...journey].sort(
+    (a, b) => a.sequence_number - b.sequence_number,
+  );
   const sentiments = ordered
     .map((j) => j.sentiment_at_call)
     .filter((s): s is string => s != null);
-  let sentiment_trend: "improving" | "stable" | "declining" | "unknown" = "unknown";
+  let sentiment_trend: "improving" | "stable" | "declining" | "unknown" =
+    "unknown";
   if (sentiments.length >= 2) {
     const half = Math.ceil(sentiments.length / 2);
     const early = sentiments.slice(0, half);
@@ -41,7 +50,8 @@ function computeScores(
       arr.filter((s) => s === "positive").length -
       arr.filter((s) => s === "negative").length;
     const diff = sentScore(recent) - sentScore(early);
-    sentiment_trend = diff > 0 ? "improving" : diff < 0 ? "declining" : "stable";
+    sentiment_trend =
+      diff > 0 ? "improving" : diff < 0 ? "declining" : "stable";
   }
 
   // unresolved_pressure: 0 items → 0, 10+ items → 100
@@ -72,11 +82,14 @@ function computeScores(
 
   // engagement_score: calls per month, normalized (10 calls/month → 100)
   const daysSinceFirst = customer.first_seen_at
-    ? Math.max(1, (Date.now() - new Date(customer.first_seen_at).getTime()) / 86400000)
+    ? Math.max(
+        1,
+        (Date.now() - new Date(customer.first_seen_at).getTime()) / 86400000,
+      )
     : 30;
   const engagement_score = Math.min(
     100,
-    Math.round(((customer.total_calls / daysSinceFirst) * 30) * 10),
+    Math.round((customer.total_calls / daysSinceFirst) * 30 * 10),
   );
 
   return {
@@ -175,7 +188,9 @@ export async function GET(
 
   const scores = computeScores(
     customer,
-    (interactions ?? []) as Array<{ qac_evaluations: Array<{ overall_score: number | null }> | null }>,
+    (interactions ?? []) as Array<{
+      qac_evaluations: Array<{ overall_score: number | null }> | null;
+    }>,
     (journey ?? []) as Array<{
       sequence_number: number;
       sentiment_at_call: string | null;

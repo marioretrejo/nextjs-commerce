@@ -44,7 +44,12 @@ async function resolveWorkspace(
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const RUBRIC_KEYS = ["compliance", "sales", "soft_skills", "conversation"] as const;
+const RUBRIC_KEYS = [
+  "compliance",
+  "sales",
+  "soft_skills",
+  "conversation",
+] as const;
 const VALID_CRITERIA = new Set(RUBRIC_KEYS);
 
 function validateScoringRubric(
@@ -86,7 +91,7 @@ function validateCriticalCriteria(
     return { ok: false, error: "critical_criteria must be an array" };
   }
   for (const item of criteria) {
-    if (!VALID_CRITERIA.has(item as typeof RUBRIC_KEYS[number])) {
+    if (!VALID_CRITERIA.has(item as (typeof RUBRIC_KEYS)[number])) {
       return {
         ok: false,
         error: `critical_criteria contains invalid value "${item}". Must be one of: ${[...VALID_CRITERIA].join(", ")}`,
@@ -172,10 +177,16 @@ export async function PATCH(
   if (body["name"] !== undefined) {
     const name = body["name"];
     if (typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json({ error: "name must be a non-empty string" }, { status: 400 });
+      return NextResponse.json(
+        { error: "name must be a non-empty string" },
+        { status: 400 },
+      );
     }
     if (name.trim().length > 100) {
-      return NextResponse.json({ error: "name must be 100 characters or fewer" }, { status: 400 });
+      return NextResponse.json(
+        { error: "name must be 100 characters or fewer" },
+        { status: 400 },
+      );
     }
     updates["name"] = name.trim();
   }
@@ -184,7 +195,10 @@ export async function PATCH(
     const slug = body["slug"];
     if (typeof slug !== "string" || !SLUG_RE.test(slug) || slug.length > 50) {
       return NextResponse.json(
-        { error: "slug must be lowercase alphanumeric with hyphens only, max 50 chars" },
+        {
+          error:
+            "slug must be lowercase alphanumeric with hyphens only, max 50 chars",
+        },
         { status: 400 },
       );
     }
@@ -193,12 +207,16 @@ export async function PATCH(
 
   if (body["description"] !== undefined) {
     updates["description"] =
-      typeof body["description"] === "string" ? body["description"].trim() || null : null;
+      typeof body["description"] === "string"
+        ? body["description"].trim() || null
+        : null;
   }
 
   if (body["qa_prompt"] !== undefined) {
     updates["qa_prompt"] =
-      typeof body["qa_prompt"] === "string" ? body["qa_prompt"].trim() || null : null;
+      typeof body["qa_prompt"] === "string"
+        ? body["qa_prompt"].trim() || null
+        : null;
   }
 
   if (body["scoring_rubric"] !== undefined) {
@@ -217,13 +235,19 @@ export async function PATCH(
 
   if (body["is_active"] !== undefined) {
     if (typeof body["is_active"] !== "boolean") {
-      return NextResponse.json({ error: "is_active must be a boolean" }, { status: 400 });
+      return NextResponse.json(
+        { error: "is_active must be a boolean" },
+        { status: 400 },
+      );
     }
     updates["is_active"] = body["is_active"];
   }
 
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    return NextResponse.json(
+      { error: "No valid fields to update" },
+      { status: 400 },
+    );
   }
 
   const admin = createAdminClient();
@@ -247,7 +271,10 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data)
-    return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Department not found" },
+      { status: 404 },
+    );
 
   return NextResponse.json({ department: data });
 }
@@ -292,7 +319,10 @@ export async function DELETE(
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data)
-    return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Department not found" },
+      { status: 404 },
+    );
 
   return NextResponse.json({ department: data, deactivated: true });
 }

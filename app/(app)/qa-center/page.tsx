@@ -877,7 +877,8 @@ function QACRulesManager() {
 export default function QACenterPage() {
   const [interactions, setInteractions] = useState<QACInteraction[]>([]);
   const [stats, setStats] = useState<QACStats | null>(null);
-  const [violationsStats, setViolationsStats] = useState<ViolationsStats | null>(null);
+  const [violationsStats, setViolationsStats] =
+    useState<ViolationsStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
 
@@ -950,7 +951,8 @@ export default function QACenterPage() {
         setTotalCount(d.total ?? 0);
       }
       if (statsRes.ok) setStats((await statsRes.json()) as QACStats);
-      if (vStatsRes.ok) setViolationsStats((await vStatsRes.json()) as ViolationsStats);
+      if (vStatsRes.ok)
+        setViolationsStats((await vStatsRes.json()) as ViolationsStats);
       setLoading(false);
     },
     [filterAgent, filterStatus, filterRange, filterRisk, buildInteractionsUrl],
@@ -1424,20 +1426,28 @@ export default function QACenterPage() {
                     {/* Summary pills */}
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="flex items-center gap-1.5 rounded-full border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1.5">
-                        <span className="text-sm font-bold text-[#111]">{violationsStats.total}</span>
+                        <span className="text-sm font-bold text-[#111]">
+                          {violationsStats.total}
+                        </span>
                         <span className="text-xs text-[#6b6b6b]">total</span>
                       </div>
                       {violationsStats.critical > 0 && (
                         <div className="flex items-center gap-1.5 rounded-full border border-transparent bg-[#111] px-3 py-1.5">
                           <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                          <span className="text-sm font-bold text-white">{violationsStats.critical}</span>
-                          <span className="text-xs text-white/80">críticas</span>
+                          <span className="text-sm font-bold text-white">
+                            {violationsStats.critical}
+                          </span>
+                          <span className="text-xs text-white/80">
+                            críticas
+                          </span>
                         </div>
                       )}
                       {violationsStats.warning > 0 && (
                         <div className="flex items-center gap-1.5 rounded-full border border-[#e0e0e0] bg-[#f0f0f0] px-3 py-1.5">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#9b9b9b]" />
-                          <span className="text-sm font-bold text-[#555]">{violationsStats.warning}</span>
+                          <span className="text-sm font-bold text-[#555]">
+                            {violationsStats.warning}
+                          </span>
                           <span className="text-xs text-[#555]">warnings</span>
                         </div>
                       )}
@@ -1452,7 +1462,10 @@ export default function QACenterPage() {
                           </p>
                           <div className="space-y-1.5">
                             {violationsStats.topRules.map((r, i) => (
-                              <div key={r.rule_name} className="flex items-center gap-2">
+                              <div
+                                key={r.rule_name}
+                                className="flex items-center gap-2"
+                              >
                                 <span className="text-[10px] font-bold text-[#c0c0c0] w-4 shrink-0">
                                   {i + 1}
                                 </span>
@@ -1476,7 +1489,10 @@ export default function QACenterPage() {
                           </p>
                           <div className="space-y-1.5">
                             {violationsStats.topAgents.map((a, i) => (
-                              <div key={a.agent_name} className="flex items-center gap-2">
+                              <div
+                                key={a.agent_name}
+                                className="flex items-center gap-2"
+                              >
                                 <span className="text-[10px] font-bold text-[#c0c0c0] w-4 shrink-0">
                                   {i + 1}
                                 </span>

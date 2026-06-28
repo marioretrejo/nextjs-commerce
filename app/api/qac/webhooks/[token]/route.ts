@@ -89,7 +89,10 @@ async function transcribeWithDiarization(
   accountSid: string | null,
   authToken: string | null,
   lang: string = "en",
-): Promise<{ transcript: string; diarizedTranscript: DiarizedTranscript | null }> {
+): Promise<{
+  transcript: string;
+  diarizedTranscript: DiarizedTranscript | null;
+}> {
   const mp3Url = /\.(mp3|wav|ogg|m4a|flac)$/i.test(recordingUrl)
     ? recordingUrl
     : `${recordingUrl}.mp3`;
@@ -148,7 +151,8 @@ async function transcribeWithDiarization(
       if (dgRes.ok) {
         const dgData = (await dgRes.json()) as DeepgramResponse;
         const plainTranscript =
-          dgData.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() ?? "";
+          dgData.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() ??
+          "";
 
         if (plainTranscript.length >= 20) {
           const rawUtterances = dgData.results?.utterances ?? [];
@@ -171,7 +175,12 @@ async function transcribeWithDiarization(
             transcript: plainTranscript,
             diarizedTranscript:
               utterances.length > 0
-                ? { provider: "deepgram", model: "nova-3", language: lang, utterances }
+                ? {
+                    provider: "deepgram",
+                    model: "nova-3",
+                    language: lang,
+                    utterances,
+                  }
                 : null,
           };
         }
@@ -221,7 +230,10 @@ async function transcribeWithDiarization(
     }
 
     console.info("[qac-webhook] Groq Whisper fallback used (no diarization)");
-    return { transcript: (await whisperRes.text()).trim(), diarizedTranscript: null };
+    return {
+      transcript: (await whisperRes.text()).trim(),
+      diarizedTranscript: null,
+    };
   } catch (err) {
     console.error("[qac-webhook] Groq fallback error:", err);
     return { transcript: "", diarizedTranscript: null };
@@ -384,7 +396,8 @@ export async function POST(
 
   // Override provider name with the integration's configured value when set
   // (GenericAdapter returns "generic"; use the real provider_name for storage)
-  const providerName = integration.provider_name?.toLowerCase().trim() ?? normalized.provider;
+  const providerName =
+    integration.provider_name?.toLowerCase().trim() ?? normalized.provider;
 
   // Agent name fallback: integration.agent_name_field → external_call_id → "Unknown Agent"
   const agentName =

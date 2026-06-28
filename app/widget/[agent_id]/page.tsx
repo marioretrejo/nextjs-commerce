@@ -54,8 +54,9 @@ export default function WidgetPage({
       const { access_token } = (await res.json()) as { access_token: string };
 
       // Dynamic import to avoid SSR issues
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-      const mod = await import("retell-client-js-sdk" as any).catch(() => null);
+      const mod = await import("retell-client-js-sdk" as string).catch(
+        () => null,
+      );
       if (!mod) {
         setStatus("idle");
         return;

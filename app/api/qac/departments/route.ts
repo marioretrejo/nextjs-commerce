@@ -42,7 +42,12 @@ async function resolveWorkspace(
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const RUBRIC_KEYS = ["compliance", "sales", "soft_skills", "conversation"] as const;
+const RUBRIC_KEYS = [
+  "compliance",
+  "sales",
+  "soft_skills",
+  "conversation",
+] as const;
 const VALID_CRITERIA = new Set(RUBRIC_KEYS);
 
 function validateScoringRubric(
@@ -84,7 +89,7 @@ function validateCriticalCriteria(
     return { ok: false, error: "critical_criteria must be an array" };
   }
   for (const item of criteria) {
-    if (!VALID_CRITERIA.has(item as typeof RUBRIC_KEYS[number])) {
+    if (!VALID_CRITERIA.has(item as (typeof RUBRIC_KEYS)[number])) {
       return {
         ok: false,
         error: `critical_criteria contains invalid value "${item}". Must be one of: ${[...VALID_CRITERIA].join(", ")}`,

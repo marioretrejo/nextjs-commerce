@@ -53,7 +53,12 @@ export async function GET(req: Request) {
   }[];
 
   if (workspaceList.length === 0) {
-    return NextResponse.json({ ok: true, reset_at: now, workspaces_reset: 0, campaigns_reactivated: 0 });
+    return NextResponse.json({
+      ok: true,
+      reset_at: now,
+      workspaces_reset: 0,
+      campaigns_reactivated: 0,
+    });
   }
 
   const workspaceIds = workspaceList.map((w) => w.id);
@@ -108,7 +113,10 @@ export async function GET(req: Request) {
       .insert(events);
 
     if (eventsErr) {
-      console.error("Minute reset — workspace_events insert failed:", eventsErr);
+      console.error(
+        "Minute reset — workspace_events insert failed:",
+        eventsErr,
+      );
       // Non-fatal: log and continue
     }
   }

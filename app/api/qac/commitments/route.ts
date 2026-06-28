@@ -51,7 +51,12 @@ export async function GET(req: Request) {
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const VALID_STATUSES = new Set(["pending", "fulfilled", "missed", "cancelled"]);
+  const VALID_STATUSES = new Set([
+    "pending",
+    "fulfilled",
+    "missed",
+    "cancelled",
+  ]);
   if (status && VALID_STATUSES.has(status)) {
     query = query.eq("status", status);
   }
@@ -122,7 +127,10 @@ export async function PATCH(req: Request) {
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data)
-    return NextResponse.json({ error: "Commitment not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Commitment not found" },
+      { status: 404 },
+    );
 
   return NextResponse.json({ commitment: data });
 }

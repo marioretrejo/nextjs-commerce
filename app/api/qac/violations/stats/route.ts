@@ -12,8 +12,7 @@ export async function GET(_req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ws = await resolveQacWorkspace(user.id);
-  if (!ws)
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!ws) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const sevenDaysAgo = new Date(
     Date.now() - 7 * 24 * 60 * 60 * 1000,

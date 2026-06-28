@@ -62,7 +62,8 @@ export async function POST(req: Request) {
         { status: 400 },
       );
 
-    const creds = (data as { credentials: Record<string, unknown> }).credentials;
+    const creds = (data as { credentials: Record<string, unknown> })
+      .credentials;
     botToken = typeof creds?.bot_token === "string" ? creds.bot_token : "";
     chatId = typeof creds?.chat_id === "string" ? creds.chat_id : "";
 

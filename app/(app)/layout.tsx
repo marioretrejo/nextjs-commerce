@@ -109,10 +109,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     workspace as unknown as { has_compliance_qa?: boolean }
   ).has_compliance_qa;
 
-  const isOwner =
-    (workspace as { owner_id?: string }).owner_id === authUser.id;
-  const memberRole =
-    (memberRecord as { role?: string } | null)?.role ?? null;
+  const isOwner = (workspace as { owner_id?: string }).owner_id === authUser.id;
+  const memberRole = (memberRecord as { role?: string } | null)?.role ?? null;
   const isQaAdmin =
     userProfile.is_superadmin || isOwner || memberRole === "admin";
 

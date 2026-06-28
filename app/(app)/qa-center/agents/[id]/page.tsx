@@ -111,8 +111,10 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 function TrendIcon({ trend }: { trend: "up" | "down" | "stable" }) {
-  if (trend === "up") return <TrendingUp className="h-4 w-4 text-emerald-400" />;
-  if (trend === "down") return <TrendingDown className="h-4 w-4 text-red-400" />;
+  if (trend === "up")
+    return <TrendingUp className="h-4 w-4 text-emerald-400" />;
+  if (trend === "down")
+    return <TrendingDown className="h-4 w-4 text-red-400" />;
   return <Minus className="h-4 w-4 text-gray-500" />;
 }
 
@@ -145,7 +147,9 @@ function fmtRelative(d: string) {
 /* ─── Mini sparkline (SVG) ───────────────────────────────────────── */
 function Sparkline({ data }: { data: Array<{ date: string; score: number }> }) {
   if (data.length < 2) return <span className="text-xs text-gray-600">—</span>;
-  const W = 120, H = 36, PAD = 4;
+  const W = 120,
+    H = 36,
+    PAD = 4;
   const scores = data.map((d) => d.score);
   const min = Math.min(...scores);
   const max = Math.max(...scores);
@@ -162,7 +166,13 @@ function Sparkline({ data }: { data: Array<{ date: string; score: number }> }) {
   const stroke = last >= first ? "#34d399" : "#f87171";
   return (
     <svg width={W} height={H} className="inline-block align-middle">
-      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" />
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -204,7 +214,9 @@ export default function AgentDetailPage({
       const res = await fetch(`/api/qac/agents/${agentDbId}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error((j as { error?: string }).error ?? "Failed to load agent");
+        throw new Error(
+          (j as { error?: string }).error ?? "Failed to load agent",
+        );
       }
       const data: AgentProfile = await res.json();
       setProfile(data);
@@ -256,9 +268,16 @@ export default function AgentDetailPage({
 
   async function deactivate() {
     if (!agentDbId || !profile) return;
-    if (!confirm(`Deactivate ${profile.name}? They will no longer appear in active agent lists.`)) return;
+    if (
+      !confirm(
+        `Deactivate ${profile.name}? They will no longer appear in active agent lists.`,
+      )
+    )
+      return;
     try {
-      const res = await fetch(`/api/qac/agents/${agentDbId}`, { method: "DELETE" });
+      const res = await fetch(`/api/qac/agents/${agentDbId}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error("Failed to deactivate");
       router.push("/qa-center/agents");
     } catch (e) {
@@ -313,7 +332,9 @@ export default function AgentDetailPage({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h1 className="text-lg font-semibold text-white">{profile.name}</h1>
+                    <h1 className="text-lg font-semibold text-white">
+                      {profile.name}
+                    </h1>
                     {!profile.is_active && (
                       <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
                         Inactive
@@ -345,7 +366,11 @@ export default function AgentDetailPage({
                   disabled={saving}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
                 >
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {saving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
                   Save
                 </button>
               </>
@@ -382,15 +407,24 @@ export default function AgentDetailPage({
                 { field: "team", label: "Team" },
                 { field: "role", label: "Role" },
                 { field: "hire_date", label: "Hire Date", type: "date" },
-              ] as Array<{ field: keyof typeof editFields; label: string; type?: string }>
+              ] as Array<{
+                field: keyof typeof editFields;
+                label: string;
+                type?: string;
+              }>
             ).map(({ field, label, type }) => (
               <div key={field}>
-                <label className="mb-1 block text-xs text-gray-500">{label}</label>
+                <label className="mb-1 block text-xs text-gray-500">
+                  {label}
+                </label>
                 <input
                   type={type ?? "text"}
                   value={editFields[field]}
                   onChange={(e) =>
-                    setEditFields((prev) => ({ ...prev, [field]: e.target.value }))
+                    setEditFields((prev) => ({
+                      ...prev,
+                      [field]: e.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
@@ -399,9 +433,7 @@ export default function AgentDetailPage({
           </div>
         )}
 
-        {error && (
-          <p className="mt-2 text-xs text-red-400">{error}</p>
-        )}
+        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
 
         {/* Tabs */}
         <div className="mt-4 flex gap-1">
@@ -411,7 +443,11 @@ export default function AgentDetailPage({
               { id: "calls", label: "Calls", icon: Phone },
               { id: "coaching", label: "Coaching", icon: MessageSquare },
               { id: "performance", label: "Performance", icon: BarChart2 },
-            ] as Array<{ id: Tab; label: string; icon: React.FC<{ className?: string }> }>
+            ] as Array<{
+              id: Tab;
+              label: string;
+              icon: React.FC<{ className?: string }>;
+            }>
           ).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -432,8 +468,12 @@ export default function AgentDetailPage({
       {/* Tab Content */}
       <div className="p-6">
         {tab === "overview" && <OverviewTab profile={profile} />}
-        {tab === "calls" && <CallsTab calls={profile.recent_calls} router={router} />}
-        {tab === "coaching" && <CoachingTab reports={profile.coaching_reports} />}
+        {tab === "calls" && (
+          <CallsTab calls={profile.recent_calls} router={router} />
+        )}
+        {tab === "coaching" && (
+          <CoachingTab reports={profile.coaching_reports} />
+        )}
         {tab === "performance" && <PerformanceTab profile={profile} />}
       </div>
     </div>
@@ -472,7 +512,10 @@ function OverviewTab({ profile }: { profile: AgentProfile }) {
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {stats.map(({ label, value, icon: Icon }) => (
-          <div key={label} className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+          <div
+            key={label}
+            className="rounded-xl border border-gray-800 bg-gray-900/50 p-4"
+          >
             <div className="mb-2 flex items-center gap-2 text-xs text-gray-500">
               <Icon className="h-3.5 w-3.5" />
               {label}
@@ -513,16 +556,28 @@ function OverviewTab({ profile }: { profile: AgentProfile }) {
       {/* Score breakdown */}
       {m.avg_score > 0 && (
         <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-          <h3 className="mb-4 text-sm font-medium text-gray-300">Score Breakdown</h3>
+          <h3 className="mb-4 text-sm font-medium text-gray-300">
+            Score Breakdown
+          </h3>
           <div className="space-y-3">
             {[
-              { label: "Compliance", value: m.avg_compliance, color: "bg-blue-500" },
+              {
+                label: "Compliance",
+                value: m.avg_compliance,
+                color: "bg-blue-500",
+              },
               { label: "Sales", value: m.avg_sales, color: "bg-emerald-500" },
-              { label: "Soft Skills", value: m.avg_soft_skills, color: "bg-purple-500" },
+              {
+                label: "Soft Skills",
+                value: m.avg_soft_skills,
+                color: "bg-purple-500",
+              },
               { label: "Overall", value: m.avg_score, color: "bg-indigo-500" },
             ].map(({ label, value, color }) => (
               <div key={label} className="flex items-center gap-3">
-                <span className="w-24 flex-shrink-0 text-xs text-gray-400">{label}</span>
+                <span className="w-24 flex-shrink-0 text-xs text-gray-400">
+                  {label}
+                </span>
                 <div className="flex-1 rounded-full bg-gray-800">
                   <div
                     className={`h-2 rounded-full ${color} transition-all`}
@@ -579,16 +634,24 @@ function CallsTab({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-800 bg-gray-900/50">
-            {["Date", "Channel", "Duration", "Score", "Compliance", "Sales", "Risk", "Status", ""].map(
-              (h) => (
-                <th
-                  key={h}
-                  className="px-4 py-2.5 text-left text-xs font-medium text-gray-500"
-                >
-                  {h}
-                </th>
-              ),
-            )}
+            {[
+              "Date",
+              "Channel",
+              "Duration",
+              "Score",
+              "Compliance",
+              "Sales",
+              "Risk",
+              "Status",
+              "",
+            ].map((h) => (
+              <th
+                key={h}
+                className="px-4 py-2.5 text-left text-xs font-medium text-gray-500"
+              >
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -598,13 +661,17 @@ function CallsTab({
               onClick={() => router.push(`/qa-center/calls/${c.id}`)}
               className="cursor-pointer border-b border-gray-800/50 transition hover:bg-gray-800/40 last:border-0"
             >
-              <td className="px-4 py-2.5 text-gray-300">{fmtRelative(c.created_at)}</td>
+              <td className="px-4 py-2.5 text-gray-300">
+                {fmtRelative(c.created_at)}
+              </td>
               <td className="px-4 py-2.5">
                 <span className="rounded bg-gray-800 px-2 py-0.5 font-mono text-xs text-gray-400">
                   {c.channel}
                 </span>
               </td>
-              <td className="px-4 py-2.5 text-gray-400">{fmtDuration(c.duration_s)}</td>
+              <td className="px-4 py-2.5 text-gray-400">
+                {fmtDuration(c.duration_s)}
+              </td>
               <td className="px-4 py-2.5">
                 {c.overall_score != null ? (
                   <ScoreBadge score={c.overall_score} />
@@ -613,7 +680,9 @@ function CallsTab({
                 )}
               </td>
               <td className="px-4 py-2.5 text-xs text-gray-400">
-                {c.compliance_score != null ? c.compliance_score.toFixed(0) : "—"}
+                {c.compliance_score != null
+                  ? c.compliance_score.toFixed(0)
+                  : "—"}
               </td>
               <td className="px-4 py-2.5 text-xs text-gray-400">
                 {c.sales_score != null ? c.sales_score.toFixed(0) : "—"}
@@ -675,7 +744,9 @@ function CoachingTab({ reports }: { reports: CoachingItem[] }) {
               >
                 {r.priority}
               </span>
-              <span className="text-xs text-gray-500">{fmtDate(r.created_at)}</span>
+              <span className="text-xs text-gray-500">
+                {fmtDate(r.created_at)}
+              </span>
             </div>
             <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-600" />
           </div>
@@ -724,7 +795,10 @@ function PerformanceTab({ profile }: { profile: AgentProfile }) {
           { label: "Avg Sales", value: m.avg_sales, suffix: "" },
           { label: "Avg Soft Skills", value: m.avg_soft_skills, suffix: "" },
         ].map(({ label, value }) => (
-          <div key={label} className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+          <div
+            key={label}
+            className="rounded-xl border border-gray-800 bg-gray-900/50 p-4"
+          >
             <p className="text-xs text-gray-500">{label}</p>
             <p className="mt-1 text-2xl font-semibold text-white">
               {value > 0 ? value.toFixed(1) : "—"}
@@ -751,14 +825,23 @@ function PerformanceTab({ profile }: { profile: AgentProfile }) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-900">
                 <tr className="border-b border-gray-800">
-                  <th className="px-5 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                  <th className="px-5 py-2 text-right text-xs font-medium text-gray-500">Score</th>
+                  <th className="px-5 py-2 text-left text-xs font-medium text-gray-500">
+                    Date
+                  </th>
+                  <th className="px-5 py-2 text-right text-xs font-medium text-gray-500">
+                    Score
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {[...trend].reverse().map((d, i) => (
-                  <tr key={i} className="border-b border-gray-800/50 last:border-0">
-                    <td className="px-5 py-2 text-gray-400">{fmtDate(d.date)}</td>
+                  <tr
+                    key={i}
+                    className="border-b border-gray-800/50 last:border-0"
+                  >
+                    <td className="px-5 py-2 text-gray-400">
+                      {fmtDate(d.date)}
+                    </td>
                     <td className="px-5 py-2 text-right">
                       <ScoreBadge score={d.score} />
                     </td>
@@ -777,7 +860,9 @@ function PerformanceTab({ profile }: { profile: AgentProfile }) {
 
       {/* Risk distribution */}
       <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-        <h3 className="mb-3 text-sm font-medium text-gray-300">Avg Risk Score</h3>
+        <h3 className="mb-3 text-sm font-medium text-gray-300">
+          Avg Risk Score
+        </h3>
         <div className="flex items-center gap-3">
           <div className="flex-1 rounded-full bg-gray-800">
             <div

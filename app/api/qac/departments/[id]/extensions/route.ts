@@ -76,7 +76,10 @@ export async function GET(
 
   const exists = await verifyDepartment(id, ws.id);
   if (!exists)
-    return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Department not found" },
+      { status: 404 },
+    );
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -120,7 +123,10 @@ export async function POST(
 
   const exists = await verifyDepartment(id, ws.id);
   if (!exists)
-    return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Department not found" },
+      { status: 404 },
+    );
 
   let body: Record<string, unknown>;
   try {
@@ -208,7 +214,10 @@ export async function DELETE(
 
   const exists = await verifyDepartment(id, ws.id);
   if (!exists)
-    return NextResponse.json({ error: "Department not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Department not found" },
+      { status: 404 },
+    );
 
   let body: Record<string, unknown>;
   try {
@@ -242,5 +251,8 @@ export async function DELETE(
   if (!count || count === 0)
     return NextResponse.json({ error: "Extension not found" }, { status: 404 });
 
-  return NextResponse.json({ deleted: true, agent_extension: agentExtension.trim() });
+  return NextResponse.json({
+    deleted: true,
+    agent_extension: agentExtension.trim(),
+  });
 }

@@ -19,7 +19,10 @@ export async function GET(
   if (!ws)
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   if (!ws.has_compliance_qa)
-    return NextResponse.json({ error: "Compliance module not enabled" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Compliance module not enabled" },
+      { status: 403 },
+    );
 
   const admin = createAdminClient();
   const { data, error } = await admin

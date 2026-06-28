@@ -80,7 +80,9 @@ export default function CustomersPage() {
       if (!res.ok) throw new Error("Failed to load customers");
       setResult(await res.json());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load customers");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to load customers",
+      );
     } finally {
       setLoading(false);
     }
@@ -92,7 +94,16 @@ export default function CustomersPage() {
 
   function handleExportCSV() {
     if (!result?.data.length) return;
-    const headers = ["ID", "Name", "Phone", "Email", "Total Calls", "Sentiment", "First Seen", "Last Seen"];
+    const headers = [
+      "ID",
+      "Name",
+      "Phone",
+      "Email",
+      "Total Calls",
+      "Sentiment",
+      "First Seen",
+      "Last Seen",
+    ];
     const rows = result.data.map((c) => [
       c.id,
       c.display_name,
@@ -135,9 +146,13 @@ export default function CustomersPage() {
               <Users className="h-5 w-5 text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-white">Customer Profiles</h1>
+              <h1 className="text-xl font-semibold text-white">
+                Customer Profiles
+              </h1>
               {result && (
-                <p className="text-xs text-gray-500">{result.total.toLocaleString()} customers</p>
+                <p className="text-xs text-gray-500">
+                  {result.total.toLocaleString()} customers
+                </p>
               )}
             </div>
           </div>
@@ -173,7 +188,9 @@ export default function CustomersPage() {
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Users className="h-10 w-10 text-gray-700 mb-3" />
             <p className="text-sm text-gray-500">
-              {debouncedSearch ? `No customers match "${debouncedSearch}"` : "No customers yet"}
+              {debouncedSearch
+                ? `No customers match "${debouncedSearch}"`
+                : "No customers yet"}
             </p>
           </div>
         ) : (
@@ -192,7 +209,9 @@ export default function CustomersPage() {
 
                   {/* Name + identifiers */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-white">{c.display_name}</p>
+                    <p className="truncate text-sm font-medium text-white">
+                      {c.display_name}
+                    </p>
                     <div className="flex items-center gap-3 mt-0.5">
                       {c.canonical_phone && (
                         <span className="inline-flex items-center gap-1 text-xs text-gray-500">
@@ -213,14 +232,21 @@ export default function CustomersPage() {
                   <div className="hidden sm:flex items-center gap-4 shrink-0">
                     <div className="text-right">
                       <p className="text-xs text-gray-500">Calls</p>
-                      <p className="text-sm font-semibold text-white">{c.total_calls}</p>
+                      <p className="text-sm font-semibold text-white">
+                        {c.total_calls}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-gray-500">Last seen</p>
-                      <p className="text-xs text-gray-300">{formatDate(c.last_seen_at)}</p>
+                      <p className="text-xs text-gray-300">
+                        {formatDate(c.last_seen_at)}
+                      </p>
                     </div>
                     {c.lifetime_sentiment && (
-                      <Badge variant={sentimentBadgeVariant(c.lifetime_sentiment)} className="text-[10px] capitalize shrink-0">
+                      <Badge
+                        variant={sentimentBadgeVariant(c.lifetime_sentiment)}
+                        className="text-[10px] capitalize shrink-0"
+                      >
                         {c.lifetime_sentiment}
                       </Badge>
                     )}
@@ -249,7 +275,9 @@ export default function CustomersPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage((p) => Math.min(result.pages, p + 1))}
+                    onClick={() =>
+                      setPage((p) => Math.min(result.pages, p + 1))
+                    }
                     disabled={page >= result.pages}
                     className="gap-1 border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800 hover:text-white"
                   >

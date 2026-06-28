@@ -65,7 +65,10 @@ export async function PATCH(
   if (body.review_status) {
     update.review_status = body.review_status;
 
-    if (body.review_status === "reviewed" || body.review_status === "in_review") {
+    if (
+      body.review_status === "reviewed" ||
+      body.review_status === "in_review"
+    ) {
       update.reviewed_by = user.id;
       update.reviewed_at = now;
     }

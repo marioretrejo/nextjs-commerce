@@ -72,7 +72,6 @@ const E164_RE = /^\+[1-9]\d{6,14}$/;
 function _isValidPhone(phone: string): boolean {
   if (!E164_RE.test(phone)) return false;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const lib = require("libphonenumber-js") as {
       isValidPhoneNumber: (p: string) => boolean;
     };
@@ -87,7 +86,6 @@ function _normalizePhone(phone: string): {
   country: CountryCode | string | null;
 } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const lib = require("libphonenumber-js") as {
       parsePhoneNumber: (p: string) => {
         format: (f: string) => string;

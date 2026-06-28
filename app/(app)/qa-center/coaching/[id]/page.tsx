@@ -198,7 +198,8 @@ export default function CoachingDetailPage({
                 Coaching Report
               </h1>
               <p className="text-sm text-gray-400">
-                {report.qac_interactions?.agent_name ?? "Unknown Agent"} · {fmtDate(report.created_at)}
+                {report.qac_interactions?.agent_name ?? "Unknown Agent"} ·{" "}
+                {fmtDate(report.created_at)}
               </p>
             </div>
           </div>
@@ -220,11 +221,17 @@ export default function CoachingDetailPage({
                 {report.agent_profile.name.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <p className="font-medium text-gray-200">{report.agent_profile.name}</p>
+                <p className="font-medium text-gray-200">
+                  {report.agent_profile.name}
+                </p>
                 <p className="text-sm text-gray-500">
                   {report.agent_profile.role ?? "Agent"}
-                  {report.agent_profile.team ? ` · ${report.agent_profile.team}` : ""}
-                  {report.agent_profile.email ? ` · ${report.agent_profile.email}` : ""}
+                  {report.agent_profile.team
+                    ? ` · ${report.agent_profile.team}`
+                    : ""}
+                  {report.agent_profile.email
+                    ? ` · ${report.agent_profile.email}`
+                    : ""}
                 </p>
               </div>
               <button
@@ -242,7 +249,9 @@ export default function CoachingDetailPage({
         {/* Related Call */}
         {interaction && (
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium text-gray-400">Related Call</h2>
+            <h2 className="mb-3 text-sm font-medium text-gray-400">
+              Related Call
+            </h2>
             <div className="flex flex-wrap items-center gap-3">
               <span className="rounded bg-gray-800 px-2 py-0.5 font-mono text-xs text-gray-400">
                 {interaction.channel}
@@ -263,7 +272,9 @@ export default function CoachingDetailPage({
                 <Clock className="h-3 w-3" />
                 {fmtDuration(interaction.duration_s)}
               </span>
-              <span className="text-xs text-gray-500">{fmtDate(interaction.created_at)}</span>
+              <span className="text-xs text-gray-500">
+                {fmtDate(interaction.created_at)}
+              </span>
               {interaction.customer_name && (
                 <span className="flex items-center gap-1 text-xs text-gray-500">
                   <User className="h-3 w-3" />
@@ -271,7 +282,9 @@ export default function CoachingDetailPage({
                 </span>
               )}
               <button
-                onClick={() => router.push(`/qa-center/calls/${interaction.id}`)}
+                onClick={() =>
+                  router.push(`/qa-center/calls/${interaction.id}`)
+                }
                 className="ml-auto flex items-center gap-1 text-sm text-indigo-400 hover:text-indigo-300"
               >
                 View Call <ChevronRight className="h-3.5 w-3.5" />
@@ -281,15 +294,34 @@ export default function CoachingDetailPage({
             {evaluation && (
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
-                  { label: "Overall", score: evaluation.overall_score, icon: Star },
-                  { label: "Compliance", score: evaluation.compliance_score, icon: Shield },
+                  {
+                    label: "Overall",
+                    score: evaluation.overall_score,
+                    icon: Star,
+                  },
+                  {
+                    label: "Compliance",
+                    score: evaluation.compliance_score,
+                    icon: Shield,
+                  },
                   { label: "Sales", score: evaluation.sales_score, icon: Star },
-                  { label: "Soft Skills", score: evaluation.soft_skills_score, icon: Star },
+                  {
+                    label: "Soft Skills",
+                    score: evaluation.soft_skills_score,
+                    icon: Star,
+                  },
                 ].map(({ label, score }) => (
-                  <div key={label} className="rounded-lg bg-gray-800/50 px-3 py-2">
+                  <div
+                    key={label}
+                    className="rounded-lg bg-gray-800/50 px-3 py-2"
+                  >
                     <p className="text-xs text-gray-500">{label}</p>
                     <div className="mt-1">
-                      {score != null ? <ScoreBadge score={score} /> : <span className="text-xs text-gray-600">—</span>}
+                      {score != null ? (
+                        <ScoreBadge score={score} />
+                      ) : (
+                        <span className="text-xs text-gray-600">—</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -301,12 +333,18 @@ export default function CoachingDetailPage({
         {/* Coaching Plan */}
         {report.coaching_plan ? (
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium text-gray-400">Coaching Plan</h2>
-            <p className="text-sm leading-relaxed text-gray-300">{report.coaching_plan}</p>
+            <h2 className="mb-3 text-sm font-medium text-gray-400">
+              Coaching Plan
+            </h2>
+            <p className="text-sm leading-relaxed text-gray-300">
+              {report.coaching_plan}
+            </p>
           </div>
         ) : (
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium text-gray-400">Coaching Plan</h2>
+            <h2 className="mb-3 text-sm font-medium text-gray-400">
+              Coaching Plan
+            </h2>
             <p className="text-sm text-gray-600">No coaching plan available.</p>
           </div>
         )}
@@ -314,8 +352,12 @@ export default function CoachingDetailPage({
         {/* Coaching Summary from Evaluation */}
         {evaluation?.coaching_summary && (
           <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-5">
-            <h2 className="mb-3 text-sm font-medium text-indigo-400">AI Coaching Notes</h2>
-            <p className="text-sm leading-relaxed text-gray-300">{evaluation.coaching_summary}</p>
+            <h2 className="mb-3 text-sm font-medium text-indigo-400">
+              AI Coaching Notes
+            </h2>
+            <p className="text-sm leading-relaxed text-gray-300">
+              {evaluation.coaching_summary}
+            </p>
           </div>
         )}
 
@@ -328,7 +370,10 @@ export default function CoachingDetailPage({
             </h2>
             <ul className="space-y-2">
               {report.strengths.map((s, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-gray-300"
+                >
                   <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
                   {s}
                 </li>
@@ -346,7 +391,10 @@ export default function CoachingDetailPage({
             </h2>
             <ul className="space-y-2">
               {report.weaknesses.map((s, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-gray-300"
+                >
                   <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
                   {s}
                 </li>
@@ -356,27 +404,37 @@ export default function CoachingDetailPage({
         )}
 
         {/* Recommended Training */}
-        {report.recommended_training && report.recommended_training.length > 0 && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
-            <h2 className="mb-3 text-sm font-medium text-blue-400">Recommended Training</h2>
-            <ul className="space-y-2">
-              {report.recommended_training.map((s, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                  <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-blue-400/40 text-xs text-blue-400">
-                    {i + 1}
-                  </span>
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {report.recommended_training &&
+          report.recommended_training.length > 0 && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+              <h2 className="mb-3 text-sm font-medium text-blue-400">
+                Recommended Training
+              </h2>
+              <ul className="space-y-2">
+                {report.recommended_training.map((s, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-gray-300"
+                  >
+                    <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-blue-400/40 text-xs text-blue-400">
+                      {i + 1}
+                    </span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
         {/* Evaluation Summary */}
         {evaluation?.summary && (
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium text-gray-400">Evaluation Summary</h2>
-            <p className="text-sm leading-relaxed text-gray-400">{evaluation.summary}</p>
+            <h2 className="mb-3 text-sm font-medium text-gray-400">
+              Evaluation Summary
+            </h2>
+            <p className="text-sm leading-relaxed text-gray-400">
+              {evaluation.summary}
+            </p>
           </div>
         )}
       </div>

@@ -45,11 +45,12 @@ function isSafeWebhookUrl(rawUrl: string): boolean {
     const a = parts[1]!;
     const b = parts[2]!;
     if (
-      a === 10 ||                          // 10.0.0.0/8
+      a === 10 || // 10.0.0.0/8
       (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
-      (a === 192 && b === 168) ||           // 192.168.0.0/16
-      (a === 169 && b === 254)              // 169.254.0.0/16 link-local
-    ) return false;
+      (a === 192 && b === 168) || // 192.168.0.0/16
+      (a === 169 && b === 254) // 169.254.0.0/16 link-local
+    )
+      return false;
   }
 
   return true;

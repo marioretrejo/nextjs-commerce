@@ -112,7 +112,9 @@ export default function CoachingPage() {
       const res = await fetch(`/api/qac/coaching?${params}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error((j as { error?: string }).error ?? "Failed to load coaching reports");
+        throw new Error(
+          (j as { error?: string }).error ?? "Failed to load coaching reports",
+        );
       }
       const json: CoachingResponse = await res.json();
       setReports(json.data);
@@ -132,8 +134,15 @@ export default function CoachingPage() {
   function exportCSV() {
     if (!reports.length) return;
     const headers = [
-      "id", "agent_name", "agent_id", "priority_score", "strengths", "weaknesses",
-      "recommended_training", "coaching_plan", "created_at",
+      "id",
+      "agent_name",
+      "agent_id",
+      "priority_score",
+      "strengths",
+      "weaknesses",
+      "recommended_training",
+      "coaching_plan",
+      "created_at",
     ];
     const rows = reports.map((r) => [
       r.id,
@@ -147,7 +156,9 @@ export default function CoachingPage() {
       r.created_at,
     ]);
     const csv = [headers, ...rows]
-      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .map((row) =>
+        row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","),
+      )
       .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -179,8 +190,12 @@ export default function CoachingPage() {
               <MessageSquare className="h-5 w-5 text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-white">Coaching Reports</h1>
-              <p className="text-sm text-gray-400">{total.toLocaleString()} reports</p>
+              <h1 className="text-lg font-semibold text-white">
+                Coaching Reports
+              </h1>
+              <p className="text-sm text-gray-400">
+                {total.toLocaleString()} reports
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -204,7 +219,9 @@ export default function CoachingPage() {
               onClick={() => void fetchReports()}
               className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-700"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
         </div>
@@ -216,7 +233,10 @@ export default function CoachingPage() {
           <Filter className="h-4 w-4 text-gray-500" />
           <select
             value={filterPriority}
-            onChange={(e) => { setFilterPriority(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterPriority(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Priorities</option>
@@ -228,19 +248,30 @@ export default function CoachingPage() {
           <input
             type="date"
             value={filterFrom}
-            onChange={(e) => { setFilterFrom(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterFrom(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
           <span className="text-sm text-gray-600">to</span>
           <input
             type="date"
             value={filterTo}
-            onChange={(e) => { setFilterTo(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterTo(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
           {(filterPriority || filterFrom || filterTo) && (
             <button
-              onClick={() => { setFilterPriority(""); setFilterFrom(""); setFilterTo(""); setPage(1); }}
+              onClick={() => {
+                setFilterPriority("");
+                setFilterFrom("");
+                setFilterTo("");
+                setPage(1);
+              }}
               className="text-sm text-indigo-400 hover:text-indigo-300"
             >
               Clear filters
@@ -285,7 +316,9 @@ export default function CoachingPage() {
                           {priorityLabel(r.priority_score)}
                         </span>
                         {r.qac_interactions?.agent_name && (
-                          <span className="text-sm font-medium text-gray-200">{r.qac_interactions.agent_name}</span>
+                          <span className="text-sm font-medium text-gray-200">
+                            {r.qac_interactions.agent_name}
+                          </span>
                         )}
                         {r.qac_interactions?.risk_level && (
                           <span
@@ -317,7 +350,9 @@ export default function CoachingPage() {
                       <div className="mt-3 flex flex-wrap gap-4">
                         {r.strengths && r.strengths.length > 0 && (
                           <div>
-                            <p className="mb-1 text-xs text-emerald-400">Strengths</p>
+                            <p className="mb-1 text-xs text-emerald-400">
+                              Strengths
+                            </p>
                             <ul className="space-y-0.5">
                               {r.strengths.slice(0, 2).map((s, i) => (
                                 <li key={i} className="text-xs text-gray-500">
@@ -334,7 +369,9 @@ export default function CoachingPage() {
                         )}
                         {r.weaknesses && r.weaknesses.length > 0 && (
                           <div>
-                            <p className="mb-1 text-xs text-amber-400">Weaknesses</p>
+                            <p className="mb-1 text-xs text-amber-400">
+                              Weaknesses
+                            </p>
                             <ul className="space-y-0.5">
                               {r.weaknesses.slice(0, 2).map((s, i) => (
                                 <li key={i} className="text-xs text-gray-500">

@@ -275,7 +275,11 @@ function CredentialCard({
             >
               {def.logoSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={def.logoSrc} alt={def.name} className="w-7 h-7 object-contain" />
+                <img
+                  src={def.logoSrc}
+                  alt={def.name}
+                  className="w-7 h-7 object-contain"
+                />
               ) : (
                 def.logo
               )}
@@ -429,7 +433,11 @@ function GenericCard({
             >
               {def.logoSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={def.logoSrc} alt={def.name} className="w-7 h-7 object-contain" />
+                <img
+                  src={def.logoSrc}
+                  alt={def.name}
+                  className="w-7 h-7 object-contain"
+                />
               ) : (
                 def.logo
               )}

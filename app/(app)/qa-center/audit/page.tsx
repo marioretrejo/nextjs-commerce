@@ -109,7 +109,14 @@ function formatDetails(log: AuditLog): string {
 }
 
 const ALL_ACTIONS = Object.keys(ACTION_LABELS);
-const ENTITY_TYPES = ["interaction", "evaluation", "rule", "agent", "coaching_report", "review_comment"];
+const ENTITY_TYPES = [
+  "interaction",
+  "evaluation",
+  "rule",
+  "agent",
+  "coaching_report",
+  "review_comment",
+];
 
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -156,7 +163,15 @@ export default function AuditLogPage() {
 
   function exportCSV() {
     if (!logs.length) return;
-    const headers = ["timestamp", "action", "entity_type", "entity_id", "user_id", "details", "ip_address"];
+    const headers = [
+      "timestamp",
+      "action",
+      "entity_type",
+      "entity_id",
+      "user_id",
+      "details",
+      "ip_address",
+    ];
     const rows = logs.map((l) => [
       l.created_at,
       l.action,
@@ -226,7 +241,9 @@ export default function AuditLogPage() {
               onClick={() => void fetchLogs()}
               className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-700"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
         </div>
@@ -238,40 +255,62 @@ export default function AuditLogPage() {
           <Filter className="h-4 w-4 text-gray-500" />
           <select
             value={filterAction}
-            onChange={(e) => { setFilterAction(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterAction(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Actions</option>
             {ALL_ACTIONS.map((a) => (
-              <option key={a} value={a}>{ACTION_LABELS[a]}</option>
+              <option key={a} value={a}>
+                {ACTION_LABELS[a]}
+              </option>
             ))}
           </select>
           <select
             value={filterEntity}
-            onChange={(e) => { setFilterEntity(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterEntity(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="">All Entities</option>
             {ENTITY_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
           <input
             type="date"
             value={filterFrom}
-            onChange={(e) => { setFilterFrom(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterFrom(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
           <span className="text-gray-600 text-sm">to</span>
           <input
             type="date"
             value={filterTo}
-            onChange={(e) => { setFilterTo(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setFilterTo(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
           {(filterAction || filterEntity || filterFrom || filterTo) && (
             <button
-              onClick={() => { setFilterAction(""); setFilterEntity(""); setFilterFrom(""); setFilterTo(""); setPage(1); }}
+              onClick={() => {
+                setFilterAction("");
+                setFilterEntity("");
+                setFilterFrom("");
+                setFilterTo("");
+                setPage(1);
+              }}
               className="text-sm text-indigo-400 hover:text-indigo-300"
             >
               Clear filters
@@ -349,7 +388,9 @@ export default function AuditLogPage() {
                             <span className="text-gray-400">{detail}</span>
                           )}
                           {log.ip_address && (
-                            <span className="text-gray-600">{log.ip_address}</span>
+                            <span className="text-gray-600">
+                              {log.ip_address}
+                            </span>
                           )}
                         </div>
                       </div>

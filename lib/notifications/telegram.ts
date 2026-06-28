@@ -127,7 +127,10 @@ export async function sendTelegramTestMessage(
       },
     );
 
-    const data = (await response.json()) as { ok: boolean; description?: string };
+    const data = (await response.json()) as {
+      ok: boolean;
+      description?: string;
+    };
 
     if (!response.ok || !data.ok) {
       return { ok: false, error: data.description ?? "Error desconocido" };
