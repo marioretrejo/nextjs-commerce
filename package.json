@@ -13,14 +13,19 @@
     "start:operational-worker": "tsx agent/operational_worker.ts",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
-    "lint": "next lint",
+    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false next lint",
     "prettier": "prettier --write --ignore-unknown .",
     "prettier:check": "prettier --check --ignore-unknown .",
     "test": "pnpm prettier:check && pnpm lint && pnpm test:unit",
     "test:unit": "tsx --test agent/tests/call-lifecycle.test.ts agent/tests/call-events-repository.test.ts agent/tests/twilio-validation.test.ts agent/tests/status-mapping.test.ts agent/tests/call-events-backfill.test.ts agent/tests/provider-pricing.test.ts agent/tests/billing-tracker.test.ts agent/tests/call-cost-backfill.test.ts agent/tests/watchdog-billing.test.ts agent/tests/tts-provider-router.test.ts agent/tests/circuit-breaker.test.ts agent/tests/analytics-webhooks.test.ts agent/tests/dynamic-routing.test.ts agent/tests/llm-provider-router.test.ts agent/tests/human-transfer.test.ts agent/tests/dial-eligibility.test.ts agent/tests/campaign-dialer.test.ts agent/tests/post-call-jobs.test.ts agent/tests/load-test-harness.test.ts agent/tests/campaign-api.test.ts agent/tests/provider-health.test.ts agent/tests/alerting.test.ts agent/tests/production-readiness.test.ts agent/tests/twilio-webhook.test.ts",
     "load:test": "tsx scripts/load-test-calls.ts",
     "scraper:install": "pnpm add -D playwright && npx playwright install chromium",
-    "scraper": "node scraper/tracker-scraper.js"
+    "scraper": "node scraper/tracker-scraper.js",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,css,md}": "prettier --write",
+    "*.{ts,tsx}": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint --fix --max-warnings=0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.0",
@@ -70,7 +75,7 @@
     "livekit-client": "^2.19.0",
     "livekit-server-sdk": "^2.15.3",
     "lucide-react": "^0.511.0",
-    "next": "15.3.9",
+    "next": "15.5.19",
     "next-intl": "^4.13.0",
     "next-themes": "^0.4.6",
     "openai": "^6.39.0",
@@ -94,7 +99,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "form-data@>=4.0.0 <4.0.6": ">=4.0.6"
+    }
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",
@@ -107,8 +115,11 @@
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.4",
     "@types/three": "^0.184.1",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.4",
-    "eslint-config-next": "15.3.9",
+    "eslint-config-next": "15.5.19",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "postcss": "^8.5.3",
     "prettier": "3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
