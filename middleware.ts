@@ -18,11 +18,9 @@ const PUBLIC_PATHS = [
   "/api/webhooks/stripe",
   "/api/v1/outbound/twiml",
   "/api/health",
-  "/api/debug",
   "/api/auth/callback",
   "/api/auth/set-session",
   "/api/auth/signout",
-  "/api/auth/direct-access",
   // Cron routes use timing-safe INTERNAL_API_SECRET — no session cookie
   "/api/cron",
 ];
@@ -42,13 +40,14 @@ async function sha256Hex(text: string): Promise<string> {
 function buildLoginRedirect(
   req: NextRequest,
   pathname: string,
-  reason?: string,
+  // `reason` is accepted for call-site clarity but intentionally NOT emitted as
+  // a response header — doing so leaked auth/cookie internals to unauthenticated
+  // visitors.
+  _reason?: string,
 ): NextResponse {
   const loginUrl = new URL("/login", req.url);
   loginUrl.searchParams.set("callbackUrl", pathname);
-  const res = NextResponse.redirect(loginUrl);
-  if (reason) res.headers.set("x-debug-auth-reason", reason);
-  return res;
+  return NextResponse.redirect(loginUrl);
 }
 
 export async function middleware(req: NextRequest) {

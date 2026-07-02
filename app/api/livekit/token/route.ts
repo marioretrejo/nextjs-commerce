@@ -31,30 +31,6 @@ function sanitizePrompt(raw: string | null | undefined): string | null {
 export async function POST(req: Request) {
   const trace = traceRequest(req, "token.issue");
 
-  // ── DIAGNOSTIC: log connection metadata to debug mobile/production issues ──
-  console.log(
-    "[token.diag] incoming request",
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      method: req.method,
-      userAgent: req.headers.get("user-agent") ?? "(none)",
-      origin: req.headers.get("origin") ?? "(none)",
-      referer: req.headers.get("referer") ?? "(none)",
-      ip:
-        req.headers.get("x-forwarded-for") ??
-        req.headers.get("x-real-ip") ??
-        "(none)",
-      secure: req.headers.get("x-forwarded-proto") === "https",
-      host: req.headers.get("host") ?? "(none)",
-      // env snapshot
-      LIVEKIT_URL_set: !!process.env["LIVEKIT_URL"],
-      LIVEKIT_API_KEY_set: !!process.env["LIVEKIT_API_KEY"],
-      LIVEKIT_API_SECRET_set: !!process.env["LIVEKIT_API_SECRET"],
-      LIVEKIT_URL_proto:
-        (process.env["LIVEKIT_URL"] ?? "").split("://")[0] || "(missing)",
-    }),
-  );
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -72,19 +48,8 @@ export async function POST(req: Request) {
   const apiKey = process.env["LIVEKIT_API_KEY"];
   const apiSecret = process.env["LIVEKIT_API_SECRET"];
 
-  console.log(
-    "[token.diag] resolved URLs",
-    JSON.stringify({
-      region,
-      wsUrl,
-      httpUrl,
-      wsUrl_proto: wsUrl.split("://")[0] || "(empty)",
-      wsUrl_starts_wss: wsUrl.startsWith("wss://"),
-    }),
-  );
-
   if (!apiKey || !apiSecret || !wsUrl) {
-    console.error("[token.diag] LiveKit not configured — missing env vars");
+    console.error("[token] LiveKit not configured — missing env vars");
     return NextResponse.json(
       { error: "LiveKit not configured" },
       { status: 500 },
