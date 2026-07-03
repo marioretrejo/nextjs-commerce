@@ -3440,9 +3440,9 @@ function QACDocsPanel() {
                   note: "Free tier at console.groq.com — needed to auto-transcribe recordings",
                 },
                 {
-                  key: "ANTHROPIC_API_KEY",
+                  key: "GROQ_API_KEY",
                   for: "QA scoring / analysis",
-                  note: "Required for AI scoring. Get at console.anthropic.com",
+                  note: "Required for AI scoring. Free tier at console.groq.com",
                 },
                 {
                   key: "INTERNAL_API_SECRET",

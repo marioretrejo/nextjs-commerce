@@ -61,13 +61,8 @@ const CATEGORY_REGULATION: Record<string, string> = {
 };
 
 function analyzeRule(rule: QARule, transcript: string): RuleViolation | null {
-  // TODO: Replace with LLM call:
-  // const result = await anthropic.messages.create({
-  //   model: 'claude-sonnet-4-6',
-  //   system: `You are a compliance evaluator. Given a call transcript and a rule,
-  //            determine if the rule was violated. Respond in JSON.`,
-  //   messages: [{ role: 'user', content: `Rule: ${rule.description}\nTranscript: ${transcript}` }],
-  // });
+  // TODO: Replace with an LLM call via lib/groq.ts (groqJson) to evaluate the
+  // rule against the transcript and return a structured violation verdict.
 
   const lower = transcript.toLowerCase();
   const ruleWords = rule.description

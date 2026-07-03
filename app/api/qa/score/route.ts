@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { groqJson, isLLMConfigured } from "@/lib/groq";
 import { NextResponse } from "next/server";
 
 // Internal-only endpoint — called by the Retell webhook (server-to-server).
@@ -52,8 +53,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "workspace mismatch" }, { status: 403 });
   }
 
-  const ANTHROPIC_KEY = process.env["ANTHROPIC_API_KEY"];
-  if (!ANTHROPIC_KEY) return NextResponse.json({ ok: true });
+  if (!isLLMConfigured()) return NextResponse.json({ ok: true });
 
   try {
     const criteriaList = (
@@ -62,45 +62,16 @@ export async function POST(req: Request) {
       .map((c) => `- ${c.name} (weight ${c.weight}/10): ${c.description ?? ""}`)
       .join("\n");
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 512,
-        system:
-          'You are a call quality analyst. Score the call transcript against the criteria. Return only valid JSON: {"overall": number 0-100, "scores": [{"name": string, "score": number 0-100}]}',
-        messages: [
-          {
-            role: "user",
-            content: `Criteria:\n${criteriaList}\n\nTranscript:\n${call.transcript.slice(0, 4000)}\n\nScore this call.`,
-          },
-        ],
-      }),
+    const result = await groqJson<{ overall?: number }>({
+      system:
+        'You are a call quality analyst. Score the call transcript against the criteria. Return only valid JSON: {"overall": number 0-100, "scores": [{"name": string, "score": number 0-100}]}',
+      prompt: `Criteria:\n${criteriaList}\n\nTranscript:\n${call.transcript.slice(0, 4000)}\n\nScore this call.`,
+      maxTokens: 512,
     });
 
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      console.error(
-        "QA: Anthropic request failed",
-        res.status,
-        errBody.slice(0, 200),
-      );
+    if (!result) {
+      console.error("QA: LLM scoring returned no result");
       return NextResponse.json({ ok: true, scored: false });
-    }
-
-    const data = (await res.json()) as { content: { text: string }[] };
-    let result: { overall?: number } = {};
-    try {
-      result = JSON.parse(data.content[0]?.text ?? "{}") as {
-        overall?: number;
-      };
-    } catch {
-      console.error("QA: failed to parse Claude response");
     }
 
     if (typeof result.overall === "number") {

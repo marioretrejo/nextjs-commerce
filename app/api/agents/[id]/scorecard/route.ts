@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { groqJson, isLLMConfigured } from "@/lib/groq";
 import { NextResponse } from "next/server";
 import { subDays } from "date-fns";
 
@@ -72,10 +73,9 @@ export async function GET(_req: Request, { params }: RouteParams) {
     outcomes,
   };
 
-  // AI recommendations (only if Anthropic key is set)
+  // AI recommendations (only if an LLM provider is configured)
   let recommendations: string[] = [];
-  const anthropicKey = process.env["ANTHROPIC_API_KEY"];
-  if (anthropicKey && totalCalls >= 3) {
+  if (isLLMConfigured() && totalCalls >= 3) {
     try {
       const prompt = `You are a voice AI performance analyst. Here are the stats for agent "${agentData.name}" in the last 30 days:
 - Total calls: ${totalCalls}
@@ -86,32 +86,14 @@ export async function GET(_req: Request, { params }: RouteParams) {
 - Outcomes: ${JSON.stringify(outcomes)}
 - Agent objective: ${agentData.objective ?? "not set"}
 
-Provide exactly 3 specific, actionable recommendations to improve this agent's performance. Each recommendation should be 1–2 sentences. Format as a JSON array of strings.`;
+Provide exactly 3 specific, actionable recommendations to improve this agent's performance. Each recommendation should be 1–2 sentences. Return only valid JSON of the form {"recommendations": ["...", "...", "..."]}.`;
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 512,
-          messages: [{ role: "user", content: prompt }],
-        }),
+      const parsed = await groqJson<{ recommendations?: string[] }>({
+        prompt,
+        maxTokens: 512,
       });
-
-      if (res.ok) {
-        const data = (await res.json()) as {
-          content: { type: string; text: string }[];
-        };
-        const text = data.content?.[0]?.text ?? "";
-        const match = text.match(/\[[\s\S]*?\]/);
-        if (match) {
-          const parsed = JSON.parse(match[0]) as string[];
-          recommendations = Array.isArray(parsed) ? parsed.slice(0, 3) : [];
-        }
+      if (parsed && Array.isArray(parsed.recommendations)) {
+        recommendations = parsed.recommendations.slice(0, 3);
       }
     } catch {
       // AI recommendations are optional — silently skip on error

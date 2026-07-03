@@ -1,15 +1,14 @@
 /**
  * POST /api/agents/[id]/flow/generate
- * Generates a ReactFlow config from a natural-language description using Claude.
+ * Generates a ReactFlow config from a natural-language description using the
+ * central LLM (Groq → OpenAI fallback).
  */
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { groqJson } from "@/lib/groq";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const client = new Anthropic();
 
 const SYSTEM_PROMPT = `You are an expert conversation flow designer for AI voice agents.
 Given a natural-language description of a conversation workflow, you output a valid ReactFlow JSON configuration.
@@ -81,38 +80,18 @@ export async function POST(
     );
 
   try {
-    const message = await client.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 4096,
+    const flowData = await groqJson<{ nodes?: unknown[]; edges?: unknown[] }>({
       system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Generate a complete conversation flow for this voice agent workflow:\n\n${description}\n\nRemember: output ONLY the JSON object with "nodes" and "edges" arrays, nothing else.`,
-        },
-      ],
+      prompt: `Generate a complete conversation flow for this voice agent workflow:\n\n${description}\n\nRemember: output ONLY the JSON object with "nodes" and "edges" arrays, nothing else.`,
+      maxTokens: 4096,
     });
 
-    const firstBlock = message.content[0];
-    const rawText = firstBlock?.type === "text" ? firstBlock.text : "";
-
-    // Extract JSON even if model wrapped it in backticks
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error(
-        "generate-flow: no JSON in response",
-        rawText.slice(0, 200),
-      );
+    if (!flowData) {
       return NextResponse.json(
         { error: "Model did not return valid JSON" },
         { status: 500 },
       );
     }
-
-    const flowData = JSON.parse(jsonMatch[0]) as {
-      nodes: unknown[];
-      edges: unknown[];
-    };
 
     if (!Array.isArray(flowData.nodes) || !Array.isArray(flowData.edges)) {
       return NextResponse.json(

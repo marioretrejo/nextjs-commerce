@@ -155,7 +155,11 @@ export async function POST(req: Request) {
 
     // Trigger QA scoring async (fire-and-forget)
     const appUrl = process.env["NEXT_PUBLIC_APP_URL"];
-    if (call.transcript && process.env["ANTHROPIC_API_KEY"] && appUrl) {
+    if (
+      call.transcript &&
+      (process.env["GROQ_API_KEY"] || process.env["OPENAI_API_KEY"]) &&
+      appUrl
+    ) {
       fetch(`${appUrl}/api/qa/score`, {
         method: "POST",
         headers: {

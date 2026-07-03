@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { groqJson, isLLMConfigured } from "@/lib/groq";
 import { NextResponse } from "next/server";
 
 export async function POST(
@@ -25,9 +26,8 @@ export async function POST(
 
   const a = agent as Record<string, unknown>;
 
-  // Simulated conversation using Claude
-  const ANTHROPIC_KEY = process.env["ANTHROPIC_API_KEY"];
-  if (!ANTHROPIC_KEY) {
+  // Simulated conversation using the central LLM (Groq → OpenAI fallback)
+  if (!isLLMConfigured()) {
     return NextResponse.json({
       transcript: [
         {
@@ -46,31 +46,12 @@ export async function POST(
     });
   }
 
-  try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        system: `You are simulating a sales call conversation. The AI agent has this system prompt: "${a["system_prompt"] ?? ""}". First message: "${a["first_message"] ?? ""}". Generate a realistic 6-turn conversation between agent and prospect. Prospect persona: ${persona ?? "interested but skeptical business owner"}. Return JSON array: [{role:"agent"|"prospect", text:string}]`,
-        messages: [{ role: "user", content: "Generate the simulation." }],
-      }),
-    });
-    const data = (await resp.json()) as { content: { text: string }[] };
-    let transcript: unknown[] = [];
-    try {
-      transcript = JSON.parse(data.content[0]?.text ?? "[]") as unknown[];
-    } catch {
-      // Claude returned non-JSON — return the raw text as a single agent turn
-      transcript = [{ role: "agent", text: data.content[0]?.text ?? "" }];
-    }
-    return NextResponse.json({ transcript });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
+  const result = await groqJson<{ transcript?: unknown[] }>({
+    system: `You are simulating a sales call conversation. The AI agent has this system prompt: "${a["system_prompt"] ?? ""}". First message: "${a["first_message"] ?? ""}". Generate a realistic 6-turn conversation between agent and prospect. Prospect persona: ${persona ?? "interested but skeptical business owner"}. Return only valid JSON of the form {"transcript": [{"role": "agent"|"prospect", "text": string}]}.`,
+    prompt: "Generate the simulation.",
+    maxTokens: 1024,
+  });
+
+  const transcript = Array.isArray(result?.transcript) ? result.transcript : [];
+  return NextResponse.json({ transcript });
 }
