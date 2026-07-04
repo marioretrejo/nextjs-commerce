@@ -10,6 +10,11 @@ import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { ActivationBanner } from "@/components/billing/ActivationBanner";
 import { EnterpriseQuotaBar } from "@/components/billing/EnterpriseQuotaBar";
 import type { User, WorkspaceBranding } from "@/lib/supabase/types";
+import {
+  getAccountState,
+  accountStateNeedsBanner,
+  type AccountStateInput,
+} from "@/lib/account-state";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserWorkspaces } from "@/lib/workspace";
@@ -97,8 +102,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const balanceCents =
     (workspace as { stripe_balance_cents?: number }).stripe_balance_cents ?? 0;
   const isEnterprise = minuteCap !== null;
-  const needsActivation =
-    !isEnterprise && balanceCents === 0 && !isImpersonating;
+  void balanceCents;
+
+  // Unified account state — the single source shared with the header minutes
+  // pill, so the banner can never say "inactive" while the header shows minutes.
+  const accountState = getAccountState(workspace as AccountStateInput);
+  const minutesRemaining =
+    Number(workspace.minutes_limit) - Number(workspace.minutes_used);
+  const showActivationBanner =
+    !isEnterprise && !isImpersonating && accountStateNeedsBanner(accountState);
 
   const unread = notifications.data?.length ?? 0;
 
@@ -146,10 +158,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           workspace={workspace}
           unreadNotifications={unread}
         />
-        {/* Activation banner — standard clients with $0 balance */}
-        {needsActivation && userProfile.onboarding_completed && (
+        {/* Activation / trial banner — driven by the unified account state */}
+        {showActivationBanner && userProfile.onboarding_completed && (
           <div className="pt-14">
-            <ActivationBanner workspaceId={workspace.id} />
+            <ActivationBanner
+              workspaceId={workspace.id}
+              state={accountState}
+              minutesRemaining={minutesRemaining}
+            />
           </div>
         )}
         {/* Enterprise quota bar — replaces Stripe balance for minute_cap clients */}
@@ -162,7 +178,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
         )}
         <main
-          className={`flex-1 pb-16 md:pb-0 ${needsActivation || isEnterprise ? "" : "pt-14"}`}
+          className={`flex-1 pb-16 md:pb-0 ${showActivationBanner || isEnterprise ? "" : "pt-14"}`}
         >
           {children}
         </main>
