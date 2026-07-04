@@ -21,7 +21,7 @@ const FAQ = [
   },
   {
     q: "What languages are supported?",
-    a: "We support 70+ languages through Retell AI and ElevenLabs voice engines. You can configure a primary language per agent and enable auto-detection to match the caller's language on the first turn.",
+    a: "We support 70+ languages through our Deepgram (speech-to-text) and Cartesia (text-to-speech) voice pipeline. You can configure a primary language per agent and enable auto-detection to match the caller's language on the first turn.",
   },
   {
     q: "Can I use my own phone numbers?",
@@ -41,7 +41,7 @@ const FEATURES = [
   {
     index: "01",
     title: "Hyper-Realistic Voices",
-    desc: "ElevenLabs & Retell AI powered voices with emotional control, custom cloning, and 70+ languages.",
+    desc: "Cartesia-powered voices with emotional control, custom cloning, and 70+ languages.",
   },
   {
     index: "02",

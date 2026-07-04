@@ -179,12 +179,6 @@ importers:
       resend:
         specifier: ^6.12.4
         version: 6.12.4
-      retell-client-js-sdk:
-        specifier: ^2.0.7
-        version: 2.0.7(@types/dom-mediacapture-record@1.0.22)
-      retell-sdk:
-        specifier: ^5.28.0
-        version: 5.28.0
       sonner:
         specifier: ^2.0.1
         version: 2.0.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -4637,12 +4631,6 @@ packages:
   ret@0.2.2:
     resolution: {integrity: sha512-M0b3YWQs7R3Z917WRQy1HHA7Ba7D8hvZg6UE5mLykJxQVE2ju0IXbGlaHPPlkY+WN7wFP+wUMXmBFA0aV6vYGQ==}
     engines: {node: '>=4'}
-
-  retell-client-js-sdk@2.0.7:
-    resolution: {integrity: sha512-56iFklXfqVZuniEioMPVKylhBqjN+Xk7Mmv8Q/lGyEnvBBi5B9R6WPJDInlcyXltWH1EsXPjLoVgJI9Xpje68w==}
-
-  retell-sdk@5.28.0:
-    resolution: {integrity: sha512-uduPcoasHGRi89upGjXNBVWEYq6QSGh9N1Avley4tJwO4Z8daexN95+OV+kWyolaT5RV9MEuQneOg88yc2aYsg==}
 
   reusify@1.1.0:
     resolution: {integrity: sha512-g6QUff04oZpHs0eG5p83rFLhHeV00ug/Yf9nZM6fLeUrPguBTkTQOdpAWWspMh55TZfVQDPaN3NQJfbVRAxdIw==}
@@ -9932,15 +9920,6 @@ snapshots:
       signal-exit: 4.1.0
 
   ret@0.2.2: {}
-
-  retell-client-js-sdk@2.0.7(@types/dom-mediacapture-record@1.0.22):
-    dependencies:
-      eventemitter3: 5.0.4
-      livekit-client: 2.19.0(@types/dom-mediacapture-record@1.0.22)
-    transitivePeerDependencies:
-      - '@types/dom-mediacapture-record'
-
-  retell-sdk@5.28.0: {}
 
   reusify@1.1.0: {}
 

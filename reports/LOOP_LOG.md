@@ -43,6 +43,32 @@
   `max_concurrency`, DNC, TCPA hours.
 - GATE: prettier ✓, lint ✓, 452 unit tests ✓ (was 450), build ✓.
 
+## FASE 3 — Retell removal ✅ (SDK fully removed)
+
+- **Deleted:** `lib/retell/`, `app/api/webhooks/retell/`, the dead
+  `app/api/agents/[id]/test-call` route (no callers), and
+  `app/api/agents/[id]/web-call` (only the widget used it).
+- **Widget rewrite:** `app/widget/[agent_id]/page.tsx` now runs on LiveKit
+  (`@livekit/components-react` `<LiveKitRoom>` + `/api/livekit/token`), mirroring
+  the proven agent test page. Same session-gated auth model — no new public
+  token-minting surface. ⚠️ Needs live QA (browser voice UX not verifiable here).
+- **campaigns/launch:** removed the Retell `batchCall` branch; launch now just
+  marks the campaign active and the continuous LiveKit-SIP dialer (FASE 2) places
+  the calls. Dropped the now-pointless `TWILIO_PHONE_NUMBER` guard that would
+  have blocked SIP-only launches.
+- **Deps removed:** `retell-sdk`, `retell-client-js-sdk` (package.json: 0 retell).
+- **vercel.json:** removed the retell webhook function entry.
+- **Migration 074:** deprecates `retell_*` columns (COMMENT only) — NOT dropped,
+  per the "don't destroy data" rule and because `calls.retell_call_id` is still
+  the LiveKit room/call dedup key.
+- **Marketing/comment cleanup:** removed stale "Retell AI"/"ElevenLabs" claims in
+  `app/page.tsx` and a stale comment in `qa/score`.
+- **Gate exception (documented):** the literal "0 `retell` references" gate is not
+  met because `retell_call_id` / `retell_agent_id` / `retell_batch_call_id` /
+  `retell_kb_id` remain as **legacy column names** — kept intentionally per the
+  inviolable "deprecate, don't drop" rule. All _active SDK usage_ is gone.
+- GATE: tsc 0, lint ✓, 452 unit tests ✓, build ✓.
+
 ## Technical debt surfaced
 
 - `dist/worker.mjs` (1.4 MB build artifact) is tracked in git — should be

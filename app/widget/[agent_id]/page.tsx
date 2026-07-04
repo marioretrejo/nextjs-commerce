@@ -1,5 +1,13 @@
 "use client";
 
+import "@livekit/components-styles";
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useConnectionState,
+  useTranscriptions,
+} from "@livekit/components-react";
+import { ConnectionState } from "livekit-client";
 import { use, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 
@@ -8,130 +16,62 @@ interface TranscriptLine {
   text: string;
 }
 
-interface RetellWebClientType {
-  on(event: string, cb: (data?: unknown) => void): void;
-  startCall(opts: { accessToken: string; sampleRate: number }): Promise<void>;
-  stopCall(): void;
-}
-
-export default function WidgetPage({
-  params,
+// Inner UI — must live inside <LiveKitRoom> to use its hooks.
+function CallSurface({
+  agentName,
+  onEnd,
 }: {
-  params: Promise<{ agent_id: string }>;
+  agentName: string;
+  onEnd: () => void;
 }) {
-  const { agent_id } = use(params);
-  const [status, setStatus] = useState<
-    "idle" | "connecting" | "active" | "ended"
-  >("idle");
-  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
-  const [agentName, setAgentName] = useState("AI Agent");
-  const retellRef = useRef<RetellWebClientType | null>(null);
+  const connectionState = useConnectionState();
+  const segments = useTranscriptions();
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetch(`/api/agents/${agent_id}/widget-config`)
-      .then((r) => r.json())
-      .then((d: { name?: string }) => setAgentName(d.name ?? "AI Agent"));
-  }, [agent_id]);
+  const isActive = connectionState === ConnectionState.Connected;
+  const isConnecting = connectionState === ConnectionState.Connecting;
+
+  // Map LiveKit transcription segments to agent/user lines. A segment produced
+  // by a local participant is the user; anything else is the agent.
+  const transcript: TranscriptLine[] = segments.map((s) => {
+    const isLocal = Boolean(
+      (s as { participantInfo?: { isLocal?: boolean } }).participantInfo
+        ?.isLocal,
+    );
+    return { role: isLocal ? "user" : "agent", text: s.text };
+  });
 
   useEffect(() => {
     if (transcriptRef.current) {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
-  }, [transcript]);
-
-  async function startCall() {
-    setStatus("connecting");
-    setTranscript([]);
-    try {
-      const res = await fetch(`/api/agents/${agent_id}/web-call`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        setStatus("idle");
-        return;
-      }
-      const { access_token } = (await res.json()) as { access_token: string };
-
-      // Dynamic import to avoid SSR issues
-      const mod = await import("retell-client-js-sdk" as string).catch(
-        () => null,
-      );
-      if (!mod) {
-        setStatus("idle");
-        return;
-      }
-      const { RetellWebClient } = mod as {
-        RetellWebClient: new () => RetellWebClientType;
-      };
-      const client = new RetellWebClient();
-      retellRef.current = client;
-
-      client.on("call_started", () => setStatus("active"));
-      client.on("call_ended", () => {
-        setStatus("ended");
-      });
-      client.on("update", (update) => {
-        const upd = update as
-          | { transcript?: { role: string; content: string }[] }
-          | undefined;
-        if (upd?.transcript) {
-          setTranscript(
-            upd.transcript.map((t) => ({
-              role: (t.role === "agent" ? "agent" : "user") as "agent" | "user",
-              text: t.content,
-            })),
-          );
-        }
-      });
-      client.on("error", () => setStatus("idle"));
-
-      await client.startCall({ accessToken: access_token, sampleRate: 24000 });
-    } catch {
-      setStatus("idle");
-    }
-  }
-
-  async function endCall() {
-    retellRef.current?.stopCall();
-    setStatus("ended");
-  }
-
-  const isActive = status === "active";
-  const isConnecting = status === "connecting";
+  }, [transcript.length]);
 
   return (
-    <div className="flex flex-col h-screen bg-white font-sans">
-      {/* Header */}
+    <>
+      <RoomAudioRenderer />
       <div className="flex items-center gap-3 border-b border-[#e0e0e0] p-4">
-        <div className="w-8 h-8 rounded-full bg-[#0a0a0a] flex items-center justify-center text-white text-xs font-bold">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a0a0a] text-xs font-bold text-white">
           {agentName[0]?.toUpperCase() ?? "A"}
         </div>
         <div>
           <p className="text-sm font-semibold text-[#0a0a0a]">{agentName}</p>
           <p className="text-xs text-[#6b6b6b]">
-            {status === "idle"
-              ? "Click to start"
-              : status === "connecting"
-                ? "Connecting…"
-                : status === "active"
-                  ? "Live"
-                  : "Call ended"}
+            {isConnecting ? "Connecting…" : isActive ? "Live" : "Connecting…"}
           </p>
         </div>
         {isActive && (
           <span className="ml-auto flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+            <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
           </span>
         )}
       </div>
 
-      {/* Transcript */}
-      <div ref={transcriptRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={transcriptRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {transcript.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <Phone className="h-10 w-10 text-[#e0e0e0] mb-3" />
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <Phone className="mb-3 h-10 w-10 text-[#e0e0e0]" />
             <p className="text-sm text-[#6b6b6b]">Start a voice conversation</p>
           </div>
         )}
@@ -153,27 +93,14 @@ export default function WidgetPage({
         ))}
       </div>
 
-      {/* Controls */}
-      <div className="border-t border-[#e0e0e0] p-4 flex items-center justify-center gap-4">
-        {status === "idle" || status === "ended" ? (
-          <button
-            onClick={startCall}
-            className="flex items-center gap-2 rounded-full bg-[#0a0a0a] px-6 py-3 text-white text-sm font-medium hover:bg-[#3a3a3a] transition-colors"
-          >
-            <Phone className="h-4 w-4" />
-            {status === "ended" ? "Call Again" : "Start Call"}
-          </button>
-        ) : (
-          <button
-            onClick={endCall}
-            disabled={isConnecting}
-            className="flex items-center gap-2 rounded-full bg-red-500 px-6 py-3 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
-          >
-            <PhoneOff className="h-4 w-4" />
-            {isConnecting ? "Connecting…" : "End Call"}
-          </button>
-        )}
-
+      <div className="flex items-center justify-center gap-4 border-t border-[#e0e0e0] p-4">
+        <button
+          onClick={onEnd}
+          className="flex items-center gap-2 rounded-full bg-red-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-red-600"
+        >
+          <PhoneOff className="h-4 w-4" />
+          End Call
+        </button>
         <div className="flex items-center gap-1 text-xs text-[#6b6b6b]">
           {isActive ? (
             <Mic className="h-3 w-3" />
@@ -183,6 +110,123 @@ export default function WidgetPage({
           {isActive ? "Mic active" : "Mic off"}
         </div>
       </div>
+    </>
+  );
+}
+
+export default function WidgetPage({
+  params,
+}: {
+  params: Promise<{ agent_id: string }>;
+}) {
+  const { agent_id } = use(params);
+  const [status, setStatus] = useState<
+    "idle" | "connecting" | "active" | "ended"
+  >("idle");
+  const [agentName, setAgentName] = useState("AI Agent");
+  const [token, setToken] = useState<string | null>(null);
+  const [wsUrl, setWsUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/agents/${agent_id}/widget-config`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("config"))))
+      .then((d: { name?: string }) => setAgentName(d.name ?? "AI Agent"))
+      .catch(() => setAgentName("AI Agent"));
+  }, [agent_id]);
+
+  async function startCall() {
+    setStatus("connecting");
+    try {
+      // LiveKit-native web call: mint a room token (same auth model the widget
+      // used before — the endpoint is session-gated).
+      const res = await fetch("/api/livekit/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agent_id }),
+      });
+      if (!res.ok) {
+        setStatus("idle");
+        return;
+      }
+      const data = (await res.json()) as {
+        token?: string;
+        wsUrl?: string;
+        agentName?: string;
+      };
+      if (!data.token || !data.wsUrl) {
+        setStatus("idle");
+        return;
+      }
+      if (data.agentName) setAgentName(data.agentName);
+      setToken(data.token);
+      setWsUrl(data.wsUrl);
+      setStatus("active");
+    } catch {
+      setStatus("idle");
+    }
+  }
+
+  function endCall() {
+    setToken(null);
+    setWsUrl(null);
+    setStatus("ended");
+  }
+
+  const connected = status === "active" && token && wsUrl;
+
+  return (
+    <div className="flex h-screen flex-col bg-white font-sans">
+      {connected ? (
+        <LiveKitRoom
+          token={token}
+          serverUrl={wsUrl}
+          connect={true}
+          audio={true}
+          video={false}
+          onDisconnected={endCall}
+          className="flex flex-1 flex-col"
+        >
+          <CallSurface agentName={agentName} onEnd={endCall} />
+        </LiveKitRoom>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 border-b border-[#e0e0e0] p-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a0a0a] text-xs font-bold text-white">
+              {agentName[0]?.toUpperCase() ?? "A"}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#0a0a0a]">
+                {agentName}
+              </p>
+              <p className="text-xs text-[#6b6b6b]">
+                {status === "connecting"
+                  ? "Connecting…"
+                  : status === "ended"
+                    ? "Call ended"
+                    : "Click to start"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-1 flex-col items-center justify-center text-center">
+            <Phone className="mb-3 h-10 w-10 text-[#e0e0e0]" />
+            <p className="text-sm text-[#6b6b6b]">Start a voice conversation</p>
+          </div>
+          <div className="flex items-center justify-center gap-4 border-t border-[#e0e0e0] p-4">
+            <button
+              onClick={startCall}
+              disabled={status === "connecting"}
+              className="flex items-center gap-2 rounded-full bg-[#0a0a0a] px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-[#3a3a3a] disabled:opacity-50"
+            >
+              <Phone className="h-4 w-4" />
+              {status === "connecting"
+                ? "Connecting…"
+                : status === "ended"
+                  ? "Call Again"
+                  : "Start Call"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

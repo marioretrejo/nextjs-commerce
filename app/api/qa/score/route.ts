@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { groqJson, isLLMConfigured } from "@/lib/groq";
 import { NextResponse } from "next/server";
 
-// Internal-only endpoint — called by the Retell webhook (server-to-server).
+// Internal-only endpoint — called server-to-server after a call completes.
 // Secured by requiring a shared internal secret token.
 export async function POST(req: Request) {
   const internalToken = req.headers.get("x-internal-token");

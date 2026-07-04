@@ -1,11 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { retell } from "@/lib/retell/client";
 import {
   checkMinuteLimit,
   minuteLimitBlockedResponse,
 } from "@/lib/checkMinuteLimit";
-import type { Agent, Campaign, CampaignContact } from "@/lib/supabase/types";
+import type { Campaign } from "@/lib/supabase/types";
 import { NextResponse } from "next/server";
 import { notifyWorkspace } from "@/lib/notifications/activity";
 import { writeAuditLog } from "@/lib/admin-audit";
@@ -49,7 +48,6 @@ export async function POST(
     .single();
   if (!agentData)
     return NextResponse.json({ error: "Agent not found" }, { status: 400 });
-  const agent = agentData as Agent;
 
   // Get pending contacts
   const { data: contacts } = await supabase
@@ -63,75 +61,12 @@ export async function POST(
     return NextResponse.json({ error: "No pending contacts" }, { status: 400 });
   }
 
-  const fromNumber = process.env["TWILIO_PHONE_NUMBER"];
-  if (!fromNumber)
-    return NextResponse.json(
-      { error: "No Twilio number configured" },
-      { status: 500 },
-    );
-
   const admin = createAdminClient();
 
-  // Launch batch via Retell
-  if (agent.retell_agent_id && process.env["RETELL_API_KEY"]) {
-    try {
-      const tasks = (contacts as CampaignContact[]).map((contact) => ({
-        from_number: fromNumber,
-        to_number: contact.phone,
-        override_agent_id: agent.retell_agent_id!,
-        metadata: {
-          campaign_id: id,
-          contact_id: contact.id,
-          contact_name: contact.name,
-          to_number: contact.phone,
-        },
-        retell_llm_dynamic_variables: contact.variables as Record<
-          string,
-          string
-        >,
-      }));
-
-      const batch = await retell.batchCall({
-        from_number: fromNumber,
-        tasks,
-        name: c.name,
-        max_concurrent_calls: c.max_concurrency,
-      });
-
-      await admin
-        .from("campaigns")
-        .update({
-          status: "active",
-          retell_batch_call_id: batch.batch_call_id,
-        })
-        .eq("id", id);
-
-      void notifyWorkspace({
-        workspaceId: c.workspace_id,
-        title: "Campaign launched",
-        message: `Campaign "${c.name}" was launched with ${contacts.length} contacts.`,
-        link: `/campaigns/${id}`,
-      });
-      void writeAuditLog({
-        actorId: user.id,
-        actorType: "user",
-        action: "campaign.launch",
-        targetType: "campaign",
-        targetId: id,
-        workspaceId: c.workspace_id,
-        metadata: { campaign_name: c.name, contacts: contacts.length },
-      });
-
-      return NextResponse.json({
-        batch_call_id: batch.batch_call_id,
-        contacts: contacts.length,
-      });
-    } catch (e) {
-      return NextResponse.json({ error: String(e) }, { status: 500 });
-    }
-  }
-
-  // Fallback: mark as active
+  // Launch = mark the campaign active. The continuous dialer (operational
+  // worker → /api/cron/campaign-dial) claims pending contacts race-free and
+  // places calls via LiveKit SIP (BYOT trunk) / the workspace telephony
+  // provider. No batch call-out is issued here.
   await admin.from("campaigns").update({ status: "active" }).eq("id", id);
   void notifyWorkspace({
     workspaceId: c.workspace_id,
