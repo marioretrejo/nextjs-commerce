@@ -338,7 +338,7 @@ export default function VoiceStudioPage() {
             <p className="font-semibold text-[#0a0a0a]">No cloned voices yet</p>
             <p className="text-sm text-[#6b6b6b] mt-1 mb-5 max-w-xs">
               Upload an audio sample and we&apos;ll clone the voice using
-              ElevenLabs Instant Voice Cloning.
+              Cartesia Instant Voice Cloning.
             </p>
             <Button
               onClick={() => setCloneOpen(true)}
