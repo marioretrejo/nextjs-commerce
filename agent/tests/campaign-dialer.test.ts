@@ -361,6 +361,51 @@ describe("DispatchResult aggregation", () => {
 
 // ── Test 8: Race condition guard ──────────────────────────────────────────────
 
+describe("Double-dial prevention — compare-and-swap claim", () => {
+  // Models the route's per-contact claim: an atomic
+  //   UPDATE campaign_contacts SET status='calling'
+  //   WHERE id = ? AND status = 'pending'
+  // Only the runner whose UPDATE affects 1 row may dial; the loser sees 0 rows.
+  it("only one of two concurrent runners claims the same pending contact", () => {
+    const row = { id: "c1", status: "pending" as ContactStatus };
+
+    const casClaim = (): number => {
+      if (row.status === "pending") {
+        row.status = "calling";
+        return 1; // this runner owns the dial
+      }
+      return 0; // already claimed → skip
+    };
+
+    const runnerA = casClaim();
+    const runnerB = casClaim();
+
+    assert.strictEqual(runnerA, 1, "First runner claims the contact");
+    assert.strictEqual(runnerB, 0, "Second runner sees 0 rows");
+    assert.strictEqual(
+      runnerA + runnerB,
+      1,
+      "Contact is dialed exactly once across both runners",
+    );
+  });
+
+  it("a runner that loses the CAS releases its call slot and does not dial", () => {
+    const row = { id: "c1", status: "calling" as ContactStatus }; // already claimed
+    let slotsHeld = 1; // this runner had claimed a concurrency slot
+    let dialed = false;
+
+    const casRows = row.status === "pending" ? 1 : 0;
+    if (casRows === 0) {
+      slotsHeld -= 1; // release_call_slot
+    } else {
+      dialed = true;
+    }
+
+    assert.strictEqual(dialed, false, "No dial when the CAS claim fails");
+    assert.strictEqual(slotsHeld, 0, "Call slot released when skipping");
+  });
+});
+
 describe("Race condition prevention", () => {
   it("two dispatchers claiming same pool get disjoint subsets", () => {
     // Simulate two concurrent dispatcher calls claiming from pool of 4

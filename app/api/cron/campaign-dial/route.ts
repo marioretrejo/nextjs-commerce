@@ -472,15 +472,30 @@ async function dialContact(params: {
 
   const roomName = `agent-${campaign.agent_id}-${Date.now()}`;
 
-  // Mark contact as calling immediately to prevent double-dial
-  await admin
+  // Atomically claim the contact (compare-and-swap): flip pending → calling only
+  // if it is still pending. Two concurrent runners (the continuous worker and the
+  // Vercel cron, or overlapping worker cycles) can both SELECT the same pending
+  // contact; without this guard both would dial it, double-billing the workspace
+  // and breaching call-frequency compliance. The runner whose UPDATE affects 0
+  // rows lost the race — it releases its call slot and skips.
+  const { data: claimedRows } = await admin
     .from("campaign_contacts")
     .update({
       status: "calling",
       attempts: contact.attempts + 1,
       last_called_at: new Date().toISOString(),
     })
-    .eq("id", contact.id);
+    .eq("id", contact.id)
+    .eq("status", "pending")
+    .select("id");
+
+  if (!claimedRows || claimedRows.length === 0) {
+    // Another runner already claimed this contact — release the slot and skip.
+    void Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspace.id }),
+    ).catch(() => null);
+    return;
+  }
 
   try {
     await new RoomServiceClient(httpUrl, apiKey, apiSecret).createRoom({

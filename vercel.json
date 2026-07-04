@@ -73,10 +73,6 @@
       "schedule": "0 2 1 * *"
     },
     {
-      "path": "/api/cron/campaign-dial",
-      "schedule": "0 8 * * *"
-    },
-    {
       "path": "/api/cron/post-call-jobs",
       "schedule": "0 0 * * *"
     },

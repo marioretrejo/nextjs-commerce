@@ -116,8 +116,11 @@ services:
         value: "true"
       - key: VOICEOS_RUN_ALERTS
         value: "true"
+      # Continuous dialer: the operational worker calls campaign-dial every 60s.
+      # Safe to run alongside any other trigger — contact claiming is race-free
+      # (compare-and-swap on status='pending' in the dial route).
       - key: VOICEOS_RUN_CAMPAIGN_DIAL
-        value: "false"
+        value: "true"
       - key: VOICEOS_RUN_RECOVERY
         value: "false"
 
