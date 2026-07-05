@@ -2,47 +2,27 @@
 
 import { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
   ArrowLeft,
-  BookOpen,
-  CheckCircle2,
-  Clock,
-  Globe,
   Loader2,
-  MessageSquare,
-  Phone,
   PlayCircle,
-  Shield,
   ShieldAlert,
-  TrendingUp,
-  User,
-  ArrowRight,
 } from "lucide-react";
-import { format } from "date-fns";
 import { toast } from "sonner";
 import type {
-  CriteriaScores,
   QACInteraction,
   ComplianceViolation,
   QACAuditLog,
 } from "./_components/types";
-import { formatDuration } from "./_components/format";
-import { SEV_CFG, CAT_CFG, AUDIT_ACTION_LABELS } from "./_components/config";
 import { AudioPlayer } from "./_components/AudioPlayer";
-import { ScoreGauge, RiskBadge } from "./_components/score-ui";
-import { TranscriptCard } from "./_components/TranscriptCard";
-import { SentimentTimeline } from "./_components/SentimentTimeline";
-import { CoachingCard } from "./_components/CoachingCard";
-import { KeyMomentsTimeline } from "./_components/KeyMomentsTimeline";
 import { CallReviewSkeleton } from "./_components/CallReviewSkeleton";
 import { ReviewPanel } from "./_components/ReviewPanel";
 import { CommentsPanel } from "./_components/CommentsPanel";
-import { ComplianceSection } from "./_components/ComplianceSection";
+import { CallReviewHeader } from "./_components/CallReviewHeader";
+import { AnalyzedReview } from "./_components/AnalyzedReview";
 
 export default function CallReviewPage({
   params,
@@ -268,108 +248,18 @@ export default function CallReviewPage({
 
   const evaluation = interaction.qac_evaluations?.[0];
   const flags = evaluation?.qac_flags ?? [];
-  const criticalFlags = flags.filter((f) => f.severity === "critical");
-  const highFlags = flags.filter((f) => f.severity === "high");
   const isPending =
     interaction.status === "pending" || interaction.status === "failed";
   const isAnalyzing = interaction.status === "analyzing" || analyzing;
 
-  const criteriaConfig: { key: keyof CriteriaScores; label: string }[] = [
-    { key: "opening", label: "Opening" },
-    { key: "compliance", label: "Compliance" },
-    { key: "objection_handling", label: "Sales" },
-    { key: "closing", label: "Soft Skills" },
-    { key: "empathy", label: "Empathy" },
-  ];
-
-  const CHANNEL_ICON: Record<string, React.ReactNode> = {
-    call: <Phone className="h-3.5 w-3.5" />,
-    chat: <MessageSquare className="h-3.5 w-3.5" />,
-    email: <MessageSquare className="h-3.5 w-3.5" />,
-    sms: <MessageSquare className="h-3.5 w-3.5" />,
-    social: <Globe className="h-3.5 w-3.5" />,
-    other: <Phone className="h-3.5 w-3.5" />,
-  };
-
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-[#6b6b6b] hover:text-[#111] -ml-2"
-        >
-          <Link href="/qa-center">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Link>
-        </Button>
-
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#111] shrink-0">
-            <ShieldAlert className="h-4 w-4 text-white" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold text-[#111] truncate leading-tight">
-              Call Review &mdash; {interaction.agent_name}
-            </h1>
-            <p className="text-xs text-[#6b6b6b]">
-              {format(new Date(interaction.created_at), "MMM d, yyyy · HH:mm")}
-              {interaction.duration_s
-                ? ` · ${formatDuration(interaction.duration_s)}`
-                : ""}
-            </p>
-          </div>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          {evaluation && (
-            <RiskBadge score={Math.round(Number(evaluation.risk_score))} />
-          )}
-
-          {isPending && (
-            <Button
-              size="sm"
-              onClick={handleAnalyze}
-              disabled={analyzing}
-              className="gap-1.5"
-            >
-              {analyzing ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Analyzing…
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="h-3.5 w-3.5" />
-                  Analyze
-                </>
-              )}
-            </Button>
-          )}
-
-          {isAnalyzing && !analyzing && (
-            <Badge className="bg-blue-50 text-blue-700 border-blue-100 gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Analyzing
-            </Badge>
-          )}
-
-          {interaction.status === "failed" && !analyzing && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleAnalyze}
-              className="gap-1.5 text-red-600"
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Retry Analysis
-            </Button>
-          )}
-        </div>
-      </div>
+      <CallReviewHeader
+        interaction={interaction}
+        evaluation={evaluation}
+        analyzing={analyzing}
+        handleAnalyze={handleAnalyze}
+      />
 
       {/* ── Review + Comments always visible ─────────────────────────────── */}
       {!evaluation && (
@@ -457,299 +347,25 @@ export default function CallReviewPage({
         );
       })()}
 
-      {/* ── Score gauges row ────────────────────────────────────────────── */}
       {evaluation && (
-        <>
-          <Card className="border-[#efefef]">
-            <CardContent className="py-5 px-6">
-              <div className="flex items-center justify-around gap-4 flex-wrap">
-                {/* Overall score gauge */}
-                <div className="flex flex-col items-center gap-2">
-                  <ScoreGauge
-                    score={Math.round(Number(evaluation.overall_score))}
-                    label="Overall"
-                    size={96}
-                  />
-                  <Badge
-                    className={`text-[9px] px-2 py-0.5 border-transparent ${
-                      evaluation.tone === "professional" ||
-                      evaluation.tone === "friendly"
-                        ? "bg-green-50 text-green-700"
-                        : evaluation.tone === "unprofessional" ||
-                            evaluation.tone === "aggressive"
-                          ? "bg-red-50 text-red-700"
-                          : "bg-gray-50 text-gray-600"
-                    }`}
-                  >
-                    {evaluation.tone ?? "unknown"}
-                  </Badge>
-                </div>
-
-                <div className="h-16 w-px bg-[#f0f0f0] hidden sm:block" />
-
-                {/* Criteria gauges */}
-                {criteriaConfig.map(({ key, label }) => (
-                  <ScoreGauge
-                    key={key}
-                    score={Math.round(
-                      Number(evaluation.criteria_scores?.[key] ?? 0),
-                    )}
-                    label={label}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ── Summary ──────────────────────────────────────────────────── */}
-          {evaluation.summary && (
-            <div className="flex items-start gap-3 rounded-xl bg-[#f8f8f8] border border-[#efefef] px-4 py-3">
-              <TrendingUp className="h-4 w-4 text-[#9b9b9b] shrink-0 mt-0.5" />
-              <p className="text-sm text-[#555] leading-relaxed">
-                {evaluation.summary}
-              </p>
-            </div>
-          )}
-
-          {/* ── Two-column layout ─────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-            {/* LEFT — Transcript */}
-            <div className="lg:col-span-3 space-y-4">
-              <TranscriptCard
-                transcript={interaction.transcript}
-                diarizedRaw={interaction.diarized_transcript}
-                flags={flags}
-                criticalFlags={criticalFlags}
-                highFlags={highFlags}
-              />
-
-              {/* Sentiment Timeline */}
-              {evaluation.sentiment_timeline &&
-                evaluation.sentiment_timeline.length > 0 && (
-                  <Card className="border-[#efefef]">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">
-                        Sentiment Timeline
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <SentimentTimeline
-                        points={evaluation.sentiment_timeline}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-            </div>
-
-            {/* RIGHT — Analysis panels */}
-            <div className="lg:col-span-2 space-y-4">
-              {/* Compliance Alerts — only if compliance module enabled */}
-              <ComplianceSection
-                complianceViolations={complianceViolations}
-                complianceEnabled={complianceEnabled}
-                selectedViolations={selectedViolations}
-                setSelectedViolations={setSelectedViolations}
-                markFalsePositive={markFalsePositive}
-                markBulkFalsePositive={markBulkFalsePositive}
-                markingFp={markingFp}
-                bulkMarking={bulkMarking}
-                flags={flags}
-              />
-
-              {/* Coaching Insights */}
-              {evaluation.coaching_insights &&
-                Object.keys(evaluation.coaching_insights).length > 0 && (
-                  <Card className="border-[#efefef]">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">
-                        Coaching Insights
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <CoachingCard insights={evaluation.coaching_insights} />
-                    </CardContent>
-                  </Card>
-                )}
-
-              {/* Key Moments */}
-              {evaluation.key_moments && evaluation.key_moments.length > 0 && (
-                <Card className="border-[#efefef]">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Key Moments</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <KeyMomentsTimeline moments={evaluation.key_moments} />
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Review Status */}
-              <ReviewPanel
-                interaction={interaction}
-                onUpdated={() => void fetchInteraction()}
-              />
-
-              {/* QA Comments */}
-              <CommentsPanel interactionId={interaction.id} />
-            </div>
-          </div>
-
-          {/* ── Call metadata ────────────────────────────────────────────── */}
-          <Card className="border-[#efefef]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-[#6b6b6b] font-medium">
-                Call Metadata
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
-                {[
-                  {
-                    label: "Agent",
-                    value: interaction.agent_name,
-                    icon: <User className="h-3.5 w-3.5" />,
-                  },
-                  {
-                    label: "Agent ID",
-                    value: interaction.agent_id ?? "—",
-                    icon: <User className="h-3.5 w-3.5" />,
-                  },
-                  {
-                    label: "Channel",
-                    value: interaction.channel,
-                    icon: CHANNEL_ICON[interaction.channel] ?? (
-                      <Phone className="h-3.5 w-3.5" />
-                    ),
-                  },
-                  {
-                    label: "Direction",
-                    value: interaction.direction ?? "—",
-                    icon: <ArrowRight className="h-3.5 w-3.5" />,
-                  },
-                  {
-                    label: "Duration",
-                    value: interaction.duration_s
-                      ? formatDuration(interaction.duration_s)
-                      : "—",
-                    icon: <Clock className="h-3.5 w-3.5" />,
-                  },
-                  {
-                    label: "Language",
-                    value: interaction.language ?? "—",
-                    icon: <Globe className="h-3.5 w-3.5" />,
-                  },
-                  {
-                    label: "Customer",
-                    value: interaction.customer_id ?? "—",
-                    icon: <User className="h-3.5 w-3.5" />,
-                  },
-                  {
-                    label: "Campaign",
-                    value: interaction.campaign ?? "—",
-                    icon: <TrendingUp className="h-3.5 w-3.5" />,
-                  },
-                ].map(({ label, value, icon }) => (
-                  <div key={label} className="flex items-start gap-2">
-                    <span className="text-[#9b9b9b] mt-0.5 shrink-0">
-                      {icon}
-                    </span>
-                    <div>
-                      <dt className="text-[10px] font-medium text-[#9b9b9b] uppercase tracking-wider">
-                        {label}
-                      </dt>
-                      <dd className="text-sm font-medium text-[#111] capitalize">
-                        {value}
-                      </dd>
-                    </div>
-                  </div>
-                ))}
-              </dl>
-
-              <div className="mt-4 pt-4 border-t border-[#f0f0f0] flex items-center gap-4 text-[10px] text-[#9b9b9b]">
-                <span>
-                  Created{" "}
-                  {format(
-                    new Date(interaction.created_at),
-                    "MMM d, yyyy HH:mm",
-                  )}
-                </span>
-                {evaluation && (
-                  <span>
-                    Analyzed{" "}
-                    {format(
-                      new Date(evaluation.evaluated_at),
-                      "MMM d, yyyy HH:mm",
-                    )}
-                  </span>
-                )}
-                {evaluation && (
-                  <span>
-                    {evaluation.rules_applied} QA rule
-                    {evaluation.rules_applied !== 1 ? "s" : ""} applied
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {auditLogs.length > 0 && (
-            <Card className="border-[#efefef]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-[#6b6b6b]" />
-                    Audit Trail
-                  </span>
-                  <Link
-                    href="/qa-center/audit"
-                    className="text-[11px] text-[#9b9b9b] hover:text-[#555] font-normal flex items-center gap-1"
-                  >
-                    View all
-                    <ArrowRight className="h-3 w-3" />
-                  </Link>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {auditLogs.map((log) => {
-                    const detail =
-                      log.action === "review_status.change" && log.details
-                        ? `${String((log.details as { from?: string }).from ?? "")} → ${String((log.details as { to?: string }).to ?? "")}`
-                        : null;
-                    return (
-                      <div
-                        key={log.id}
-                        className="flex items-baseline gap-2.5 text-xs"
-                      >
-                        <span className="text-[#b0b0b0] tabular-nums shrink-0">
-                          {format(new Date(log.created_at), "MMM d HH:mm")}
-                        </span>
-                        <span className="font-medium text-[#333]">
-                          {AUDIT_ACTION_LABELS[log.action] ?? log.action}
-                        </span>
-                        {detail && (
-                          <span className="text-[#9b9b9b]">{detail}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {auditLogsHasMore && (
-                    <button
-                      onClick={() => void loadMoreAuditLogs()}
-                      disabled={loadingMoreAudit}
-                      className="mt-1 text-[11px] text-[#6b6b6b] hover:text-[#111] flex items-center gap-1 disabled:opacity-50"
-                    >
-                      {loadingMoreAudit ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : null}
-                      Cargar más
-                    </button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
+        <AnalyzedReview
+          interaction={interaction}
+          evaluation={evaluation}
+          flags={flags}
+          complianceViolations={complianceViolations}
+          complianceEnabled={complianceEnabled}
+          selectedViolations={selectedViolations}
+          setSelectedViolations={setSelectedViolations}
+          markFalsePositive={markFalsePositive}
+          markBulkFalsePositive={markBulkFalsePositive}
+          markingFp={markingFp}
+          bulkMarking={bulkMarking}
+          auditLogs={auditLogs}
+          auditLogsHasMore={auditLogsHasMore}
+          loadMoreAuditLogs={loadMoreAuditLogs}
+          loadingMoreAudit={loadingMoreAudit}
+          onReviewUpdated={() => void fetchInteraction()}
+        />
       )}
     </div>
   );
