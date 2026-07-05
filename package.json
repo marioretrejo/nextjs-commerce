@@ -22,7 +22,8 @@
     "scraper:install": "pnpm add -D playwright && npx playwright install chromium",
     "scraper": "node scraper/tracker-scraper.js",
     "prepare": "husky",
-    "i18n:audit": "node scripts/i18n-audit.mjs"
+    "i18n:audit": "node scripts/i18n-audit.mjs",
+    "design:audit": "node scripts/design-audit.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css,md}": "prettier --write",

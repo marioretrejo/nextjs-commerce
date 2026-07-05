@@ -60,3 +60,22 @@ service-role credentials are absent.
 `/api/admin/*` would answer an API call with a 302 to an HTML page instead of a
 403 JSON. The in-route guards return the correct machine-readable status, so
 they remain the authorization layer for the API surface.
+
+### B&W design system — audit gate + trial banner (Task 5)
+
+The product design system is intentionally monochrome (tokens in
+`app/globals.css`: `#ffffff` / `#0a0a0a` + grey ramp `#f5f5f5` / `#e0e0e0` /
+`#6b6b6b`). The `ActivationBanner` violated it with blue (soft trial) and amber
+(exhausted/inactive) Tailwind utilities.
+
+- Restyled both banner variants to pure B&W. Urgency is signalled by
+  **inversion**, not hue: the soft trial banner sits on the grey surface with
+  a dark solid-fill Upgrade button; the exhausted/inactive banner inverts to a
+  near-black bar with a white Add-Credit button — high attention, zero colour.
+- Added `scripts/design-audit.mjs` + `pnpm design:audit`: scans an allowlist of
+  restyled files (`AUDITED_FILES`, currently the banner) for off-palette
+  Tailwind hue utilities (`bg-blue-*`, `text-amber-*`, …) and fails on any hit.
+  Same lock-and-grow pattern as the i18n audit's `MIGRATED_ROUTES`; components
+  are added as they are converted. The one sanctioned non-mono token,
+  `destructive` (#dc2626), is used via token classes, never a raw `*-red-*`
+  utility, so it does not trip the scan.
