@@ -30,6 +30,7 @@ import {
   Trophy,
   TrendingUp,
   Users,
+  AudioLines,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -285,14 +286,12 @@ export function Sidebar({
   return (
     <aside className="fixed inset-y-0 left-0 z-40 w-56">
       <div className="m-3 flex h-[calc(100vh-24px)] flex-col rounded-2xl bg-white sidebar-panel overflow-hidden">
-        {/* Logo */}
+        {/* Logo — always renders a clear mark + name (no white-label URL needed) */}
         <div className="px-5 pt-5 pb-4">
-          <div className="flex items-center gap-1.5 mb-4">
-            <span className="h-4 w-1 rounded-full bg-[#0a0a0a]" />
-            <span className="h-3 w-1 rounded-full bg-[#d4d4d4]" />
-            <span className="h-2 w-1 rounded-full bg-[#e8e8e8]" />
+          <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-lg bg-[#0a0a0a]">
+            <AudioLines className="h-4 w-4 text-white" aria-hidden="true" />
           </div>
-          <span className="text-[13px] font-bold tracking-tight text-[#0a0a0a] leading-none">
+          <span className="text-[13px] font-bold leading-none tracking-tight text-[#0a0a0a]">
             {appName}
           </span>
           <p className="text-[10px] text-[#9b9b9b] mt-0.5 font-medium tracking-wider uppercase">

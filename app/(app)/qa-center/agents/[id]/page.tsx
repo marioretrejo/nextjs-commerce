@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { EmptyState } from "@/components/ui/empty-state";
+import { hasChartData } from "@/lib/chart-utils";
 import {
   ArrowLeft,
   User,
@@ -146,7 +148,13 @@ function fmtRelative(d: string) {
 
 /* ─── Mini sparkline (SVG) ───────────────────────────────────────── */
 function Sparkline({ data }: { data: Array<{ date: string; score: number }> }) {
-  if (data.length < 2) return <span className="text-xs text-gray-600">—</span>;
+  // Guard: empty or all-zero series must not render as a flat/solid line.
+  if (
+    data.length < 2 ||
+    !hasChartData(data, (d) => (d as { score: number }).score)
+  ) {
+    return <EmptyState compact title="Sin actividad aún" />;
+  }
   const W = 120,
     H = 36,
     PAD = 4;

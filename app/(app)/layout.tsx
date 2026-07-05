@@ -178,7 +178,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
         )}
         <main
-          className={`flex-1 pb-16 md:pb-0 ${showActivationBanner || isEnterprise ? "" : "pt-14"}`}
+          className={`flex-1 pb-24 md:pb-24 ${showActivationBanner || isEnterprise ? "" : "pt-14"}`}
         >
           {children}
         </main>
