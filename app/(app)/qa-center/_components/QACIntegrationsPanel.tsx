@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Copy, Globe, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -22,103 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  type QACIntegrationConfig,
+  DEFAULT_FIELD_MAPPINGS,
+  PROVIDER_PRESETS,
+} from "./integrations-config";
+import { WebhookUrlCard } from "./WebhookUrlCard";
+import { FieldMappingCard } from "./FieldMappingCard";
+import { PlatformGuidesCard } from "./PlatformGuidesCard";
 
 // ─── Integrations Panel ───────────────────────────────────────────────────────
-
-interface QACIntegrationConfig {
-  id: string;
-  webhook_token: string;
-  twilio_account_sid: string | null;
-  auto_analyze: boolean;
-  agent_name_field: string;
-  is_active: boolean;
-  provider_name: string | null;
-  field_mappings: Record<string, string[]> | null;
-}
-
-const DEFAULT_FIELD_MAPPINGS: Record<string, string[]> = {
-  recording_url: [
-    "RecordingUrl",
-    "recording_url",
-    "audioUrl",
-    "audio_url",
-    "recordingUrl",
-    "file_url",
-  ],
-  agent_name: [
-    "agent_name",
-    "To",
-    "user_name",
-    "extension",
-    "sip_user",
-    "called_number",
-  ],
-  customer_phone: [
-    "From",
-    "caller_id",
-    "customer_phone",
-    "ani",
-    "calling_number",
-  ],
-  call_id: [
-    "CallSid",
-    "call_id",
-    "callId",
-    "session_id",
-    "external_call_id",
-    "call_uuid",
-  ],
-  duration: [
-    "RecordingDuration",
-    "duration",
-    "call_duration",
-    "callDuration",
-    "duration_seconds",
-  ],
-  transcript: ["transcript", "transcription", "text", "call_transcript"],
-  agent_id: ["agent_id", "user_id", "extension_id", "sip_user_id"],
-  direction: ["direction", "call_direction", "callDirection", "call_type"],
-  outcome: ["outcome", "call_outcome", "disposition", "hangup_cause"],
-  language: ["language", "lang", "transcript_lang"],
-  customer_name: ["customer_name", "contact_name", "callerName"],
-};
-
-const PROVIDER_PRESETS: Record<string, Record<string, string[]>> = {
-  twilio: {
-    recording_url: ["RecordingUrl"],
-    agent_name: ["To"],
-    customer_phone: ["From"],
-    call_id: ["CallSid"],
-    duration: ["RecordingDuration"],
-  },
-  squaretalk: {
-    recording_url: ["recording_url", "audio_url", "file_url"],
-    agent_name: ["agent_name", "user_name", "extension"],
-    customer_phone: ["caller_id", "from_number", "ani"],
-    call_id: ["call_id", "call_uuid", "session_id"],
-    duration: ["duration", "call_duration"],
-    direction: ["direction", "call_type"],
-    outcome: ["outcome", "disposition"],
-  },
-  voiso: {
-    recording_url: ["recording_url", "audioUrl", "recordingUrl"],
-    agent_name: ["agent", "agent_name", "operator"],
-    customer_phone: ["customer_phone", "caller", "from"],
-    call_id: ["call_id", "callId"],
-    duration: ["duration", "billsec"],
-    direction: ["direction"],
-    outcome: ["disposition", "outcome"],
-  },
-  genesys: {
-    recording_url: ["mediaUrl", "recording_url"],
-    agent_name: ["participantName", "agentName", "agent_name"],
-    customer_phone: ["ani", "caller_id", "from"],
-    call_id: ["conversationId", "call_id"],
-    duration: ["duration", "talkTime"],
-    direction: ["direction"],
-    outcome: ["wrapUpCode", "disposition"],
-  },
-};
 
 export function QACIntegrationsPanel() {
   const [config, setConfig] = useState<QACIntegrationConfig | null>(null);
@@ -283,64 +195,7 @@ export function QACIntegrationsPanel() {
         </p>
       </div>
 
-      {/* Webhook URL card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <div className="h-6 w-6 rounded bg-[#111] flex items-center justify-center">
-              <Globe className="h-3.5 w-3.5 text-white" />
-            </div>
-            Webhook URL
-          </CardTitle>
-          <CardDescription>
-            Configure this URL as the Recording Status Callback in your Twilio
-            number or campaign settings. When a call recording is ready, Twilio
-            will POST to this endpoint and QA analysis starts automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded-lg bg-[#f5f5f5] border border-[#e8e8e8] px-3 py-2.5 text-xs font-mono text-[#111] break-all">
-              {webhookUrl}
-            </code>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={copyUrl}
-              className="shrink-0 gap-1.5"
-            >
-              <Copy className="h-3.5 w-3.5" />
-              Copy
-            </Button>
-          </div>
-          <div className="flex gap-2 rounded-xl bg-[#f8f8f8] border border-[#efefef] p-3">
-            <div className="space-y-1 text-xs text-[#6b6b6b]">
-              <p className="font-semibold text-[#555]">
-                How to configure in Twilio:
-              </p>
-              <ol className="list-decimal pl-4 space-y-0.5">
-                <li>Go to Twilio Console → Phone Numbers → Active Numbers</li>
-                <li>Select the number your agents use</li>
-                <li>
-                  Under <strong>Voice &amp; Fax</strong> →{" "}
-                  <strong>Call Status Changes</strong>, paste this URL
-                </li>
-                <li>
-                  Enable <strong>Record Calls</strong> in your TwiML or number
-                  settings
-                </li>
-              </ol>
-              <p className="pt-1">
-                Alternatively, set{" "}
-                <code className="bg-[#f0f0f0] px-1 rounded">
-                  RecordingStatusCallback
-                </code>{" "}
-                in your TwiML &lt;Record&gt; verb.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <WebhookUrlCard webhookUrl={webhookUrl} copyUrl={copyUrl} />
 
       {/* Twilio credentials */}
       <Card>
@@ -459,235 +314,21 @@ export function QACIntegrationsPanel() {
         </CardContent>
       </Card>
 
-      {/* Field Mapping Engine */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Field Mapping Engine</CardTitle>
-              <CardDescription className="mt-0.5">
-                Map your SIP provider's payload keys to VoiceOS fields. Each row
-                is an ordered list of candidates — the first non-empty match
-                wins. Works with Twilio, Squaretalk, Voiso, Genesys, and any
-                custom SIP trunk.
-              </CardDescription>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowMappings((s) => !s)}
-              className="shrink-0 gap-1.5"
-            >
-              {showMappings ? (
-                <>
-                  <X className="h-3.5 w-3.5" />
-                  Close
-                </>
-              ) : (
-                "Configure Mappings"
-              )}
-            </Button>
-          </div>
-        </CardHeader>
+      <FieldMappingCard
+        showMappings={showMappings}
+        setShowMappings={setShowMappings}
+        loadPreset={loadPreset}
+        mappingDraft={mappingDraft}
+        setMappingDraft={setMappingDraft}
+        saveMappings={saveMappings}
+        savingMappings={savingMappings}
+        testPayload={testPayload}
+        setTestPayload={setTestPayload}
+        runTestExtraction={runTestExtraction}
+        testResult={testResult}
+      />
 
-        {showMappings && (
-          <CardContent className="space-y-4">
-            {/* Provider presets */}
-            <div>
-              <p className="text-[10px] font-semibold text-[#9b9b9b] uppercase tracking-widest mb-2">
-                Load Preset
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {Object.keys(PROVIDER_PRESETS).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => loadPreset(p)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#e0e0e0] bg-white hover:bg-[#f5f5f5] hover:border-[#111] transition-colors capitalize"
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  onClick={() => {
-                    const draft: Record<string, string> = {};
-                    for (const [k, v] of Object.entries(DEFAULT_FIELD_MAPPINGS))
-                      draft[k] = v.join(", ");
-                    setMappingDraft(draft);
-                    toast.success("Reset to default mappings");
-                  }}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-dashed border-[#e0e0e0] text-[#9b9b9b] hover:text-[#111] hover:border-[#111] transition-colors"
-                >
-                  Reset to defaults
-                </button>
-              </div>
-            </div>
-
-            {/* Field mapping rows */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold text-[#9b9b9b] uppercase tracking-widest">
-                Field Mappings
-              </p>
-              <div className="rounded-xl border border-[#efefef] overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-[#fafafa] border-b border-[#efefef]">
-                      <th className="px-3 py-2 text-left text-[10px] font-bold text-[#9b9b9b] uppercase tracking-wider w-36">
-                        VoiceOS Field
-                      </th>
-                      <th className="px-3 py-2 text-left text-[10px] font-bold text-[#9b9b9b] uppercase tracking-wider">
-                        Candidate Keys (comma-separated, first match wins)
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f5f5f5]">
-                    {Object.keys(DEFAULT_FIELD_MAPPINGS).map((field) => (
-                      <tr key={field}>
-                        <td className="px-3 py-2">
-                          <code className="text-[11px] font-mono font-semibold text-[#555]">
-                            {field}
-                          </code>
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <input
-                            className="w-full h-7 rounded border border-[#e8e8e8] bg-white px-2.5 text-xs font-mono text-[#333] focus:outline-none focus:ring-1 focus:ring-[#111] focus:border-[#111]"
-                            value={mappingDraft[field] ?? ""}
-                            onChange={(e) =>
-                              setMappingDraft((d) => ({
-                                ...d,
-                                [field]: e.target.value,
-                              }))
-                            }
-                            placeholder={
-                              DEFAULT_FIELD_MAPPINGS[field]?.join(", ") ?? ""
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Button
-                onClick={saveMappings}
-                disabled={savingMappings}
-                size="sm"
-                className="gap-2"
-              >
-                {savingMappings && (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                )}
-                Save Mappings
-              </Button>
-            </div>
-
-            {/* Test extractor */}
-            <div className="space-y-2 pt-2 border-t border-[#f0f0f0]">
-              <p className="text-[10px] font-semibold text-[#9b9b9b] uppercase tracking-widest">
-                Test Payload Extractor
-              </p>
-              <p className="text-xs text-[#6b6b6b]">
-                Paste a sample webhook payload from your provider and see which
-                VoiceOS fields would be extracted.
-              </p>
-              <Textarea
-                rows={5}
-                placeholder={
-                  '{\n  "RecordingUrl": "https://…",\n  "From": "+1234567890",\n  "To": "+0987654321",\n  "CallSid": "CAxxxxxxxx",\n  "RecordingDuration": "95"\n}'
-                }
-                className="font-mono text-xs"
-                value={testPayload}
-                onChange={(e) => setTestPayload(e.target.value)}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={runTestExtraction}
-                className="gap-1.5"
-              >
-                Run Extraction Test
-              </Button>
-
-              {testResult && (
-                <div className="rounded-xl border border-[#efefef] overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-[#fafafa] border-b border-[#efefef]">
-                        <th className="px-3 py-2 text-left text-[10px] font-bold text-[#9b9b9b] uppercase tracking-wider w-36">
-                          Field
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-bold text-[#9b9b9b] uppercase tracking-wider">
-                          Extracted Value
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#f5f5f5]">
-                      {Object.entries(testResult).map(([field, val]) => (
-                        <tr key={field}>
-                          <td className="px-3 py-2">
-                            <code className="text-[11px] font-mono text-[#555]">
-                              {field}
-                            </code>
-                          </td>
-                          <td className="px-3 py-2">
-                            {val !== null ? (
-                              <span className="text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded">
-                                {val}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-[#c0c0c0] italic">
-                                not found
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Webhook URL card - platform instructions */}
-      <Card className="border-dashed border-[#e0e0e0]">
-        <CardContent className="py-4 px-5">
-          <p className="text-xs font-semibold text-[#555] mb-2">
-            Platform Setup Guides
-          </p>
-          <div className="grid grid-cols-2 gap-3 text-xs text-[#6b6b6b]">
-            <div>
-              <p className="font-medium text-[#333] mb-1">Squaretalk</p>
-              <p>
-                Settings → Webhooks → Call Events → paste webhook URL. Use
-                &ldquo;Squaretalk&rdquo; preset above.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-[#333] mb-1">Voiso</p>
-              <p>
-                Settings → Integrations → Webhooks → Call Completed. Use
-                &ldquo;Voiso&rdquo; preset above.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-[#333] mb-1">Twilio</p>
-              <p>
-                Phone Numbers → Recording Status Callback. Default mappings work
-                out of the box.
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-[#333] mb-1">Custom SIP / Other</p>
-              <p>
-                Send any JSON or form-encoded POST. Map your field names using
-                the editor above.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <PlatformGuidesCard />
     </div>
   );
 }
