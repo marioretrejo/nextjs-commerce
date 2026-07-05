@@ -333,3 +333,45 @@ export const VOICE_FILTERS = [
   },
 ] as const;
 export type VoiceFilterId = (typeof VOICE_FILTERS)[number]["id"];
+
+export const defaultForm = {
+  name: "",
+  language: "en-US",
+  auto_language_detection: false,
+  voice_engine: "standard" as "standard" | "ultra_fast" | "premium",
+  voice_id: "",
+  voice_name: "",
+  emotional_speed: 1.0,
+  emotional_pitch: 1.0,
+  emotional_expressiveness: 0.7,
+  voice_emotion: null as string | null,
+  objective: "",
+  personality: "",
+  system_prompt: "",
+  first_message: "",
+  voicemail_message: "",
+  schedule_days: ["mon", "tue", "wed", "thu", "fri"],
+  schedule_start_time: "09:00",
+  schedule_end_time: "18:00",
+  timezone: "America/New_York",
+  max_attempts: 3,
+  retry_interval_minutes: 60,
+  phone_number_id: "",
+  branded_caller_id: "",
+  transfer_enabled: false,
+  transfer_number: "",
+  transfer_type: "warm" as "warm" | "cold",
+  transfer_condition: "",
+  interruption_handling: true,
+  noise_cancellation: true,
+  ivr_mode: false,
+  dtmf_enabled: false,
+  post_call_analysis_enabled: true,
+  dynamic_variables: {} as Record<string, string>,
+};
+
+export type FormState = typeof defaultForm;
+export type SetField = <K extends keyof FormState>(
+  key: K,
+  val: FormState[K],
+) => void;

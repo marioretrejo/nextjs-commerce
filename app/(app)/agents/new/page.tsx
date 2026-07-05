@@ -1,60 +1,27 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldTooltip } from "@/components/ui/field-tooltip";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Play,
-  Plus,
-  Trash2,
-  Zap,
-  GitBranch,
-  ArrowLeft,
-  Layers,
-  Search,
-  X,
-} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import {
   type Screen,
   type AgentTemplate,
   type Voice,
   type VoiceFilterId,
   AGENT_TEMPLATES,
-  STEPS,
-  DAYS,
-  LANGUAGES,
-  TIMEZONES,
-  VOICE_FILTERS,
+  defaultForm,
 } from "./_components/constants";
 import { WorkflowScreen } from "./_components/WorkflowScreen";
 import { ModeScreen } from "./_components/ModeScreen";
 import { TemplatesScreen } from "./_components/TemplatesScreen";
+import { StepBasics } from "./_components/StepBasics";
+import { StepVoice } from "./_components/StepVoice";
+import { StepBehavior } from "./_components/StepBehavior";
+import { StepSchedule } from "./_components/StepSchedule";
+import { StepAdvanced } from "./_components/StepAdvanced";
+import { StepReview } from "./_components/StepReview";
+import { WizardHeader } from "./_components/WizardHeader";
+import { WizardFooter } from "./_components/WizardFooter";
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -77,42 +44,6 @@ export default function NewAgentPage() {
   const [workflowName, setWorkflowName] = useState("");
   const [workflowLanguage, setWorkflowLanguage] = useState("en-US");
   const [workflowSaving, setWorkflowSaving] = useState(false);
-
-  const defaultForm = {
-    name: "",
-    language: "en-US",
-    auto_language_detection: false,
-    voice_engine: "standard" as "standard" | "ultra_fast" | "premium",
-    voice_id: "",
-    voice_name: "",
-    emotional_speed: 1.0,
-    emotional_pitch: 1.0,
-    emotional_expressiveness: 0.7,
-    voice_emotion: null as string | null,
-    objective: "",
-    personality: "",
-    system_prompt: "",
-    first_message: "",
-    voicemail_message: "",
-    schedule_days: ["mon", "tue", "wed", "thu", "fri"],
-    schedule_start_time: "09:00",
-    schedule_end_time: "18:00",
-    timezone: "America/New_York",
-    max_attempts: 3,
-    retry_interval_minutes: 60,
-    phone_number_id: "",
-    branded_caller_id: "",
-    transfer_enabled: false,
-    transfer_number: "",
-    transfer_type: "warm" as "warm" | "cold",
-    transfer_condition: "",
-    interruption_handling: true,
-    noise_cancellation: true,
-    ivr_mode: false,
-    dtmf_enabled: false,
-    post_call_analysis_enabled: true,
-    dynamic_variables: {} as Record<string, string>,
-  };
 
   const AUTOSAVE_KEY = "voiceos:agent-draft";
 
@@ -363,7 +294,6 @@ export default function NewAgentPage() {
       ),
   );
 
-  // ─── TEMPLATE SELECTION ────────────────────────────────────────────────────
   if (screen === "templates") {
     return (
       <TemplatesScreen
@@ -394,7 +324,6 @@ export default function NewAgentPage() {
     );
   }
 
-  // ─── WORKFLOW CREATION ────────────────────────────────────────────────────
   if (screen === "workflow") {
     return (
       <WorkflowScreen
@@ -412,733 +341,59 @@ export default function NewAgentPage() {
   // ─── SIMPLE MODE WIZARD ───────────────────────────────────────────────────
   return (
     <div className="p-6 mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => {
-            setScreen("mode");
-            setStep(0);
-          }}
-          className="text-[#6b6b6b] hover:text-[#0a0a0a] transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Agent</h1>
-          <p className="text-sm text-[#6b6b6b]">
-            Step {step + 1} of {STEPS.length} — {STEPS[step]}
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {autosaveStatus === "saved" && (
-            <span className="text-xs text-[#6b6b6b]">Draft saved</span>
-          )}
-          <button
-            onClick={() => {
-              localStorage.removeItem(AUTOSAVE_KEY);
-              setForm(defaultForm);
-              toast.success("Draft cleared");
-            }}
-            className="text-xs text-[#6b6b6b] hover:text-[#0a0a0a] underline underline-offset-2 transition-colors"
-          >
-            Clear draft
-          </button>
-        </div>
-      </div>
+      <WizardHeader
+        step={step}
+        fromTemplate={fromTemplate}
+        autosaveStatus={autosaveStatus}
+        onBack={() => {
+          setScreen("mode");
+          setStep(0);
+        }}
+        onClearDraft={() => {
+          localStorage.removeItem(AUTOSAVE_KEY);
+          setForm(defaultForm);
+          toast.success("Draft cleared");
+        }}
+      />
 
-      {fromTemplate && (
-        <div className="flex items-center gap-2 rounded-md border border-[#e0e0e0] bg-[#f5f5f5] px-4 py-2.5 text-sm text-[#6b6b6b]">
-          <Layers className="w-4 h-4 shrink-0" />
-          Template:{" "}
-          <span className="font-medium text-[#0a0a0a]">
-            {fromTemplate.name}
-          </span>
-        </div>
-      )}
-
-      <div className="flex gap-1">
-        {STEPS.map((s, i) => (
-          <div
-            key={s}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? "bg-[#0a0a0a]" : "bg-[#e0e0e0]"}`}
-          />
-        ))}
-      </div>
-
-      {step === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-1.5">
-              <Label>Agent Name *</Label>
-              <Input
-                placeholder="e.g. Sales SDR, Appointment Setter"
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>
-                Language{" "}
-                <FieldTooltip text="The primary language the agent will speak. This also controls the speech recognition model used during calls." />
-              </Label>
-              <Select
-                value={form.language}
-                onValueChange={(v) => setField("language", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((l) => (
-                    <SelectItem key={l.value} value={l.value}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={form.auto_language_detection}
-                onCheckedChange={(v) => setField("auto_language_detection", v)}
-              />
-              <div>
-                <Label>
-                  Auto Language Detection{" "}
-                  <FieldTooltip text="When enabled, the agent will detect the caller's language on the first turn and switch automatically. Useful for multilingual markets." />
-                </Label>
-                <p className="text-xs text-[#6b6b6b]">
-                  Detect and match the caller&apos;s language automatically
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
+      {step === 0 && <StepBasics form={form} setField={setField} />}
       {step === 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Voice Configuration</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <Label>Voice</Label>
-
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#6b6b6b]" />
-                <Input
-                  className="pl-8 pr-7 h-8 text-xs"
-                  placeholder="Buscar voz…"
-                  value={voiceSearch}
-                  onChange={(e) => setVoiceSearch(e.target.value)}
-                />
-                {voiceSearch && (
-                  <button
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
-                    onClick={() => setVoiceSearch("")}
-                  >
-                    <X className="h-3 w-3 text-[#6b6b6b]" />
-                  </button>
-                )}
-              </div>
-
-              {/* Filter chips */}
-              <div className="flex flex-wrap gap-1.5">
-                {VOICE_FILTERS.map((f) => {
-                  const active = voiceFilters.includes(f.id);
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() =>
-                        setVoiceFilters((prev) =>
-                          active
-                            ? prev.filter((x) => x !== f.id)
-                            : [...prev, f.id],
-                        )
-                      }
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-all ${
-                        active
-                          ? "bg-[#0a0a0a] text-white border-[#0a0a0a]"
-                          : "bg-white text-[#6b6b6b] border-[#e0e0e0] hover:border-[#0a0a0a] hover:text-[#0a0a0a]"
-                      }`}
-                    >
-                      {f.label}
-                    </button>
-                  );
-                })}
-                {(voiceFilters.length > 0 || voiceSearch) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVoiceFilters([]);
-                      setVoiceSearch("");
-                    }}
-                    className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-[#6b6b6b] hover:text-red-600 border border-[#e0e0e0] hover:border-red-200 transition-all"
-                  >
-                    <X className="h-2.5 w-2.5" /> Limpiar
-                  </button>
-                )}
-              </div>
-
-              {/* Voice list */}
-              <div className="max-h-56 overflow-y-auto rounded-md border border-[#e0e0e0]">
-                {voices.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-[#6b6b6b]">
-                    Loading voices…
-                  </div>
-                ) : (
-                  (() => {
-                    const filtered = voices.filter((v) => {
-                      const text =
-                        `${v.name} ${v.description ?? ""} ${v.language ?? ""}`.toLowerCase();
-                      if (
-                        voiceSearch &&
-                        !text.includes(voiceSearch.toLowerCase())
-                      )
-                        return false;
-                      const haystack =
-                        `${v.name} ${v.description ?? ""} ${(v.tags ?? []).join(" ")} ${v.language ?? ""}`.toLowerCase();
-                      if (
-                        voiceFilters.length > 0 &&
-                        !voiceFilters.every((f) =>
-                          VOICE_FILTERS.find((fi) => fi.id === f)!.re.test(
-                            haystack,
-                          ),
-                        )
-                      )
-                        return false;
-                      return true;
-                    });
-                    if (filtered.length === 0)
-                      return (
-                        <div className="p-4 text-center text-xs text-[#6b6b6b]">
-                          No se encontraron voces
-                        </div>
-                      );
-                    return filtered.map((v) => (
-                      <div
-                        key={v.voice_id}
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            voice_id: v.voice_id,
-                            voice_name: v.name,
-                          }))
-                        }
-                        className={`flex items-center justify-between p-3 cursor-pointer border-b border-[#e0e0e0] last:border-b-0 transition-colors ${form.voice_id === v.voice_id ? "bg-[#0a0a0a] text-white" : "hover:bg-[#f5f5f5]"}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium truncate">
-                              {v.name}
-                            </p>
-                            {v.language && (
-                              <span
-                                className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0 uppercase ${form.voice_id === v.voice_id ? "bg-white/20 text-white" : "bg-[#f5f5f5] text-[#6b6b6b]"}`}
-                              >
-                                {v.language}
-                              </span>
-                            )}
-                          </div>
-                          {v.description ? (
-                            <p
-                              className={`text-xs line-clamp-1 ${form.voice_id === v.voice_id ? "text-[#aaa]" : "text-[#6b6b6b]"}`}
-                            >
-                              {v.description}
-                            </p>
-                          ) : (
-                            <p
-                              className={`text-xs ${form.voice_id === v.voice_id ? "text-[#aaa]" : "text-[#6b6b6b]"}`}
-                            >
-                              {v.labels?.["gender"] ?? ""}{" "}
-                              {v.labels?.["accent"]
-                                ? `· ${v.labels["accent"]}`
-                                : ""}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            playPreview(v);
-                          }}
-                          disabled={playingVoice === v.voice_id}
-                          className="p-1.5 rounded-md hover:bg-white/20 disabled:opacity-60"
-                        >
-                          {playingVoice === v.voice_id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    ));
-                  })()
-                )}
-              </div>
-            </div>
-            <div className="space-y-3">
-              <Label>Voice Emotion</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {(
-                  [
-                    { value: null, label: "😶 None" },
-                    { value: "calm", label: "😌 Calm" },
-                    { value: "sympathetic", label: "🤝 Sympathetic" },
-                    { value: "happy", label: "😊 Happy" },
-                    { value: "sad", label: "😢 Sad" },
-                    { value: "angry", label: "😠 Angry" },
-                    { value: "fearful", label: "😨 Fearful" },
-                    { value: "surprised", label: "😲 Surprised" },
-                  ] as { value: string | null; label: string }[]
-                ).map(({ value, label }) => (
-                  <button
-                    key={value ?? "none"}
-                    type="button"
-                    onClick={() =>
-                      setField(
-                        "voice_emotion" as keyof typeof form,
-                        value as never,
-                      )
-                    }
-                    className={`rounded-lg border p-2 text-xs text-center transition-colors ${
-                      (form as Record<string, unknown>)["voice_emotion"] ===
-                      value
-                        ? "border-[#0a0a0a] bg-[#0a0a0a] text-white"
-                        : "border-[#e0e0e0] hover:border-[#0a0a0a]"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StepVoice
+          form={form}
+          setField={setField}
+          setForm={setForm}
+          voices={voices}
+          voiceSearch={voiceSearch}
+          setVoiceSearch={setVoiceSearch}
+          voiceFilters={voiceFilters}
+          setVoiceFilters={setVoiceFilters}
+          playingVoice={playingVoice}
+          playPreview={playPreview}
+        />
       )}
 
-      {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Behavior & Prompt</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-1.5">
-              <Label>Objective</Label>
-              <Input
-                placeholder="e.g. Schedule a product demo with qualified leads"
-                value={form.objective}
-                onChange={(e) => setField("objective", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Personality</Label>
-              <Input
-                placeholder="e.g. Professional, empathetic, confident, concise"
-                value={form.personality}
-                onChange={(e) => setField("personality", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label>
-                  System Prompt{" "}
-                  <FieldTooltip text="Instructions the AI follows throughout the call. Use [variable_name] placeholders for dynamic values like contact name or company. More detail = better performance." />
-                </Label>
-                <span className="text-xs text-[#6b6b6b]">
-                  ~{tokenCount} tokens
-                </span>
-              </div>
-              <Textarea
-                rows={8}
-                placeholder="You are a friendly sales representative for Acme Inc. Your goal is to..."
-                value={form.system_prompt}
-                onChange={(e) => setField("system_prompt", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>
-                First Message{" "}
-                <FieldTooltip text="The exact words the agent says when the call is answered. Keep it short and natural. Use [name] to personalize with the contact's name." />
-              </Label>
-              <Textarea
-                rows={3}
-                placeholder="Hello! I'm calling from Acme Inc. Is this a good time to talk?"
-                value={form.first_message}
-                onChange={(e) => setField("first_message", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>
-                Voicemail Message{" "}
-                <FieldTooltip text="Spoken when the call goes to voicemail. Keep it under 30 seconds. Include a callback number or clear next step." />
-              </Label>
-              <Textarea
-                rows={3}
-                placeholder="Hi, I'm calling from Acme Inc. Please call us back at..."
-                value={form.voicemail_message}
-                onChange={(e) => setField("voicemail_message", e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
+      {step === 2 && <StepBehavior form={form} setField={setField} />}
       {step === 3 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Call Schedule</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <Label>Active Days</Label>
-              <div className="flex gap-2 flex-wrap">
-                {DAYS.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => toggleDay(d.id)}
-                    className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${form.schedule_days.includes(d.id) ? "border-[#0a0a0a] bg-[#0a0a0a] text-white" : "border-[#e0e0e0] hover:border-[#0a0a0a]"}`}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Start Time</Label>
-                <Input
-                  type="time"
-                  value={form.schedule_start_time}
-                  onChange={(e) =>
-                    setField("schedule_start_time", e.target.value)
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>End Time</Label>
-                <Input
-                  type="time"
-                  value={form.schedule_end_time}
-                  onChange={(e) =>
-                    setField("schedule_end_time", e.target.value)
-                  }
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Timezone</Label>
-              <Select
-                value={form.timezone}
-                onValueChange={(v) => setField("timezone", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIMEZONES.map((tz) => (
-                    <SelectItem key={tz} value={tz}>
-                      {tz}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>
-                  Max Attempts{" "}
-                  <FieldTooltip text="How many times the agent will call a contact if they don't answer. Each unanswered call counts. Recommended: 3–5." />
-                </Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={form.max_attempts}
-                  onChange={(e) =>
-                    setField("max_attempts", Number(e.target.value))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>
-                  Retry Interval (min){" "}
-                  <FieldTooltip text="Minutes to wait before calling a contact again after a no-answer. Minimum 15 minutes. Recommended: 60–240 minutes." />
-                </Label>
-                <Input
-                  type="number"
-                  min={15}
-                  value={form.retry_interval_minutes}
-                  onChange={(e) =>
-                    setField("retry_interval_minutes", Number(e.target.value))
-                  }
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StepSchedule form={form} setField={setField} toggleDay={toggleDay} />
       )}
-
       {step === 4 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Advanced Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-1.5">
-              <Label>
-                Branded Caller ID{" "}
-                <FieldTooltip text="The name displayed on the recipient's phone screen. Requires CNAM registration with your phone provider. Leave blank to use the number." />
-              </Label>
-              <Input
-                placeholder="Acme Inc."
-                value={form.branded_caller_id}
-                onChange={(e) => setField("branded_caller_id", e.target.value)}
-              />
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={form.transfer_enabled}
-                  onCheckedChange={(v) => setField("transfer_enabled", v)}
-                />
-                <Label>Enable Call Transfer</Label>
-              </div>
-              {form.transfer_enabled && (
-                <div className="ml-8 space-y-3 border-l-2 border-[#e0e0e0] pl-4">
-                  <div className="space-y-1.5">
-                    <Label>Transfer Number</Label>
-                    <Input
-                      placeholder="+1234567890"
-                      value={form.transfer_number}
-                      onChange={(e) =>
-                        setField("transfer_number", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Transfer Type</Label>
-                    <Select
-                      value={form.transfer_type}
-                      onValueChange={(v) =>
-                        setField("transfer_type", v as "warm" | "cold")
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="warm">
-                          Warm (announce before transfer)
-                        </SelectItem>
-                        <SelectItem value="cold">
-                          Cold (blind transfer)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Transfer Condition</Label>
-                    <Input
-                      placeholder="e.g. When prospect asks to speak to a human"
-                      value={form.transfer_condition}
-                      onChange={(e) =>
-                        setField("transfer_condition", e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-              {[
-                {
-                  key: "interruption_handling" as const,
-                  label: "Interruption Handling",
-                  desc: "Allow caller to interrupt the agent",
-                },
-                {
-                  key: "noise_cancellation" as const,
-                  label: "Noise Cancellation",
-                  desc: "Filter background noise from calls",
-                },
-                {
-                  key: "ivr_mode" as const,
-                  label: "IVR Mode",
-                  desc: "Navigate phone trees automatically",
-                },
-                {
-                  key: "dtmf_enabled" as const,
-                  label: "DTMF (Keypad)",
-                  desc: "Send touch-tone keypad inputs",
-                },
-                {
-                  key: "post_call_analysis_enabled" as const,
-                  label: "Post-Call Analysis",
-                  desc: "Auto-generate summary and extracted data",
-                },
-              ].map(({ key, label, desc }) => (
-                <div key={key} className="flex items-start gap-3">
-                  <Switch
-                    className="mt-0.5"
-                    checked={form[key]}
-                    onCheckedChange={(v) => setField(key, v)}
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-[#6b6b6b]">{desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-2 pt-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>
-                    Dynamic Variables{" "}
-                    <FieldTooltip text="Key-value pairs injected into your system prompt at call time. Reference them with [key_name] syntax. Example: key='company', value='Acme Inc.'." />
-                  </Label>
-                  <p className="text-xs text-[#6b6b6b]">
-                    Variables injected into prompts at call time.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    updateDynVars([...dynVars, { key: "", value: "" }])
-                  }
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Add
-                </Button>
-              </div>
-              {dynVars.map((entry, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
-                  <Input
-                    placeholder="key"
-                    value={entry.key}
-                    onChange={(e) => {
-                      const next = [...dynVars];
-                      next[idx] = { ...next[idx]!, key: e.target.value };
-                      updateDynVars(next);
-                    }}
-                    className="font-mono text-sm"
-                  />
-                  <Input
-                    placeholder="value"
-                    value={entry.value}
-                    onChange={(e) => {
-                      const next = [...dynVars];
-                      next[idx] = { ...next[idx]!, value: e.target.value };
-                      updateDynVars(next);
-                    }}
-                    className="font-mono text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      updateDynVars(dynVars.filter((_, i) => i !== idx))
-                    }
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-[#6b6b6b]" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <StepAdvanced
+          form={form}
+          setField={setField}
+          dynVars={dynVars}
+          updateDynVars={updateDynVars}
+        />
       )}
+      {step === 5 && <StepReview form={form} />}
 
-      {step === 5 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Review & Create</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-[#e0e0e0] divide-y divide-[#e0e0e0]">
-              {[
-                { label: "Name", value: form.name },
-                {
-                  label: "Language",
-                  value:
-                    LANGUAGES.find((l) => l.value === form.language)?.label ??
-                    form.language,
-                },
-                { label: "Voice", value: form.voice_name || form.voice_id },
-                { label: "Objective", value: form.objective || "—" },
-                {
-                  label: "Schedule",
-                  value: `${form.schedule_days.join(", ")} · ${form.schedule_start_time}–${form.schedule_end_time}`,
-                },
-                { label: "Max Attempts", value: String(form.max_attempts) },
-                {
-                  label: "Transfer",
-                  value: form.transfer_enabled
-                    ? `${form.transfer_type} → ${form.transfer_number}`
-                    : "Disabled",
-                },
-                {
-                  label: "Post-Call Analysis",
-                  value: form.post_call_analysis_enabled
-                    ? "Enabled"
-                    : "Disabled",
-                },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="flex justify-between px-4 py-2.5 text-sm"
-                >
-                  <span className="text-[#6b6b6b]">{label}</span>
-                  <span className="font-medium max-w-[60%] text-right truncate">
-                    {value}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-[#6b6b6b]">
-              The agent will be activated and ready to make calls immediately
-              after creation.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="flex justify-between">
-        <Button
-          variant="secondary"
-          onClick={() => (step > 0 ? setStep(step - 1) : setScreen("mode"))}
-          disabled={saving}
-        >
-          <ChevronLeft className="mr-1 h-4 w-4" /> Back
-        </Button>
-        {step < STEPS.length - 1 ? (
-          <Button
-            onClick={() => setStep(step + 1)}
-            disabled={step === 0 && !form.name}
-          >
-            Next <ChevronRight className="ml-1 h-4 w-4" />
-          </Button>
-        ) : (
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating…
-              </>
-            ) : (
-              "Create Agent"
-            )}
-          </Button>
-        )}
-      </div>
+      <WizardFooter
+        step={step}
+        saving={saving}
+        nextDisabled={step === 0 && !form.name}
+        onBack={() => (step > 0 ? setStep(step - 1) : setScreen("mode"))}
+        onNext={() => setStep(step + 1)}
+        onSave={handleSave}
+      />
     </div>
   );
 }
