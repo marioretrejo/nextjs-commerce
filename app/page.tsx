@@ -594,7 +594,12 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="mx-auto max-w-5xl mt-8 border-t border-black/8 pt-6 text-xs text-[#bbb]">
-          &copy; {new Date().getFullYear()} VoiceOS. All rights reserved.
+          {/* suppressHydrationWarning: the year is time-derived and can differ
+              between the (build/SSR) render and the client across a
+              timezone/midnight boundary — the only such node on the page. */}
+          <span suppressHydrationWarning>
+            &copy; {new Date().getFullYear()} VoiceOS. All rights reserved.
+          </span>
         </div>
       </footer>
     </main>
