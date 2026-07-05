@@ -74,3 +74,13 @@ export interface PriceRow {
   notes: string | null;
   updated_at: string;
 }
+
+export interface Totals {
+  total_leads: number;
+  total_ftds: number;
+  original_ftds: number;
+  duplicate_ftds: number;
+  total_cpa: number;
+  ecpa: number;
+  cr: number;
+}
