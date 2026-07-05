@@ -52,6 +52,9 @@ import {
   TIMEZONES,
   VOICE_FILTERS,
 } from "./_components/constants";
+import { WorkflowScreen } from "./_components/WorkflowScreen";
+import { ModeScreen } from "./_components/ModeScreen";
+import { TemplatesScreen } from "./_components/TemplatesScreen";
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -363,335 +366,46 @@ export default function NewAgentPage() {
   // ─── TEMPLATE SELECTION ────────────────────────────────────────────────────
   if (screen === "templates") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#f5f5f5]">
-        <div className="w-full max-w-2xl">
-          <button
-            onClick={() => router.push("/agents")}
-            className="flex items-center gap-1.5 text-sm text-[#6b6b6b] hover:text-[#0a0a0a] mb-8 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back to Agents
-          </button>
-
-          <div className="text-center mb-10">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#0a0a0a] text-white mx-auto mb-4">
-              <Layers className="h-7 w-7" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-[#0a0a0a]">
-              New Agent
-            </h1>
-            <p className="mt-2 text-[#6b6b6b]">
-              Start from a template or build from scratch
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Card
-              className="cursor-pointer border-2 hover:border-[#0a0a0a] transition-all hover:shadow-md"
-              onClick={() => setShowGallery(true)}
-            >
-              <CardContent className="p-6 flex flex-col items-center text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#f5f5f5] border border-[#e0e0e0] mb-4">
-                  <Layers className="h-6 w-6 text-[#0a0a0a]" />
-                </div>
-                <h2 className="font-bold text-[#0a0a0a] mb-1">
-                  Browse Templates
-                </h2>
-                <p className="text-xs text-[#6b6b6b] mb-4">
-                  12 industry-specific templates ready to deploy in seconds.
-                </p>
-                <div className="flex flex-wrap gap-1 justify-center">
-                  {["Sales", "Support", "Scheduling", "B2B"].map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="text-[10px] border-[#e0e0e0] text-[#6b6b6b]"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer border-2 hover:border-[#0a0a0a] transition-all hover:shadow-md"
-              onClick={() => setScreen("mode")}
-            >
-              <CardContent className="p-6 flex flex-col items-center text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0a0a0a] mb-4">
-                  <Plus className="h-6 w-6 text-white" />
-                </div>
-                <h2 className="font-bold text-[#0a0a0a] mb-1">
-                  Start from Scratch
-                </h2>
-                <p className="text-xs text-[#6b6b6b] mb-4">
-                  Full control over every setting. Choose simple or workflow
-                  mode.
-                </p>
-                <Badge className="bg-[#0a0a0a] text-white border-transparent text-xs">
-                  Simple or Workflow
-                </Badge>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Template Gallery Modal */}
-        <Dialog open={showGallery} onOpenChange={setShowGallery}>
-          <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Template Gallery</DialogTitle>
-            </DialogHeader>
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6b6b6b]" />
-              <Input
-                className="pl-9"
-                placeholder="Search templates by name, category, or language…"
-                value={gallerySearch}
-                onChange={(e) => setGallerySearch(e.target.value)}
-                autoFocus
-              />
-              {gallerySearch && (
-                <button
-                  onClick={() => setGallerySearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                >
-                  <X className="h-4 w-4 text-[#6b6b6b]" />
-                </button>
-              )}
-            </div>
-            <div className="overflow-y-auto flex-1">
-              <div className="grid grid-cols-3 gap-3 pb-2">
-                {filteredTemplates.map((tpl) => (
-                  <Card
-                    key={tpl.id}
-                    className="cursor-pointer hover:border-[#0a0a0a] transition-all hover:shadow-sm"
-                    onClick={() => applyTemplate(tpl)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-[#e0e0e0] text-[#6b6b6b]"
-                        >
-                          {tpl.languageLabel}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-[#e0e0e0] text-[#6b6b6b]"
-                        >
-                          {tpl.category}
-                        </Badge>
-                      </div>
-                      <p className="font-semibold text-sm text-[#0a0a0a] mb-1">
-                        {tpl.name}
-                      </p>
-                      <p className="text-xs text-[#6b6b6b] line-clamp-2">
-                        {tpl.first_message}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full mt-3 text-xs"
-                      >
-                        Use Template
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <TemplatesScreen
+        showGallery={showGallery}
+        setShowGallery={setShowGallery}
+        gallerySearch={gallerySearch}
+        setGallerySearch={setGallerySearch}
+        filteredTemplates={filteredTemplates}
+        applyTemplate={applyTemplate}
+        onBackToAgents={() => router.push("/agents")}
+        onStartFromScratch={() => setScreen("mode")}
+      />
     );
   }
 
-  // ─── MODE SELECTOR ────────────────────────────────────────────────────────
   if (screen === "mode") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#f5f5f5]">
-        <div className="w-full max-w-2xl">
-          <button
-            onClick={() => setScreen("templates")}
-            className="flex items-center gap-1.5 text-sm text-[#6b6b6b] hover:text-[#0a0a0a] mb-8 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-
-          {fromTemplate && (
-            <div className="flex items-center gap-2 rounded-md border border-[#e0e0e0] bg-white px-4 py-2.5 text-sm text-[#6b6b6b] mb-6">
-              <Layers className="w-4 h-4 shrink-0" />
-              Template:{" "}
-              <span className="font-medium text-[#0a0a0a]">
-                {fromTemplate.name}
-              </span>
-              <button
-                onClick={() => {
-                  setFromTemplate(null);
-                  setForm((f) => ({ ...f, ...defaultForm }));
-                }}
-                className="ml-auto"
-              >
-                <X className="h-3.5 w-3.5 hover:text-[#0a0a0a]" />
-              </button>
-            </div>
-          )}
-
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold tracking-tight text-[#0a0a0a]">
-              Choose Your Mode
-            </h1>
-            <p className="mt-2 text-[#6b6b6b]">
-              How do you want to build your agent?
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-5">
-            <Card
-              className="cursor-pointer border-2 hover:border-[#0a0a0a] transition-all hover:shadow-md"
-              onClick={() => setScreen("simple")}
-            >
-              <CardContent className="p-7 flex flex-col items-start">
-                <div className="flex items-center justify-between w-full mb-5">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0a0a0a] text-white">
-                    <Zap className="h-6 w-6" />
-                  </div>
-                  <Badge className="bg-[#0a0a0a] text-white border-transparent text-xs">
-                    Recommended
-                  </Badge>
-                </div>
-                <h2 className="text-lg font-bold text-[#0a0a0a] mb-2">
-                  Simple Mode
-                </h2>
-                <p className="text-sm text-[#6b6b6b] mb-1 font-medium">
-                  Create your agent in 2 minutes
-                </p>
-                <p className="text-sm text-[#6b6b6b] mb-6">
-                  Write what your agent should do in plain language. Perfect for
-                  beginners.
-                </p>
-                <Button
-                  className="w-full mt-auto"
-                  onClick={() => setScreen("simple")}
-                >
-                  Start Simple
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer border-2 hover:border-[#0a0a0a] transition-all hover:shadow-md"
-              onClick={() => setScreen("workflow")}
-            >
-              <CardContent className="p-7 flex flex-col items-start">
-                <div className="flex items-center justify-between w-full mb-5">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#f5f5f5] border border-[#e0e0e0]">
-                    <GitBranch className="h-6 w-6 text-[#0a0a0a]" />
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="text-xs border-[#e0e0e0] text-[#6b6b6b]"
-                  >
-                    Advanced
-                  </Badge>
-                </div>
-                <h2 className="text-lg font-bold text-[#0a0a0a] mb-2">
-                  Workflow Mode
-                </h2>
-                <p className="text-sm text-[#6b6b6b] mb-1 font-medium">
-                  Build complex conversation flows
-                </p>
-                <p className="text-sm text-[#6b6b6b] mb-6">
-                  Design multi-step conversations with branches, conditions, and
-                  specialized sub-agents.
-                </p>
-                <Button
-                  variant="outline"
-                  className="w-full mt-auto"
-                  onClick={() => setScreen("workflow")}
-                >
-                  Open Workflow Builder
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+      <ModeScreen
+        fromTemplate={fromTemplate}
+        onBack={() => setScreen("templates")}
+        onSimple={() => setScreen("simple")}
+        onWorkflow={() => setScreen("workflow")}
+        onClearTemplate={() => {
+          setFromTemplate(null);
+          setForm((f) => ({ ...f, ...defaultForm }));
+        }}
+      />
     );
   }
 
   // ─── WORKFLOW CREATION ────────────────────────────────────────────────────
   if (screen === "workflow") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#f5f5f5]">
-        <div className="w-full max-w-md">
-          <button
-            onClick={() => setScreen("mode")}
-            className="flex items-center gap-1.5 text-sm text-[#6b6b6b] hover:text-[#0a0a0a] mb-8 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-          <div className="text-center mb-8">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#f5f5f5] border border-[#e0e0e0] mx-auto mb-4">
-              <GitBranch className="h-7 w-7 text-[#0a0a0a]" />
-            </div>
-            <h1 className="text-2xl font-bold text-[#0a0a0a]">
-              Workflow Agent
-            </h1>
-            <p className="mt-1 text-sm text-[#6b6b6b]">
-              Name your agent, then design its conversation flow visually.
-            </p>
-          </div>
-          <Card>
-            <CardContent className="p-6 space-y-5">
-              <div className="space-y-1.5">
-                <Label>Agent Name *</Label>
-                <Input
-                  placeholder="e.g. Sales Flow Agent"
-                  value={workflowName}
-                  onChange={(e) => setWorkflowName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Language</Label>
-                <Select
-                  value={workflowLanguage}
-                  onValueChange={setWorkflowLanguage}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LANGUAGES.map((l) => (
-                      <SelectItem key={l.value} value={l.value}>
-                        {l.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                className="w-full"
-                onClick={handleWorkflowCreate}
-                disabled={workflowSaving || !workflowName.trim()}
-              >
-                {workflowSaving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating…
-                  </>
-                ) : (
-                  <>
-                    <GitBranch className="mr-2 h-4 w-4" /> Create & Open Flow
-                    Builder
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <WorkflowScreen
+        workflowName={workflowName}
+        setWorkflowName={setWorkflowName}
+        workflowLanguage={workflowLanguage}
+        setWorkflowLanguage={setWorkflowLanguage}
+        workflowSaving={workflowSaving}
+        onBack={() => setScreen("mode")}
+        onCreate={handleWorkflowCreate}
+      />
     );
   }
 
