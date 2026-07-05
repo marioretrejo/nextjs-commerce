@@ -67,9 +67,10 @@ export default function CopilotConfigPage() {
 
   useEffect(() => {
     fetch("/api/admin/copilot-config")
-      .then((r) => r.json())
-      .then((d: { config: CopilotConfig }) => {
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("config"))))
+      .then((d: { config?: CopilotConfig }) => {
         const c = d.config;
+        if (!c) throw new Error("empty config");
         setSystemPrompt(c.system_prompt || DEFAULT_SYSTEM_PROMPT);
         setRagDocs(
           (c.rag_documents ?? []).map((doc, i) => ({ ...doc, id: String(i) })),

@@ -119,8 +119,8 @@ export function WorkspaceCommandCenter({ workspaces: initial }: Props) {
     const ids = initial.map((w) => w.id);
     if (!ids.length) return;
     fetch(`/api/admin/rate-limit-stats?workspaceIds=${ids.join(",")}`)
-      .then((r) => r.json())
-      .then((d: { counts: Record<string, number> }) =>
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("stats"))))
+      .then((d: { counts?: Record<string, number> }) =>
         setRejectionCounts(d.counts ?? {}),
       )
       .catch(() => null);
