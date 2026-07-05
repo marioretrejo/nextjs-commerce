@@ -1,5 +1,16 @@
 /** Shared types for the QA Center page and its panels. */
 
+export interface AgentStat {
+  name: string;
+  count: number;
+  scoreSum: number;
+  scored: number;
+  flagged: number;
+  passed: number;
+  avgScore: number | null;
+  passRate: number | null;
+}
+
 export interface QACFlag {
   id: string;
   category: string;
