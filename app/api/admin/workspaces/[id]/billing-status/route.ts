@@ -5,8 +5,7 @@
  * Body: { status: 'active' | 'suspended_for_nonpayment' }
  * Superadmin only. Logs to audit_logs.
  */
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { NextResponse } from "next/server";
 
 const VALID_STATUSES = ["active", "suspended_for_nonpayment"] as const;
@@ -17,22 +16,9 @@ type Params = Promise<{ id: string }>;
 export async function POST(req: Request, { params }: { params: Params }) {
   const { id: workspaceId } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const admin = createAdminClient();
-  const { data: profile } = await admin
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(profile as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
   let body: { status?: string };
   try {

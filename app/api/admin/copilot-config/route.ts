@@ -3,29 +3,13 @@
  * PUT  /api/admin/copilot-config  — update global copilot config
  * Superadmin only.
  */
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { NextResponse } from "next/server";
 
-async function guardSuperadmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const admin = createAdminClient();
-  const { data: p } = await admin
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(p as { is_superadmin: boolean } | null)?.is_superadmin) return null;
-  return admin;
-}
-
 export async function GET() {
-  const admin = await guardSuperadmin();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin } = gate;
 
   const { data, error } = await admin
     .from("copilot_config")
@@ -39,8 +23,9 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const admin = await guardSuperadmin();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin } = gate;
 
   const body = (await req.json()) as {
     system_prompt?: string;

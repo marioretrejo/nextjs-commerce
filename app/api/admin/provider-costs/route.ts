@@ -1,28 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { NextResponse } from "next/server";
 
-async function assertSuperadmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  return (data as { is_superadmin: boolean } | null)?.is_superadmin
-    ? user
-    : null;
-}
-
 export async function GET() {
-  const user = await assertSuperadmin();
-  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin } = gate;
 
-  const admin = createAdminClient();
   const { data } = await admin
     .from("provider_costs")
     .select("*")
@@ -32,8 +15,9 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const user = await assertSuperadmin();
-  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
   const body = (await req.json()) as Record<string, number>;
   const allowed = [
@@ -52,7 +36,6 @@ export async function PUT(req: Request) {
     if (typeof body[key] === "number") patch[key] = body[key];
   }
 
-  const admin = createAdminClient();
   const { error } = await admin
     .from("provider_costs")
     .upsert({ label: "default", ...patch }, { onConflict: "label" });

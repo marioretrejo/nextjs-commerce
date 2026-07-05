@@ -7,8 +7,7 @@
  * DELETE /api/admin/workspaces/[id]/impersonate
  *   Ends the session (sets ended_at) and writes audit log.
  */
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { writeAuditLog } from "@/lib/admin-audit";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
@@ -18,23 +17,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(profile as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const admin = createAdminClient();
   const { data: ws } = await admin
     .from("workspaces")
     .select("id, is_suspended")
@@ -85,23 +71,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(profile as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const admin = createAdminClient();
   await admin
     .from("impersonation_sessions")
     .update({ ended_at: new Date().toISOString() })

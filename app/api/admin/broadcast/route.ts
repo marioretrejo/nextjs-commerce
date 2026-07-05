@@ -5,29 +5,14 @@
  *   - user_ids provided         → send only to those users
  * Superadmin only.
  */
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const admin = createAdminClient();
-
-    const { data: profile } = await admin
-      .from("users")
-      .select("is_superadmin")
-      .eq("id", user.id)
-      .single();
-    if (!(profile as { is_superadmin: boolean } | null)?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const gate = await requireSuperadmin();
+    if (!gate.ok) return gate.response;
+    const { admin } = gate;
 
     const body = (await req.json()) as {
       title?: string;

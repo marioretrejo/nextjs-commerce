@@ -1,27 +1,12 @@
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const admin = createAdminClient();
-  const { data: me } = await admin
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(me as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
 
   const wsUrl = process.env["LIVEKIT_URL"] ?? "";
   const apiKey = process.env["LIVEKIT_API_KEY"];

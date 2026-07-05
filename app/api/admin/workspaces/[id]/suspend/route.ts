@@ -8,8 +8,7 @@
  *  3. Kills all active LiveKit rooms (immediate call termination)
  *  4. Writes to audit_logs
  */
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { writeAuditLog } from "@/lib/admin-audit";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { NextResponse } from "next/server";
@@ -19,22 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // Must be superadmin
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(profile as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
   const url = new URL(req.url);
   const action = url.searchParams.get("action") ?? "suspend";
@@ -45,8 +31,6 @@ export async function POST(
       ? ((await req.json().catch(() => ({}))) as { reason?: string })
       : {};
   const reason = body.reason ?? (suspend ? "Suspended by admin" : null);
-
-  const admin = createAdminClient();
 
   // Verify workspace exists
   const { data: ws } = await admin

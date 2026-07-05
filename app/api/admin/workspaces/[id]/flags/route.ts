@@ -3,46 +3,19 @@
  * PATCH /api/admin/workspaces/[id]/flags       — upsert one or more flags
  *   Body: { flag: string, enabled: boolean, value?: object }
  */
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { writeAuditLog } from "@/lib/admin-audit";
 import { NextResponse } from "next/server";
 
-async function requireSuperadmin(req: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return {
-      user: null,
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    };
-
-  const { data: p } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(p as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return {
-      user: null,
-      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
-  return { user, error: null };
-}
-
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params;
-  const { user, error } = await requireSuperadmin(req);
-  if (error) return error;
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin } = gate;
 
-  void user; // auth already verified
-  const admin = createAdminClient();
   const { data } = await admin
     .from("workspace_feature_flags")
     .select("*")
@@ -55,11 +28,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params;
-  const { user, error } = await requireSuperadmin(req);
-  if (!user || error)
-    return (
-      error ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    );
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
   const body = (await req.json()) as {
     flag: string;
@@ -75,7 +46,6 @@ export async function PATCH(
     );
   }
 
-  const admin = createAdminClient();
   const { data, error: upsertErr } = await admin
     .from("workspace_feature_flags")
     .upsert(

@@ -1,24 +1,10 @@
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-
-  if (!(profile as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
   const body = (await req.json()) as {
     workspace_id: string;
@@ -34,8 +20,6 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-
-  const admin = createAdminClient();
 
   // Fetch current values
   const { data: ws } = await admin

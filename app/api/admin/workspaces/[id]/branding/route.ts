@@ -3,45 +3,18 @@
  * Sets or clears white-label branding for a workspace. Superadmin only.
  * Body: { app_name?, logo_url?, primary_color?, favicon_url?, custom_css? } | null to clear
  */
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperadmin } from "@/lib/admin/guard";
 import { writeAuditLog } from "@/lib/admin-audit";
 import { NextResponse } from "next/server";
-
-async function requireSuperadmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return {
-      user: null,
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    };
-  const { data: p } = await supabase
-    .from("users")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!(p as { is_superadmin: boolean } | null)?.is_superadmin) {
-    return {
-      user: null,
-      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
-  return { user, error: null };
-}
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params;
-  const { user, error } = await requireSuperadmin();
-  if (!user || error)
-    return (
-      error ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    );
+  const gate = await requireSuperadmin();
+  if (!gate.ok) return gate.response;
+  const { admin, user } = gate;
 
   let body: {
     app_name?: string;
@@ -56,8 +29,6 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-
-  const admin = createAdminClient();
 
   // null body = clear branding entirely
   const branding =
