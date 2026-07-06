@@ -1,123 +1,24 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Avatar } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { User, NotificationType } from "@/lib/supabase/types";
 import {
   User as UserIcon,
   Lock,
   Bell,
   AlertTriangle,
-  Upload,
-  Check,
   Key,
   Building2,
   Phone,
 } from "lucide-react";
 import Link from "next/link";
-
-const TIMEZONES = [
-  "UTC",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Sao_Paulo",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Europe/Madrid",
-  "Asia/Dubai",
-  "Asia/Kolkata",
-  "Asia/Singapore",
-  "Asia/Tokyo",
-  "Australia/Sydney",
-];
-
-const LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "es", label: "Spanish" },
-  { code: "fr", label: "French" },
-  { code: "de", label: "German" },
-  { code: "pt", label: "Portuguese" },
-  { code: "it", label: "Italian" },
-];
-
-const NOTIFICATION_TYPES: {
-  type: NotificationType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    type: "minutes_80",
-    label: "80% minutes used",
-    description: "Alert when usage reaches 80% of limit.",
-  },
-  {
-    type: "minutes_100",
-    label: "100% minutes used",
-    description: "Alert when all minutes are consumed.",
-  },
-  {
-    type: "campaign_completed",
-    label: "Campaign completed",
-    description: "Notify when a campaign finishes.",
-  },
-  {
-    type: "contact_converted",
-    label: "Contact converted",
-    description: "Notify on each conversion.",
-  },
-  {
-    type: "qa_alert",
-    label: "QA score alert",
-    description: "Alert when a call scores below threshold.",
-  },
-  {
-    type: "team_invite",
-    label: "Team invitations",
-    description: "Notify when someone joins the workspace.",
-  },
-  {
-    type: "payment_failed",
-    label: "Payment failed",
-    description: "Critical billing failure alerts.",
-  },
-];
-
-interface ProfileForm {
-  name: string;
-  company: string;
-  timezone: string;
-  language: string;
-}
-
-interface PasswordForm {
-  current: string;
-  next: string;
-  confirm: string;
-}
+import type { ProfileForm, PasswordForm } from "./_components/constants";
+import { ProfileTab } from "./_components/ProfileTab";
+import { PasswordTab } from "./_components/PasswordTab";
+import { NotificationsTab } from "./_components/NotificationsTab";
+import { DangerTab } from "./_components/DangerTab";
+import { DeleteAccountDialog } from "./_components/DeleteAccountDialog";
 
 export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -133,7 +34,6 @@ export default function SettingsPage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // Password tab
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
@@ -154,9 +54,6 @@ export default function SettingsPage() {
 
   // Danger zone
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteConfirm1, setDeleteConfirm1] = useState("");
-  const [deleteConfirm2, setDeleteConfirm2] = useState("");
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -249,17 +146,6 @@ export default function SettingsPage() {
     );
   }
 
-  async function deleteAccount() {
-    if (deleteConfirm1 !== "DELETE" || deleteConfirm2 !== (user?.email ?? ""))
-      return;
-    setDeleting(true);
-    await fetch("/api/me", { method: "DELETE" });
-    window.location.href = "/login";
-  }
-
-  const canDelete =
-    deleteConfirm1 === "DELETE" && deleteConfirm2 === (user?.email ?? "");
-
   const initials = user?.name
     ? user.name
         .split(" ")
@@ -332,367 +218,44 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Profile tab */}
-        <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile</CardTitle>
-              <CardDescription>
-                Update your personal information and preferences.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Avatar */}
-              <div className="flex items-center gap-4">
-                <Avatar className="w-16 h-16 bg-[#0a0a0a] text-white text-lg font-semibold flex items-center justify-center">
-                  {user?.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- user-supplied avatar URL from arbitrary origins; next/image remote config is impractical here
-                    <img
-                      src={user.avatar_url}
-                      alt="Avatar"
-                      className="w-full h-full object-cover rounded-full"
-                    />
-                  ) : (
-                    <span>{initials}</span>
-                  )}
-                </Avatar>
-                <div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={avatarUploading}
-                  >
-                    <Upload className="w-4 h-4 mr-1" />
-                    {avatarUploading ? "Uploading…" : "Upload Photo"}
-                  </Button>
-                  <p className="text-xs text-[#6b6b6b] mt-1">
-                    JPG, PNG, GIF up to 4 MB.
-                  </p>
-                </div>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadAvatar(f);
-                  }}
-                />
-              </div>
+        <ProfileTab
+          user={user}
+          initials={initials}
+          profileForm={profileForm}
+          setProfileForm={setProfileForm}
+          profileSaving={profileSaving}
+          profileSaved={profileSaved}
+          avatarUploading={avatarUploading}
+          onSave={saveProfile}
+          onUploadAvatar={uploadAvatar}
+        />
 
-              <Separator />
+        <PasswordTab
+          passwordForm={passwordForm}
+          setPasswordForm={setPasswordForm}
+          passwordSaving={passwordSaving}
+          passwordSaved={passwordSaved}
+          passwordError={passwordError}
+          onSave={savePassword}
+        />
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="pf-name">Full Name</Label>
-                  <Input
-                    id="pf-name"
-                    value={profileForm.name}
-                    onChange={(e) =>
-                      setProfileForm((f) => ({ ...f, name: e.target.value }))
-                    }
-                    placeholder="Your name"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pf-company">Company</Label>
-                  <Input
-                    id="pf-company"
-                    value={profileForm.company}
-                    onChange={(e) =>
-                      setProfileForm((f) => ({ ...f, company: e.target.value }))
-                    }
-                    placeholder="Your company"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pf-tz">Timezone</Label>
-                  <select
-                    id="pf-tz"
-                    value={profileForm.timezone}
-                    onChange={(e) =>
-                      setProfileForm((f) => ({
-                        ...f,
-                        timezone: e.target.value,
-                      }))
-                    }
-                    className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
-                  >
-                    {TIMEZONES.map((tz) => (
-                      <option key={tz} value={tz}>
-                        {tz}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pf-lang">Language</Label>
-                  <select
-                    id="pf-lang"
-                    value={profileForm.language}
-                    onChange={(e) =>
-                      setProfileForm((f) => ({
-                        ...f,
-                        language: e.target.value,
-                      }))
-                    }
-                    className="w-full h-9 rounded-md border border-[#e0e0e0] bg-white px-3 text-sm text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
-                  >
-                    {LANGUAGES.map((l) => (
-                      <option key={l.code} value={l.code}>
-                        {l.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+        <NotificationsTab
+          enabledNotifications={enabledNotifications}
+          onToggle={toggleNotif}
+          notifSaving={notifSaving}
+          notifSaved={notifSaved}
+          onSave={saveNotifications}
+        />
 
-              <div className="flex justify-end">
-                <Button onClick={saveProfile} disabled={profileSaving}>
-                  {profileSaved ? (
-                    <>
-                      <Check className="w-4 h-4 mr-1" /> Saved
-                    </>
-                  ) : profileSaving ? (
-                    "Saving…"
-                  ) : (
-                    "Save Profile"
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Password tab */}
-        <TabsContent value="password">
-          <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>
-                Update your account password. Use a strong, unique password.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="pw-current">Current Password</Label>
-                <Input
-                  id="pw-current"
-                  type="password"
-                  value={passwordForm.current}
-                  onChange={(e) =>
-                    setPasswordForm((f) => ({ ...f, current: e.target.value }))
-                  }
-                  placeholder="Your current password"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pw-new">New Password</Label>
-                <Input
-                  id="pw-new"
-                  type="password"
-                  value={passwordForm.next}
-                  onChange={(e) =>
-                    setPasswordForm((f) => ({ ...f, next: e.target.value }))
-                  }
-                  placeholder="At least 8 characters"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pw-confirm">Confirm New Password</Label>
-                <Input
-                  id="pw-confirm"
-                  type="password"
-                  value={passwordForm.confirm}
-                  onChange={(e) =>
-                    setPasswordForm((f) => ({ ...f, confirm: e.target.value }))
-                  }
-                  placeholder="Repeat new password"
-                />
-              </div>
-
-              {passwordError && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                  {passwordError}
-                </p>
-              )}
-
-              <div className="flex justify-end">
-                <Button
-                  onClick={savePassword}
-                  disabled={
-                    passwordSaving ||
-                    !passwordForm.current ||
-                    !passwordForm.next
-                  }
-                >
-                  {passwordSaved ? (
-                    <>
-                      <Check className="w-4 h-4 mr-1" /> Updated
-                    </>
-                  ) : passwordSaving ? (
-                    "Updating…"
-                  ) : (
-                    "Update Password"
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Notifications tab */}
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
-                Choose which events you want to be notified about.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {NOTIFICATION_TYPES.map((n) => (
-                  <div key={n.type} className="flex items-start gap-3 py-1">
-                    <Checkbox
-                      id={`notif-${n.type}`}
-                      checked={enabledNotifications.includes(n.type)}
-                      onCheckedChange={() => toggleNotif(n.type)}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <Label
-                        htmlFor={`notif-${n.type}`}
-                        className="text-sm font-medium text-[#0a0a0a] cursor-pointer"
-                      >
-                        {n.label}
-                      </Label>
-                      <p className="text-xs text-[#6b6b6b] mt-0.5">
-                        {n.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Separator className="my-4" />
-
-              <div className="flex justify-end">
-                <Button onClick={saveNotifications} disabled={notifSaving}>
-                  {notifSaved ? (
-                    <>
-                      <Check className="w-4 h-4 mr-1" /> Saved
-                    </>
-                  ) : notifSaving ? (
-                    "Saving…"
-                  ) : (
-                    "Save Preferences"
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Danger zone */}
-        <TabsContent value="danger">
-          <Card className="border-red-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-red-700">
-                <AlertTriangle className="w-5 h-5" />
-                Danger Zone
-              </CardTitle>
-              <CardDescription>
-                Irreversible and destructive actions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-red-200 p-4">
-                <p className="text-sm font-medium text-[#0a0a0a] mb-1">
-                  Delete Account
-                </p>
-                <p className="text-xs text-[#6b6b6b] mb-3">
-                  Permanently delete your account, all workspaces, agents,
-                  campaigns, and calls. This cannot be undone.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-red-300 text-red-700 hover:bg-red-50"
-                  onClick={() => setDeleteDialogOpen(true)}
-                >
-                  <AlertTriangle className="w-4 h-4 mr-1" />
-                  Delete Account
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        <DangerTab onOpenDelete={() => setDeleteDialogOpen(true)} />
       </Tabs>
 
       {/* Delete account dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-red-700 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              Delete Account
-            </DialogTitle>
-            <DialogDescription>
-              This will permanently delete your account and all associated data.
-              This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="del-confirm1">
-                Type <span className="font-bold font-mono">DELETE</span> to
-                confirm
-              </Label>
-              <Input
-                id="del-confirm1"
-                value={deleteConfirm1}
-                onChange={(e) => setDeleteConfirm1(e.target.value)}
-                placeholder="DELETE"
-                className="font-mono"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="del-confirm2">
-                Type your email{" "}
-                <span className="font-semibold">{user?.email ?? ""}</span> to
-                confirm
-              </Label>
-              <Input
-                id="del-confirm2"
-                type="email"
-                value={deleteConfirm2}
-                onChange={(e) => setDeleteConfirm2(e.target.value)}
-                placeholder={user?.email ?? ""}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-red-700 hover:bg-red-800 text-white border-transparent"
-              disabled={!canDelete || deleting}
-              onClick={deleteAccount}
-            >
-              {deleting ? "Deleting…" : "Delete My Account"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteAccountDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        email={user?.email ?? ""}
+      />
     </div>
   );
 }
