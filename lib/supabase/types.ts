@@ -336,11 +336,25 @@ export interface Call {
   extracted_objections: string | null;
   qa_score: number | null;
   qa_feedback: string | null;
+  qa_details: Record<string, unknown> | null;
   retell_call_id: string | null;
   cost_usd: number;
   tokens_used: number | null;
   extracted_data: Record<string, unknown> | null;
   created_at: string;
+  // External-import fields (migration 075)
+  external_source: string | null;
+  external_call_id: string | null;
+  external_agent_name: string | null;
+  department: string | null;
+  prospect_id: string | null;
+  crm_id: string | null;
+  extension: string | null;
+  imported_payload: Record<string, unknown> | null;
+  analysis_status: CallAnalysisStatus | null;
+  analysis_error: string | null;
+  recording_storage_path: string | null;
+  import_integration_id: string | null;
   agent?: Agent;
   campaign?: Campaign;
 }
@@ -348,9 +362,64 @@ export interface Call {
 export interface QACriteria {
   id: string;
   agent_id: string;
+  workspace_id: string | null;
   name: string;
   description: string | null;
   weight: number;
+  created_at: string;
+}
+
+export type CallAnalysisStatus =
+  | "pending"
+  | "processing"
+  | "analyzed"
+  | "error";
+
+export type CallProvider =
+  | "squaretalk"
+  | "voiso"
+  | "commpeak"
+  | "custom_webhook"
+  | "n8n";
+
+export type CallConnectionMethod = "webhook_receiver" | "api_sync";
+
+export type CallProviderIntegrationStatus =
+  | "active"
+  | "paused"
+  | "error"
+  | "disabled";
+
+export interface CallProviderIntegration {
+  id: string;
+  workspace_id: string;
+  name: string;
+  provider: CallProvider;
+  connection_method: CallConnectionMethod;
+  status: CallProviderIntegrationStatus;
+  default_agent_id: string | null;
+  default_department: string | null;
+  webhook_secret: string | null;
+  config: Record<string, unknown>;
+  credentials: Record<string, unknown>;
+  last_event_at: string | null;
+  last_sync_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CallImportLog {
+  id: string;
+  workspace_id: string;
+  integration_id: string | null;
+  provider: string;
+  external_call_id: string | null;
+  status: "success" | "error" | "duplicate";
+  message: string | null;
+  payload: Record<string, unknown> | null;
+  response: Record<string, unknown> | null;
+  call_id: string | null;
   created_at: string;
 }
 
@@ -661,6 +730,19 @@ export type Database = {
         Row: QACriteria;
         Insert: Omit<QACriteria, "id" | "created_at">;
         Update: Partial<QACriteria>;
+      };
+      call_provider_integrations: {
+        Row: CallProviderIntegration;
+        Insert: Omit<
+          CallProviderIntegration,
+          "id" | "created_at" | "updated_at"
+        >;
+        Update: Partial<CallProviderIntegration>;
+      };
+      call_import_logs: {
+        Row: CallImportLog;
+        Insert: Omit<CallImportLog, "id" | "created_at">;
+        Update: Partial<CallImportLog>;
       };
       integrations: {
         Row: Integration;
