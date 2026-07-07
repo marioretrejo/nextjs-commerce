@@ -20,44 +20,20 @@
  *
  * Response:
  *   { "call_id": "...", "room_name": "...", "status": "dialing" }
+ *
+ * External-service helpers (auth, LiveKit room/SIP, Twilio) live in _lib.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { RoomServiceClient } from "livekit-server-sdk";
 import { getRegionalHttpUrl } from "@/lib/livekit/edge";
 import { traceRequest } from "@/lib/tracing";
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-
-// ─── API key auth ─────────────────────────────────────────────────────────────
-async function authenticateApiKey(
-  req: Request,
-): Promise<{ workspaceId: string; userId: string } | null> {
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const rawKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!rawKey) return null;
-
-  const hashed = crypto.createHash("sha256").update(rawKey).digest("hex");
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("api_keys")
-    .select("workspace_id, user_id, is_active")
-    .eq("key_hash", hashed)
-    .single();
-
-  if (!data || !(data as { is_active: boolean }).is_active) return null;
-
-  void Promise.resolve(
-    admin
-      .from("api_keys")
-      .update({ last_used_at: new Date().toISOString() })
-      .eq("key_hash", hashed),
-  ).catch(() => null);
-
-  return {
-    workspaceId: (data as { workspace_id: string }).workspace_id,
-    userId: (data as { user_id: string }).user_id,
-  };
-}
+import { authenticateApiKey } from "./_lib/auth";
+import {
+  createOutboundRoom,
+  createOutboundSipParticipant,
+  type OutboundAgent,
+} from "./_lib/livekit";
+import { resolveCallerId, initiateTwilioCall } from "./_lib/twilio";
 
 export async function POST(req: Request) {
   const trace = traceRequest(req, "v1.calls.outbound");
@@ -181,55 +157,41 @@ export async function POST(req: Request) {
     );
   }
 
+  const releaseSlot = () =>
+    void Promise.resolve(
+      admin.rpc("release_call_slot", { p_workspace_id: workspaceId }),
+    ).catch(() => null);
+
   // ── LiveKit config ────────────────────────────────────────────────────────
   const apiKey = process.env["LIVEKIT_API_KEY"];
   const apiSecret = process.env["LIVEKIT_API_SECRET"];
   const httpUrl = getRegionalHttpUrl();
 
   if (!apiKey || !apiSecret || !httpUrl) {
-    void Promise.resolve(
-      admin.rpc("release_call_slot", { p_workspace_id: workspaceId }),
-    ).catch(() => null);
+    releaseSlot();
     return NextResponse.json(
       { error: "LiveKit not configured." },
       { status: 500 },
     );
   }
+  const creds = { httpUrl, apiKey, apiSecret };
 
-  const agent = agentRow as {
-    id: string;
-    name: string;
-    system_prompt: string | null;
-    first_message: string | null;
-    voice_id: string | null;
-    voice_emotion: string | null;
-  };
+  const agent = agentRow as OutboundAgent;
 
   // Use agent- prefix (not sip-agent-) so outbound rooms match the same worker pattern
   const roomName = `agent-${agentId}-${Date.now()}`;
 
   // ── Create LiveKit room ───────────────────────────────────────────────────
   try {
-    const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
-    await roomService.createRoom({
-      name: roomName,
-      metadata: JSON.stringify({
-        agent_name: agent.name,
-        system_prompt: agent.system_prompt,
-        first_message: agent.first_message,
-        voice_id: agent.voice_id,
-        voice_emotion: agent.voice_emotion,
-        workspace_id: workspaceId,
-        call_direction: "outbound",
-        dynamic_variables: variables,
-        recipient_number: to,
-      }),
-      departureTimeout: 600,
+    await createOutboundRoom(creds, {
+      roomName,
+      agent,
+      workspaceId,
+      variables,
+      to,
     });
   } catch (err) {
-    void Promise.resolve(
-      admin.rpc("release_call_slot", { p_workspace_id: workspaceId }),
-    ).catch(() => null);
+    releaseSlot();
     trace.end({ ok: false, error: String(err) });
     return NextResponse.json(
       { error: "Failed to create voice room." },
@@ -243,41 +205,19 @@ export async function POST(req: Request) {
   const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "";
   const livekitSipHost = process.env["LIVEKIT_SIP_HOST"] ?? "sip.livekit.run";
 
-  // Resolve caller ID: explicit param → workspace default number → env fallback
-  let callerId = fromNumber;
-  if (!callerId) {
-    const { data: defaultNumber } = await admin
-      .from("phone_numbers")
-      .select("number")
-      .eq("workspace_id", workspaceId)
-      .eq("status", "available")
-      .limit(1)
-      .single();
-    callerId =
-      (defaultNumber as { number: string } | null)?.number ??
-      process.env["TWILIO_PHONE_NUMBER"] ??
-      "";
-  }
+  const callerId = await resolveCallerId(admin, workspaceId, fromNumber);
 
   if (!twilioSid || !twilioToken || !callerId) {
     // Fallback: LiveKit native outbound SIP (requires LIVEKIT_SIP_OUTBOUND_TRUNK_ID)
     const outboundTrunkId = process.env["LIVEKIT_SIP_OUTBOUND_TRUNK_ID"];
     if (outboundTrunkId) {
       try {
-        const { SipClient } = await import("livekit-server-sdk");
-        const sipClient = new SipClient(httpUrl, apiKey, apiSecret);
-        const sipP = await sipClient.createSipParticipant(
+        const participantIdentity = await createOutboundSipParticipant(creds, {
           outboundTrunkId,
           to,
           roomName,
-          {
-            participantIdentity: `sip_out_${Date.now()}`,
-            participantName: "Caller",
-            ...(fromNumber ? { fromNumber } : {}),
-            playDialtone: true,
-            waitUntilAnswered: false,
-          },
-        );
+          ...(fromNumber ? { fromNumber } : {}),
+        });
 
         await admin.from("calls").insert({
           workspace_id: workspaceId,
@@ -289,7 +229,7 @@ export async function POST(req: Request) {
           cost_usd: 0,
           routing_data: {
             method: "livekit_sip",
-            participant_id: sipP.participantIdentity,
+            participant_id: participantIdentity,
           },
         });
 
@@ -299,10 +239,8 @@ export async function POST(req: Request) {
           room_name: roomName,
           status: "dialing",
         });
-      } catch (err) {
-        void Promise.resolve(
-          admin.rpc("release_call_slot", { p_workspace_id: workspaceId }),
-        ).catch(() => null);
+      } catch {
+        releaseSlot();
         return NextResponse.json(
           { error: "Failed to initiate call." },
           { status: 500 },
@@ -310,9 +248,7 @@ export async function POST(req: Request) {
       }
     }
 
-    void Promise.resolve(
-      admin.rpc("release_call_slot", { p_workspace_id: workspaceId }),
-    ).catch(() => null);
+    releaseSlot();
     return NextResponse.json(
       {
         error:
@@ -333,43 +269,16 @@ export async function POST(req: Request) {
   // Initiate the Twilio call
   let twilioCallSid: string;
   try {
-    const callParams = new URLSearchParams({
-      To: to,
-      From: callerId,
-      Url: twimlCallbackUrl,
-      StatusCallback: statusCallbackUrl,
-      StatusCallbackMethod: "POST",
-      StatusCallbackEvent: "initiated ringing answered completed",
-      MachineDetection: "Enable", // AMD — skip voicemail
-      AsyncAmdStatusCallback: statusCallbackUrl,
+    twilioCallSid = await initiateTwilioCall({
+      twilioSid,
+      twilioToken,
+      to,
+      callerId,
+      twimlCallbackUrl,
+      statusCallbackUrl,
     });
-
-    const res = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString("base64")}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: callParams.toString(),
-      },
-    );
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Twilio ${res.status}: ${text}`);
-    }
-
-    const twilioResponse = (await res.json()) as {
-      sid: string;
-      status: string;
-    };
-    twilioCallSid = twilioResponse.sid;
   } catch (err) {
-    void Promise.resolve(
-      admin.rpc("release_call_slot", { p_workspace_id: workspaceId }),
-    ).catch(() => null);
+    releaseSlot();
     trace.end({ ok: false, error: String(err) });
     return NextResponse.json(
       { error: "Twilio failed to initiate call." },
