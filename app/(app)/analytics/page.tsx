@@ -1,71 +1,28 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import type { Call, Agent } from "@/lib/supabase/types";
-import {
-  Phone,
-  Clock,
-  TrendingUp,
-  Target,
-  Bot,
-  DollarSign,
-  Smile,
-  Meh,
-  Frown,
-} from "lucide-react";
+import { Phone, Clock, TrendingUp, Target, DollarSign } from "lucide-react";
 import Link from "next/link";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
 import {
   format,
   subDays,
   startOfDay,
   eachDayOfInterval,
   eachWeekOfInterval,
-  startOfWeek,
   endOfWeek,
 } from "date-fns";
-
-type DateRange = "7d" | "30d" | "90d";
-
-interface AgentRow {
-  id: string;
-  name: string;
-  calls: number;
-  converted: number;
-  avgQA: number;
-}
-
-interface DailyBar {
-  date: string;
-  calls: number;
-}
-
-interface WeeklyLine {
-  week: string;
-  rate: number;
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
-}
+import {
+  type DateRange,
+  type AgentRow,
+  type DailyBar,
+  type WeeklyLine,
+  formatDuration,
+} from "./_components/types";
+import { MetricCards, type MetricCard } from "./_components/MetricCards";
+import { CallsCharts } from "./_components/CallsCharts";
+import { SentimentBreakdown } from "./_components/SentimentBreakdown";
+import { AgentComparison } from "./_components/AgentComparison";
 
 export default function AnalyticsPage() {
   const [calls, setCalls] = useState<Call[]>([]);
@@ -198,7 +155,7 @@ export default function AnalyticsPage() {
     .filter((r) => r.calls > 0)
     .sort((a, b) => b.calls - a.calls);
 
-  const metricCards = [
+  const metricCards: MetricCard[] = [
     {
       label: "Total Calls",
       value: totalCalls.toLocaleString(),
@@ -274,243 +231,25 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {metricCards.map((m) => (
-          <Card key={m.label}>
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <p className="text-sm text-[#6b6b6b]">{m.label}</p>
-                <span className="text-[#6b6b6b]">{m.icon}</span>
-              </div>
-              {loading ? (
-                <div className="h-8 w-20 bg-[#f5f5f5] rounded animate-pulse" />
-              ) : (
-                <p className="text-3xl font-bold text-[#0a0a0a]">{m.value}</p>
-              )}
-              <p className="text-xs text-[#6b6b6b] mt-1">{m.sub}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MetricCards loading={loading} cards={metricCards} />
 
       {/* Charts row */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {/* Bar chart */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Calls per Day</CardTitle>
-            <CardDescription>Total calls made each day</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="h-52 bg-[#f5f5f5] rounded animate-pulse" />
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart
-                  data={dailyData}
-                  margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11, fill: "#6b6b6b" }}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: "#6b6b6b" }}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#fff",
-                      border: "1px solid #e0e0e0",
-                      borderRadius: 6,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="calls" fill="#0a0a0a" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Line chart */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              Conversion Rate per Week
-            </CardTitle>
-            <CardDescription>Weekly conversion trend (%)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="h-52 bg-[#f5f5f5] rounded animate-pulse" />
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart
-                  data={weeklyData}
-                  margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                  <XAxis
-                    dataKey="week"
-                    tick={{ fontSize: 11, fill: "#6b6b6b" }}
-                  />
-                  <YAxis tick={{ fontSize: 11, fill: "#6b6b6b" }} unit="%" />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#fff",
-                      border: "1px solid #e0e0e0",
-                      borderRadius: 6,
-                      fontSize: 12,
-                    }}
-                    formatter={(v: number) => [`${v}%`, "Rate"]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="rate"
-                    stroke="#0a0a0a"
-                    strokeWidth={2}
-                    dot={{ fill: "#0a0a0a", r: 3 }}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <CallsCharts
+        loading={loading}
+        dailyData={dailyData}
+        weeklyData={weeklyData}
+      />
 
       {/* Sentiment breakdown */}
-      <Card className="mb-6">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Sentiment Breakdown</CardTitle>
-          <CardDescription>
-            AI-analyzed call sentiment from post-call intelligence
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="h-20 bg-[#f5f5f5] rounded animate-pulse" />
-          ) : sentimentTotal === 0 ? (
-            <p className="text-sm text-[#6b6b6b] py-4 text-center">
-              No analyzed calls yet — sentiment is extracted automatically after
-              each call.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {[
-                {
-                  key: "positive" as const,
-                  label: "Positive",
-                  icon: <Smile className="w-4 h-4 text-green-600" />,
-                  color: "bg-green-500",
-                },
-                {
-                  key: "neutral" as const,
-                  label: "Neutral",
-                  icon: <Meh className="w-4 h-4 text-yellow-600" />,
-                  color: "bg-yellow-400",
-                },
-                {
-                  key: "negative" as const,
-                  label: "Negative",
-                  icon: <Frown className="w-4 h-4 text-red-500" />,
-                  color: "bg-red-500",
-                },
-              ].map(({ key, label, icon, color }) => {
-                const count = sentimentCounts[key];
-                const pct =
-                  sentimentTotal > 0
-                    ? Math.round((count / sentimentTotal) * 100)
-                    : 0;
-                return (
-                  <div key={key} className="flex items-center gap-3">
-                    {icon}
-                    <span className="w-16 text-sm text-[#6b6b6b]">{label}</span>
-                    <div className="flex-1 h-2 rounded-full bg-[#f5f5f5] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${color} transition-all`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="w-16 text-right text-sm font-medium text-[#0a0a0a]">
-                      {count.toLocaleString()} ({pct}%)
-                    </span>
-                  </div>
-                );
-              })}
-              <p className="text-xs text-[#6b6b6b] pt-1">
-                {sentimentTotal.toLocaleString()} of{" "}
-                {totalCalls.toLocaleString()} calls analyzed
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SentimentBreakdown
+        loading={loading}
+        counts={sentimentCounts}
+        total={sentimentTotal}
+        totalCalls={totalCalls}
+      />
 
       {/* Agent comparison table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Bot className="w-4 h-4" />
-            Agent Comparison
-          </CardTitle>
-          <CardDescription>Performance breakdown by agent</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="p-5 space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-8 bg-[#f5f5f5] rounded animate-pulse"
-                />
-              ))}
-            </div>
-          ) : agentRows.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#6b6b6b]">
-              No data available for the selected period.
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-4 gap-3 px-5 py-3 border-b border-[#e0e0e0] text-xs font-medium text-[#6b6b6b] uppercase tracking-wide">
-                <span>Agent</span>
-                <span className="text-right">Calls</span>
-                <span className="text-right">Conversion</span>
-                <span className="text-right">Avg QA</span>
-              </div>
-              <div className="divide-y divide-[#e0e0e0]">
-                {agentRows.map((row) => {
-                  const rate =
-                    row.calls > 0
-                      ? ((row.converted / row.calls) * 100).toFixed(1)
-                      : "0.0";
-                  return (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-4 gap-3 px-5 py-3 text-sm items-center hover:bg-[#f5f5f5]"
-                    >
-                      <span className="font-medium text-[#0a0a0a]">
-                        {row.name}
-                      </span>
-                      <span className="text-right text-[#6b6b6b]">
-                        {row.calls.toLocaleString()}
-                      </span>
-                      <span className="text-right text-[#0a0a0a] font-medium">
-                        {rate}%
-                      </span>
-                      <span className="text-right text-[#6b6b6b]">
-                        {row.avgQA > 0 ? `${row.avgQA}%` : "—"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <AgentComparison loading={loading} rows={agentRows} />
     </div>
   );
 }
