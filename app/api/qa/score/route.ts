@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { groqJson, isLLMConfigured } from "@/lib/groq";
+import { isLLMConfigured } from "@/lib/groq";
+import { scoreCallQuality, type QACriterion } from "@/lib/call-analysis";
 import { NextResponse } from "next/server";
 
 // Internal-only endpoint — called server-to-server after a call completes.
@@ -56,30 +57,28 @@ export async function POST(req: Request) {
   if (!isLLMConfigured()) return NextResponse.json({ ok: true });
 
   try {
-    const criteriaList = (
-      criteria as { name: string; description: string | null; weight: number }[]
-    )
-      .map((c) => `- ${c.name} (weight ${c.weight}/10): ${c.description ?? ""}`)
-      .join("\n");
-
-    const result = await groqJson<{ overall?: number }>({
-      system:
-        'You are a call quality analyst. Score the call transcript against the criteria. Return only valid JSON: {"overall": number 0-100, "scores": [{"name": string, "score": number 0-100}]}',
-      prompt: `Criteria:\n${criteriaList}\n\nTranscript:\n${call.transcript.slice(0, 4000)}\n\nScore this call.`,
-      maxTokens: 512,
+    const qa = await scoreCallQuality(call.transcript, {
+      criteria: criteria as QACriterion[],
     });
 
-    if (!result) {
+    if (!qa) {
       console.error("QA: LLM scoring returned no result");
       return NextResponse.json({ ok: true, scored: false });
     }
 
-    if (typeof result.overall === "number") {
-      await admin
-        .from("calls")
-        .update({ qa_score: result.overall })
-        .eq("id", call.id);
-    }
+    await admin
+      .from("calls")
+      .update({
+        qa_score: qa.score,
+        qa_feedback: qa.feedback || null,
+        qa_details: {
+          overall: qa.score,
+          feedback: qa.feedback,
+          scores: qa.breakdown,
+          criteria_count: (criteria as QACriterion[]).length,
+        },
+      })
+      .eq("id", call.id);
   } catch (e) {
     console.error("QA scoring failed:", e);
   }
