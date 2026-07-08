@@ -46,12 +46,15 @@ async function runMigrations() {
         const trimmed = statement.trim();
         if (!trimmed) continue;
 
-        const { error } = await client.rpc("exec", {
-          query: trimmed,
-        }).catch(() => {
+        let error: { message?: string } | null = null;
+        try {
+          const res = await client.rpc("exec", { query: trimmed });
+          error = res.error;
+        } catch {
           // Fallback: use raw query
-          return client.from("_migrations").select().limit(0);
-        });
+          const res = await client.from("_migrations").select().limit(0);
+          error = res.error;
+        }
 
         if (error && error.message !== "No rows found") {
           throw error;

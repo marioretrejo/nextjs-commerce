@@ -1,145 +1,163 @@
 "use client";
 
-import { useState } from "react";
-import { Play, Pause, Search, Download } from "lucide-react";
-import type { Call } from "@/lib/supabase/types";
+import { useMemo, useState } from "react";
+import { Search, Download } from "lucide-react";
+import { WaveformPlayer } from "@/components/calls/WaveformPlayer";
+import { agentName, formatDuration, type QaCall } from "./types";
 
-interface CallPlayerProps {
-  call: Call | null;
-  loading: boolean;
+interface TranscriptLine {
+  speaker: string;
+  text: string;
+  isAgent: boolean;
 }
 
-export function CallPlayer({ call, loading }: CallPlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
+function parseTranscript(raw: string | null): TranscriptLine[] {
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const isAgent =
+        /^\S+\s*:/.test(line) &&
+        !/^(user|caller|contact|cliente|customer)\s*:/i.test(line);
+      const m = line.match(/^([^:]{1,30}):\s*(.*)$/);
+      return {
+        speaker: m ? m[1]!.trim() : isAgent ? "Agente" : "Cliente",
+        text: m ? m[2]!.trim() : line,
+        isAgent,
+      };
+    });
+}
+
+export function CallPlayer({
+  call,
+  loading,
+}: {
+  call: QaCall | null;
+  loading: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const lines = useMemo(() => parseTranscript(call?.transcript ?? null), [call]);
+  const filtered = query.trim()
+    ? lines.filter((l) => l.text.toLowerCase().includes(query.toLowerCase()))
+    : lines;
 
   if (loading) {
     return (
-      <div className="p-6 space-y-4">
-        <div className="h-20 bg-gray-100 rounded animate-pulse" />
-        <div className="h-40 bg-gray-100 rounded animate-pulse" />
+      <div className="space-y-4 p-6">
+        <div className="h-24 animate-pulse rounded-lg bg-[#f5f5f5]" />
+        <div className="h-64 animate-pulse rounded-lg bg-[#f5f5f5]" />
       </div>
     );
   }
 
   if (!call) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl text-gray-200 mb-4">🎙️</div>
-          <p className="text-gray-500 font-medium">No call selected</p>
-          <p className="text-gray-400 text-sm">
-            Select a call from the list to start reviewing
-          </p>
-        </div>
+      <div className="flex h-full items-center justify-center p-6 text-sm text-[#6b6b6b]">
+        Selecciona una llamada para revisarla.
       </div>
     );
   }
 
-  const duration = call.duration_seconds || 0;
-  const minutes = Math.floor(duration / 60);
-  const seconds = duration % 60;
+  const hasRecording = !!(call.recording_storage_path || call.recording_url);
+  const recordingUrl = hasRecording ? `/api/calls/${call.id}/recording` : null;
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Call Info Header */}
-      <div className="border-b border-gray-200 p-6">
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-black mb-1">
-            {call.contact_name || "Unknown Client"}
+    <div className="space-y-5 p-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-semibold text-[#0a0a0a]">
+            {call.contact_name ?? call.contact_phone ?? "Desconocido"}
           </h2>
-          <p className="text-sm text-gray-600">
-            Agent: {call.external_agent_name || "—"} · Phone:{" "}
-            {call.contact_phone || "—"}
+          <p className="mt-0.5 text-sm text-[#6b6b6b]">
+            {agentName(call)}
+            {call.department ? ` · ${call.department}` : ""}
           </p>
         </div>
-
-        {/* Audio Player */}
-        <div className="space-y-3">
-          {/* Player Controls */}
-          <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-lg">
-            <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="p-2 hover:bg-gray-200 rounded-full transition"
-            >
-              {isPlaying ? (
-                <Pause className="h-5 w-5 text-black" />
-              ) : (
-                <Play className="h-5 w-5 text-black" />
-              )}
-            </button>
-
-            {/* Timeline */}
-            <div className="flex-1 space-y-1">
-              <div className="bg-gray-300 h-1 rounded-full cursor-pointer hover:bg-gray-400 transition">
-                {/* Waveform would go here */}
-              </div>
-              <div className="flex justify-between text-xs text-gray-600">
-                <span>
-                  {String(Math.floor(currentTime / 60)).padStart(2, "0")}:
-                  {String(currentTime % 60).padStart(2, "0")}
-                </span>
-                <span>
-                  {String(minutes).padStart(2, "0")}:
-                  {String(seconds).padStart(2, "0")}
-                </span>
-              </div>
-            </div>
-
-            {/* Speed */}
-            <select className="text-sm border border-gray-300 rounded px-2 py-1 bg-white text-black">
-              <option>1x</option>
-              <option>1.25x</option>
-              <option>1.5x</option>
-              <option>2x</option>
-            </select>
-
-            {/* Download */}
-            {call.recording_url && (
-              <button
-                onClick={() => window.open(call.recording_url!, "_blank")}
-                className="p-2 hover:bg-gray-200 rounded-full transition"
-                title="Download recording"
-              >
-                <Download className="h-5 w-5 text-gray-600" />
-              </button>
-            )}
-          </div>
+        <div className="shrink-0 text-right text-xs text-[#6b6b6b]">
+          <p>{formatDuration(call.duration_seconds)}</p>
+          {call.external_source && (
+            <p className="mt-0.5 uppercase tracking-wide">
+              {call.external_source.replace(/_/g, " ")}
+            </p>
+          )}
         </div>
       </div>
 
+      {/* Player */}
+      {recordingUrl ? (
+        <div className="rounded-xl border border-[#e5e5e5] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-[#0a0a0a]">Grabación</span>
+            <a
+              href={`${recordingUrl}?download=1`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#e0e0e0] bg-white px-2.5 py-1 text-xs font-medium text-[#0a0a0a] transition-colors hover:bg-[#f5f5f5]"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Descargar
+            </a>
+          </div>
+          <WaveformPlayer
+            url={recordingUrl}
+            transcript={call.transcript}
+            duration={call.duration_seconds}
+          />
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-[#e5e5e5] p-4 text-center text-sm text-[#9b9b9b]">
+          Sin grabación disponible.
+        </div>
+      )}
+
       {/* Transcript */}
-      <div className="flex-1 overflow-auto p-6 space-y-4">
-        {/* Search Transcript */}
-        <div className="sticky top-0 bg-white pb-3 border-b border-gray-200 -mx-6 px-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+      <div className="rounded-xl border border-[#e5e5e5]">
+        <div className="flex items-center justify-between gap-3 border-b border-[#efefef] p-3">
+          <span className="text-sm font-medium text-[#0a0a0a]">
+            Transcripción
+          </span>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9b9b9b]" />
             <input
-              type="text"
-              placeholder="Search in transcript..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar en la transcripción…"
+              className="h-8 w-full rounded-md border border-[#e0e0e0] bg-white pl-8 pr-2 text-xs text-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
             />
           </div>
         </div>
-
-        {/* Transcript Content */}
-        {call.transcript ? (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-700 leading-relaxed">
-              {call.transcript}
+        <div className="max-h-[420px] space-y-3 overflow-y-auto p-4">
+          {filtered.length === 0 ? (
+            <p className="text-sm text-[#9b9b9b]">
+              {call.transcript ? "Sin coincidencias." : "Sin transcripción."}
             </p>
-          </div>
-        ) : (
-          <div className="text-center text-gray-500 py-8">
-            <p className="text-sm">No transcript available</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Transcript will appear once analysis is complete
-            </p>
-          </div>
-        )}
+          ) : (
+            filtered.map((line, i) => (
+              <div
+                key={i}
+                className={`flex ${line.isAgent ? "flex-row" : "flex-row-reverse"}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm ${
+                    line.isAgent
+                      ? "bg-[#0a0a0a] text-white"
+                      : "bg-[#f5f5f5] text-[#0a0a0a]"
+                  }`}
+                >
+                  <p
+                    className={`mb-1 text-[11px] font-medium ${
+                      line.isAgent ? "text-[#b5b5b5]" : "text-[#6b6b6b]"
+                    }`}
+                  >
+                    {line.isAgent ? "Agente" : "Cliente"}
+                  </p>
+                  {line.text}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
