@@ -1,7 +1,12 @@
 "use client";
 
 import type { Call } from "@/lib/supabase/types";
-import { AlertCircle, TrendingUp, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  AlertCircle,
+  TrendingUp,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
 
 interface ScoreCardProps {
   call: Call | null;
@@ -47,8 +52,14 @@ export function ScoreCard({ call, loading }: ScoreCardProps) {
   }
 
   function getRiskBadge(s: number) {
-    if (s >= 80) return { bg: "bg-green-100", text: "text-green-800", label: "Low Risk" };
-    if (s >= 60) return { bg: "bg-yellow-100", text: "text-yellow-800", label: "Medium Risk" };
+    if (s >= 80)
+      return { bg: "bg-green-100", text: "text-green-800", label: "Low Risk" };
+    if (s >= 60)
+      return {
+        bg: "bg-yellow-100",
+        text: "text-yellow-800",
+        label: "Medium Risk",
+      };
     return { bg: "bg-red-100", text: "text-red-800", label: "High Risk" };
   }
 
@@ -84,7 +95,10 @@ export function ScoreCard({ call, loading }: ScoreCardProps) {
                   className={getScoreColor(score)}
                   strokeDasharray={`${(score / 100) * 340} 340`}
                   strokeLinecap="round"
-                  style={{ transform: "rotate(-90deg)", transformOrigin: "60px 60px" }}
+                  style={{
+                    transform: "rotate(-90deg)",
+                    transformOrigin: "60px 60px",
+                  }}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -108,15 +122,9 @@ export function ScoreCard({ call, loading }: ScoreCardProps) {
             Sentiment
           </p>
           <div className="flex items-center gap-2">
-            {sentiment === "positive" && (
-              <span className="text-lg">😊</span>
-            )}
-            {sentiment === "neutral" && (
-              <span className="text-lg">😐</span>
-            )}
-            {sentiment === "negative" && (
-              <span className="text-lg">😞</span>
-            )}
+            {sentiment === "positive" && <span className="text-lg">😊</span>}
+            {sentiment === "neutral" && <span className="text-lg">😐</span>}
+            {sentiment === "negative" && <span className="text-lg">😞</span>}
             <span className="text-sm font-medium text-gray-800 capitalize">
               {sentiment}
             </span>
@@ -129,34 +137,40 @@ export function ScoreCard({ call, loading }: ScoreCardProps) {
             Score Breakdown
           </p>
           <div className="space-y-3">
-            {["Opening", "Discovery", "Objection Handling", "Compliance", "Closing"].map(
-              (category, idx) => {
-                const categoryScores = [90, 85, 75, 92, 88];
-                const catScore = categoryScores[idx];
-                return (
-                  <div key={category} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-700 font-medium">{category}</span>
-                      <span className={`font-bold ${getScoreColor(catScore)}`}>
-                        {catScore}/100
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${
-                          catScore >= 80
-                            ? "bg-green-600"
-                            : catScore >= 60
-                              ? "bg-yellow-600"
-                              : "bg-red-600"
-                        }`}
-                        style={{ width: `${catScore}%` }}
-                      />
-                    </div>
+            {[
+              "Opening",
+              "Discovery",
+              "Objection Handling",
+              "Compliance",
+              "Closing",
+            ].map((category, idx) => {
+              const categoryScores = [90, 85, 75, 92, 88];
+              const catScore = categoryScores[idx] ?? 0;
+              return (
+                <div key={category} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-700 font-medium">
+                      {category}
+                    </span>
+                    <span className={`font-bold ${getScoreColor(catScore)}`}>
+                      {catScore}/100
+                    </span>
                   </div>
-                );
-              }
-            )}
+                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${
+                        catScore >= 80
+                          ? "bg-green-600"
+                          : catScore >= 60
+                            ? "bg-yellow-600"
+                            : "bg-red-600"
+                      }`}
+                      style={{ width: `${catScore}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -215,7 +229,9 @@ export function ScoreCard({ call, loading }: ScoreCardProps) {
             </p>
           </div>
           <p className="text-sm text-gray-700 leading-relaxed">
-            Focus on deeper discovery questions at the beginning of calls to better understand client needs. This will help craft more tailored solutions and increase objection handling effectiveness.
+            Focus on deeper discovery questions at the beginning of calls to
+            better understand client needs. This will help craft more tailored
+            solutions and increase objection handling effectiveness.
           </p>
         </div>
 

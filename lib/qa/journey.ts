@@ -20,11 +20,11 @@ export async function findOrCreateJourney(
   contactPhone: string | null,
   contactName: string | null,
   agentId: string | null,
-  department: string | null
+  department: string | null,
 ): Promise<QACustomerJourney | null> {
   if (!contactPhone) return null;
 
-  const client = createClient();
+  const client = await createClient();
   const normalized = normalizePhone(contactPhone);
   if (!normalized) return null;
 
@@ -85,9 +85,9 @@ export async function addCallToJourney(
   journeyId: string,
   callId: string,
   sequenceIndex: number,
-  roleInJourney: QAJourneyCall["role_in_journey"] = "other"
+  roleInJourney: QAJourneyCall["role_in_journey"] = "other",
 ): Promise<QAJourneyCall | null> {
-  const client = createClient();
+  const client = await createClient();
 
   try {
     const { data, error } = await client
@@ -117,9 +117,9 @@ export async function addCallToJourney(
  * Get all calls in a journey, ordered by sequence
  */
 export async function getJourneyCalls(
-  journeyId: string
+  journeyId: string,
 ): Promise<QAJourneyCall[] | null> {
-  const client = createClient();
+  const client = await createClient();
 
   try {
     const { data, error } = await client
@@ -147,9 +147,9 @@ export async function getJourneyCalls(
 export async function updateJourneyAfterAnalysis(
   journeyId: string,
   finalOutcome?: string | null,
-  callScore?: number | null
+  callScore?: number | null,
 ): Promise<QACustomerJourney | null> {
-  const client = createClient();
+  const client = await createClient();
 
   try {
     // Get all calls in journey
@@ -162,7 +162,7 @@ export async function updateJourneyAfterAnalysis(
       .select("qa_score")
       .in(
         "id",
-        calls.map((c) => c.call_id)
+        calls.map((c) => c.call_id),
       );
 
     if (callsError) {
@@ -174,7 +174,8 @@ export async function updateJourneyAfterAnalysis(
       ?.map((c: { qa_score: number | null }) => c.qa_score)
       .filter((s: number | null) => s !== null) as number[];
 
-    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b) / scores.length : null;
+    const avgScore =
+      scores.length > 0 ? scores.reduce((a, b) => a + b) / scores.length : null;
 
     // Update journey
     const { data, error } = await client
@@ -206,9 +207,7 @@ export async function updateJourneyAfterAnalysis(
  * Get journey context for display
  * Returns journey + all calls with minimal data
  */
-export async function getJourneyContext(
-  journeyId: string
-): Promise<{
+export async function getJourneyContext(journeyId: string): Promise<{
   journey: QACustomerJourney;
   calls: Array<{
     id: string;
@@ -221,7 +220,7 @@ export async function getJourneyContext(
     role_in_journey: string;
   }>;
 } | null> {
-  const client = createClient();
+  const client = await createClient();
 
   try {
     const { data: journey, error: journeyError } = await client
@@ -241,11 +240,11 @@ export async function getJourneyContext(
     const { data: calls, error: callsError } = await client
       .from("calls")
       .select(
-        "id, created_at, duration_seconds, outcome, qa_score, sentiment, qa_journey_calls(sequence_index, role_in_journey)"
+        "id, created_at, duration_seconds, outcome, qa_score, sentiment, qa_journey_calls(sequence_index, role_in_journey)",
       )
       .in(
         "id",
-        journeyCallsData.map((c) => c.call_id)
+        journeyCallsData.map((c) => c.call_id),
       )
       .order("created_at", { ascending: false });
 

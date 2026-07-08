@@ -10,12 +10,13 @@ import { DEFAULT_SCORING_WEIGHTS, type ScoringWeights } from "./types";
 export function calculateJourneyScore(
   individualScores: number[],
   hasPositiveOutcome: boolean,
-  callCount: number
+  callCount: number,
 ): number {
   if (individualScores.length === 0) return 0;
 
   // Base average of individual scores
-  const avgScore = individualScores.reduce((a, b) => a + b) / individualScores.length;
+  const avgScore =
+    individualScores.reduce((a, b) => a + b) / individualScores.length;
 
   // Boost if journey had positive outcome
   const outcomeMultiplier = hasPositiveOutcome ? 1.15 : 1.0;
@@ -39,7 +40,7 @@ export function calculateWeightedScore(
     outcome?: number;
     compliance?: number;
   },
-  weights: Partial<ScoringWeights> = DEFAULT_SCORING_WEIGHTS
+  weights: Partial<ScoringWeights> = DEFAULT_SCORING_WEIGHTS,
 ): number {
   const w = { ...DEFAULT_SCORING_WEIGHTS, ...weights };
   const scores: number[] = [];
@@ -65,7 +66,10 @@ export function calculateWeightedScore(
   if (scores.length === 0) return 0;
 
   const totalWeight = weights_.reduce((a, b) => a + b);
-  const weightedSum = scores.reduce((sum, score, i) => sum + score * weights_[i], 0);
+  const weightedSum = scores.reduce(
+    (sum, score, i) => sum + score * (weights_[i] ?? 0),
+    0,
+  );
 
   return Math.round((weightedSum / totalWeight) * 100) / 100;
 }
@@ -86,7 +90,7 @@ export function getSeverityFromScore(score: number, threshold: number): string {
 export function shouldFlagForReview(
   score: number | null,
   hasAlerts: boolean,
-  complianceIssues: number
+  complianceIssues: number,
 ): boolean {
   if (!score) return hasAlerts || complianceIssues > 0;
   if (score < 50) return true;
@@ -123,11 +127,15 @@ export function generateCoachingRecommendation(dimensions: {
 
   if ((dimensions.compliance ?? 75) < 60) {
     recommendations.push("Review compliance requirements for your department");
-    recommendations.push("Study required disclosures and regulatory guidelines");
+    recommendations.push(
+      "Study required disclosures and regulatory guidelines",
+    );
   }
 
   if (recommendations.length === 0) {
-    recommendations.push("Continue excellent work; maintain current performance");
+    recommendations.push(
+      "Continue excellent work; maintain current performance",
+    );
   }
 
   return recommendations;
@@ -140,7 +148,7 @@ export function calculateAgentScorecard(
   callScores: number[],
   journeyScores: (number | null)[],
   alertCount: number,
-  criticalAlertCount: number
+  criticalAlertCount: number,
 ): {
   avgCallScore: number;
   avgJourneyScore: number;
@@ -148,9 +156,17 @@ export function calculateAgentScorecard(
   riskLevel: "low" | "medium" | "high" | "critical";
   healthPercentage: number;
 } {
-  const avgCall = callScores.length > 0 ? callScores.reduce((a, b) => a + b) / callScores.length : 0;
-  const validJourneyScores = journeyScores.filter((s) => s !== null && s !== undefined) as number[];
-  const avgJourney = validJourneyScores.length > 0 ? validJourneyScores.reduce((a, b) => a + b) / validJourneyScores.length : 0;
+  const avgCall =
+    callScores.length > 0
+      ? callScores.reduce((a, b) => a + b) / callScores.length
+      : 0;
+  const validJourneyScores = journeyScores.filter(
+    (s) => s !== null && s !== undefined,
+  ) as number[];
+  const avgJourney =
+    validJourneyScores.length > 0
+      ? validJourneyScores.reduce((a, b) => a + b) / validJourneyScores.length
+      : 0;
 
   // Determine risk level
   let riskLevel: "low" | "medium" | "high" | "critical" = "low";
@@ -161,7 +177,7 @@ export function calculateAgentScorecard(
   // Health percentage (combination of score and alerts)
   const scoreHealth = (avgCall + avgJourney) / 2;
   const alertHealth = Math.max(0, 100 - alertCount * 3);
-  const healthPercentage = (scoreHealth * 0.7 + alertHealth * 0.3);
+  const healthPercentage = scoreHealth * 0.7 + alertHealth * 0.3;
 
   return {
     avgCallScore: Math.round(avgCall * 100) / 100,
