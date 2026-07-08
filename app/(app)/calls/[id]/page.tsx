@@ -32,9 +32,37 @@ interface CallDetail {
   qa_feedback: string | null;
   cost_usd: number;
   created_at: string;
+  // External-import metadata (migration 075)
+  external_source: string | null;
+  external_agent_name: string | null;
+  department: string | null;
+  prospect_id: string | null;
+  crm_id: string | null;
+  extension: string | null;
+  analysis_status: string | null;
+  analysis_error: string | null;
+  recording_storage_path: string | null;
   agent: { name: string } | null;
   campaign: { name: string } | null;
 }
+
+const ANALYSIS_STATUS_CONFIG: Record<
+  string,
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "Analysis pending",
+    className: "bg-[#f5f5f5] text-[#6b6b6b] border-[#e0e0e0]",
+  },
+  processing: {
+    label: "Analyzing…",
+    className: "bg-[#f5f5f5] text-[#0a0a0a] border-[#e0e0e0]",
+  },
+  error: {
+    label: "Analysis failed",
+    className: "bg-red-50 text-red-700 border-red-200",
+  },
+};
 
 const SENTIMENT_COLORS: Record<string, string> = {
   positive: "bg-emerald-50 text-emerald-700",
@@ -80,21 +108,6 @@ const DISPOSITION_CONFIG: Record<
   },
 };
 
-/** Extract the file path within the `call_recordings` bucket from various URL formats. */
-function extractStoragePath(rawUrl: string): string | null {
-  if (!rawUrl) return null;
-  // s3://call_recordings/path/file.mp3
-  if (rawUrl.startsWith("s3://")) return rawUrl.replace(/^s3:\/\/[^/]+\//, "");
-  // https://xxx.supabase.co/storage/v1/s3/call_recordings/path/file.mp3
-  // https://xxx.supabase.co/storage/v1/object/.../call_recordings/path/file.mp3
-  if (rawUrl.includes("call_recordings/")) {
-    return rawUrl.split("call_recordings/")[1] ?? null;
-  }
-  // Bare path already (no scheme)
-  if (!rawUrl.startsWith("http")) return rawUrl;
-  return null;
-}
-
 export default async function CallDetailPage({
   params,
 }: {
@@ -116,18 +129,11 @@ export default async function CallDetailPage({
   if (error || !data) notFound();
   const call = data as unknown as CallDetail;
 
-  // Generate a fresh signed URL (1 h) so the recording is always playable/downloadable.
-  // The raw recording_url is an S3 path — not directly accessible by the browser.
-  let playbackUrl: string | null = call.recording_url;
-  if (call.recording_url) {
-    const storagePath = extractStoragePath(call.recording_url);
-    if (storagePath) {
-      const { data: signed } = await supabase.storage
-        .from("call_recordings")
-        .createSignedUrl(storagePath, 3600);
-      if (signed?.signedUrl) playbackUrl = signed.signedUrl;
-    }
-  }
+  // The recording is served through /api/calls/[id]/recording, which mints a
+  // fresh signed URL (native + imported calls) — the raw recording_url is an S3
+  // path or an external URL not directly playable by the browser.
+  const hasRecording = !!(call.recording_storage_path || call.recording_url);
+  const recordingUrl = hasRecording ? `/api/calls/${call.id}/recording` : null;
 
   return (
     <div className="p-6 mx-auto max-w-4xl space-y-6">
@@ -165,8 +171,52 @@ export default async function CallDetailPage({
               QA {call.qa_score.toFixed(0)}
             </Badge>
           )}
+          {(() => {
+            const cfg = call.analysis_status
+              ? ANALYSIS_STATUS_CONFIG[call.analysis_status]
+              : undefined;
+            return cfg ? (
+              <Badge className={`${cfg.className} text-xs`}>{cfg.label}</Badge>
+            ) : null;
+          })()}
         </div>
       </div>
+
+      {call.external_source && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Imported call</CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y divide-[#e0e0e0]">
+            {[
+              { label: "Provider", value: call.external_source },
+              { label: "Department", value: call.department },
+              { label: "External agent", value: call.external_agent_name },
+              { label: "Prospect ID", value: call.prospect_id },
+              { label: "CRM ID", value: call.crm_id },
+              { label: "Extension", value: call.extension },
+              {
+                label: "Analysis status",
+                value: call.analysis_error
+                  ? `${call.analysis_status ?? "—"} — ${call.analysis_error}`
+                  : (call.analysis_status ?? "—"),
+              },
+            ]
+              .filter((r) => r.value)
+              .map(({ label, value }) => (
+                <div
+                  key={label}
+                  className="flex justify-between py-2.5 text-sm"
+                >
+                  <span className="text-[#6b6b6b]">{label}</span>
+                  <span className="font-medium max-w-[60%] text-right capitalize">
+                    {value}
+                  </span>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
@@ -185,14 +235,13 @@ export default async function CallDetailPage({
       </div>
 
       {/* Waveform player + synced transcript */}
-      {playbackUrl ? (
+      {recordingUrl ? (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Recording &amp; Transcript</CardTitle>
               <a
-                href={playbackUrl}
-                download={`call-${call.id}.mp3`}
+                href={`${recordingUrl}?download=1`}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e0e0] bg-white px-3 py-1.5 text-xs font-medium text-[#0a0a0a] hover:bg-[#f5f5f5] transition-colors"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -203,7 +252,7 @@ export default async function CallDetailPage({
           <CardContent className="p-0 pb-0">
             <div className="px-5 pb-5">
               <WaveformPlayer
-                url={playbackUrl}
+                url={recordingUrl}
                 transcript={call.transcript}
                 duration={call.duration_seconds}
               />

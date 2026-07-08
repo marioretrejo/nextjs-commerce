@@ -260,9 +260,19 @@ export default function CallsPage() {
                     </span>
                     <span className="text-[#6b6b6b] flex items-center gap-1.5 truncate">
                       <Bot className="w-3.5 h-3.5 shrink-0" />
-                      {call.agent
-                        ? (call.agent as unknown as { name: string }).name
-                        : "—"}
+                      <span className="truncate">
+                        {call.agent
+                          ? (call.agent as unknown as { name: string }).name
+                          : "—"}
+                      </span>
+                      {call.external_source && (
+                        <span
+                          className="shrink-0 rounded border border-[#e0e0e0] px-1 py-0.5 text-[10px] uppercase tracking-wide text-[#6b6b6b]"
+                          title={`Imported from ${call.external_source}`}
+                        >
+                          {call.external_source.replace(/_/g, " ")}
+                        </span>
+                      )}
                     </span>
                     <span className="text-[#6b6b6b] flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 shrink-0" />
