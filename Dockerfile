@@ -7,7 +7,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
 # Copy manifest only — Docker cache layer stays valid unless deps change
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install all deps (devDeps included — esbuild needs tsx types for bundling)
 RUN pnpm install --frozen-lockfile --ignore-scripts
@@ -32,7 +32,7 @@ COPY agent/      ./agent/
 COPY lib/        ./lib/
 COPY tsconfig.json ./
 
-RUN node_modules/.pnpm/node_modules/.bin/esbuild agent/worker_core.ts \
+RUN node_modules/.bin/esbuild agent/worker_core.ts \
   --bundle \
   --platform=node \
   --format=esm \

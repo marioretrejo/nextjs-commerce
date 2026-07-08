@@ -20,9 +20,12 @@
     "settings": "Configurações",
     "developers": "Desenvolvedores",
     "design": "Design",
-    "leaderboard": "Classificação",
-    "agentAssist": "Assistente do Agente",
-    "voiceLab": "Laboratório de Voz"
+    "voiceLab": "Laboratório de Voz",
+    "qaOverview": "Visao geral",
+    "qaInteractions": "Interacoes",
+    "qaDepartments": "Departamentos",
+    "qaScorecards": "Scorecards",
+    "qaProviders": "Provedores"
   },
   "common": {
     "save": "Salvar",

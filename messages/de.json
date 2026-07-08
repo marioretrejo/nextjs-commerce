@@ -20,9 +20,12 @@
     "settings": "Einstellungen",
     "developers": "Entwickler",
     "design": "Design",
-    "leaderboard": "Rangliste",
-    "agentAssist": "Agenten-Assistent",
-    "voiceLab": "Sprach-Labor"
+    "voiceLab": "Sprach-Labor",
+    "qaOverview": "Overview",
+    "qaInteractions": "Interaktionen",
+    "qaDepartments": "Abteilungen",
+    "qaScorecards": "Scorecards",
+    "qaProviders": "Anbieter"
   },
   "common": {
     "save": "Speichern",

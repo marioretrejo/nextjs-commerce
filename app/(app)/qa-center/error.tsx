@@ -1,7 +1,7 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
-import { ShieldAlert } from "lucide-react";
 
 export default function QACenterError({
   error,
@@ -15,37 +15,30 @@ export default function QACenterError({
   }, [error]);
 
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-xl border border-[#e0e0e0] bg-white p-8 text-center">
-        <div className="mb-4 flex justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f5f5f5] border border-[#e0e0e0]">
-            <ShieldAlert className="h-6 w-6 text-[#555]" />
-          </div>
-        </div>
-        <h1 className="mb-2 text-xl font-semibold text-[#111]">
-          QA Center error
-        </h1>
-        <p className="mb-4 text-sm text-[#6b6b6b]">
-          Something went wrong loading QA Center data. Please try again.
+    <div className="min-h-screen bg-[#f7f7f5] px-6 py-10">
+      <div className="mx-auto max-w-xl rounded-lg border border-[#deded8] bg-white p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#77756d]">
+          QA Center
         </p>
-        {error?.message && (
-          <p className="mb-4 rounded bg-[#f5f5f5] px-3 py-2 text-left font-mono text-xs text-[#0a0a0a] break-all">
-            {error.message}
-          </p>
-        )}
-        <div className="flex flex-col gap-2">
+        <h1 className="mt-2 text-xl font-semibold text-[#181816]">
+          Something went wrong
+        </h1>
+        <p className="mt-2 text-sm text-[#6f6d66]">
+          The QA Center view could not be loaded.
+        </p>
+        <div className="mt-5 flex gap-2">
           <button
             onClick={reset}
-            className="w-full rounded-lg bg-[#111] px-4 py-2 text-sm font-medium text-white hover:bg-[#333] transition-colors"
+            className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white"
           >
             Try again
           </button>
-          <a
+          <Link
             href="/qa-center"
-            className="w-full rounded-lg border border-[#e0e0e0] px-4 py-2 text-sm font-medium text-[#6b6b6b] hover:text-[#111] hover:border-[#111] transition-colors"
+            className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm font-medium text-[#181816]"
           >
-            Go to QA Center
-          </a>
+            Overview
+          </Link>
         </div>
       </div>
     </div>

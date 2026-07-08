@@ -13,6 +13,11 @@
     "numbers": "Números",
     "compliance": "Cumplimiento",
     "qaCenter": "Centro QA",
+    "qaOverview": "Resumen",
+    "qaInteractions": "Interacciones",
+    "qaDepartments": "Departamentos",
+    "qaScorecards": "Scorecards",
+    "qaProviders": "Proveedores",
     "integrations": "Integraciones",
     "webhooks": "Webhooks",
     "callProviders": "Proveedores de Llamadas",
@@ -21,12 +26,7 @@
     "settings": "Configuración",
     "developers": "Desarrolladores",
     "design": "Diseño",
-    "leaderboard": "Clasificación",
-    "agentAssist": "Asistente de Agente",
-    "voiceLab": "Laboratorio de Voz",
-    "agentProfiles": "Perfiles de Agente",
-    "coaching": "Coaching",
-    "auditLog": "Registro de Auditoría"
+    "voiceLab": "Laboratorio de Voz"
   },
   "common": {
     "save": "Guardar",

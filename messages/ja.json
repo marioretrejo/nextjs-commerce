@@ -20,9 +20,12 @@
     "settings": "設定",
     "developers": "開発者",
     "design": "デザイン",
-    "leaderboard": "リーダーボード",
-    "agentAssist": "エージェントアシスト",
-    "voiceLab": "ボイスラボ"
+    "voiceLab": "ボイスラボ",
+    "qaOverview": "Overview",
+    "qaInteractions": "Interactions",
+    "qaDepartments": "Departments",
+    "qaScorecards": "Scorecards",
+    "qaProviders": "Providers"
   },
   "common": {
     "save": "保存",

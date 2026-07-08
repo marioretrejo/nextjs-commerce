@@ -10,7 +10,6 @@ import {
   Code2,
   Cpu,
   FlaskConical,
-  Headphones,
   ListChecks,
   Mic,
   CreditCard,
@@ -26,9 +25,7 @@ import {
   Settings,
   Shield,
   ShieldAlert,
-  ShieldCheck,
   Star,
-  Trophy,
   TrendingUp,
   Users,
   AudioLines,
@@ -75,7 +72,6 @@ interface SidebarProps {
   visibleModules?: string[];
   hasComplianceQa?: boolean;
   hasDesignAccess?: boolean;
-  isQaAdmin?: boolean;
 }
 
 export function Sidebar({
@@ -84,7 +80,6 @@ export function Sidebar({
   visibleModules,
   hasComplianceQa = false,
   hasDesignAccess = false,
-  isQaAdmin = false,
 }: SidebarProps) {
   const pathname = usePathname();
   const t = useTranslations("nav");
@@ -179,67 +174,52 @@ export function Sidebar({
           ? [
               {
                 href: "/qa-center",
-                labelKey: "qaCenter",
+                labelKey: "qaOverview",
                 icon: ShieldAlert,
                 module: "compliance",
               },
               {
-                href: "/qa-center/leaderboard",
-                labelKey: "leaderboard",
-                icon: Trophy,
-                module: "compliance",
-                sub: true,
-              },
-              {
-                href: "/qa-center/assist",
-                labelKey: "agentAssist",
-                icon: Headphones,
+                href: "/qa-center/interactions",
+                labelKey: "qaInteractions",
+                icon: PhoneCall,
                 module: "compliance",
                 sub: true,
               },
               {
                 href: "/qa-center/agents",
-                labelKey: "agentProfiles",
+                labelKey: "agents",
                 icon: Users,
                 module: "compliance",
                 sub: true,
               },
               {
-                href: "/qa-center/coaching",
-                labelKey: "coaching",
-                icon: BookOpen,
+                href: "/qa-center/departments",
+                labelKey: "qaDepartments",
+                icon: Building2,
                 module: "compliance",
                 sub: true,
               },
               {
-                href: "/qa-center/audit",
-                labelKey: "auditLog",
-                icon: ShieldCheck,
+                href: "/qa-center/scorecards",
+                labelKey: "qaScorecards",
+                icon: ListChecks,
                 module: "compliance",
                 sub: true,
               },
-              ...(isQaAdmin
-                ? [
-                    {
-                      href: "/qa-center/settings/departments",
-                      labelKey: "Departamentos QA",
-                      icon: Building2,
-                      module: "compliance",
-                      sub: true,
-                    },
-                  ]
-                : []),
-              ...(isSuperadmin
-                ? [
-                    {
-                      href: "/qa-center/settings/compliance",
-                      labelKey: "compliance",
-                      icon: ListChecks,
-                      module: "compliance",
-                      sub: true,
-                    },
-                  ]
-                : []),
+              {
+                href: "/qa-center/providers",
+                labelKey: "qaProviders",
+                icon: Globe,
+                module: "compliance",
+                sub: true,
+              },
+              {
+                href: "/qa-center/settings",
+                labelKey: "settings",
+                icon: Settings,
+                module: "compliance",
+                sub: true,
+              },
             ]
           : []),
         {

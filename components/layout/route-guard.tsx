@@ -11,7 +11,7 @@ const MODULE_PATHS: Record<string, string[]> = {
   knowledge: ["/knowledge"],
   quality: ["/quality"],
   numbers: ["/numbers"],
-  compliance: ["/compliance"],
+  compliance: ["/compliance", "/qa-center"],
   integrations: ["/integrations"],
   team: ["/team"],
   billing: ["/billing"],

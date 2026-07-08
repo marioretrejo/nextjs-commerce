@@ -1,135 +1,230 @@
-"use client";
+import { QACShell, Panel } from "../_components/QACShell";
+import { percent } from "../_components/format";
+import { requireQacAccess } from "@/lib/qac/access";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { Users, Plus, Search } from "lucide-react";
-import type { Agent } from "./_components/types";
-import { AgentTable } from "./_components/AgentTable";
-import { CreateAgentModal } from "./_components/CreateAgentModal";
+interface AgentRow {
+  id: string;
+  name: string;
+  extension: string | null;
+  qac_departments?: { name: string | null } | null;
+}
 
-export default function AgentProfilesPage() {
-  const router = useRouter();
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+interface InteractionRow {
+  id: string;
+  agent_id: string | null;
+  status: string;
+  review_status: string;
+  call_started_at: string | null;
+  created_at: string;
+  qac_analyses?: Array<{
+    overall_score: number | null;
+    qac_criteria_results?: Array<{
+      result: string;
+      score: number | null;
+      qac_scorecard_criteria?: {
+        name: string | null;
+        category: string | null;
+        weight: number | null;
+      } | null;
+    }>;
+  }>;
+}
 
-  const fetchAgents = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (showInactive) params.set("active", "false");
-      const res = await fetch(`/api/qac/agents?${params}`);
-      if (!res.ok) throw new Error("Failed to load agents");
-      const data: Agent[] = await res.json();
-      setAgents(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showInactive]);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
-
-  const filtered = agents.filter(
-    (a) =>
-      a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.agent_id.toLowerCase().includes(search.toLowerCase()) ||
-      (a.team ?? "").toLowerCase().includes(search.toLowerCase()),
+function average(values: number[]): number | null {
+  if (!values.length) return null;
+  return Math.round(
+    values.reduce((sum, value) => sum + value, 0) / values.length,
   );
+}
 
-  async function handleDeactivate(agentId: string, name: string) {
-    if (
-      !confirm(
-        `Deactivate agent "${name}"? They will no longer appear in active lists.`,
+export default async function QACAgentsPage() {
+  const access = await requireQacAccess();
+  const admin = createAdminClient();
+
+  const [agentsResult, interactionsResult] = await Promise.all([
+    admin
+      .from("qac_agents")
+      .select("id, name, extension, qac_departments(name)")
+      .eq("workspace_id", access.workspaceId)
+      .order("name"),
+    admin
+      .from("qac_interactions")
+      .select(
+        `id, agent_id, status, review_status, call_started_at, created_at,
+         qac_analyses(
+          overall_score,
+          qac_criteria_results(
+            result, score,
+            qac_scorecard_criteria(name, category, weight)
+          )
+         )`,
       )
-    )
-      return;
-    try {
-      const res = await fetch(`/api/qac/agents/${agentId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to deactivate");
-      void fetchAgents();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to deactivate agent");
+      .eq("workspace_id", access.workspaceId)
+      .not("agent_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+  ]);
+
+  const agents = (agentsResult.data as AgentRow[] | null) ?? [];
+  const interactions =
+    (interactionsResult.data as InteractionRow[] | null) ?? [];
+
+  const rows = agents.map((agent) => {
+    const calls = interactions.filter((item) => item.agent_id === agent.id);
+    const analyzed = calls.filter((item) => item.status === "analyzed");
+    const scores = calls
+      .map((item) => item.qac_analyses?.[0]?.overall_score)
+      .filter(
+        (score): score is number => score !== null && score !== undefined,
+      );
+    const categoryTotals = new Map<
+      string,
+      { earned: number; weight: number }
+    >();
+    const failed = new Map<string, number>();
+
+    for (const call of calls) {
+      for (const result of call.qac_analyses?.[0]?.qac_criteria_results ?? []) {
+        const criterion = result.qac_scorecard_criteria;
+        const category = criterion?.category ?? "Uncategorized";
+        const weight = Number(criterion?.weight ?? 0);
+        if (result.result !== "n/a") {
+          const current = categoryTotals.get(category) ?? {
+            earned: 0,
+            weight: 0,
+          };
+          current.earned += Number(result.score ?? 0);
+          current.weight += weight;
+          categoryTotals.set(category, current);
+        }
+        if (result.result === "fail") {
+          const name = criterion?.name ?? "Criterion";
+          failed.set(name, (failed.get(name) ?? 0) + 1);
+        }
+      }
     }
-  }
+
+    const categories = [...categoryTotals.entries()].map(([name, value]) => ({
+      name,
+      score:
+        value.weight > 0
+          ? Math.round((value.earned / value.weight) * 100)
+          : null,
+    }));
+
+    const trend = calls
+      .filter((item) => item.qac_analyses?.[0]?.overall_score !== null)
+      .slice(0, 8)
+      .reverse()
+      .map((item) => Number(item.qac_analyses?.[0]?.overall_score ?? 0));
+
+    return {
+      agent,
+      totalCalls: calls.length,
+      analyzedCalls: analyzed.length,
+      averageScore: average(scores),
+      categories,
+      failed: [...failed.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4),
+      trend,
+      requiringReview: calls.filter(
+        (item) =>
+          item.status === "manual_review_required" ||
+          item.status.startsWith("failed") ||
+          item.review_status === "in_review",
+      ).length,
+    };
+  });
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-blue-500/10 p-2">
-              <Users className="h-5 w-5 text-blue-400" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-white">
-                Agent Profiles
-              </h1>
-              <p className="text-sm text-gray-400">
-                {agents.filter((a) => a.is_active).length} active agents
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
-          >
-            <Plus className="h-4 w-4" />
-            New Agent
-          </button>
+    <QACShell
+      active="agents"
+      title="Agents"
+      description="Agent performance calculated only from imported CDR interactions."
+    >
+      <Panel title={`${rows.length} agents`}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-[#77756d]">
+              <tr className="border-b border-[#eeeeea]">
+                <th className="py-2 pr-3 font-medium">Agent</th>
+                <th className="py-2 pr-3 font-medium">Department</th>
+                <th className="py-2 pr-3 font-medium">Total calls</th>
+                <th className="py-2 pr-3 font-medium">Analyzed</th>
+                <th className="py-2 pr-3 font-medium">Average score</th>
+                <th className="py-2 pr-3 font-medium">Score by category</th>
+                <th className="py-2 pr-3 font-medium">Failed criteria</th>
+                <th className="py-2 pr-3 font-medium">Trend</th>
+                <th className="py-2 pr-3 font-medium">Needs review</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#eeeeea]">
+              {rows.map((row) => (
+                <tr key={row.agent.id} className="align-top">
+                  <td className="py-3 pr-3">
+                    <p className="font-medium text-[#181816]">
+                      {row.agent.name}
+                    </p>
+                    <p className="text-xs text-[#77756d]">
+                      Extension {row.agent.extension ?? "-"}
+                    </p>
+                  </td>
+                  <td className="py-3 pr-3">
+                    {row.agent.qac_departments?.name ?? "-"}
+                  </td>
+                  <td className="py-3 pr-3">{row.totalCalls}</td>
+                  <td className="py-3 pr-3">{row.analyzedCalls}</td>
+                  <td className="py-3 pr-3 font-semibold">
+                    {percent(row.averageScore)}
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="space-y-1">
+                      {row.categories.map((category) => (
+                        <div key={category.name} className="flex gap-2">
+                          <span className="min-w-24 text-[#77756d]">
+                            {category.name}
+                          </span>
+                          <span>{percent(category.score)}</span>
+                        </div>
+                      ))}
+                      {row.categories.length === 0 && "-"}
+                    </div>
+                  </td>
+                  <td className="py-3 pr-3">
+                    {row.failed.length > 0
+                      ? row.failed
+                          .map(([name, count]) => `${name} (${count})`)
+                          .join(", ")
+                      : "-"}
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="flex h-10 items-end gap-1">
+                      {row.trend.map((score, index) => (
+                        <span
+                          key={`${score}-${index}`}
+                          className="w-2 rounded-sm bg-[#181816]"
+                          style={{ height: `${Math.max(4, score * 0.36)}px` }}
+                        />
+                      ))}
+                      {row.trend.length === 0 && (
+                        <span className="text-[#77756d]">-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 pr-3">{row.requiringReview}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-[#77756d]">
+                    No CDR agents have been matched yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      {/* Controls */}
-      <div className="border-b border-gray-800 bg-gray-900/30 px-6 py-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search agents…"
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 py-1.5 pl-9 pr-4 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
-              className="rounded border-gray-600 bg-gray-700 text-blue-500"
-            />
-            Show inactive
-          </label>
-        </div>
-      </div>
-
-      {/* Table */}
-      <AgentTable
-        filtered={filtered}
-        loading={loading}
-        error={error}
-        onView={(id) => router.push(`/qa-center/agents/${id}`)}
-        onDeactivate={(id, name) => void handleDeactivate(id, name)}
-        onCreate={() => setShowCreateModal(true)}
-      />
-
-      {/* Create Modal */}
-      <CreateAgentModal
-        open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreated={fetchAgents}
-      />
-    </div>
+      </Panel>
+    </QACShell>
   );
 }

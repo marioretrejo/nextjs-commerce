@@ -20,9 +20,12 @@
     "settings": "Paramètres",
     "developers": "Développeurs",
     "design": "Design",
-    "leaderboard": "Classement",
-    "agentAssist": "Assistance Agent",
-    "voiceLab": "Labo Vocal"
+    "voiceLab": "Labo Vocal",
+    "qaOverview": "Vue d ensemble",
+    "qaInteractions": "Interactions",
+    "qaDepartments": "Departements",
+    "qaScorecards": "Scorecards",
+    "qaProviders": "Fournisseurs"
   },
   "common": {
     "save": "Enregistrer",
