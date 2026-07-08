@@ -76,8 +76,14 @@ export function CallPlayer({ call, loading }: CallPlayerProps) {
                 {/* Waveform would go here */}
               </div>
               <div className="flex justify-between text-xs text-gray-600">
-                <span>{String(Math.floor(currentTime / 60)).padStart(2, "0")}:{String(currentTime % 60).padStart(2, "0")}</span>
-                <span>{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>
+                <span>
+                  {String(Math.floor(currentTime / 60)).padStart(2, "0")}:
+                  {String(currentTime % 60).padStart(2, "0")}
+                </span>
+                <span>
+                  {String(minutes).padStart(2, "0")}:
+                  {String(seconds).padStart(2, "0")}
+                </span>
               </div>
             </div>
 
@@ -92,7 +98,7 @@ export function CallPlayer({ call, loading }: CallPlayerProps) {
             {/* Download */}
             {call.recording_url && (
               <button
-                onClick={() => window.open(call.recording_url, "_blank")}
+                onClick={() => window.open(call.recording_url!, "_blank")}
                 className="p-2 hover:bg-gray-200 rounded-full transition"
                 title="Download recording"
               >
