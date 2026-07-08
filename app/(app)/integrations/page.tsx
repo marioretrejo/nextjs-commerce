@@ -249,6 +249,21 @@ export default function IntegrationsPage() {
         </Button>
       </div>
 
+      {/* ── Call Providers (import external calls) ───────────────────────────── */}
+      <a
+        href="/integrations/call-providers"
+        className="mb-8 flex items-center justify-between rounded-2xl border border-[#e0e0e0] bg-white px-5 py-4 transition-colors hover:bg-[#f5f5f5]"
+      >
+        <div>
+          <p className="font-semibold text-[#0a0a0a]">Call Providers</p>
+          <p className="mt-0.5 text-sm text-[#6b6b6b]">
+            Import calls from Squaretalk, Voiso, CommPeak, n8n, or a custom
+            webhook into your QA Center.
+          </p>
+        </div>
+        <span className="text-sm font-medium text-[#0a0a0a]">Manage →</span>
+      </a>
+
       {/* ── Notifications & Automation (credential-based) ────────────────────── */}
       <div className="mb-8">
         <h2 className="text-sm font-semibold text-[#6b6b6b] uppercase tracking-wide mb-3 flex items-center gap-2">
