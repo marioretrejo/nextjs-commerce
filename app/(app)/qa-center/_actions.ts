@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "node:crypto";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 function text(formData: FormData, key: string): string | null {
   const value = formData.get(key);
@@ -33,29 +34,87 @@ function numberValue(formData: FormData, key: string, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function departmentsUrl(params: Record<string, string>): string {
+  const search = new URLSearchParams(params);
+  return `/qa-center/departments?${search.toString()}`;
+}
+
+function departmentErrorMessage(message?: string): string {
+  const raw = message ?? "";
+  if (
+    raw.includes("duplicate key") ||
+    raw.includes("qac_departments_workspace_id_slug")
+  ) {
+    return "Ya existe un departamento con ese nombre o slug.";
+  }
+  if (
+    raw.includes("auto_analyze") ||
+    raw.includes("Could not find") ||
+    raw.includes("schema cache")
+  ) {
+    return "El departamento se intento crear, pero la base de datos necesita la migracion 082 de QA Center.";
+  }
+  return raw || "No se pudo crear el departamento.";
+}
+
+function missingColumn(errorMessage?: string | null, column?: string): boolean {
+  const message = errorMessage ?? "";
+  return Boolean(
+    column &&
+      (message.includes(column) ||
+        message.includes("Could not find") ||
+        message.includes("schema cache")),
+  );
+}
+
 export async function createDepartmentAction(formData: FormData) {
   const access = await requireQacAccess(true);
   const admin = createAdminClient();
   const name = text(formData, "name");
-  if (!name) return;
+  if (!name) {
+    redirect(departmentsUrl({ error: "Escribe el nombre del departamento." }));
+  }
 
   const slug = text(formData, "slug") ?? slugify(name);
-  const { data: dept, error } = await admin
+  const payload = {
+    workspace_id: access.workspaceId,
+    name,
+    slug,
+    description: text(formData, "description"),
+    qa_prompt: text(formData, "qa_prompt"),
+    auto_analyze: checkbox(formData, "auto_analyze"),
+    is_active: checkbox(formData, "is_active"),
+  };
+
+  let result = await admin
     .from("qac_departments")
-    .insert({
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (missingColumn(result.error?.message, "auto_analyze")) {
+    const fallbackPayload = {
       workspace_id: access.workspaceId,
       name,
       slug,
       description: text(formData, "description"),
       qa_prompt: text(formData, "qa_prompt"),
-      auto_analyze: checkbox(formData, "auto_analyze"),
       is_active: checkbox(formData, "is_active"),
-    })
-    .select("id")
-    .single();
+    };
+    result = await admin
+      .from("qac_departments")
+      .insert(fallbackPayload)
+      .select("id")
+      .single();
+  }
 
+  const { data: dept, error } = result;
   if (error || !dept) {
-    throw new Error(error?.message ?? "Department could not be created");
+    redirect(
+      departmentsUrl({
+        error: departmentErrorMessage(error?.message),
+      }),
+    );
   }
 
   const extensions = (text(formData, "extensions") ?? "")
@@ -64,19 +123,49 @@ export async function createDepartmentAction(formData: FormData) {
     .filter(Boolean);
 
   if (extensions.length > 0) {
-    await admin.from("qac_department_extensions").insert(
-      extensions.map((extension) => ({
-        workspace_id: access.workspaceId,
-        department_id: (dept as { id: string }).id,
-        extension,
-        agent_extension: extension,
-        is_active: true,
-      })),
-    );
+    const rows = extensions.map((extension) => ({
+      workspace_id: access.workspaceId,
+      department_id: (dept as { id: string }).id,
+      extension,
+      agent_extension: extension,
+      is_active: true,
+    }));
+    const extResult = await admin
+      .from("qac_department_extensions")
+      .insert(rows);
+
+    if (missingColumn(extResult.error?.message, "extension")) {
+      await admin.from("qac_department_extensions").insert(
+        extensions.map((extension) => ({
+          workspace_id: access.workspaceId,
+          department_id: (dept as { id: string }).id,
+          agent_extension: extension,
+        })),
+      );
+    } else if (missingColumn(extResult.error?.message, "is_active")) {
+      await admin.from("qac_department_extensions").insert(
+        extensions.map((extension) => ({
+          workspace_id: access.workspaceId,
+          department_id: (dept as { id: string }).id,
+          extension,
+          agent_extension: extension,
+        })),
+      );
+    } else if (extResult.error) {
+      console.error(
+        "[qac-departments] extension insert failed:",
+        extResult.error.message,
+      );
+    }
   }
 
   revalidatePath("/qa-center/departments");
   revalidatePath("/qa-center");
+  redirect(
+    departmentsUrl({
+      created: "1",
+    }),
+  );
 }
 
 export async function createProviderAction(formData: FormData) {
