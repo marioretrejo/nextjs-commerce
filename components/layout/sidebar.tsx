@@ -164,17 +164,11 @@ export function Sidebar({
     {
       label: "WORKSPACE",
       items: [
-        {
-          href: "/numbers",
-          labelKey: "numbers",
-          icon: Phone,
-          module: "numbers",
-        },
         ...(isSuperadmin || hasComplianceQa
           ? [
               {
                 href: "/qa-center",
-                labelKey: "qaOverview",
+                labelKey: "qaCenter",
                 icon: ShieldAlert,
                 module: "compliance",
               },
@@ -222,6 +216,12 @@ export function Sidebar({
               },
             ]
           : []),
+        {
+          href: "/numbers",
+          labelKey: "numbers",
+          icon: Phone,
+          module: "numbers",
+        },
         {
           href: "/integrations",
           labelKey: "integrations",

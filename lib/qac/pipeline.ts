@@ -15,7 +15,6 @@ interface InteractionForPipeline {
   department_id: string | null;
   recording_url: string | null;
   internal_audio_url: string | null;
-  transcript?: string | null;
   status: string;
 }
 
@@ -58,6 +57,11 @@ function contentTypeFor(url: string): string {
   return "audio/mpeg";
 }
 
+function missingColumn(errorMessage?: string | null): boolean {
+  const message = errorMessage ?? "";
+  return message.includes("Could not find") || message.includes("schema cache");
+}
+
 async function fetchAudio(url: string): Promise<{
   buffer: Buffer;
   contentType: string;
@@ -93,18 +97,6 @@ async function getTranscript(
     (existing as { full_text?: unknown } | null)?.full_text,
   );
   if (saved) return saved;
-
-  const legacy = asString(interaction.transcript);
-  if (legacy) {
-    await admin.from("qac_transcripts").insert({
-      workspace_id: interaction.workspace_id,
-      interaction_id: interaction.id,
-      full_text: legacy,
-      diarized_json: [],
-      provider: "payload",
-    });
-    return legacy;
-  }
 
   const audioUrl = interaction.internal_audio_url ?? interaction.recording_url;
   if (!audioUrl) {
@@ -151,10 +143,16 @@ async function getTranscript(
     provider: "deepgram",
   });
 
-  await admin
+  const updateResult = await admin
     .from("qac_interactions")
     .update({ status: "transcribed", transcript })
     .eq("id", interaction.id);
+  if (missingColumn(updateResult.error?.message)) {
+    await admin
+      .from("qac_interactions")
+      .update({ status: "transcribed" })
+      .eq("id", interaction.id);
+  }
 
   return transcript;
 }
@@ -234,7 +232,7 @@ export async function processQacInteraction(interactionId: string): Promise<{
   const { data: rawInteraction } = await admin
     .from("qac_interactions")
     .select(
-      "id, workspace_id, provider_id, external_call_id, department_id, recording_url, internal_audio_url, transcript, status",
+      "id, workspace_id, provider_id, external_call_id, department_id, recording_url, internal_audio_url, status",
     )
     .eq("id", interactionId)
     .maybeSingle();

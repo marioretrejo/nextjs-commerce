@@ -38,6 +38,28 @@ function readSecret(req: Request, url: URL): string | null {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readPayloadSecret(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  for (const key of ["api_key", "apiKey", "webhook_secret", "secret"]) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  const metadata = payload["metadata"];
+  if (isRecord(metadata)) {
+    for (const key of ["api_key", "apiKey", "webhook_secret", "secret"]) {
+      const value = metadata[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+
+  return null;
+}
+
 async function readPayload(req: Request): Promise<unknown> {
   const contentType = req.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
@@ -77,13 +99,19 @@ function parseConfig(config: unknown): {
   };
 }
 
+function missingColumn(errorMessage?: string | null): boolean {
+  const message = errorMessage ?? "";
+  return message.includes("Could not find") || message.includes("schema cache");
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ provider: string }> },
 ) {
   const { provider: providerSlug } = await params;
   const url = new URL(req.url);
-  const secret = readSecret(req, url);
+  const rawPayload = await readPayload(req);
+  const secret = readSecret(req, url) ?? readPayloadSecret(rawPayload);
 
   if (!secret) {
     return NextResponse.json(
@@ -114,7 +142,6 @@ export async function POST(
     );
   }
 
-  const rawPayload = await readPayload(req);
   const config = parseConfig(provider.config_json);
   const adapter = getCdrAdapter(provider.type);
   const normalized = adapter.normalize(rawPayload, {
@@ -190,39 +217,70 @@ export async function POST(
     normalized.external_call_id ??
     "CDR interaction";
 
-  const { data: inserted, error: insertError } = await admin
+  const insertPayload = {
+    workspace_id: provider.workspace_id,
+    provider_id: provider.id,
+    provider: provider.slug,
+    external_call_id: normalized.external_call_id,
+    agent_id: agent?.id ?? null,
+    agent_name: normalized.agent_name,
+    agent_extension: normalized.agent_extension,
+    department_id: department?.id ?? null,
+    department_name: normalized.department_name,
+    caller_id: normalized.caller_id,
+    prospect_id: normalized.prospect_id,
+    interaction_title: title,
+    recording_url: normalized.recording_url,
+    audio_url: normalized.recording_url,
+    duration_seconds: normalized.duration_seconds,
+    duration_s: normalized.duration_seconds,
+    direction: normalized.direction,
+    disposition: normalized.disposition,
+    call_started_at: normalized.call_started_at,
+    call_ended_at: normalized.call_ended_at,
+    started_at: normalized.call_started_at,
+    channel: "call",
+    transcript: normalized.transcript,
+    status,
+    review_status: "pending_review",
+    raw_payload: normalized.raw_payload,
+    source_payload: normalized.raw_payload,
+  };
+
+  let insertResult = await admin
     .from("qac_interactions")
-    .insert({
-      workspace_id: provider.workspace_id,
-      provider_id: provider.id,
-      provider: provider.slug,
-      external_call_id: normalized.external_call_id,
-      agent_id: agent?.id ?? null,
-      agent_name: normalized.agent_name,
-      agent_extension: normalized.agent_extension,
-      department_id: department?.id ?? null,
-      department_name: normalized.department_name,
-      caller_id: normalized.caller_id,
-      prospect_id: normalized.prospect_id,
-      interaction_title: title,
-      recording_url: normalized.recording_url,
-      audio_url: normalized.recording_url,
-      duration_seconds: normalized.duration_seconds,
-      duration_s: normalized.duration_seconds,
-      direction: normalized.direction,
-      disposition: normalized.disposition,
-      call_started_at: normalized.call_started_at,
-      call_ended_at: normalized.call_ended_at,
-      started_at: normalized.call_started_at,
-      channel: "call",
-      transcript: normalized.transcript,
-      status,
-      review_status: "pending_review",
-      raw_payload: normalized.raw_payload,
-      source_payload: normalized.raw_payload,
-    })
+    .insert(insertPayload)
     .select("id, status")
     .single();
+
+  if (missingColumn(insertResult.error?.message)) {
+    insertResult = await admin
+      .from("qac_interactions")
+      .insert({
+        workspace_id: provider.workspace_id,
+        provider_id: provider.id,
+        external_call_id: normalized.external_call_id,
+        agent_id: agent?.id ?? null,
+        department_id: department?.id ?? null,
+        caller_id: normalized.caller_id,
+        prospect_id: normalized.prospect_id,
+        interaction_title: title,
+        recording_url: normalized.recording_url,
+        duration_seconds: normalized.duration_seconds,
+        direction: normalized.direction,
+        disposition: normalized.disposition,
+        call_started_at: normalized.call_started_at,
+        call_ended_at: normalized.call_ended_at,
+        channel: "call",
+        status,
+        review_status: "pending_review",
+        raw_payload: normalized.raw_payload,
+      })
+      .select("id, status")
+      .single();
+  }
+
+  const { data: inserted, error: insertError } = insertResult;
 
   if (insertError || !inserted) {
     await admin.from("qac_ingestion_logs").insert({
@@ -260,7 +318,6 @@ export async function POST(
   });
 
   const shouldAnalyze =
-    Boolean(department?.auto_analyze) &&
     (config.auto_analyze ?? true) &&
     status !== "manual_review_required" &&
     (hasTranscript || hasAudio);

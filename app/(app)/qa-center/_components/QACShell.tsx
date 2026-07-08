@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const NAV = [
-  { href: "/qa-center", label: "Overview", key: "overview" },
+  { href: "/qa-center", label: "Dashboard", key: "dashboard" },
   {
     href: "/qa-center/interactions",
     label: "Interactions",

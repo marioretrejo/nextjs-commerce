@@ -271,6 +271,104 @@ export async function createCriterionAction(formData: FormData) {
   revalidatePath("/qa-center/scorecards");
 }
 
+export async function deleteAgentAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  if (!id) return;
+
+  const { error } = await admin
+    .from("qac_agents")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/qa-center/agents");
+  revalidatePath("/qa-center");
+  redirect("/qa-center/agents?deleted=agent");
+}
+
+export async function deleteDepartmentAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  if (!id) return;
+
+  const { error } = await admin
+    .from("qac_departments")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/qa-center/departments");
+  revalidatePath("/qa-center/agents");
+  revalidatePath("/qa-center/scorecards");
+  revalidatePath("/qa-center");
+  redirect("/qa-center/departments?deleted=department");
+}
+
+export async function deleteProviderAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  if (!id) return;
+
+  const { error } = await admin
+    .from("qac_voip_providers")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/qa-center/providers");
+  revalidatePath("/qa-center");
+  redirect("/qa-center/providers?deleted=provider");
+}
+
+export async function deleteScorecardAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  if (!id) return;
+
+  const { error } = await admin
+    .from("qac_scorecards")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/qa-center/scorecards");
+  revalidatePath("/qa-center/departments");
+  revalidatePath("/qa-center");
+  redirect("/qa-center/scorecards?deleted=scorecard");
+}
+
+export async function deleteCriterionAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  if (!id) return;
+
+  const { error } = await admin
+    .from("qac_scorecard_criteria")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/qa-center/scorecards");
+  revalidatePath("/qa-center");
+  redirect("/qa-center/scorecards?deleted=criterion");
+}
+
 export async function triggerQacAnalysisAction(formData: FormData) {
   const access = await requireQacAccess();
   const admin = createAdminClient();

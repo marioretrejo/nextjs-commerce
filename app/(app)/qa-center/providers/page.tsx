@@ -1,4 +1,4 @@
-import { createProviderAction } from "../_actions";
+import { createProviderAction, deleteProviderAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { maskSecret } from "../_components/format";
@@ -22,7 +22,21 @@ function webhookUrl(slug: string): string {
   return base ? `${base}${path}` : path;
 }
 
-export default async function QACProvidersPage() {
+function firstParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string,
+): string | null {
+  const value = params[key];
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+export default async function QACProvidersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const deleted = firstParam(params, "deleted");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -42,6 +56,11 @@ export default async function QACProvidersPage() {
       title="Providers"
       description="VoIP provider adapters normalize CDR payloads into one QA Center interaction format."
     >
+      {deleted && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Provider deleted.
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <Panel title={`${providers.length} providers`}>
           <div className="overflow-x-auto">
@@ -53,6 +72,9 @@ export default async function QACProvidersPage() {
                   <th className="py-2 pr-3 font-medium">Webhook</th>
                   <th className="py-2 pr-3 font-medium">Secret</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
+                  {access.isAdmin && (
+                    <th className="py-2 pr-3 font-medium">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eeeeea]">
@@ -80,11 +102,24 @@ export default async function QACProvidersPage() {
                         value={provider.is_active ? "active" : "inactive"}
                       />
                     </td>
+                    {access.isAdmin && (
+                      <td className="py-3 pr-3">
+                        <form action={deleteProviderAction}>
+                          <input type="hidden" name="id" value={provider.id} />
+                          <button className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                            Delete
+                          </button>
+                        </form>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {providers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-[#77756d]">
+                    <td
+                      colSpan={access.isAdmin ? 6 : 5}
+                      className="py-8 text-center text-[#77756d]"
+                    >
                       No providers configured yet.
                     </td>
                   </tr>
@@ -109,7 +144,7 @@ export default async function QACProvidersPage() {
             />
             <select
               name="type"
-              defaultValue="generic"
+              defaultValue="squaretalk"
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             >
               <option value="squaretalk">Squaretalk</option>

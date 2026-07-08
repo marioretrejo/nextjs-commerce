@@ -1,4 +1,4 @@
-import { createDepartmentAction } from "../_actions";
+import { createDepartmentAction, deleteDepartmentAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { requireQacAccess } from "@/lib/qac/access";
@@ -49,6 +49,7 @@ export default async function QACDepartmentsPage({
   const params = (await searchParams) ?? {};
   const errorMessage = firstParam(params, "error");
   const created = firstParam(params, "created");
+  const deleted = firstParam(params, "deleted");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -145,7 +146,7 @@ export default async function QACDepartmentsPage({
       title="Departments"
       description="Each department owns its QA prompt, extensions, agents and active scorecard."
     >
-      {(errorMessage || created) && (
+      {(errorMessage || created || deleted) && (
         <div
           className={
             errorMessage
@@ -153,7 +154,10 @@ export default async function QACDepartmentsPage({
               : "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
           }
         >
-          {errorMessage ?? "Departamento creado correctamente."}
+          {errorMessage ??
+            (deleted
+              ? "Departamento eliminado correctamente."
+              : "Departamento creado correctamente.")}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
@@ -185,7 +189,7 @@ export default async function QACDepartmentsPage({
                         {department.slug}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <StatusBadge
                         value={department.is_active ? "active" : "inactive"}
                       />
@@ -196,6 +200,18 @@ export default async function QACDepartmentsPage({
                             : "manual analysis"
                         }
                       />
+                      {access.isAdmin && (
+                        <form action={deleteDepartmentAction}>
+                          <input
+                            type="hidden"
+                            name="id"
+                            value={department.id}
+                          />
+                          <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
+                            Delete
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </div>
                   {department.description && (
@@ -284,7 +300,12 @@ export default async function QACDepartmentsPage({
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
             <label className="flex items-center gap-2 text-sm">
-              <input name="auto_analyze" type="checkbox" className="h-4 w-4" />
+              <input
+                name="auto_analyze"
+                type="checkbox"
+                defaultChecked
+                className="h-4 w-4"
+              />
               Auto analyze imported calls
             </label>
             <label className="flex items-center gap-2 text-sm">

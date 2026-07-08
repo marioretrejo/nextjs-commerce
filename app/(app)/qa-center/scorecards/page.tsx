@@ -1,4 +1,9 @@
-import { createCriterionAction, createScorecardAction } from "../_actions";
+import {
+  createCriterionAction,
+  createScorecardAction,
+  deleteCriterionAction,
+  deleteScorecardAction,
+} from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { requireQacAccess } from "@/lib/qac/access";
@@ -31,7 +36,21 @@ interface ScorecardRow {
   }>;
 }
 
-export default async function QACScorecardsPage() {
+function firstParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string,
+): string | null {
+  const value = params[key];
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+export default async function QACScorecardsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const deleted = firstParam(params, "deleted");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -66,6 +85,13 @@ export default async function QACScorecardsPage() {
       title="Scorecards"
       description="Department-specific QA criteria with N/A-aware scoring."
     >
+      {deleted && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {deleted === "criterion"
+            ? "Criterion deleted."
+            : "Scorecard deleted."}
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
         <Panel title={`${scorecards.length} scorecards`}>
           <div className="space-y-4">
@@ -92,9 +118,19 @@ export default async function QACScorecardsPage() {
                         total weight {totalWeight}
                       </p>
                     </div>
-                    <StatusBadge
-                      value={scorecard.is_active ? "active" : "inactive"}
-                    />
+                    <div className="flex flex-wrap gap-2">
+                      <StatusBadge
+                        value={scorecard.is_active ? "active" : "inactive"}
+                      />
+                      {access.isAdmin && (
+                        <form action={deleteScorecardAction}>
+                          <input type="hidden" name="id" value={scorecard.id} />
+                          <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
+                            Delete
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   </div>
                   <div className="divide-y divide-[#eeeeea]">
                     {criteria.map((criterion) => (
@@ -109,6 +145,18 @@ export default async function QACScorecardsPage() {
                               {criterion.is_critical ? " - critical" : ""}
                             </p>
                           </div>
+                          {access.isAdmin && (
+                            <form action={deleteCriterionAction}>
+                              <input
+                                type="hidden"
+                                name="id"
+                                value={criterion.id}
+                              />
+                              <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
+                                Delete
+                              </button>
+                            </form>
+                          )}
                         </div>
                         {criterion.description && (
                           <p className="mt-2 text-sm text-[#2f2e2a]">

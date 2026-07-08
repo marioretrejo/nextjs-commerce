@@ -37,7 +37,7 @@ export default function QACenterError({
             href="/qa-center"
             className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm font-medium text-[#181816]"
           >
-            Overview
+            Dashboard
           </Link>
         </div>
       </div>

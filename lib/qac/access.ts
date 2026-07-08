@@ -63,7 +63,11 @@ export async function requireQacAccess(adminOnly = false): Promise<QacAccess> {
   const role = (member as { role?: string } | null)?.role ?? null;
   const isOwner = workspace.owner_id === user.id;
   const isAdmin =
-    isSuperadmin || isOwner || role === "owner" || role === "admin";
+    isSuperadmin ||
+    isOwner ||
+    role === "owner" ||
+    role === "admin" ||
+    role === "supervisor";
 
   if (adminOnly && !isAdmin) redirect("/qa-center");
 

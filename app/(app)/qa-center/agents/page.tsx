@@ -1,3 +1,4 @@
+import { deleteAgentAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { percent } from "../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
@@ -38,7 +39,21 @@ function average(values: number[]): number | null {
   );
 }
 
-export default async function QACAgentsPage() {
+function firstParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string,
+): string | null {
+  const value = params[key];
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+export default async function QACAgentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const deleted = firstParam(params, "deleted");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -142,6 +157,11 @@ export default async function QACAgentsPage() {
       title="Agents"
       description="Agent performance calculated only from imported CDR interactions."
     >
+      {deleted && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Agent deleted.
+        </div>
+      )}
       <Panel title={`${rows.length} agents`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
@@ -156,6 +176,9 @@ export default async function QACAgentsPage() {
                 <th className="py-2 pr-3 font-medium">Failed criteria</th>
                 <th className="py-2 pr-3 font-medium">Trend</th>
                 <th className="py-2 pr-3 font-medium">Needs review</th>
+                {access.isAdmin && (
+                  <th className="py-2 pr-3 font-medium">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#eeeeea]">
@@ -212,11 +235,24 @@ export default async function QACAgentsPage() {
                     </div>
                   </td>
                   <td className="py-3 pr-3">{row.requiringReview}</td>
+                  {access.isAdmin && (
+                    <td className="py-3 pr-3">
+                      <form action={deleteAgentAction}>
+                        <input type="hidden" name="id" value={row.agent.id} />
+                        <button className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                          Delete
+                        </button>
+                      </form>
+                    </td>
+                  )}
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-[#77756d]">
+                  <td
+                    colSpan={access.isAdmin ? 10 : 9}
+                    className="py-8 text-center text-[#77756d]"
+                  >
                     No CDR agents have been matched yet.
                   </td>
                 </tr>
