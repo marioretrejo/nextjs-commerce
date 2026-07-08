@@ -18,6 +18,46 @@
 # ───────────────────────────────────────────────────────────────────────────────
 
 services:
+  # ── Web app (Next.js frontend + API) ─────────────────────────────────────────
+  # Public web service — gives the app a Render URL. Render injects PORT; the
+  # start script binds 0.0.0.0. Fill the sync:false env vars in the Render UI.
+  - type: web
+    name: voiceos-web
+    env: node
+    plan: starter
+    autoDeploy: true
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /login
+    envVars:
+      # Supabase (required)
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # App URL (set to this service's public URL once created)
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      # Internal server-to-server auth (analyze-call, qa/score, cron)
+      - key: INTERNAL_API_SECRET
+        sync: false
+      # AI providers used by analysis/transcription
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      # Stripe (billing) — public key needed at build for client bundles
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production
+
   # ── A. Voice Agent Worker ────────────────────────────────────────────────────
   # Handles LiveKit voice sessions. Scale horizontally for more concurrent calls.
   - type: worker
