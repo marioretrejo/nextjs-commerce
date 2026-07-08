@@ -667,6 +667,181 @@ export interface ComplianceSettings {
   updated_at: string;
 }
 
+// QA Center v2 Types
+
+export interface QACustomerJourney {
+  id: string;
+  workspace_id: string;
+  contact_phone: string;
+  contact_name: string | null;
+  agent_id: string | null;
+  department: string | null;
+  first_call_at: string | null;
+  last_call_at: string | null;
+  total_calls: number;
+  final_outcome: string | null;
+  final_score: number | null;
+  journey_summary: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QAJourneyCall {
+  id: string;
+  journey_id: string;
+  call_id: string;
+  sequence_index: number;
+  role_in_journey: "first_touch" | "follow_up" | "closing_call" | "support_call" | "other";
+  created_at: string;
+}
+
+export interface QADepartment {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  department_type: string;
+  scoring_prompt: string;
+  compliance_prompt: string | null;
+  coaching_prompt: string | null;
+  forbidden_terms_prompt: string | null;
+  scoring_weights: Record<string, number>;
+  telegram_alert_enabled: boolean;
+  telegram_chat_id: string | null;
+  critical_score_threshold: number;
+  high_risk_keywords_enabled: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QAForbiddenRule {
+  id: string;
+  workspace_id: string;
+  department_id: string | null;
+  name: string;
+  description: string | null;
+  severity: "low" | "medium" | "high" | "critical";
+  match_type: "keyword" | "semantic" | "regex" | "combined";
+  patterns: string[];
+  interpretation_prompt: string | null;
+  alert_enabled: boolean;
+  auto_block_enabled: boolean;
+  action_on_trigger: "notify_qa_manager" | "escalate" | "flag_for_review" | "stop_analysis" | "suspend_agent";
+  metadata: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QAAlert {
+  id: string;
+  workspace_id: string;
+  call_id: string;
+  journey_id: string | null;
+  agent_id: string | null;
+  department_id: string | null;
+  rule_id: string | null;
+  severity: "low" | "medium" | "high" | "critical";
+  title: string;
+  summary: string;
+  transcript_excerpt: string | null;
+  timestamp_seconds: number | null;
+  timestamp_label: string | null;
+  status: "open" | "acknowledged" | "resolved" | "dismissed";
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_notes: string | null;
+  telegram_sent: boolean;
+  telegram_message_id: string | null;
+  telegram_retry_count: number;
+  telegram_last_retry_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QATranscriptSegment {
+  id: string;
+  call_id: string;
+  workspace_id: string;
+  speaker: "agent" | "customer" | "system" | "ivr";
+  text: string;
+  start_seconds: number;
+  end_seconds: number;
+  confidence: number | null;
+  language: string | null;
+  is_key_moment: boolean;
+  key_moment_label: string | null;
+  embedding: number[] | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface QACallTranscriptSummary {
+  id: string;
+  call_id: string;
+  workspace_id: string;
+  total_segments: number;
+  duration_seconds: number | null;
+  language: string;
+  agent_turn_count: number;
+  customer_turn_count: number;
+  agent_avg_turn_length: number | null;
+  customer_avg_turn_length: number | null;
+  key_moments_count: number;
+  key_moments_types: string[];
+  first_agent_line_at: number | null;
+  last_customer_line_at: number | null;
+  has_embedding: boolean;
+  embeddings_updated_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type QAPermission =
+  | "view_qa_center"
+  | "view_all_calls"
+  | "view_team_calls"
+  | "view_own_calls"
+  | "view_scores"
+  | "export_reports"
+  | "manage_qa_rules"
+  | "manage_departments"
+  | "manage_forbidden_rules"
+  | "manage_roles"
+  | "acknowledge_alerts"
+  | "resolve_alerts"
+  | "configure_telegram";
+
+export interface QARole {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  permissions: QAPermission[];
+  is_system: boolean;
+  color: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QAUserRole {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  role_id: string;
+  assigned_at: string;
+  assigned_by: string | null;
+  expires_at: string | null;
+  metadata: Record<string, unknown>;
+}
+
 // Database type map for Supabase generics
 export type Database = {
   public: {
@@ -794,6 +969,51 @@ export type Database = {
         Row: ScenarioHandlerRow;
         Insert: Omit<ScenarioHandlerRow, "id" | "created_at">;
         Update: Partial<ScenarioHandlerRow>;
+      };
+      qa_customer_journeys: {
+        Row: QACustomerJourney;
+        Insert: Omit<QACustomerJourney, "id" | "created_at" | "updated_at">;
+        Update: Partial<QACustomerJourney>;
+      };
+      qa_journey_calls: {
+        Row: QAJourneyCall;
+        Insert: Omit<QAJourneyCall, "id" | "created_at">;
+        Update: Partial<QAJourneyCall>;
+      };
+      qa_departments: {
+        Row: QADepartment;
+        Insert: Omit<QADepartment, "id" | "created_at" | "updated_at">;
+        Update: Partial<QADepartment>;
+      };
+      qa_forbidden_rules: {
+        Row: QAForbiddenRule;
+        Insert: Omit<QAForbiddenRule, "id" | "created_at" | "updated_at">;
+        Update: Partial<QAForbiddenRule>;
+      };
+      qa_alerts: {
+        Row: QAAlert;
+        Insert: Omit<QAAlert, "id" | "created_at" | "updated_at">;
+        Update: Partial<QAAlert>;
+      };
+      qa_transcript_segments: {
+        Row: QATranscriptSegment;
+        Insert: Omit<QATranscriptSegment, "id" | "created_at">;
+        Update: Partial<QATranscriptSegment>;
+      };
+      qa_call_transcript_summary: {
+        Row: QACallTranscriptSummary;
+        Insert: Omit<QACallTranscriptSummary, "id" | "created_at" | "updated_at">;
+        Update: Partial<QACallTranscriptSummary>;
+      };
+      qa_roles: {
+        Row: QARole;
+        Insert: Omit<QARole, "id" | "created_at" | "updated_at">;
+        Update: Partial<QARole>;
+      };
+      qa_user_roles: {
+        Row: QAUserRole;
+        Insert: Omit<QAUserRole, "id" | "assigned_at">;
+        Update: Partial<QAUserRole>;
       };
     };
   };
