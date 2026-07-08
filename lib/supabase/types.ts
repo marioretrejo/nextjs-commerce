@@ -692,7 +692,12 @@ export interface QAJourneyCall {
   journey_id: string;
   call_id: string;
   sequence_index: number;
-  role_in_journey: "first_touch" | "follow_up" | "closing_call" | "support_call" | "other";
+  role_in_journey:
+    | "first_touch"
+    | "follow_up"
+    | "closing_call"
+    | "support_call"
+    | "other";
   created_at: string;
 }
 
@@ -728,7 +733,12 @@ export interface QAForbiddenRule {
   interpretation_prompt: string | null;
   alert_enabled: boolean;
   auto_block_enabled: boolean;
-  action_on_trigger: "notify_qa_manager" | "escalate" | "flag_for_review" | "stop_analysis" | "suspend_agent";
+  action_on_trigger:
+    | "notify_qa_manager"
+    | "escalate"
+    | "flag_for_review"
+    | "stop_analysis"
+    | "suspend_agent";
   metadata: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
@@ -1002,7 +1012,10 @@ export type Database = {
       };
       qa_call_transcript_summary: {
         Row: QACallTranscriptSummary;
-        Insert: Omit<QACallTranscriptSummary, "id" | "created_at" | "updated_at">;
+        Insert: Omit<
+          QACallTranscriptSummary,
+          "id" | "created_at" | "updated_at"
+        >;
         Update: Partial<QACallTranscriptSummary>;
       };
       qa_roles: {

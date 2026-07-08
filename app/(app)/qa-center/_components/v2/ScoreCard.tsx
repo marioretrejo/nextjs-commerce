@@ -9,7 +9,14 @@ function ScoreRing({ score }: { score: number }) {
   return (
     <div className="relative h-32 w-32">
       <svg viewBox="0 0 120 120" className="h-32 w-32 -rotate-90">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="#ececec" strokeWidth="8" />
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          stroke="#ececec"
+          strokeWidth="8"
+        />
         <circle
           cx="60"
           cy="60"
@@ -40,7 +47,9 @@ function CategoryBar({ name, score }: { name: string; score: number }) {
         <span className="capitalize text-[#0a0a0a]">
           {name.replace(/_/g, " ")}
         </span>
-        <span className="font-semibold text-[#0a0a0a]">{Math.round(pct)}/100</span>
+        <span className="font-semibold text-[#0a0a0a]">
+          {Math.round(pct)}/100
+        </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[#ececec]">
         <div
@@ -111,7 +120,9 @@ export function ScoreCard({
             <ScoreRing score={call.qa_score ?? 0} />
             <div className="mt-3 flex items-center gap-4 text-xs text-[#6b6b6b]">
               {call.sentiment && (
-                <span className="capitalize">Sentimiento: {call.sentiment}</span>
+                <span className="capitalize">
+                  Sentimiento: {call.sentiment}
+                </span>
               )}
               {call.disposition && (
                 <span className="capitalize">
@@ -137,7 +148,10 @@ export function ScoreCard({
             title="Oportunidades de mejora"
             items={details?.opportunities ?? details?.weaknesses ?? []}
           />
-          <List title="Recomendaciones" items={details?.recommendations ?? []} />
+          <List
+            title="Recomendaciones"
+            items={details?.recommendations ?? []}
+          />
 
           {call.qa_feedback &&
             !details?.recommendations?.length &&

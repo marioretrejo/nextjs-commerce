@@ -1,6 +1,7 @@
 # Desplegar QA Center v2 en Render
 
 ## Estado Actual
+
 - ✅ Fase 1: Migraciones SQL creadas (6 archivos)
 - ✅ Tipos TypeScript actualizados
 - ✅ Helpers (journey, scoring) implementados
@@ -12,6 +13,7 @@
 ### 1. Ejecutar Migraciones en Supabase (PRIMERO)
 
 #### Opción A: Dashboard Supabase (Recomendado)
+
 1. Ve a https://supabase.com/dashboard
 2. Selecciona proyecto `blyzfuwwxwpuihrjdpuh`
 3. SQL Editor → New Query
@@ -19,6 +21,7 @@
 5. Ejecuta cada uno
 
 **Archivos en orden:**
+
 - `supabase/migrations/076_qa_customer_journeys.sql`
 - `supabase/migrations/077_qa_departments.sql`
 - `supabase/migrations/078_qa_forbidden_rules.sql`
@@ -27,6 +30,7 @@
 - `supabase/migrations/081_qa_roles_and_permissions.sql`
 
 #### Opción B: Localmente (Requiere psql/Python)
+
 ```bash
 # Python
 python scripts/run_migrations.py
@@ -56,6 +60,7 @@ git push origin voiceos-saas-build
 ```
 
 Render tiene auto-deploy configurado, así que:
+
 - → Render detectará el push
 - → Ejecutará build (npm run build)
 - → Desplegará automáticamente
@@ -66,6 +71,7 @@ Render tiene auto-deploy configurado, así que:
 1. Espera ~3-5 minutos por el build
 2. Ve a https://voiceos-app.onrender.com/qa-center
 3. Comprueba que:
+
    - ✅ La página carga sin errores
    - ✅ No hay TypeScript errors
    - ✅ Puedes acceder a la URL
@@ -95,12 +101,14 @@ Después del deploy, estas URLs estarán disponibles:
 Si el deploy falla:
 
 1. **Build error:**
+
    - Revisa logs en Render dashboard
    - Busca línea de error (ej: "Type 'QADepartment' not found")
    - Edita archivo correspondiente
    - Haz nuevo push
 
 2. **Database error:**
+
    - Verifica que migraciones se ejecutaron
    - Revisa Supabase Activity log
    - Re-ejecuta migración que falló
@@ -117,6 +125,7 @@ Si el deploy falla:
 Una vez Fase 1 esté live:
 
 ### Fase 2: UI Reconstrucción
+
 - Dashboard layout (3 columnas)
 - Call list con filtros
 - Audio player + transcript
@@ -124,12 +133,14 @@ Una vez Fase 1 esté live:
 - Journey context
 
 ### Fase 3: Análisis
+
 - Scoring con prompts por departamento
 - Detección de reglas prohibidas
 - Generación de alertas
 - Telegram notifications
 
 ### Fase 4: Configuración
+
 - Panel de departamentos
 - Panel de reglas
 - Panel de roles
@@ -149,4 +160,4 @@ Si tienes preguntas o problemas:
 
 **Branch:** voiceos-saas-build  
 **Commits:** 7827c74, 5c3496c, 276cf5d, b6aaa2d  
-**Status:** Ready for Phase 1 deployment  
+**Status:** Ready for Phase 1 deployment

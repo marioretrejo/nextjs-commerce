@@ -38,7 +38,10 @@ export function CallPlayer({
   loading: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const lines = useMemo(() => parseTranscript(call?.transcript ?? null), [call]);
+  const lines = useMemo(
+    () => parseTranscript(call?.transcript ?? null),
+    [call],
+  );
   const filtered = query.trim()
     ? lines.filter((l) => l.text.toLowerCase().includes(query.toLowerCase()))
     : lines;
@@ -90,7 +93,9 @@ export function CallPlayer({
       {recordingUrl ? (
         <div className="rounded-xl border border-[#e5e5e5] p-4">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-[#0a0a0a]">Grabación</span>
+            <span className="text-sm font-medium text-[#0a0a0a]">
+              Grabación
+            </span>
             <a
               href={`${recordingUrl}?download=1`}
               className="inline-flex items-center gap-1.5 rounded-md border border-[#e0e0e0] bg-white px-2.5 py-1 text-xs font-medium text-[#0a0a0a] transition-colors hover:bg-[#f5f5f5]"

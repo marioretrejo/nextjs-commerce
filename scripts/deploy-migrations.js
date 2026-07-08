@@ -35,8 +35,8 @@ const migrationFiles = [
   "078_qa_forbidden_rules.sql",
   "079_qa_alerts.sql",
   "080_qa_transcript_segments.sql",
-  "081_qa_roles_and_permissions.sql"
-].map(f => path.join(migrationsDir, f));
+  "081_qa_roles_and_permissions.sql",
+].map((f) => path.join(migrationsDir, f));
 
 console.log(`📊 Found ${migrationFiles.length} migrations\n`);
 
@@ -52,17 +52,17 @@ async function executeSql(sql, description) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": SERVICE_KEY,
-        "Authorization": `Bearer ${SERVICE_KEY}`,
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
         "Content-Length": payload.length,
         // Try to execute as raw SQL - some endpoints might support it
-        "X-Raw-SQL": "true"
-      }
+        "X-Raw-SQL": "true",
+      },
     };
 
     const req = https.request(options, (res) => {
       let data = "";
-      res.on("data", chunk => data += chunk);
+      res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
         // REST API won't work for DDL, but we'll try other methods
         resolve({ status: res.statusCode, data });
@@ -86,7 +86,7 @@ async function deployViaNative() {
 
     const client = new Client({
       connectionString: dbUrl,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
     });
 
     await client.connect();
@@ -108,8 +108,8 @@ async function deployViaNative() {
         // Split statements and execute
         const statements = sql
           .split(";")
-          .map(s => s.trim())
-          .filter(s => s && !s.startsWith("--"));
+          .map((s) => s.trim())
+          .filter((s) => s && !s.startsWith("--"));
 
         for (const statement of statements) {
           await client.query(statement);
@@ -143,15 +143,20 @@ async function deployViaNative() {
     console.log("✨ All migrations deployed successfully!\n");
     console.log("🚀 Next step: Render will auto-deploy from GitHub");
     console.log(`📍 Check: https://voiceos-app.onrender.com/qa-center\n`);
-
   } catch (error) {
     if (error.code === "MODULE_NOT_FOUND") {
       console.error("❌ PostgreSQL client not installed");
       console.error("   Install with: npm install pg\n");
       console.error("📌 Manual Alternative:");
-      console.error("   1. Go to https://supabase.com/dashboard/project/" + projectId + "/sql/new");
+      console.error(
+        "   1. Go to https://supabase.com/dashboard/project/" +
+          projectId +
+          "/sql/new",
+      );
       console.error("   2. Copy each SQL file (076-081) and execute");
-      console.error("   3. Verify: SELECT COUNT(*) FROM qa_roles WHERE is_system = true; (should return 5)\n");
+      console.error(
+        "   3. Verify: SELECT COUNT(*) FROM qa_roles WHERE is_system = true; (should return 5)\n",
+      );
       process.exit(1);
     }
 
@@ -161,7 +166,7 @@ async function deployViaNative() {
 }
 
 // Start deployment
-deployViaNative().catch(error => {
+deployViaNative().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });

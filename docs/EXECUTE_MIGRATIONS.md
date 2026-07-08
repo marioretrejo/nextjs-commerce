@@ -9,36 +9,42 @@
 5. Copia y pega cada migración en orden:
 
 ### Migración 076: Customer Journeys
+
 ```sql
 -- Archivo: supabase/migrations/076_qa_customer_journeys.sql
 [COPIAR CONTENIDO DEL ARCHIVO]
 ```
 
 ### Migración 077: Departments
+
 ```sql
 -- Archivo: supabase/migrations/077_qa_departments.sql
 [COPIAR CONTENIDO DEL ARCHIVO]
 ```
 
 ### Migración 078: Forbidden Rules
+
 ```sql
 -- Archivo: supabase/migrations/078_qa_forbidden_rules.sql
 [COPIAR CONTENIDO DEL ARCHIVO]
 ```
 
 ### Migración 079: Alerts
+
 ```sql
 -- Archivo: supabase/migrations/079_qa_alerts.sql
 [COPIAR CONTENIDO DEL ARCHIVO]
 ```
 
 ### Migración 080: Transcript Segments
+
 ```sql
 -- Archivo: supabase/migrations/080_qa_transcript_segments.sql
 [COPIAR CONTENIDO DEL ARCHIVO]
 ```
 
 ### Migración 081: Roles
+
 ```sql
 -- Archivo: supabase/migrations/081_qa_roles_and_permissions.sql
 [COPIAR CONTENIDO DEL ARCHIVO]
@@ -81,13 +87,14 @@ node scripts/migrate-node.js
 Después de ejecutar las migraciones, verifica que las tablas fueron creadas:
 
 ```sql
-SELECT table_name FROM information_schema.tables 
-WHERE table_schema = 'public' 
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
 AND table_name LIKE 'qa_%'
 ORDER BY table_name;
 ```
 
 Debería mostrar:
+
 - `qa_alerts`
 - `qa_alerts_audit`
 - `qa_alerts_telegram_queue`
@@ -111,6 +118,7 @@ SELECT * FROM qa_roles WHERE is_system = true ORDER BY name;
 ```
 
 Debería mostrar 5 roles:
+
 1. Owner/Admin
 2. QA Manager
 3. Supervisor
@@ -122,15 +130,19 @@ Debería mostrar 5 roles:
 ## Troubleshooting
 
 ### Error: "FATAL: remaining connection slots are reserved"
+
 → Espera 2-3 minutos y reintentar
 
 ### Error: "relation already exists"
+
 → La tabla ya fue creada. Puedes ignorarlo.
 
 ### Error: "type already exists"
+
 → El enum ya fue creado. Puedes ignorarlo.
 
 ### Error: "function already exists"
+
 → La función ya fue creada. Puedes ignorarlo.
 
 ---
