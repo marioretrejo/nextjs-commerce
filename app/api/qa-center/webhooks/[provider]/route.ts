@@ -203,13 +203,23 @@ export async function POST(
   const hasAudio = Boolean(
     normalized.recording_url || normalized.recording_base64,
   );
+  const disposition = normalized.disposition?.toLowerCase() ?? "";
+  const notEvaluableWithoutAudio =
+    !hasAudio &&
+    !hasTranscript &&
+    (disposition.includes("no answer") ||
+      disposition.includes("busy") ||
+      disposition.includes("failed") ||
+      disposition.includes("cancel"));
   const status = !department
     ? "manual_review_required"
     : hasTranscript
       ? "transcribed"
       : hasAudio
         ? "audio_ready"
-        : "pending_audio";
+        : notEvaluableWithoutAudio
+          ? "not_evaluable"
+          : "pending_audio";
 
   const title =
     normalized.caller_id ??

@@ -63,10 +63,13 @@ const DEFAULT_MAPPINGS: Record<string, string[]> = {
   department_name: [
     "department_name",
     "department",
+    "unit_id",
     "team",
     "queue",
     "queue_name",
     "agent_type",
+    "agent_department",
+    "metadata.agent_department",
   ],
   caller_id: [
     "caller_id",
@@ -86,6 +89,8 @@ const DEFAULT_MAPPINGS: Record<string, string[]> = {
     "audio_url",
     "audioUrl",
     "download_url",
+    "__external_interaction_url",
+    "external_interaction_url",
     "file_url",
     "media.url",
   ],
@@ -95,6 +100,7 @@ const DEFAULT_MAPPINGS: Record<string, string[]> = {
     "duration_seconds",
     "duration",
     "duration_sec",
+    "total_duration_sec",
     "call_duration",
     "RecordingDuration",
     "billsec",
@@ -200,6 +206,15 @@ function normalizeDirection(
   return "unknown";
 }
 
+function cleanString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function cleanUrl(value: unknown): string | null {
+  const url = cleanString(value);
+  return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
 function normalizeGeneric(
   payload: unknown,
   context: CdrAdapterContext,
@@ -247,34 +262,41 @@ const squaretalkAdapter: CdrProviderAdapter = {
           external_call_id: ["external_interaction_id", "interaction_id"],
         }) ?? base.external_call_id,
       agent_name:
-        String(flat["user_id"] ?? base.agent_name ?? "").trim() || null,
-      agent_extension:
-        String(flat["extension"] ?? base.agent_extension ?? "").trim() || null,
+        cleanString(flat["agent_name"]) ??
+        cleanString(flat["user_id"]) ??
+        base.agent_name,
+      agent_extension: cleanString(flat["extension"]) ?? base.agent_extension,
       external_agent_id:
-        String(
-          flat["extension"] ?? flat["user_id"] ?? base.external_agent_id ?? "",
-        ).trim() || null,
+        cleanString(flat["extension"]) ??
+        cleanString(flat["user_id"]) ??
+        base.external_agent_id,
       department_name:
-        String(flat["agent_type"] ?? base.department_name ?? "").trim() || null,
+        cleanString(flat["agent_type"]) ??
+        cleanString(flat["agent_department"]) ??
+        cleanString(flat["unit_id"]) ??
+        cleanString(flat["department"]) ??
+        base.department_name,
       prospect_id:
-        String(flat["prospect_id"] ?? base.prospect_id ?? "").trim() || null,
+        cleanString(flat["prospect_id"]) ??
+        cleanString(flat["destination"]) ??
+        base.prospect_id,
       caller_id:
-        String(flat["prospect_id"] ?? base.caller_id ?? "").trim() || null,
+        cleanString(flat["prospect_id"]) ??
+        cleanString(flat["destination"]) ??
+        base.caller_id,
       recording_url:
-        String(
-          flat["download_url"] ??
-            flat["__external_interaction_url"] ??
-            base.recording_url ??
-            "",
-        ).trim() || null,
+        cleanUrl(flat["download_url"]) ??
+        cleanUrl(flat["__external_interaction_url"]) ??
+        cleanUrl(flat["external_interaction_url"]) ??
+        cleanUrl(flat["recording_file"]) ??
+        base.recording_url,
       duration_seconds:
         Number(flat["total_duration_sec"] ?? base.duration_seconds) || null,
       direction: normalizeDirection(
-        String(flat["call_type"] ?? base.direction ?? "").trim(),
+        cleanString(flat["call_type"]) ?? base.direction,
       ),
       call_started_at:
-        String(flat["call_date_utc"] ?? base.call_started_at ?? "").trim() ||
-        null,
+        cleanString(flat["call_date_utc"]) ?? base.call_started_at ?? null,
     };
   },
 };
