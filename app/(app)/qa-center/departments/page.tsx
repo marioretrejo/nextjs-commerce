@@ -13,35 +13,131 @@ interface DepartmentRow {
   auto_analyze: boolean;
   is_active: boolean;
   qac_department_extensions?: Array<{
+    department_id?: string;
     extension: string | null;
     agent_extension: string | null;
     agent_name: string | null;
-    is_active: boolean;
+    is_active?: boolean;
   }>;
   qac_agents?: Array<{
+    department_id?: string;
     name: string;
     extension: string | null;
+    is_active?: boolean;
+  }>;
+  qac_scorecards?: Array<{
+    department_id?: string;
+    name: string;
+    version: number;
     is_active: boolean;
   }>;
-  qac_scorecards?: Array<{ name: string; version: number; is_active: boolean }>;
 }
 
-export default async function QACDepartmentsPage() {
+function firstParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string,
+): string | null {
+  const value = params[key];
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+export default async function QACDepartmentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const errorMessage = firstParam(params, "error");
+  const created = firstParam(params, "created");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
-  const { data } = await admin
+  const { data: baseRows } = await admin
     .from("qac_departments")
-    .select(
-      `id, name, slug, description, qa_prompt, auto_analyze, is_active,
-       qac_department_extensions(extension, agent_extension, agent_name, is_active),
-       qac_agents(name, extension, is_active),
-       qac_scorecards(name, version, is_active)`,
-    )
+    .select("id, name, slug, description, qa_prompt, is_active")
     .eq("workspace_id", access.workspaceId)
     .order("name");
 
-  const departments = (data as DepartmentRow[] | null) ?? [];
+  const baseDepartments =
+    (baseRows as Array<Omit<DepartmentRow, "auto_analyze">> | null) ?? [];
+  const departmentIds = baseDepartments.map((department) => department.id);
+
+  let autoAnalyze = new Map<string, boolean>();
+  let extensions: NonNullable<DepartmentRow["qac_department_extensions"]> = [];
+  let agents: NonNullable<DepartmentRow["qac_agents"]> = [];
+  let scorecards: NonNullable<DepartmentRow["qac_scorecards"]> = [];
+
+  if (departmentIds.length > 0) {
+    const autoResult = await admin
+      .from("qac_departments")
+      .select("id, auto_analyze")
+      .eq("workspace_id", access.workspaceId)
+      .in("id", departmentIds);
+    autoAnalyze = new Map(
+      (
+        (autoResult.data as Array<{
+          id: string;
+          auto_analyze?: boolean;
+        }> | null) ?? []
+      ).map((row) => [row.id, Boolean(row.auto_analyze)]),
+    );
+
+    const extResult = await admin
+      .from("qac_department_extensions")
+      .select(
+        "department_id, extension, agent_extension, agent_name, is_active",
+      )
+      .eq("workspace_id", access.workspaceId)
+      .in("department_id", departmentIds);
+
+    if (extResult.error) {
+      const fallbackExtResult = await admin
+        .from("qac_department_extensions")
+        .select("department_id, agent_extension, agent_name")
+        .eq("workspace_id", access.workspaceId)
+        .in("department_id", departmentIds);
+      extensions =
+        (fallbackExtResult.data as NonNullable<
+          DepartmentRow["qac_department_extensions"]
+        > | null) ?? [];
+    } else {
+      extensions =
+        (extResult.data as NonNullable<
+          DepartmentRow["qac_department_extensions"]
+        > | null) ?? [];
+    }
+
+    const agentsResult = await admin
+      .from("qac_agents")
+      .select("department_id, name, extension, is_active")
+      .eq("workspace_id", access.workspaceId)
+      .in("department_id", departmentIds);
+    agents =
+      (agentsResult.data as NonNullable<DepartmentRow["qac_agents"]> | null) ??
+      [];
+
+    const scorecardsResult = await admin
+      .from("qac_scorecards")
+      .select("department_id, name, version, is_active")
+      .eq("workspace_id", access.workspaceId)
+      .in("department_id", departmentIds);
+    scorecards =
+      (scorecardsResult.data as NonNullable<
+        DepartmentRow["qac_scorecards"]
+      > | null) ?? [];
+  }
+
+  const departments: DepartmentRow[] = baseDepartments.map((department) => ({
+    ...department,
+    auto_analyze: autoAnalyze.get(department.id) ?? false,
+    qac_department_extensions: extensions.filter(
+      (item) => item.department_id === department.id,
+    ),
+    qac_agents: agents.filter((agent) => agent.department_id === department.id),
+    qac_scorecards: scorecards.filter(
+      (scorecard) => scorecard.department_id === department.id,
+    ),
+  }));
 
   return (
     <QACShell
@@ -49,6 +145,17 @@ export default async function QACDepartmentsPage() {
       title="Departments"
       description="Each department owns its QA prompt, extensions, agents and active scorecard."
     >
+      {(errorMessage || created) && (
+        <div
+          className={
+            errorMessage
+              ? "rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              : "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          }
+        >
+          {errorMessage ?? "Departamento creado correctamente."}
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <Panel title={`${departments.length} departments`}>
           <div className="grid gap-3">
