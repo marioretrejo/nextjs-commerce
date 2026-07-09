@@ -430,6 +430,37 @@ export default async function QACenterDashboardPage({
         />
       </div>
 
+      <section className="rounded-lg border border-[#181816]/20 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[#181816]">
+              {qacT(
+                lang,
+                "Pending call processing",
+                "Procesamiento de llamadas pendientes",
+              )}
+            </h2>
+            <p className="mt-1 text-sm text-[#6f6d66]">
+              {qacT(
+                lang,
+                `${pendingAnalysis} calls still need transcript or QA analysis.`,
+                `${pendingAnalysis} llamadas aun necesitan transcripcion o analisis QA.`,
+              )}
+            </p>
+          </div>
+          <form action={processQacBacklogAction} className="shrink-0">
+            <input type="hidden" name="lang" value={lang} />
+            <button className="w-full rounded-md bg-[#181816] px-4 py-2 text-sm font-semibold text-white hover:bg-black sm:w-auto">
+              {qacT(
+                lang,
+                "Process pending calls",
+                "Procesar llamadas pendientes",
+              )}
+            </button>
+          </form>
+        </div>
+      </section>
+
       {processed && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
           {qacT(
