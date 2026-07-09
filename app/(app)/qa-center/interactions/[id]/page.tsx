@@ -352,7 +352,7 @@ export default async function QACInteractionDetailPage({
               />
             </form>
             {filteredSegments.length > 0 ? (
-              <div className="max-h-[520px] space-y-3 overflow-y-auto pr-2">
+              <div className="max-h-[520px] space-y-3 overflow-y-auto overscroll-contain pr-2">
                 {filteredSegments.map((segment, index) => (
                   <div key={`${segment.start ?? index}-${index}`}>
                     <div className="mb-1 flex items-center gap-2 text-xs text-[#77756d]">
@@ -363,14 +363,14 @@ export default async function QACInteractionDetailPage({
                         {formatDuration(Math.round(segment.start ?? 0))}
                       </span>
                     </div>
-                    <p className="break-words rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
+                    <p className="break-words rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a] [overflow-wrap:anywhere]">
                       {segment.text}
                     </p>
                   </div>
                 ))}
               </div>
             ) : transcriptText ? (
-              <pre className="max-h-[520px] whitespace-pre-wrap break-words rounded-md bg-[#f7f7f5] p-3 font-sans text-sm leading-6 text-[#2f2e2a]">
+              <pre className="max-h-[520px] overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-[#f7f7f5] p-3 font-sans text-sm leading-6 text-[#2f2e2a] overscroll-contain [overflow-wrap:anywhere]">
                 {q && !transcriptText.toLowerCase().includes(q)
                   ? "No transcript matches this search."
                   : transcriptText}
