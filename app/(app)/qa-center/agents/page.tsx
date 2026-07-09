@@ -1,13 +1,20 @@
-import { deleteAgentAction } from "../_actions";
+import { deleteAgentAction, updateAgentAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { percent } from "../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+interface DepartmentRow {
+  id: string;
+  name: string;
+}
+
 interface AgentRow {
   id: string;
   name: string;
   extension: string | null;
+  department_id: string | null;
+  is_active: boolean;
   qac_departments?: { name: string | null } | null;
 }
 
@@ -54,19 +61,23 @@ export default async function QACAgentsPage({
 }) {
   const params = (await searchParams) ?? {};
   const deleted = firstParam(params, "deleted");
+  const updated = firstParam(params, "updated");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
-  const [agentsResult, interactionsResult] = await Promise.all([
-    admin
-      .from("qac_agents")
-      .select("id, name, extension, qac_departments(name)")
-      .eq("workspace_id", access.workspaceId)
-      .order("name"),
-    admin
-      .from("qac_interactions")
-      .select(
-        `id, agent_id, status, review_status, call_started_at, created_at,
+  const [agentsResult, interactionsResult, departmentsResult] =
+    await Promise.all([
+      admin
+        .from("qac_agents")
+        .select(
+          "id, name, extension, department_id, is_active, qac_departments(name)",
+        )
+        .eq("workspace_id", access.workspaceId)
+        .order("name"),
+      admin
+        .from("qac_interactions")
+        .select(
+          `id, agent_id, status, review_status, call_started_at, created_at,
          qac_analyses(
           overall_score,
           qac_criteria_results(
@@ -74,16 +85,23 @@ export default async function QACAgentsPage({
             qac_scorecard_criteria(name, category, weight)
           )
          )`,
-      )
-      .eq("workspace_id", access.workspaceId)
-      .not("agent_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1000),
-  ]);
+        )
+        .eq("workspace_id", access.workspaceId)
+        .not("agent_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1000),
+      admin
+        .from("qac_departments")
+        .select("id, name")
+        .eq("workspace_id", access.workspaceId)
+        .eq("is_active", true)
+        .order("name"),
+    ]);
 
   const agents = (agentsResult.data as AgentRow[] | null) ?? [];
   const interactions =
     (interactionsResult.data as InteractionRow[] | null) ?? [];
+  const departments = (departmentsResult.data as DepartmentRow[] | null) ?? [];
 
   const rows = agents.map((agent) => {
     const calls = interactions.filter((item) => item.agent_id === agent.id);
@@ -158,9 +176,9 @@ export default async function QACAgentsPage({
       description="Agent performance calculated only from imported CDR interactions."
       isSuperadmin={access.isSuperadmin}
     >
-      {deleted && (
+      {(deleted || updated) && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Agent deleted.
+          {updated ? "Agent updated." : "Agent deleted."}
         </div>
       )}
       <Panel title={`${rows.length} agents`}>
@@ -195,6 +213,9 @@ export default async function QACAgentsPage({
                   </td>
                   <td className="py-3 pr-3">
                     {row.agent.qac_departments?.name ?? "-"}
+                    {!row.agent.is_active && (
+                      <p className="text-xs text-[#77756d]">Inactive</p>
+                    )}
                   </td>
                   <td className="py-3 pr-3">{row.totalCalls}</td>
                   <td className="py-3 pr-3">{row.analyzedCalls}</td>
@@ -238,12 +259,67 @@ export default async function QACAgentsPage({
                   <td className="py-3 pr-3">{row.requiringReview}</td>
                   {access.isAdmin && (
                     <td className="py-3 pr-3">
-                      <form action={deleteAgentAction}>
-                        <input type="hidden" name="id" value={row.agent.id} />
-                        <button className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-                          Delete
-                        </button>
-                      </form>
+                      <div className="flex flex-col gap-2">
+                        <details>
+                          <summary className="inline-flex cursor-pointer rounded-md border border-black/20 px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
+                            Edit
+                          </summary>
+                          <form
+                            action={updateAgentAction}
+                            className="mt-2 grid min-w-[260px] gap-2 rounded-md border border-black/15 bg-[#fbfbfa] p-3"
+                          >
+                            <input
+                              type="hidden"
+                              name="id"
+                              value={row.agent.id}
+                            />
+                            <input
+                              name="name"
+                              required
+                              defaultValue={row.agent.name}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            />
+                            <input
+                              name="extension"
+                              defaultValue={row.agent.extension ?? ""}
+                              placeholder="Extension"
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            />
+                            <select
+                              name="department_id"
+                              defaultValue={row.agent.department_id ?? ""}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            >
+                              <option value="">No department</option>
+                              {departments.map((department) => (
+                                <option
+                                  key={department.id}
+                                  value={department.id}
+                                >
+                                  {department.name}
+                                </option>
+                              ))}
+                            </select>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                name="is_active"
+                                type="checkbox"
+                                defaultChecked={row.agent.is_active}
+                              />
+                              Active
+                            </label>
+                            <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
+                              Save changes
+                            </button>
+                          </form>
+                        </details>
+                        <form action={deleteAgentAction}>
+                          <input type="hidden" name="id" value={row.agent.id} />
+                          <button className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                            Delete
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   )}
                 </tr>

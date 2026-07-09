@@ -1,4 +1,8 @@
-import { createDepartmentAction, deleteDepartmentAction } from "../_actions";
+import {
+  createDepartmentAction,
+  deleteDepartmentAction,
+  updateDepartmentAction,
+} from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { requireQacAccess } from "@/lib/qac/access";
@@ -50,6 +54,7 @@ export default async function QACDepartmentsPage({
   const errorMessage = firstParam(params, "error");
   const created = firstParam(params, "created");
   const deleted = firstParam(params, "deleted");
+  const updated = firstParam(params, "updated");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -147,7 +152,7 @@ export default async function QACDepartmentsPage({
       description="Each department owns its QA prompt, extensions, agents and active scorecard."
       isSuperadmin={access.isSuperadmin}
     >
-      {(errorMessage || created || deleted) && (
+      {(errorMessage || created || deleted || updated) && (
         <div
           className={
             errorMessage
@@ -158,7 +163,9 @@ export default async function QACDepartmentsPage({
           {errorMessage ??
             (deleted
               ? "Departamento eliminado correctamente."
-              : "Departamento creado correctamente.")}
+              : updated
+                ? "Departamento actualizado correctamente."
+                : "Departamento creado correctamente.")}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
@@ -257,6 +264,72 @@ export default async function QACDepartmentsPage({
                         {department.qa_prompt}
                       </p>
                     </div>
+                  )}
+                  {access.isAdmin && (
+                    <details className="mt-4 rounded-md border border-black/15 bg-[#fbfbfa] p-3">
+                      <summary className="inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
+                        Edit
+                      </summary>
+                      <form
+                        action={updateDepartmentAction}
+                        className="mt-3 grid gap-3 md:grid-cols-2"
+                      >
+                        <input type="hidden" name="id" value={department.id} />
+                        <input
+                          name="name"
+                          required
+                          defaultValue={department.name}
+                          placeholder="Name"
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                        />
+                        <input
+                          name="slug"
+                          defaultValue={department.slug}
+                          placeholder="Slug"
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                        />
+                        <textarea
+                          name="description"
+                          defaultValue={department.description ?? ""}
+                          placeholder="Description"
+                          rows={3}
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                        />
+                        <textarea
+                          name="extensions"
+                          defaultValue={extensions.join("\n")}
+                          placeholder="Assigned extensions, one per line"
+                          rows={3}
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                        />
+                        <textarea
+                          name="qa_prompt"
+                          defaultValue={department.qa_prompt ?? ""}
+                          placeholder="Department QA prompt"
+                          rows={5}
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                        />
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            name="auto_analyze"
+                            type="checkbox"
+                            defaultChecked={department.auto_analyze}
+                          />
+                          Auto analyze imported calls
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            name="is_active"
+                            type="checkbox"
+                            defaultChecked={department.is_active}
+                          />
+                          Active
+                        </label>
+                        <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
+                          Save changes
+                        </button>
+                      </form>
+                    </details>
                   )}
                 </article>
               );

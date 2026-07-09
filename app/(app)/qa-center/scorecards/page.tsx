@@ -4,6 +4,8 @@ import {
   deleteCriterionAction,
   deleteScorecardAction,
   installConversionSalesV1Action,
+  updateCriterionAction,
+  updateScorecardAction,
 } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
@@ -17,6 +19,7 @@ interface DepartmentRow {
 
 interface ScorecardRow {
   id: string;
+  department_id: string | null;
   name: string;
   version: number;
   is_active: boolean;
@@ -66,6 +69,21 @@ function i18n(value: unknown): Record<string, string | undefined> {
     : {};
 }
 
+function examplesText(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .join("\n");
+  }
+  if (!value || typeof value !== "object") return "";
+  const examples = (value as { examples?: unknown }).examples;
+  return Array.isArray(examples)
+    ? examples
+        .filter((item): item is string => typeof item === "string")
+        .join("\n")
+    : "";
+}
+
 function localized(
   criterion: NonNullable<ScorecardRow["qac_scorecard_criteria"]>[number],
   key:
@@ -93,6 +111,7 @@ export default async function QACScorecardsPage({
   const deleted = firstParam(params, "deleted");
   const installed = firstParam(params, "installed");
   const errorMessage = firstParam(params, "error");
+  const updated = firstParam(params, "updated");
   const lang = languageOf(params);
   const access = await requireQacAccess();
   const admin = createAdminClient();
@@ -107,7 +126,7 @@ export default async function QACScorecardsPage({
     admin
       .from("qac_scorecards")
       .select(
-        `id, name, version, is_active,
+        `id, department_id, name, version, is_active,
          qac_departments(name),
          qac_scorecard_criteria(
           id, category, name, description, weight, is_critical,
@@ -133,7 +152,7 @@ export default async function QACScorecardsPage({
       )}
       isSuperadmin={access.isSuperadmin}
     >
-      {(deleted || installed || errorMessage) && (
+      {(deleted || installed || updated || errorMessage) && (
         <div
           className={
             errorMessage
@@ -148,9 +167,13 @@ export default async function QACScorecardsPage({
                   "Conversion Sales V1 installed.",
                   "Conversion Sales V1 instalado.",
                 )
-              : deleted === "criterion"
-                ? ui(lang, "Criterion deleted.", "Criterio eliminado.")
-                : ui(lang, "Scorecard deleted.", "Scorecard eliminado."))}
+              : updated === "criterion"
+                ? ui(lang, "Criterion updated.", "Criterio actualizado.")
+                : updated === "scorecard"
+                  ? ui(lang, "Scorecard updated.", "Scorecard actualizado.")
+                  : deleted === "criterion"
+                    ? ui(lang, "Criterion deleted.", "Criterio eliminado.")
+                    : ui(lang, "Scorecard deleted.", "Scorecard eliminado."))}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
@@ -193,6 +216,58 @@ export default async function QACScorecardsPage({
                       )}
                     </div>
                   </div>
+                  {access.isAdmin && (
+                    <details className="border-b border-black/15 bg-[#fbfbfa] px-4 py-3">
+                      <summary className="inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
+                        Edit
+                      </summary>
+                      <form
+                        action={updateScorecardAction}
+                        className="mt-3 grid gap-3 md:grid-cols-2"
+                      >
+                        <input type="hidden" name="id" value={scorecard.id} />
+                        <input type="hidden" name="lang" value={lang} />
+                        <select
+                          name="department_id"
+                          required
+                          defaultValue={scorecard.department_id ?? ""}
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                        >
+                          <option value="">Department</option>
+                          {departments.map((department) => (
+                            <option key={department.id} value={department.id}>
+                              {department.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          name="name"
+                          required
+                          defaultValue={scorecard.name}
+                          placeholder="Scorecard name"
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                        />
+                        <input
+                          name="version"
+                          type="number"
+                          min="1"
+                          defaultValue={scorecard.version}
+                          className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                        />
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            name="is_active"
+                            type="checkbox"
+                            defaultChecked={scorecard.is_active}
+                          />
+                          Active scorecard for department
+                        </label>
+                        <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
+                          Save changes
+                        </button>
+                      </form>
+                    </details>
+                  )}
                   <div className="divide-y divide-black/15">
                     {criteria.map((criterion) => (
                       <div key={criterion.id} className="p-4">
@@ -261,6 +336,118 @@ export default async function QACScorecardsPage({
                               "-"}
                           </p>
                         </div>
+                        {access.isAdmin && (
+                          <details className="mt-4 rounded-md border border-black/15 bg-[#fbfbfa] p-3">
+                            <summary className="inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
+                              Edit
+                            </summary>
+                            <form
+                              action={updateCriterionAction}
+                              className="mt-3 grid gap-3 md:grid-cols-2"
+                            >
+                              <input
+                                type="hidden"
+                                name="id"
+                                value={criterion.id}
+                              />
+                              <input type="hidden" name="lang" value={lang} />
+                              <input
+                                name="category"
+                                defaultValue={criterion.category}
+                                placeholder="Category"
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <input
+                                name="weight"
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                defaultValue={criterion.weight}
+                                placeholder="Weight"
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <input
+                                name="name"
+                                required
+                                defaultValue={criterion.name}
+                                placeholder="Criterion name"
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                              />
+                              <textarea
+                                name="description"
+                                defaultValue={criterion.description ?? ""}
+                                placeholder="Description"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                              />
+                              <textarea
+                                name="applicability_rule"
+                                defaultValue={
+                                  criterion.applicability_rule ?? ""
+                                }
+                                placeholder="Applicability rule"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                              />
+                              <textarea
+                                name="pass_definition"
+                                defaultValue={criterion.pass_definition ?? ""}
+                                placeholder="Pass definition"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <textarea
+                                name="partial_definition"
+                                defaultValue={
+                                  criterion.partial_definition ?? ""
+                                }
+                                placeholder="Partial definition"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <textarea
+                                name="fail_definition"
+                                defaultValue={criterion.fail_definition ?? ""}
+                                placeholder="Fail definition"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <textarea
+                                name="na_definition"
+                                defaultValue={criterion.na_definition ?? ""}
+                                placeholder="N/A definition"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <textarea
+                                name="examples"
+                                defaultValue={examplesText(
+                                  criterion.examples_json,
+                                )}
+                                placeholder="Examples, one per line"
+                                rows={2}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                              />
+                              <input
+                                name="sort_order"
+                                type="number"
+                                defaultValue={criterion.sort_order}
+                                className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                              />
+                              <label className="flex items-center gap-2 text-sm">
+                                <input
+                                  name="is_critical"
+                                  type="checkbox"
+                                  defaultChecked={criterion.is_critical}
+                                />
+                                Critical
+                              </label>
+                              <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
+                                Save changes
+                              </button>
+                            </form>
+                          </details>
+                        )}
                       </div>
                     ))}
                     {criteria.length === 0 && (

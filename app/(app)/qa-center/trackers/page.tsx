@@ -1,4 +1,8 @@
-import { createTrackerAction, deleteTrackerAction } from "../_actions";
+import {
+  createTrackerAction,
+  deleteTrackerAction,
+  updateTrackerAction,
+} from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { requireQacAccess } from "@/lib/qac/access";
@@ -17,6 +21,7 @@ interface TrackerRow {
   description: string;
   description_es: string | null;
   positive_examples_json: unknown;
+  action_config_json: unknown;
   severity: string;
   risk_level_override: string | null;
   trigger_manual_review: boolean;
@@ -47,6 +52,13 @@ function examples(value: unknown): string[] {
     : [];
 }
 
+function actionFlag(value: unknown, key: string, fallback = false): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  return Boolean((value as Record<string, unknown>)[key]);
+}
+
 function trackerName(tracker: TrackerRow, lang: "en" | "es"): string {
   return lang === "es" ? (tracker.name_es ?? tracker.name) : tracker.name;
 }
@@ -66,6 +78,7 @@ export default async function QACTrackersPage({
   const lang = languageOf(params);
   const created = firstParam(params, "created");
   const deleted = firstParam(params, "deleted");
+  const updated = firstParam(params, "updated");
   const errorMessage = firstParam(params, "error");
   const access = await requireQacAccess();
   const admin = createAdminClient();
@@ -81,7 +94,7 @@ export default async function QACTrackersPage({
       .from("qac_trackers")
       .select(
         `id, department_id, name, name_es, description, description_es,
-         positive_examples_json, severity, risk_level_override,
+         positive_examples_json, action_config_json, severity, risk_level_override,
          trigger_manual_review, is_active, is_system,
          qac_departments(name)`,
       )
@@ -108,7 +121,7 @@ export default async function QACTrackersPage({
       )}
       isSuperadmin={access.isSuperadmin}
     >
-      {(created || deleted || errorMessage || migrationMissing) && (
+      {(created || deleted || updated || errorMessage || migrationMissing) && (
         <div
           className={
             errorMessage || migrationMissing
@@ -125,7 +138,9 @@ export default async function QACTrackersPage({
             : (errorMessage ??
               (deleted
                 ? ui(lang, "Tracker deleted.", "Tracker eliminado.")
-                : ui(lang, "Tracker created.", "Tracker creado.")))}
+                : updated
+                  ? ui(lang, "Tracker updated.", "Tracker actualizado.")
+                  : ui(lang, "Tracker created.", "Tracker creado.")))}
         </div>
       )}
 
@@ -156,12 +171,169 @@ export default async function QACTrackersPage({
                       <StatusBadge value="manual review" />
                     )}
                     {access.isAdmin && (
-                      <form action={deleteTrackerAction}>
-                        <input type="hidden" name="id" value={tracker.id} />
-                        <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
-                          {ui(lang, "Delete", "Eliminar")}
-                        </button>
-                      </form>
+                      <div className="flex flex-wrap gap-2">
+                        <details>
+                          <summary className="inline-flex cursor-pointer rounded-md border border-black/20 px-2.5 py-1 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
+                            {ui(lang, "Edit", "Editar")}
+                          </summary>
+                          <form
+                            action={updateTrackerAction}
+                            className="mt-3 grid min-w-[340px] gap-3 rounded-md border border-black/15 bg-[#fbfbfa] p-3 md:grid-cols-2"
+                          >
+                            <input type="hidden" name="id" value={tracker.id} />
+                            <input type="hidden" name="lang" value={lang} />
+                            <select
+                              name="department_id"
+                              defaultValue={tracker.department_id ?? ""}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                            >
+                              <option value="">
+                                {ui(
+                                  lang,
+                                  "All departments",
+                                  "Todos los departamentos",
+                                )}
+                              </option>
+                              {departments.map((department) => (
+                                <option
+                                  key={department.id}
+                                  value={department.id}
+                                >
+                                  {department.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              name="name"
+                              required
+                              defaultValue={tracker.name}
+                              placeholder={ui(lang, "Name", "Nombre")}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            />
+                            <input
+                              name="name_es"
+                              defaultValue={tracker.name_es ?? ""}
+                              placeholder="Nombre en español"
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            />
+                            <textarea
+                              name="description"
+                              required
+                              defaultValue={tracker.description}
+                              placeholder={ui(
+                                lang,
+                                "Description",
+                                "Descripcion",
+                              )}
+                              rows={3}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            />
+                            <textarea
+                              name="description_es"
+                              defaultValue={tracker.description_es ?? ""}
+                              placeholder="Descripcion en español"
+                              rows={3}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            />
+                            <textarea
+                              name="positive_examples"
+                              defaultValue={examples(
+                                tracker.positive_examples_json,
+                              ).join("\n")}
+                              placeholder={ui(
+                                lang,
+                                "Positive examples, one per line",
+                                "Ejemplos positivos, uno por linea",
+                              )}
+                              rows={3}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
+                            />
+                            <select
+                              name="severity"
+                              defaultValue={tracker.severity}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            >
+                              {[
+                                "info",
+                                "low",
+                                "medium",
+                                "high",
+                                "critical",
+                              ].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              name="risk_level_override"
+                              defaultValue={tracker.risk_level_override ?? ""}
+                              className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
+                            >
+                              <option value="">No risk override</option>
+                              {["low", "medium", "high", "critical"].map(
+                                (item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                name="mark_call"
+                                type="checkbox"
+                                defaultChecked={actionFlag(
+                                  tracker.action_config_json,
+                                  "mark_call",
+                                  true,
+                                )}
+                              />
+                              {ui(lang, "Mark call", "Marcar llamada")}
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                name="trigger_manual_review"
+                                type="checkbox"
+                                defaultChecked={tracker.trigger_manual_review}
+                              />
+                              {ui(
+                                lang,
+                                "Require manual review",
+                                "Requiere revision manual",
+                              )}
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                name="send_alert"
+                                type="checkbox"
+                                defaultChecked={actionFlag(
+                                  tracker.action_config_json,
+                                  "send_alert",
+                                )}
+                              />
+                              {ui(lang, "Send alert", "Enviar alerta")}
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                name="is_active"
+                                type="checkbox"
+                                defaultChecked={tracker.is_active}
+                              />
+                              {ui(lang, "Active", "Activo")}
+                            </label>
+                            <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
+                              {ui(lang, "Save changes", "Guardar cambios")}
+                            </button>
+                          </form>
+                        </details>
+                        <form action={deleteTrackerAction}>
+                          <input type="hidden" name="id" value={tracker.id} />
+                          <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
+                            {ui(lang, "Delete", "Eliminar")}
+                          </button>
+                        </form>
+                      </div>
                     )}
                   </div>
                 </div>

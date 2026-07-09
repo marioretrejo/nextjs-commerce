@@ -40,6 +40,29 @@ function numberValue(formData: FormData, key: string, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function lines(formData: FormData, key: string): string[] {
+  return (text(formData, key) ?? "")
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function examplesJson(formData: FormData, existing?: unknown): unknown {
+  const examples = lines(formData, "examples");
+  if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+    return examples;
+  }
+  return {
+    ...existing,
+    examples,
+  };
+}
+
+function langParam(formData: FormData): Record<string, string> {
+  const lang = text(formData, "lang");
+  return lang === "es" ? { lang } : {};
+}
+
 function departmentsUrl(params: Record<string, string>): string {
   const search = new URLSearchParams(params);
   return `/qa-center/departments?${search.toString()}`;
@@ -162,10 +185,7 @@ export async function createDepartmentAction(formData: FormData) {
     );
   }
 
-  const extensions = (text(formData, "extensions") ?? "")
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const extensions = lines(formData, "extensions");
 
   if (extensions.length > 0) {
     const rows = extensions.map((extension) => ({
@@ -248,6 +268,124 @@ export async function createProviderAction(formData: FormData) {
   redirect(providersUrl({ created: "1" }));
 }
 
+export async function updateAgentAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  const name = text(formData, "name");
+  if (!id || !name) return;
+
+  const { error } = await admin
+    .from("qac_agents")
+    .update({
+      name,
+      extension: text(formData, "extension"),
+      department_id: text(formData, "department_id"),
+      is_active: checkbox(formData, "is_active"),
+    })
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/qa-center/agents");
+  revalidatePath("/qa-center");
+  redirect("/qa-center/agents?updated=agent");
+}
+
+export async function updateDepartmentAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  const name = text(formData, "name");
+  if (!id || !name) return;
+
+  const payload = {
+    name,
+    slug: text(formData, "slug") ?? slugify(name),
+    description: text(formData, "description"),
+    qa_prompt: text(formData, "qa_prompt"),
+    auto_analyze: checkbox(formData, "auto_analyze"),
+    is_active: checkbox(formData, "is_active"),
+  };
+
+  let result = await admin
+    .from("qac_departments")
+    .update(payload)
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (missingColumn(result.error?.message, "auto_analyze")) {
+    const fallbackPayload = {
+      name: payload.name,
+      slug: payload.slug,
+      description: payload.description,
+      qa_prompt: payload.qa_prompt,
+      is_active: payload.is_active,
+    };
+    result = await admin
+      .from("qac_departments")
+      .update(fallbackPayload)
+      .eq("id", id)
+      .eq("workspace_id", access.workspaceId);
+  }
+
+  if (result.error) {
+    redirect(
+      departmentsUrl({
+        error: departmentErrorMessage(result.error.message),
+      }),
+    );
+  }
+
+  await admin
+    .from("qac_department_extensions")
+    .delete()
+    .eq("workspace_id", access.workspaceId)
+    .eq("department_id", id);
+
+  const extensions = lines(formData, "extensions");
+  if (extensions.length > 0) {
+    const rows = extensions.map((extension) => ({
+      workspace_id: access.workspaceId,
+      department_id: id,
+      extension,
+      agent_extension: extension,
+      is_active: true,
+    }));
+    const extResult = await admin
+      .from("qac_department_extensions")
+      .insert(rows);
+
+    if (missingColumn(extResult.error?.message, "extension")) {
+      await admin.from("qac_department_extensions").insert(
+        extensions.map((extension) => ({
+          workspace_id: access.workspaceId,
+          department_id: id,
+          agent_extension: extension,
+        })),
+      );
+    } else if (missingColumn(extResult.error?.message, "is_active")) {
+      await admin.from("qac_department_extensions").insert(
+        extensions.map((extension) => ({
+          workspace_id: access.workspaceId,
+          department_id: id,
+          extension,
+          agent_extension: extension,
+        })),
+      );
+    } else if (extResult.error) {
+      redirect(departmentsUrl({ error: extResult.error.message }));
+    }
+  }
+
+  revalidatePath("/qa-center/departments");
+  revalidatePath("/qa-center/agents");
+  revalidatePath("/qa-center/scorecards");
+  revalidatePath("/qa-center");
+  redirect(departmentsUrl({ updated: "department" }));
+}
+
 export async function createScorecardAction(formData: FormData) {
   const access = await requireQacAccess(true);
   const admin = createAdminClient();
@@ -278,6 +416,44 @@ export async function createScorecardAction(formData: FormData) {
   revalidatePath("/qa-center/departments");
 }
 
+export async function updateScorecardAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  const departmentId = text(formData, "department_id");
+  const name = text(formData, "name");
+  if (!id || !departmentId || !name) return;
+
+  const isActive = checkbox(formData, "is_active");
+  if (isActive) {
+    await admin
+      .from("qac_scorecards")
+      .update({ is_active: false })
+      .eq("workspace_id", access.workspaceId)
+      .eq("department_id", departmentId);
+  }
+
+  const { error } = await admin
+    .from("qac_scorecards")
+    .update({
+      department_id: departmentId,
+      name,
+      version: numberValue(formData, "version", 1),
+      is_active: isActive,
+    })
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) {
+    redirect(scorecardsUrl({ error: error.message, ...langParam(formData) }));
+  }
+
+  revalidatePath("/qa-center/scorecards");
+  revalidatePath("/qa-center/departments");
+  revalidatePath("/qa-center");
+  redirect(scorecardsUrl({ updated: "scorecard", ...langParam(formData) }));
+}
+
 export async function createCriterionAction(formData: FormData) {
   const access = await requireQacAccess(true);
   const admin = createAdminClient();
@@ -294,10 +470,7 @@ export async function createCriterionAction(formData: FormData) {
 
   if (!scorecard) throw new Error("Scorecard not found");
 
-  const examples = (text(formData, "examples") ?? "")
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const examples = lines(formData, "examples");
 
   const { error } = await admin.from("qac_scorecard_criteria").insert({
     workspace_id: access.workspaceId,
@@ -319,6 +492,53 @@ export async function createCriterionAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/qa-center/scorecards");
+}
+
+export async function updateCriterionAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  const name = text(formData, "name");
+  if (!id || !name) return;
+
+  const { data: criterion } = await admin
+    .from("qac_scorecard_criteria")
+    .select("id, examples_json")
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId)
+    .maybeSingle();
+
+  if (!criterion) throw new Error("Criterion not found");
+
+  const { error } = await admin
+    .from("qac_scorecard_criteria")
+    .update({
+      category: text(formData, "category") ?? "Quality",
+      name,
+      description: text(formData, "description"),
+      weight: numberValue(formData, "weight", 0),
+      is_critical: checkbox(formData, "is_critical"),
+      applicability_rule: text(formData, "applicability_rule"),
+      pass_definition: text(formData, "pass_definition"),
+      partial_definition: text(formData, "partial_definition"),
+      fail_definition: text(formData, "fail_definition"),
+      na_definition: text(formData, "na_definition"),
+      examples_json: examplesJson(
+        formData,
+        (criterion as { examples_json?: unknown }).examples_json,
+      ),
+      sort_order: numberValue(formData, "sort_order", 0),
+    })
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) {
+    redirect(scorecardsUrl({ error: error.message, ...langParam(formData) }));
+  }
+
+  revalidatePath("/qa-center/scorecards");
+  revalidatePath("/qa-center");
+  redirect(scorecardsUrl({ updated: "criterion", ...langParam(formData) }));
 }
 
 export async function installConversionSalesV1Action() {
@@ -513,10 +733,7 @@ export async function createTrackerAction(formData: FormData) {
   const description = text(formData, "description");
   if (!name || !description) return;
 
-  const examples = (text(formData, "positive_examples") ?? "")
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const examples = lines(formData, "positive_examples");
 
   const { error } = await admin.from("qac_trackers").insert({
     workspace_id: access.workspaceId,
@@ -545,6 +762,47 @@ export async function createTrackerAction(formData: FormData) {
 
   revalidatePath("/qa-center/trackers");
   redirect(trackersUrl({ created: "1" }));
+}
+
+export async function updateTrackerAction(formData: FormData) {
+  const access = await requireQacAccess(true);
+  const admin = createAdminClient();
+  const id = text(formData, "id");
+  const name = text(formData, "name");
+  const description = text(formData, "description");
+  if (!id || !name || !description) return;
+
+  const examples = lines(formData, "positive_examples");
+  const { error } = await admin
+    .from("qac_trackers")
+    .update({
+      department_id: text(formData, "department_id"),
+      name,
+      name_es: text(formData, "name_es"),
+      description,
+      description_es: text(formData, "description_es"),
+      positive_examples_json: examples,
+      action_config_json: {
+        no_score_impact: true,
+        mark_call: checkbox(formData, "mark_call"),
+        assign_review: checkbox(formData, "trigger_manual_review"),
+        send_alert: checkbox(formData, "send_alert"),
+      },
+      severity: text(formData, "severity") ?? "info",
+      risk_level_override: text(formData, "risk_level_override"),
+      trigger_manual_review: checkbox(formData, "trigger_manual_review"),
+      is_active: checkbox(formData, "is_active"),
+    })
+    .eq("id", id)
+    .eq("workspace_id", access.workspaceId);
+
+  if (error) {
+    redirect(trackersUrl({ error: error.message, ...langParam(formData) }));
+  }
+
+  revalidatePath("/qa-center/trackers");
+  revalidatePath("/qa-center");
+  redirect(trackersUrl({ updated: "tracker", ...langParam(formData) }));
 }
 
 export async function deleteAgentAction(formData: FormData) {
