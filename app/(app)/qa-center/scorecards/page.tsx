@@ -205,6 +205,7 @@ export default async function QACScorecardsPage({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <StatusBadge
+                        lang={lang}
                         value={scorecard.is_active ? "active" : "inactive"}
                       />
                       {access.isAdmin && (

@@ -224,9 +224,11 @@ export default async function QACDepartmentsPage({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <StatusBadge
+                        lang={lang}
                         value={department.is_active ? "active" : "inactive"}
                       />
                       <StatusBadge
+                        lang={lang}
                         value={
                           department.auto_analyze
                             ? "auto analyze"

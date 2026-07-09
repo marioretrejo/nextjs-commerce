@@ -4,7 +4,14 @@ import { QACShell, Panel, MetricTile } from "../../_components/QACShell";
 import { StatusBadge } from "../../_components/StatusBadge";
 import { pickQacAnalysis } from "../../_components/analysis";
 import { formatDate, formatDuration, percent } from "../../_components/format";
-import { qacLanguageOf, qacT } from "../../_components/i18n";
+import {
+  qacAnalysisText,
+  qacLanguageOf,
+  qacOutcomeLabel,
+  qacRiskLabel,
+  qacSentimentLabel,
+  qacT,
+} from "../../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
@@ -278,8 +285,11 @@ export default async function QACInteractionDetailPage({
         />
         <MetricTile
           label={qacT(lang, "Sentiment", "Sentimiento")}
-          value={sentimentLabel(analysis?.sentiment)}
-          hint={`${qacT(lang, "Risk", "Riesgo")}: ${analysis?.risk_level ?? "-"}`}
+          value={qacSentimentLabel(lang, analysis?.sentiment)}
+          hint={`${qacT(lang, "Risk", "Riesgo")}: ${qacRiskLabel(
+            lang,
+            analysis?.risk_level,
+          )}`}
         />
         <MetricTile
           label={qacT(lang, "Review", "Revision")}
@@ -306,7 +316,7 @@ export default async function QACInteractionDetailPage({
             <p className="font-medium text-[#181816]">
               {interaction.qac_voip_providers?.name ?? "-"}
             </p>
-            <StatusBadge value={interaction.status} />
+            <StatusBadge lang={lang} value={interaction.status} />
           </div>
           <div className="space-y-2 text-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
@@ -327,7 +337,7 @@ export default async function QACInteractionDetailPage({
             <p className="font-medium text-[#181816]">
               {interaction.qac_departments?.name ?? "-"}
             </p>
-            <StatusBadge value={interaction.review_status} />
+            <StatusBadge lang={lang} value={interaction.review_status} />
           </div>
           <div className="space-y-1 text-sm">
             <p className="text-[#77756d]">
@@ -378,12 +388,13 @@ export default async function QACInteractionDetailPage({
             {analysis ? (
               <div className="space-y-4 text-sm">
                 <p className="text-[#2f2e2a]">
-                  {analysis.summary ??
-                    qacT(
-                      lang,
-                      "No summary returned.",
-                      "No se devolvio resumen.",
-                    )}
+                  {analysis.summary
+                    ? qacAnalysisText(lang, analysis.summary)
+                    : qacT(
+                        lang,
+                        "No summary returned.",
+                        "No se devolvio resumen.",
+                      )}
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -391,7 +402,7 @@ export default async function QACInteractionDetailPage({
                       {qacT(lang, "Outcome", "Resultado")}
                     </p>
                     <p className="break-words [overflow-wrap:anywhere]">
-                      {analysis.call_disposition ?? "-"}
+                      {qacOutcomeLabel(lang, analysis.call_disposition)}
                     </p>
                   </div>
                   <div>
@@ -410,8 +421,9 @@ export default async function QACInteractionDetailPage({
                     {qacT(lang, "Detected objections", "Objeciones detectadas")}
                   </p>
                   <p>
-                    {asStringArray(trackers.detected_objections).join(", ") ||
-                      "-"}
+                    {asStringArray(trackers.detected_objections)
+                      .map((item) => qacAnalysisText(lang, item))
+                      .join(", ") || "-"}
                   </p>
                 </div>
                 {detectedTrackerLabels(analysis.trackers_json).length > 0 && (
@@ -426,7 +438,7 @@ export default async function QACInteractionDetailPage({
                             key={tracker}
                             className="rounded-full border border-[#d8d8d2] bg-white px-2.5 py-1 text-xs font-medium text-[#181816]"
                           >
-                            {tracker}
+                            {qacAnalysisText(lang, tracker)}
                           </span>
                         ),
                       )}
@@ -439,7 +451,7 @@ export default async function QACInteractionDetailPage({
                   </p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {asStringArray(analysis.strengths_json).map((item) => (
-                      <li key={item}>{item}</li>
+                      <li key={item}>{qacAnalysisText(lang, item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -449,7 +461,7 @@ export default async function QACInteractionDetailPage({
                   </p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {asStringArray(analysis.opportunities_json).map((item) => (
-                      <li key={item}>{item}</li>
+                      <li key={item}>{qacAnalysisText(lang, item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -534,16 +546,22 @@ export default async function QACInteractionDetailPage({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-[#181816]">
-                          {result.qac_scorecard_criteria?.name ?? "Criterion"}
+                          {qacAnalysisText(
+                            lang,
+                            result.qac_scorecard_criteria?.name ?? "Criterion",
+                          )}
                         </p>
                         <p className="text-xs text-[#77756d]">
-                          {result.qac_scorecard_criteria?.category ?? "-"} -
-                          {qacT(lang, "Weight", "Peso")}{" "}
+                          {qacAnalysisText(
+                            lang,
+                            result.qac_scorecard_criteria?.category ?? "-",
+                          )}{" "}
+                          -{qacT(lang, "Weight", "Peso")}{" "}
                           {result.qac_scorecard_criteria?.weight ?? 0}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <StatusBadge value={result.result} />
+                        <StatusBadge lang={lang} value={result.result} />
                         <span className="text-sm font-semibold">
                           {result.applicable ? percent(result.score) : "N/A"}
                         </span>
@@ -551,7 +569,7 @@ export default async function QACInteractionDetailPage({
                     </div>
                     {result.reason && (
                       <p className="mt-2 text-sm text-[#2f2e2a]">
-                        {result.reason}
+                        {qacAnalysisText(lang, result.reason)}
                       </p>
                     )}
                     {evidence(result.evidence_json).length > 0 && (
@@ -566,12 +584,13 @@ export default async function QACInteractionDetailPage({
                                 {formatDuration(item.timestamp_seconds)}
                               </span>
                             )}
-                            {item.quote ??
-                              qacT(
-                                lang,
-                                "Evidence saved",
-                                "Evidencia guardada",
-                              )}
+                            {item.quote
+                              ? qacAnalysisText(lang, item.quote)
+                              : qacT(
+                                  lang,
+                                  "Evidence saved",
+                                  "Evidencia guardada",
+                                )}
                           </blockquote>
                         ))}
                       </div>
@@ -579,7 +598,7 @@ export default async function QACInteractionDetailPage({
                     {result.reviewer_comment && (
                       <p className="mt-2 text-sm text-[#5f5d56]">
                         {qacT(lang, "Reviewer", "Revisor")}:{" "}
-                        {result.reviewer_comment}
+                        {qacAnalysisText(lang, result.reviewer_comment)}
                       </p>
                     )}
                   </div>

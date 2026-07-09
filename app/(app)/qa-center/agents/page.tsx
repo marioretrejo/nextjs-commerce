@@ -2,7 +2,7 @@ import { deleteAgentAction, updateAgentAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { pickQacAnalysis } from "../_components/analysis";
 import { percent } from "../_components/format";
-import { qacLanguageOf, qacT } from "../_components/i18n";
+import { qacAnalysisText, qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -268,7 +268,7 @@ export default async function QACAgentsPage({
                       {row.categories.map((category) => (
                         <div key={category.name} className="flex gap-2">
                           <span className="min-w-24 text-[#77756d]">
-                            {category.name}
+                            {qacAnalysisText(lang, category.name)}
                           </span>
                           <span>{percent(category.score)}</span>
                         </div>
@@ -279,7 +279,10 @@ export default async function QACAgentsPage({
                   <td className="py-3 pr-3">
                     {row.failed.length > 0
                       ? row.failed
-                          .map(([name, count]) => `${name} (${count})`)
+                          .map(
+                            ([name, count]) =>
+                              `${qacAnalysisText(lang, name)} (${count})`,
+                          )
                           .join(", ")
                       : "-"}
                   </td>

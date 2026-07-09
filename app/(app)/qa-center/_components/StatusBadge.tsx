@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { qacStatusLabel, type QacLang } from "./i18n";
 
 const STATUS_STYLES: Record<string, string> = {
   pending_cdr: "border-slate-200 bg-slate-50 text-slate-700",
@@ -23,11 +24,13 @@ const STATUS_STYLES: Record<string, string> = {
 export function StatusBadge({
   value,
   className,
+  lang = "en",
 }: {
   value: string | null | undefined;
   className?: string;
+  lang?: QacLang;
 }) {
-  const label = value?.replace(/_/g, " ") ?? "unknown";
+  const label = qacStatusLabel(lang, value);
   return (
     <span
       className={cn(

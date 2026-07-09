@@ -164,12 +164,13 @@ export default async function QACTrackersPage({
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <StatusBadge value={tracker.severity} />
+                    <StatusBadge lang={lang} value={tracker.severity} />
                     <StatusBadge
+                      lang={lang}
                       value={tracker.is_active ? "active" : "inactive"}
                     />
                     {tracker.trigger_manual_review && (
-                      <StatusBadge value="manual review" />
+                      <StatusBadge lang={lang} value="manual review" />
                     )}
                     {access.isAdmin && (
                       <div className="flex flex-wrap gap-2">

@@ -356,6 +356,10 @@ Return strict JSON with:
 }
 
 Scoring rules:
+- Return every user-facing narrative field in Spanish: summary,
+  call_disposition, strengths, opportunities, recommendations,
+  detected_objections, tracker reason, criteria reason, and any generated
+  explanation. Keep JSON keys and enum values exactly as specified.
 - If a criterion is not applicable, return applicable=false, result="n/a", score=null.
 - Do not award or subtract points for N/A criteria.
 - If evidence is unavailable, explain the reason without inventing quotes.
@@ -418,6 +422,10 @@ Return strict JSON with:
 }
 
 If evidence is unavailable, say so without inventing facts.
+Return every user-facing narrative field in Spanish: summary,
+call_disposition, strengths, opportunities, recommendations,
+detected_objections, tracker reason, and any generated explanation. Keep JSON
+keys and enum values exactly as specified.
 Trackers do not affect score directly. Detect each tracker independently.
 
 Trackers:

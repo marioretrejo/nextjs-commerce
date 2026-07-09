@@ -4,7 +4,14 @@ import { QACShell, MetricTile, Panel } from "./_components/QACShell";
 import { StatusBadge } from "./_components/StatusBadge";
 import { pickQacAnalysis } from "./_components/analysis";
 import { formatDate, formatDuration, percent } from "./_components/format";
-import { qacLanguageOf, qacT } from "./_components/i18n";
+import {
+  qacAnalysisText,
+  qacLanguageOf,
+  qacOutcomeLabel,
+  qacRiskLabel,
+  qacSentimentLabel,
+  qacT,
+} from "./_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -560,7 +567,7 @@ export default async function QACenterDashboardPage({
                     </span>
                   </div>
                   <div className="mt-2">
-                    <StatusBadge value={interaction.status} />
+                    <StatusBadge lang={lang} value={interaction.status} />
                   </div>
                 </Link>
               );
@@ -678,7 +685,7 @@ export default async function QACenterDashboardPage({
                           {selectedSegments.length} segments
                         </span>
                       )}
-                      <StatusBadge value={selected.review_status} />
+                      <StatusBadge lang={lang} value={selected.review_status} />
                     </div>
                   </div>
                   {selectedSegments.length > 0 ? (
@@ -740,7 +747,7 @@ export default async function QACenterDashboardPage({
                     selectedAnalysis.risk_level,
                   )}`}
                 >
-                  {selectedAnalysis.risk_level.replace(/_/g, " ")} risk
+                  {qacRiskLabel(lang, selectedAnalysis.risk_level)}
                 </span>
               ) : null
             }
@@ -775,7 +782,7 @@ export default async function QACenterDashboardPage({
                       {qacT(lang, "Sentiment", "Sentimiento")}
                     </span>
                     <span className="break-words font-medium text-[#181816]">
-                      {sentimentLabel(selectedAnalysis?.sentiment)}
+                      {qacSentimentLabel(lang, selectedAnalysis?.sentiment)}
                     </span>
                   </div>
                   <div className="grid gap-1 rounded-md bg-[#fafafa] p-2">
@@ -783,14 +790,17 @@ export default async function QACenterDashboardPage({
                       {qacT(lang, "Outcome", "Resultado")}
                     </span>
                     <span className="break-words font-medium leading-5 text-[#181816] [overflow-wrap:anywhere]">
-                      {selectedAnalysis?.call_disposition ?? "-"}
+                      {qacOutcomeLabel(
+                        lang,
+                        selectedAnalysis?.call_disposition,
+                      )}
                     </span>
                   </div>
                 </div>
 
                 {selectedAnalysis?.summary ? (
                   <div className="rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
-                    {selectedAnalysis.summary}
+                    {qacAnalysisText(lang, selectedAnalysis.summary)}
                   </div>
                 ) : (
                   <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -827,7 +837,11 @@ export default async function QACenterDashboardPage({
                       >
                         <div className="mb-1 flex justify-between gap-3 text-sm">
                           <span className="truncate text-[#2f2e2a]">
-                            {result.qac_scorecard_criteria?.name ?? "Criterion"}
+                            {qacAnalysisText(
+                              lang,
+                              result.qac_scorecard_criteria?.name ??
+                                "Criterion",
+                            )}
                           </span>
                           <span className="font-medium">
                             {result.result === "n/a"
@@ -871,7 +885,7 @@ export default async function QACenterDashboardPage({
                     {asStringArray(selectedAnalysis.strengths_json)
                       .slice(0, 3)
                       .map((item) => (
-                        <li key={item}>{item}</li>
+                        <li key={item}>{qacAnalysisText(lang, item)}</li>
                       ))}
                   </ul>
                 </div>
@@ -884,13 +898,16 @@ export default async function QACenterDashboardPage({
                     {asStringArray(selectedAnalysis.opportunities_json)
                       .slice(0, 3)
                       .map((item) => (
-                        <li key={item}>{item}</li>
+                        <li key={item}>{qacAnalysisText(lang, item)}</li>
                       ))}
                   </ul>
                 </div>
                 {asStringArray(selectedAnalysis.recommendations_json)[0] && (
                   <div className="rounded-md bg-[#f7f7f5] p-3 text-[#2f2e2a]">
-                    {asStringArray(selectedAnalysis.recommendations_json)[0]}
+                    {qacAnalysisText(
+                      lang,
+                      asStringArray(selectedAnalysis.recommendations_json)[0],
+                    )}
                   </div>
                 )}
                 {detectedTrackerLabels(selectedAnalysis.trackers_json).length >
@@ -907,7 +924,7 @@ export default async function QACenterDashboardPage({
                           key={tracker}
                           className="rounded-full border border-[#d8d8d2] bg-white px-2.5 py-1 text-xs font-medium text-[#181816]"
                         >
-                          {tracker}
+                          {qacAnalysisText(lang, tracker)}
                         </span>
                       ))}
                     </div>

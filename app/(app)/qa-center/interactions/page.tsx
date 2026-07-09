@@ -2,7 +2,7 @@ import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { pickQacAnalysis } from "../_components/analysis";
 import { formatDate, formatDuration, percent } from "../_components/format";
-import { qacLanguageOf, qacT } from "../_components/i18n";
+import { qacAnalysisText, qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
@@ -386,10 +386,12 @@ export default async function QACInteractionsPage({
                     <td className="py-3 pr-3">
                       {failed.length > 0
                         ? failed
-                            .map(
-                              (result) =>
+                            .map((result) =>
+                              qacAnalysisText(
+                                lang,
                                 result.qac_scorecard_criteria?.name ??
-                                "Criterion",
+                                  "Criterion",
+                              ),
                             )
                             .join(", ")
                         : "-"}
@@ -408,10 +410,13 @@ export default async function QACInteractionsPage({
                       </Link>
                     </td>
                     <td className="py-3 pr-3">
-                      <StatusBadge value={interaction.review_status} />
+                      <StatusBadge
+                        lang={lang}
+                        value={interaction.review_status}
+                      />
                     </td>
                     <td className="py-3 pr-3">
-                      <StatusBadge value={interaction.status} />
+                      <StatusBadge lang={lang} value={interaction.status} />
                     </td>
                   </tr>
                 );

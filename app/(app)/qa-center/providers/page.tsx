@@ -135,6 +135,7 @@ export default async function QACProvidersPage({
                     </td>
                     <td className="py-3 pr-3">
                       <StatusBadge
+                        lang={lang}
                         value={provider.is_active ? "active" : "inactive"}
                       />
                     </td>

@@ -74,7 +74,7 @@ export default async function QACSettingsPage({
         <Panel title={qacT(lang, "Analysis statuses", "Estados de analisis")}>
           <div className="flex flex-wrap gap-2">
             {QAC_ANALYSIS_STATUSES.map((status) => (
-              <StatusBadge key={status} value={status} />
+              <StatusBadge key={status} lang={lang} value={status} />
             ))}
           </div>
         </Panel>
@@ -118,7 +118,7 @@ export default async function QACSettingsPage({
                         qacT(lang, "No external id", "Sin ID externo")}
                     </td>
                     <td className="py-3 pr-3">
-                      <StatusBadge value={log.status} />
+                      <StatusBadge lang={lang} value={log.status} />
                     </td>
                     <td className="py-3 pr-3 text-[#77756d]">
                       {log.error_message ?? "-"}
