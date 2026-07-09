@@ -33,7 +33,8 @@ export interface ConversionTrackerPreset {
 }
 
 export const CONVERSION_SALES_SCORECARD = {
-  name: "Conversion Sales",
+  name: "Ventas de Conversion",
+  legacyName: "Conversion Sales",
   version: 1,
   departmentName: "Conversion",
   departmentSlug: "conversion",
@@ -41,7 +42,7 @@ export const CONVERSION_SALES_SCORECARD = {
 Score only observable behavior from the transcript. Do not invent evidence.
 Compliance criteria are critical: guaranteed profit promises, missing risk disclosure, fraud risk, vulnerable customer risk or unsafe payment guidance must be surfaced even if the overall score is high.
 Trackers do not directly change the score. They detect operational signals, risks and opportunities in parallel.`,
-  qaPromptEs: `Evalua esta llamada real de ventas de conversion contra Conversion Sales V1.
+  qaPromptEs: `Evalua esta llamada real de ventas de conversion contra Ventas de Conversion V1.
 Califica solo comportamientos observables en la transcripcion. No inventes evidencia.
 Los criterios de cumplimiento son criticos: promesas de ganancias garantizadas, ausencia de divulgacion de riesgo, riesgo de fraude, cliente vulnerable o instrucciones de pago inseguras deben marcarse aunque el score general sea alto.
 Los trackers no cambian directamente el score. Detectan señales operativas, riesgos y oportunidades en paralelo.`,

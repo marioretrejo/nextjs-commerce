@@ -102,6 +102,13 @@ function localized(
   return i18n(criterion.examples_json)[key] ?? base;
 }
 
+function localizedScorecardName(name: string, lang: "en" | "es"): string {
+  if (lang === "es" && name.toLowerCase() === "conversion sales") {
+    return "Ventas de Conversion";
+  }
+  return name;
+}
+
 export default async function QACScorecardsPage({
   searchParams,
 }: {
@@ -166,7 +173,7 @@ export default async function QACScorecardsPage({
               ? ui(
                   lang,
                   "Conversion Sales V1 installed.",
-                  "Conversion Sales V1 instalado.",
+                  "Ventas de Conversion V1 instalado.",
                 )
               : updated === "criterion"
                 ? ui(lang, "Criterion updated.", "Criterio actualizado.")
@@ -196,11 +203,13 @@ export default async function QACScorecardsPage({
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-black/15 p-4">
                     <div>
                       <h2 className="text-base font-semibold text-[#181816]">
-                        {scorecard.name} v{scorecard.version}
+                        {localizedScorecardName(scorecard.name, lang)} v
+                        {scorecard.version}
                       </h2>
                       <p className="text-sm text-[#77756d]">
-                        {scorecard.qac_departments?.name ?? "No department"} -
-                        {ui(lang, "total weight", "peso total")} {totalWeight}
+                        {scorecard.qac_departments?.name ??
+                          ui(lang, "No department", "Sin departamento")}{" "}
+                        - {ui(lang, "total weight", "peso total")} {totalWeight}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -235,7 +244,9 @@ export default async function QACScorecardsPage({
                           defaultValue={scorecard.department_id ?? ""}
                           className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                         >
-                          <option value="">Department</option>
+                          <option value="">
+                            {ui(lang, "Department", "Departamento")}
+                          </option>
                           {departments.map((department) => (
                             <option key={department.id} value={department.id}>
                               {department.name}
@@ -245,8 +256,15 @@ export default async function QACScorecardsPage({
                         <input
                           name="name"
                           required
-                          defaultValue={scorecard.name}
-                          placeholder="Scorecard name"
+                          defaultValue={localizedScorecardName(
+                            scorecard.name,
+                            lang,
+                          )}
+                          placeholder={ui(
+                            lang,
+                            "Scorecard name",
+                            "Nombre del scorecard",
+                          )}
                           className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                         />
                         <input
@@ -262,7 +280,11 @@ export default async function QACScorecardsPage({
                             type="checkbox"
                             defaultChecked={scorecard.is_active}
                           />
-                          Active scorecard for department
+                          {ui(
+                            lang,
+                            "Active scorecard for department",
+                            "Scorecard activo para el departamento",
+                          )}
                         </label>
                         <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
                           {ui(lang, "Save changes", "Guardar cambios")}
@@ -355,7 +377,9 @@ export default async function QACScorecardsPage({
                               <input type="hidden" name="lang" value={lang} />
                               <input
                                 name="category"
-                                defaultValue={criterion.category}
+                                defaultValue={
+                                  localized(criterion, "category", lang) ?? ""
+                                }
                                 placeholder={ui(lang, "Category", "Categoria")}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
@@ -371,7 +395,9 @@ export default async function QACScorecardsPage({
                               <input
                                 name="name"
                                 required
-                                defaultValue={criterion.name}
+                                defaultValue={
+                                  localized(criterion, "name", lang) ?? ""
+                                }
                                 placeholder={ui(
                                   lang,
                                   "Criterion name",
@@ -381,7 +407,10 @@ export default async function QACScorecardsPage({
                               />
                               <textarea
                                 name="description"
-                                defaultValue={criterion.description ?? ""}
+                                defaultValue={
+                                  localized(criterion, "description", lang) ??
+                                  ""
+                                }
                                 placeholder={ui(
                                   lang,
                                   "Description",
@@ -393,7 +422,11 @@ export default async function QACScorecardsPage({
                               <textarea
                                 name="applicability_rule"
                                 defaultValue={
-                                  criterion.applicability_rule ?? ""
+                                  localized(
+                                    criterion,
+                                    "applicability_rule",
+                                    lang,
+                                  ) ?? ""
                                 }
                                 placeholder={ui(
                                   lang,
@@ -405,7 +438,13 @@ export default async function QACScorecardsPage({
                               />
                               <textarea
                                 name="pass_definition"
-                                defaultValue={criterion.pass_definition ?? ""}
+                                defaultValue={
+                                  localized(
+                                    criterion,
+                                    "pass_definition",
+                                    lang,
+                                  ) ?? ""
+                                }
                                 placeholder={ui(
                                   lang,
                                   "Pass definition",
@@ -417,7 +456,11 @@ export default async function QACScorecardsPage({
                               <textarea
                                 name="partial_definition"
                                 defaultValue={
-                                  criterion.partial_definition ?? ""
+                                  localized(
+                                    criterion,
+                                    "partial_definition",
+                                    lang,
+                                  ) ?? ""
                                 }
                                 placeholder={ui(
                                   lang,
@@ -429,7 +472,13 @@ export default async function QACScorecardsPage({
                               />
                               <textarea
                                 name="fail_definition"
-                                defaultValue={criterion.fail_definition ?? ""}
+                                defaultValue={
+                                  localized(
+                                    criterion,
+                                    "fail_definition",
+                                    lang,
+                                  ) ?? ""
+                                }
                                 placeholder={ui(
                                   lang,
                                   "Fail definition",
@@ -440,7 +489,10 @@ export default async function QACScorecardsPage({
                               />
                               <textarea
                                 name="na_definition"
-                                defaultValue={criterion.na_definition ?? ""}
+                                defaultValue={
+                                  localized(criterion, "na_definition", lang) ??
+                                  ""
+                                }
                                 placeholder={ui(
                                   lang,
                                   "N/A definition",
@@ -511,7 +563,9 @@ export default async function QACScorecardsPage({
 
         <div className="flex flex-col gap-4">
           {access.isSuperadmin && (
-            <Panel title="Conversion Sales V1">
+            <Panel
+              title={ui(lang, "Conversion Sales V1", "Ventas de Conversion V1")}
+            >
               <div className="space-y-3 text-sm">
                 <p className="text-[#5f5d56]">
                   {ui(
@@ -587,7 +641,8 @@ export default async function QACScorecardsPage({
                 <option value="">Scorecard</option>
                 {scorecards.map((scorecard) => (
                   <option key={scorecard.id} value={scorecard.id}>
-                    {scorecard.name} v{scorecard.version}
+                    {localizedScorecardName(scorecard.name, lang)} v
+                    {scorecard.version}
                   </option>
                 ))}
               </select>

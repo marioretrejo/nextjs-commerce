@@ -2,6 +2,7 @@ import { transcribeAudioDetailed } from "@/lib/deepgram";
 import { groqJson } from "@/lib/groq";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadQacStoredAudio } from "./audio-storage";
+import { CONVERSION_SALES_CRITERIA } from "./conversion-sales-v1";
 import { isSafeUrl } from "./ssrf";
 import { calculateQacScore } from "./scoring";
 import type { QacCriterion, QacCriterionResultInput } from "./types";
@@ -172,6 +173,77 @@ function trackerImpact(
   return { riskLevel, requiresManualReview };
 }
 
+function scorecardI18n(value: unknown): Record<string, string | undefined> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const root = value as { i18n?: unknown };
+  if (!root.i18n || typeof root.i18n !== "object" || Array.isArray(root.i18n)) {
+    return {};
+  }
+  const es = (root.i18n as { es?: unknown }).es;
+  return es && typeof es === "object" && !Array.isArray(es)
+    ? (es as Record<string, string | undefined>)
+    : {};
+}
+
+function criterionPromptValue(
+  criterion: QacCriterion,
+  key:
+    | "category"
+    | "name"
+    | "description"
+    | "applicability_rule"
+    | "pass_definition"
+    | "partial_definition"
+    | "fail_definition"
+    | "na_definition",
+  useConversionFallback: boolean,
+): string | null {
+  const translated = scorecardI18n(criterion.examples_json)[key];
+  const conversionFallback = useConversionFallback
+    ? conversionCriterionValue(criterion, key)
+    : null;
+  return translated ?? conversionFallback ?? criterion[key] ?? null;
+}
+
+function isConversionScorecardName(name: string): boolean {
+  return ["conversion sales", "ventas de conversion"].includes(
+    name.toLowerCase(),
+  );
+}
+
+function scorecardPromptName(name: string): string {
+  return isConversionScorecardName(name) ? "Ventas de Conversion" : name;
+}
+
+function conversionCriterionValue(
+  criterion: QacCriterion,
+  key:
+    | "category"
+    | "name"
+    | "description"
+    | "applicability_rule"
+    | "pass_definition"
+    | "partial_definition"
+    | "fail_definition"
+    | "na_definition",
+): string | null {
+  const preset = CONVERSION_SALES_CRITERIA.find(
+    (item) => item.sort_order === criterion.sort_order,
+  );
+  if (!preset) return null;
+  const keyMap = {
+    category: "category_es",
+    name: "name_es",
+    description: "description_es",
+    applicability_rule: "applicability_rule_es",
+    pass_definition: "pass_definition_es",
+    partial_definition: "partial_definition_es",
+    fail_definition: "fail_definition_es",
+    na_definition: "na_definition_es",
+  } as const;
+  return preset[keyMap[key]] ?? null;
+}
+
 async function fetchAudio(url: string): Promise<{
   buffer: Buffer;
   contentType: string;
@@ -291,17 +363,47 @@ function buildAnalysisPrompt(params: {
   trackers: QacTracker[];
   transcript: string;
 }): string {
+  const useConversionFallback = isConversionScorecardName(params.scorecardName);
   const criteria = params.criteria.map((criterion) => ({
     criterion_id: criterion.id,
-    name: criterion.name,
-    category: criterion.category,
+    name: criterionPromptValue(criterion, "name", useConversionFallback),
+    category: criterionPromptValue(
+      criterion,
+      "category",
+      useConversionFallback,
+    ),
+    description: criterionPromptValue(
+      criterion,
+      "description",
+      useConversionFallback,
+    ),
     weight: criterion.weight,
     critical: criterion.is_critical,
-    applicability_rule: criterion.applicability_rule,
-    pass_definition: criterion.pass_definition,
-    partial_definition: criterion.partial_definition,
-    fail_definition: criterion.fail_definition,
-    na_definition: criterion.na_definition,
+    applicability_rule: criterionPromptValue(
+      criterion,
+      "applicability_rule",
+      useConversionFallback,
+    ),
+    pass_definition: criterionPromptValue(
+      criterion,
+      "pass_definition",
+      useConversionFallback,
+    ),
+    partial_definition: criterionPromptValue(
+      criterion,
+      "partial_definition",
+      useConversionFallback,
+    ),
+    fail_definition: criterionPromptValue(
+      criterion,
+      "fail_definition",
+      useConversionFallback,
+    ),
+    na_definition: criterionPromptValue(
+      criterion,
+      "na_definition",
+      useConversionFallback,
+    ),
     examples: criterion.examples_json,
   }));
   const trackers = params.trackers.map((tracker) => ({
@@ -318,7 +420,7 @@ function buildAnalysisPrompt(params: {
 Do not assume this call came from an AI voice agent. Evaluate only the transcript below.
 
 Department: ${params.departmentName}
-Scorecard: ${params.scorecardName}
+Scorecard: ${scorecardPromptName(params.scorecardName)}
 Department-specific QA prompt:
 ${params.departmentPrompt ?? "Use the scorecard criteria as the source of truth."}
 

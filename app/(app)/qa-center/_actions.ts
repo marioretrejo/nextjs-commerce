@@ -578,8 +578,8 @@ export async function installConversionSalesV1Action() {
         workspace_id: workspaceId,
         name: CONVERSION_SALES_SCORECARD.departmentName,
         slug: CONVERSION_SALES_SCORECARD.departmentSlug,
-        description: "Conversion sales QA department.",
-        qa_prompt: `${CONVERSION_SALES_SCORECARD.qaPrompt}\n\n${CONVERSION_SALES_SCORECARD.qaPromptEs}`,
+        description: "Departamento QA de ventas de conversion.",
+        qa_prompt: CONVERSION_SALES_SCORECARD.qaPromptEs,
         auto_analyze: true,
         is_active: true,
       })
@@ -593,8 +593,8 @@ export async function installConversionSalesV1Action() {
           workspace_id: workspaceId,
           name: CONVERSION_SALES_SCORECARD.departmentName,
           slug: CONVERSION_SALES_SCORECARD.departmentSlug,
-          description: "Conversion sales QA department.",
-          qa_prompt: `${CONVERSION_SALES_SCORECARD.qaPrompt}\n\n${CONVERSION_SALES_SCORECARD.qaPromptEs}`,
+          description: "Departamento QA de ventas de conversion.",
+          qa_prompt: CONVERSION_SALES_SCORECARD.qaPromptEs,
           is_active: true,
         })
         .select("id")
@@ -611,7 +611,7 @@ export async function installConversionSalesV1Action() {
     await admin
       .from("qac_departments")
       .update({
-        qa_prompt: `${CONVERSION_SALES_SCORECARD.qaPrompt}\n\n${CONVERSION_SALES_SCORECARD.qaPromptEs}`,
+        qa_prompt: CONVERSION_SALES_SCORECARD.qaPromptEs,
         is_active: true,
       })
       .eq("id", (department as { id: string }).id)
@@ -630,7 +630,10 @@ export async function installConversionSalesV1Action() {
     .select("id")
     .eq("workspace_id", workspaceId)
     .eq("department_id", departmentId)
-    .eq("name", CONVERSION_SALES_SCORECARD.name)
+    .in("name", [
+      CONVERSION_SALES_SCORECARD.name,
+      CONVERSION_SALES_SCORECARD.legacyName,
+    ])
     .eq("version", CONVERSION_SALES_SCORECARD.version)
     .maybeSingle();
 
@@ -638,7 +641,7 @@ export async function installConversionSalesV1Action() {
   if (scorecardId) {
     await admin
       .from("qac_scorecards")
-      .update({ is_active: true })
+      .update({ name: CONVERSION_SALES_SCORECARD.name, is_active: true })
       .eq("id", scorecardId)
       .eq("workspace_id", workspaceId);
     await admin
@@ -669,16 +672,16 @@ export async function installConversionSalesV1Action() {
   const criteriaRows = CONVERSION_SALES_CRITERIA.map((criterion) => ({
     workspace_id: workspaceId,
     scorecard_id: scorecardId,
-    category: criterion.category,
-    name: criterion.name,
-    description: criterion.description,
+    category: criterion.category_es,
+    name: criterion.name_es,
+    description: criterion.description_es,
     weight: criterion.weight,
     is_critical: Boolean(criterion.is_critical),
-    applicability_rule: criterion.applicability_rule ?? null,
-    pass_definition: criterion.pass_definition,
-    partial_definition: criterion.partial_definition ?? null,
-    fail_definition: criterion.fail_definition,
-    na_definition: criterion.na_definition ?? null,
+    applicability_rule: criterion.applicability_rule_es ?? null,
+    pass_definition: criterion.pass_definition_es,
+    partial_definition: criterion.partial_definition_es ?? null,
+    fail_definition: criterion.fail_definition_es,
+    na_definition: criterion.na_definition_es ?? null,
     examples_json: criterionExamplesJson(criterion),
     sort_order: criterion.sort_order,
   }));
