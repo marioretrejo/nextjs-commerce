@@ -273,11 +273,11 @@ const squaretalkAdapter: CdrProviderAdapter = {
       department_name:
         cleanString(flat["agent_department"]) ??
         cleanString(flat["extension_groups"]) ??
+        cleanString(flat["agent_type"]) ??
         cleanString(flat["unit_id"]) ??
         cleanString(flat["department_name"]) ??
         cleanString(flat["department"]) ??
         cleanString(flat["team"]) ??
-        cleanString(flat["agent_type"]) ??
         base.department_name,
       prospect_id:
         cleanString(flat["prospect_id"]) ??
