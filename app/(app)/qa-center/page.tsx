@@ -117,6 +117,14 @@ function selectedHref(
   return `/qa-center?${search.toString()}`;
 }
 
+function audioHref(
+  interaction: DashboardInteraction | null | undefined,
+): string | null {
+  if (!interaction?.internal_audio_url && !interaction?.recording_url)
+    return null;
+  return `/api/qa-center/interactions/${interaction.id}/audio`;
+}
+
 function riskClass(risk: string | null | undefined): string {
   if (risk === "critical" || risk === "high") {
     return "border-red-200 bg-red-50 text-red-700";
@@ -240,8 +248,7 @@ export default async function QACenterDashboardPage({
     0,
     8,
   );
-  const selectedAudioUrl =
-    selected?.internal_audio_url ?? selected?.recording_url ?? null;
+  const selectedAudioUrl = audioHref(selected);
   const selectedScore = selectedAnalysis?.overall_score ?? null;
   const scores = interactions
     .map((interaction) => interaction.qac_analyses?.[0]?.overall_score)
@@ -517,8 +524,7 @@ export default async function QACenterDashboardPage({
                       </audio>
                       <div className="flex flex-wrap gap-2">
                         <a
-                          href={selectedAudioUrl}
-                          download
+                          href={`${selectedAudioUrl}?download=1`}
                           className="inline-flex items-center gap-2 rounded-md border border-[#d8d8d2] px-3 py-2 text-sm font-medium text-[#181816]"
                         >
                           <Download className="h-4 w-4" />

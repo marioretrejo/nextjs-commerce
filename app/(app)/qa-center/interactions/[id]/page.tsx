@@ -95,6 +95,12 @@ function evidence(
     : [];
 }
 
+function audioHref(interaction: InteractionDetail): string | null {
+  if (!interaction.internal_audio_url && !interaction.recording_url)
+    return null;
+  return `/api/qa-center/interactions/${interaction.id}/audio`;
+}
+
 export default async function QACInteractionDetailPage({
   params,
   searchParams,
@@ -147,7 +153,7 @@ export default async function QACInteractionDetailPage({
           .includes(q),
       )
     : diarized;
-  const audioUrl = interaction.internal_audio_url ?? interaction.recording_url;
+  const audioUrl = audioHref(interaction);
   const trackers =
     typeof analysis?.trackers_json === "object" && analysis.trackers_json
       ? (analysis.trackers_json as {
@@ -256,9 +262,12 @@ export default async function QACInteractionDetailPage({
               </p>
             )}
             {audioUrl && (
-              <p className="mt-2 break-all text-xs text-[#77756d]">
-                {audioUrl}
-              </p>
+              <a
+                href={`${audioUrl}?download=1`}
+                className="mt-2 inline-flex rounded-md border border-[#d8d8d2] px-3 py-2 text-sm font-medium text-[#181816]"
+              >
+                Download recording
+              </a>
             )}
           </Panel>
 

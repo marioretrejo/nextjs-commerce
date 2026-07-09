@@ -3,6 +3,7 @@ import {
   findOrCreateQacAgent,
   findQacDepartment,
 } from "@/lib/qac/department-matching";
+import { uploadQacRecording } from "@/lib/qac/audio-storage";
 import { processQacInteraction } from "@/lib/qac/pipeline";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { timingSafeEqual } from "node:crypto";
@@ -212,11 +213,17 @@ export async function POST(
     normalized,
     department?.id ?? null,
   );
+  const storedAudio = await uploadQacRecording({
+    admin,
+    workspaceId: provider.workspace_id,
+    providerSlug: provider.slug,
+    externalCallId: normalized.external_call_id,
+    recordingBase64: normalized.recording_base64,
+    recordingUrl: normalized.recording_url,
+  });
 
   const hasTranscript = Boolean(normalized.transcript?.trim());
-  const hasAudio = Boolean(
-    normalized.recording_url || normalized.recording_base64,
-  );
+  const hasAudio = Boolean(storedAudio.storagePath || normalized.recording_url);
   const disposition = normalized.disposition?.toLowerCase() ?? "";
   const notEvaluableWithoutAudio =
     !hasAudio &&
@@ -261,6 +268,7 @@ export async function POST(
     prospect_id: normalized.prospect_id,
     interaction_title: title,
     recording_url: normalized.recording_url,
+    internal_audio_url: storedAudio.storagePath,
     audio_url: normalized.recording_url,
     duration_seconds: normalized.duration_seconds,
     duration_s: normalized.duration_seconds,
@@ -294,6 +302,8 @@ export async function POST(
       department_name: normalized.department_name,
       disposition: normalized.disposition,
       call_started_at: normalized.call_started_at,
+      internal_audio_url: storedAudio.storagePath,
+      audio_storage_error: storedAudio.error,
     },
   };
 
@@ -394,6 +404,9 @@ export async function POST(
       interaction_id: interactionId,
       status,
       analysis_queued: shouldAnalyze,
+      audio_saved: Boolean(storedAudio.storagePath),
+      audio_storage_error: storedAudio.error,
+      normalized_department_name: normalized.department_name,
       department_id: department?.id ?? null,
       agent_id: agent?.id ?? null,
     },

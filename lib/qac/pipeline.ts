@@ -1,6 +1,7 @@
 import { transcribeAudio } from "@/lib/deepgram";
 import { groqJson } from "@/lib/groq";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { downloadQacStoredAudio } from "./audio-storage";
 import { isSafeUrl } from "./ssrf";
 import { calculateQacScore } from "./scoring";
 import type { QacCriterion, QacCriterionResultInput } from "./types";
@@ -68,7 +69,15 @@ async function fetchAudio(url: string): Promise<{
 } | null> {
   if (!isSafeUrl(url)) return null;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(url, {
+      headers: {
+        Accept: "audio/mpeg,audio/wav,audio/*,*/*",
+        Referer: "https://sequoia.squaretalk.com/reporting/calls",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
     if (!res.ok) return null;
     const buffer = Buffer.from(await res.arrayBuffer());
     if (!buffer.length) return null;
@@ -112,7 +121,9 @@ async function getTranscript(
     .update({ status: "transcribing" })
     .eq("id", interaction.id);
 
-  const audio = await fetchAudio(audioUrl);
+  const audio = audioUrl.startsWith("http")
+    ? await fetchAudio(audioUrl)
+    : await downloadQacStoredAudio(admin, audioUrl);
   if (!audio) {
     await admin
       .from("qac_interactions")
