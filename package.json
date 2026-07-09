@@ -11,7 +11,7 @@
     "start:worker": "tsx agent/worker.ts start",
     "start:operational-worker": "tsx agent/operational_worker.ts",
     "build": "next build",
-    "start": "next start -H 0.0.0.0",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false next lint",
     "prettier": "prettier --write --ignore-unknown .",
     "prettier:check": "prettier --check --ignore-unknown .",
