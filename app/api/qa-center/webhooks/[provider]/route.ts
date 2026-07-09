@@ -180,13 +180,55 @@ export async function POST(
 
   const { data: existing } = await admin
     .from("qac_interactions")
-    .select("id, status")
+    .select("id, status, department_id, recording_url, internal_audio_url")
     .eq("workspace_id", provider.workspace_id)
     .eq("provider_id", provider.id)
     .eq("external_call_id", normalized.external_call_id)
     .maybeSingle();
 
   if (existing) {
+    const existingInteraction = existing as {
+      id: string;
+      status: string;
+      department_id: string | null;
+      recording_url: string | null;
+      internal_audio_url: string | null;
+    };
+    const department = existingInteraction.department_id
+      ? null
+      : await findQacDepartment(admin, provider.workspace_id, normalized);
+    const storedAudio = existingInteraction.internal_audio_url
+      ? { storagePath: existingInteraction.internal_audio_url, error: null }
+      : await uploadQacRecording({
+          admin,
+          workspaceId: provider.workspace_id,
+          providerSlug: provider.slug,
+          externalCallId: normalized.external_call_id,
+          recordingBase64: normalized.recording_base64,
+          recordingUrl: normalized.recording_url,
+        });
+    const departmentId =
+      existingInteraction.department_id ?? department?.id ?? null;
+    const audioPath =
+      existingInteraction.internal_audio_url ?? storedAudio.storagePath;
+    const hasAudio = Boolean(audioPath || existingInteraction.recording_url);
+    const shouldAnalyze =
+      (config.auto_analyze ?? true) &&
+      Boolean(departmentId) &&
+      hasAudio &&
+      !["analyzing", "analyzed"].includes(existingInteraction.status);
+
+    await admin
+      .from("qac_interactions")
+      .update({
+        department_id: departmentId,
+        department_name: department?.name ?? normalized.department_name,
+        recording_url:
+          existingInteraction.recording_url ?? normalized.recording_url,
+        internal_audio_url: audioPath,
+      })
+      .eq("id", existingInteraction.id);
+
     await admin.from("qac_ingestion_logs").insert({
       workspace_id: provider.workspace_id,
       provider_id: provider.id,
@@ -194,11 +236,21 @@ export async function POST(
       status: "duplicate",
       raw_payload: normalized.raw_payload,
     });
+    if (shouldAnalyze) {
+      after(async () => {
+        await processQacInteraction(existingInteraction.id);
+      });
+    }
     return NextResponse.json({
       ok: true,
       duplicate: true,
-      interaction_id: (existing as { id: string }).id,
-      status: (existing as { status: string }).status,
+      interaction_id: existingInteraction.id,
+      status: existingInteraction.status,
+      analysis_queued: shouldAnalyze,
+      audio_saved: Boolean(audioPath),
+      audio_storage_error: storedAudio.error,
+      normalized_department_name: normalized.department_name,
+      department_id: departmentId,
     });
   }
 
