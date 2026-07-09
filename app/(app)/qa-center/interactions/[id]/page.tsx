@@ -252,6 +252,7 @@ export default async function QACInteractionDetailPage({
       active="interactions"
       title="Interaction Detail"
       description="CDR interaction detail with transcript, analysis and scorecard evidence."
+      isSuperadmin={access.isSuperadmin}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
@@ -481,7 +482,7 @@ export default async function QACInteractionDetailPage({
                 {analysis.qac_criteria_results.map((result) => (
                   <div
                     key={result.id}
-                    className="rounded-md border border-[#eeeeea] p-3"
+                    className="rounded-md border border-black/15 p-3"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>

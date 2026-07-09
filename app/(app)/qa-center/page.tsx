@@ -363,6 +363,7 @@ export default async function QACenterDashboardPage({
       active="dashboard"
       title="Dashboard"
       description="Call monitoring with recordings, downloads, transcript and QA analysis."
+      isSuperadmin={access.isSuperadmin}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile label="Calls" value={interactions.length} />
@@ -491,7 +492,7 @@ export default async function QACenterDashboardPage({
                   className={`block rounded-lg border p-3 transition-colors ${
                     isSelected
                       ? "border-[#181816] bg-[#fbfbfa]"
-                      : "border-[#eeeeea] bg-white hover:border-[#cfcfc8]"
+                      : "border-black/15 bg-white hover:border-black/30"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -586,7 +587,7 @@ export default async function QACenterDashboardPage({
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-[#eeeeea] p-4">
+                <div className="rounded-lg border border-black/15 p-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1f5bd8] text-white">
                       <AudioLines className="h-5 w-5" />
@@ -620,7 +621,7 @@ export default async function QACenterDashboardPage({
                   )}
                 </div>
 
-                <section className="border-t border-[#eeeeea] pt-4">
+                <section className="border-t border-black/15 pt-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-sm font-semibold text-[#181816]">
                       Transcript

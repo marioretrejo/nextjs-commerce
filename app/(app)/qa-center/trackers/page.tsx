@@ -106,36 +106,8 @@ export default async function QACTrackersPage({
         "No-code detectors for objections, risk, intent and operational signals. Trackers do not directly change score.",
         "Detectores sin codigo para objeciones, riesgo, intencion y señales operativas. Los trackers no cambian directamente el score.",
       )}
+      isSuperadmin={access.isSuperadmin}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#deded8] bg-white px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-[#181816]">
-            {ui(lang, "Language", "Idioma")}
-          </p>
-          <p className="text-xs text-[#77756d]">
-            {ui(
-              lang,
-              "View tracker definitions in English or Spanish.",
-              "Ve las definiciones de trackers en ingles o español.",
-            )}
-          </p>
-        </div>
-        <div className="flex rounded-md border border-[#d8d8d2] p-1 text-sm">
-          <a
-            href="/qa-center/trackers?lang=en"
-            className={`rounded px-3 py-1.5 ${lang === "en" ? "bg-[#181816] text-white" : "text-[#5f5d56]"}`}
-          >
-            English
-          </a>
-          <a
-            href="/qa-center/trackers?lang=es"
-            className={`rounded px-3 py-1.5 ${lang === "es" ? "bg-[#181816] text-white" : "text-[#5f5d56]"}`}
-          >
-            Español
-          </a>
-        </div>
-      </div>
-
       {(created || deleted || errorMessage || migrationMissing) && (
         <div
           className={
@@ -163,7 +135,7 @@ export default async function QACTrackersPage({
             {trackers.map((tracker) => (
               <article
                 key={tracker.id}
-                className="rounded-lg border border-[#eeeeea] p-4"
+                className="rounded-lg border border-black/15 p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>

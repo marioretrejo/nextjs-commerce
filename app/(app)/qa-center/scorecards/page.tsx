@@ -131,36 +131,8 @@ export default async function QACScorecardsPage({
         "Department-specific QA criteria with N/A-aware scoring.",
         "Criterios QA por departamento con scoring que respeta N/A.",
       )}
+      isSuperadmin={access.isSuperadmin}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#deded8] bg-white px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-[#181816]">
-            {ui(lang, "Language", "Idioma")}
-          </p>
-          <p className="text-xs text-[#77756d]">
-            {ui(
-              lang,
-              "Switch scorecard definitions between English and Spanish.",
-              "Cambia las definiciones del scorecard entre ingles y español.",
-            )}
-          </p>
-        </div>
-        <div className="flex rounded-md border border-[#d8d8d2] p-1 text-sm">
-          <a
-            href="/qa-center/scorecards?lang=en"
-            className={`rounded px-3 py-1.5 ${lang === "en" ? "bg-[#181816] text-white" : "text-[#5f5d56]"}`}
-          >
-            English
-          </a>
-          <a
-            href="/qa-center/scorecards?lang=es"
-            className={`rounded px-3 py-1.5 ${lang === "es" ? "bg-[#181816] text-white" : "text-[#5f5d56]"}`}
-          >
-            Español
-          </a>
-        </div>
-      </div>
-
       {(deleted || installed || errorMessage) && (
         <div
           className={
@@ -195,9 +167,9 @@ export default async function QACScorecardsPage({
               return (
                 <article
                   key={scorecard.id}
-                  className="rounded-lg border border-[#eeeeea]"
+                  className="rounded-lg border border-black/15"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eeeeea] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-black/15 p-4">
                     <div>
                       <h2 className="text-base font-semibold text-[#181816]">
                         {scorecard.name} v{scorecard.version}
@@ -221,7 +193,7 @@ export default async function QACScorecardsPage({
                       )}
                     </div>
                   </div>
-                  <div className="divide-y divide-[#eeeeea]">
+                  <div className="divide-y divide-black/15">
                     {criteria.map((criterion) => (
                       <div key={criterion.id} className="p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -309,22 +281,24 @@ export default async function QACScorecardsPage({
         </Panel>
 
         <div className="flex flex-col gap-4">
-          <Panel title="Conversion Sales V1">
-            <div className="space-y-3 text-sm">
-              <p className="text-[#5f5d56]">
-                {ui(
-                  lang,
-                  "Install the full 25-rule scorecard and default AI trackers for the Conversion department.",
-                  "Instala el scorecard completo de 25 reglas y los AI Trackers por defecto para el departamento Conversion.",
-                )}
-              </p>
-              <form action={installConversionSalesV1Action}>
-                <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-                  {ui(lang, "Install preset", "Instalar preset")}
-                </button>
-              </form>
-            </div>
-          </Panel>
+          {access.isSuperadmin && (
+            <Panel title="Conversion Sales V1">
+              <div className="space-y-3 text-sm">
+                <p className="text-[#5f5d56]">
+                  {ui(
+                    lang,
+                    "Install the full 25-rule scorecard and default AI trackers for the Conversion department.",
+                    "Instala el scorecard completo de 25 reglas y los AI Trackers por defecto para el departamento Conversion.",
+                  )}
+                </p>
+                <form action={installConversionSalesV1Action}>
+                  <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
+                    {ui(lang, "Install preset", "Instalar preset")}
+                  </button>
+                </form>
+              </div>
+            </Panel>
+          )}
 
           <Panel title="Create scorecard">
             <form action={createScorecardAction} className="space-y-3">

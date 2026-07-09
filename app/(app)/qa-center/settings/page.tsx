@@ -4,9 +4,12 @@ import { formatDate } from "../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { QAC_ANALYSIS_STATUSES } from "@/lib/qac/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
 
 export default async function QACSettingsPage() {
   const access = await requireQacAccess();
+  if (!access.isSuperadmin) redirect("/qa-center");
+
   const admin = createAdminClient();
 
   const [providers, departments, scorecards, logs] = await Promise.all([
@@ -38,6 +41,7 @@ export default async function QACSettingsPage() {
       active="settings"
       title="Settings"
       description="Operational QA Center configuration for CDR ingestion and analysis."
+      isSuperadmin={access.isSuperadmin}
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile label="Active providers" value={providers.count ?? 0} />
@@ -58,14 +62,14 @@ export default async function QACSettingsPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-[#77756d]">
-                <tr className="border-b border-[#eeeeea]">
+                <tr className="border-b border-black/15">
                   <th className="py-2 pr-3 font-medium">External call</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
                   <th className="py-2 pr-3 font-medium">Error</th>
                   <th className="py-2 pr-3 font-medium">Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#eeeeea]">
+              <tbody className="divide-y divide-black/15">
                 {(
                   (logs.data as Array<{
                     id: string;

@@ -156,6 +156,7 @@ export default async function QACAgentsPage({
       active="agents"
       title="Agents"
       description="Agent performance calculated only from imported CDR interactions."
+      isSuperadmin={access.isSuperadmin}
     >
       {deleted && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -166,7 +167,7 @@ export default async function QACAgentsPage({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-[#77756d]">
-              <tr className="border-b border-[#eeeeea]">
+              <tr className="border-b border-black/15">
                 <th className="py-2 pr-3 font-medium">Agent</th>
                 <th className="py-2 pr-3 font-medium">Department</th>
                 <th className="py-2 pr-3 font-medium">Total calls</th>
@@ -181,7 +182,7 @@ export default async function QACAgentsPage({
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#eeeeea]">
+            <tbody className="divide-y divide-black/15">
               {rows.map((row) => (
                 <tr key={row.agent.id} className="align-top">
                   <td className="py-3 pr-3">

@@ -4,6 +4,7 @@ import { StatusBadge } from "../_components/StatusBadge";
 import { maskSecret } from "../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
 
 interface ProviderRow {
   id: string;
@@ -40,6 +41,8 @@ export default async function QACProvidersPage({
   const created = firstParam(params, "created");
   const errorMessage = firstParam(params, "error");
   const access = await requireQacAccess();
+  if (!access.isSuperadmin) redirect("/qa-center");
+
   const admin = createAdminClient();
 
   const { data } = await admin
@@ -57,6 +60,7 @@ export default async function QACProvidersPage({
       active="providers"
       title="Providers"
       description="VoIP provider adapters normalize CDR payloads into one QA Center interaction format."
+      isSuperadmin={access.isSuperadmin}
     >
       {(deleted || created || errorMessage) && (
         <div
@@ -75,7 +79,7 @@ export default async function QACProvidersPage({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-[#77756d]">
-                <tr className="border-b border-[#eeeeea]">
+                <tr className="border-b border-black/15">
                   <th className="py-2 pr-3 font-medium">Name</th>
                   <th className="py-2 pr-3 font-medium">Type</th>
                   <th className="py-2 pr-3 font-medium">Webhook</th>
@@ -86,7 +90,7 @@ export default async function QACProvidersPage({
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#eeeeea]">
+              <tbody className="divide-y divide-black/15">
                 {providers.map((provider) => (
                   <tr key={provider.id} className="align-top">
                     <td className="py-3 pr-3">

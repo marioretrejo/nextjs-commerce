@@ -145,6 +145,7 @@ export default async function QACDepartmentsPage({
       active="departments"
       title="Departments"
       description="Each department owns its QA prompt, extensions, agents and active scorecard."
+      isSuperadmin={access.isSuperadmin}
     >
       {(errorMessage || created || deleted) && (
         <div
@@ -178,7 +179,7 @@ export default async function QACDepartmentsPage({
               return (
                 <article
                   key={department.id}
-                  className="rounded-lg border border-[#eeeeea] p-4"
+                  className="rounded-lg border border-black/15 p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>

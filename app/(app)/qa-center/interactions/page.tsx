@@ -142,6 +142,7 @@ export default async function QACInteractionsPage({
       active="interactions"
       title="Interactions"
       description="Every row here is a call center interaction imported from a provider CDR."
+      isSuperadmin={access.isSuperadmin}
     >
       <Panel title="Filters">
         <form className="grid gap-3 md:grid-cols-4 lg:grid-cols-8">
@@ -283,7 +284,7 @@ export default async function QACInteractionsPage({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-[#77756d]">
-              <tr className="border-b border-[#eeeeea]">
+              <tr className="border-b border-black/15">
                 <th className="py-2 pr-3 font-medium">Channel</th>
                 <th className="py-2 pr-3 font-medium">Provider</th>
                 <th className="py-2 pr-3 font-medium">Agent</th>
@@ -298,7 +299,7 @@ export default async function QACInteractionsPage({
                 <th className="py-2 pr-3 font-medium">Analysis</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#eeeeea]">
+            <tbody className="divide-y divide-black/15">
               {interactions.map((interaction) => {
                 const analysis = interaction.qac_analyses?.[0];
                 const failed = (analysis?.qac_criteria_results ?? []).filter(

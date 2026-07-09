@@ -215,6 +215,8 @@ export async function createDepartmentAction(formData: FormData) {
 
 export async function createProviderAction(formData: FormData) {
   const access = await requireQacAccess(true);
+  if (!access.isSuperadmin) redirect("/qa-center");
+
   const admin = createAdminClient();
   const name = text(formData, "name");
   if (!name) return;
@@ -321,6 +323,14 @@ export async function createCriterionAction(formData: FormData) {
 
 export async function installConversionSalesV1Action() {
   const access = await requireQacAccess(true);
+  if (!access.isSuperadmin) {
+    redirect(
+      scorecardsUrl({
+        error: "Solo un superadmin puede instalar Conversion Sales V1.",
+      }),
+    );
+  }
+
   const admin = createAdminClient();
   const workspaceId = access.workspaceId;
 
@@ -579,6 +589,8 @@ export async function deleteDepartmentAction(formData: FormData) {
 
 export async function deleteProviderAction(formData: FormData) {
   const access = await requireQacAccess(true);
+  if (!access.isSuperadmin) redirect("/qa-center");
+
   const admin = createAdminClient();
   const id = text(formData, "id");
   if (!id) return;

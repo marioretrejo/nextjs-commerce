@@ -16,7 +16,7 @@ export default function QACenterError({
 
   return (
     <div className="min-h-screen bg-[#f7f7f5] px-6 py-10">
-      <div className="mx-auto max-w-xl rounded-lg border border-[#deded8] bg-white p-6">
+      <div className="mx-auto max-w-xl rounded-lg border border-black/15 bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#77756d]">
           QA Center
         </p>
