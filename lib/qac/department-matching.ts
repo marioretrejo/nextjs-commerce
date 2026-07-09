@@ -35,8 +35,19 @@ export async function findQacDepartment(
     "department_name" | "agent_extension" | "agent_name" | "external_agent_id"
   >,
 ): Promise<DepartmentRow | null> {
-  if (cdr.department_name) {
-    const slug = slugify(cdr.department_name);
+  const departmentCandidates = cdr.department_name
+    ? [
+        cdr.department_name,
+        ...cdr.department_name
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .reverse(),
+      ]
+    : [];
+
+  for (const departmentName of [...new Set(departmentCandidates)]) {
+    const slug = slugify(departmentName);
     const { data: bySlug } = await admin
       .from("qac_departments")
       .select("id, name, slug, qa_prompt")
@@ -51,7 +62,7 @@ export async function findQacDepartment(
       .select("id, name, slug, qa_prompt")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true)
-      .ilike("name", cdr.department_name)
+      .ilike("name", departmentName)
       .maybeSingle();
     if (byName) return byName as DepartmentRow;
   }
