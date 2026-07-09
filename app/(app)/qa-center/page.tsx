@@ -1,6 +1,9 @@
 import { triggerQacAnalysisAction } from "./_actions";
 import { QacAudioPlayer } from "./_components/QacAudioPlayer";
-import { QacProcessPendingButton } from "./_components/QacProcessPendingButton";
+import {
+  QacProcessPendingButton,
+  QacProcessResultToast,
+} from "./_components/QacProcessPendingButton";
 import { QACShell, MetricTile, Panel } from "./_components/QACShell";
 import { StatusBadge } from "./_components/StatusBadge";
 import { pickQacAnalysis } from "./_components/analysis";
@@ -338,6 +341,15 @@ export default async function QACenterDashboardPage({
   const processed = valueOf(params, "processed");
   const succeeded = valueOf(params, "succeeded");
   const failed = valueOf(params, "failed");
+  const cleanedParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, rawValue]) => {
+    if (["processed", "succeeded", "failed"].includes(key)) return;
+    const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+    if (value) cleanedParams.set(key, value);
+  });
+  const cleanedDashboardHref = cleanedParams.toString()
+    ? `/qa-center?${cleanedParams.toString()}`
+    : "/qa-center";
 
   if (provider) query = query.eq("provider_id", provider);
   if (department) query = query.eq("department_id", department);
@@ -407,6 +419,16 @@ export default async function QACenterDashboardPage({
       isSuperadmin={access.isSuperadmin}
       lang={lang}
     >
+      {processed && (
+        <QacProcessResultToast
+          lang={lang}
+          processed={processed}
+          succeeded={succeeded}
+          failed={failed}
+          cleanHref={cleanedDashboardHref}
+        />
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
           label={qacT(lang, "Calls", "Llamadas")}
@@ -431,41 +453,37 @@ export default async function QACenterDashboardPage({
         />
       </div>
 
-      <section className="rounded-lg border border-[#181816]/20 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-[#181816]">
-              {qacT(
-                lang,
-                "Pending call processing",
-                "Procesamiento de llamadas pendientes",
-              )}
-            </h2>
-            <p className="mt-1 text-sm text-[#6f6d66]">
-              {qacT(
-                lang,
-                `${pendingAnalysis} calls still need transcript or QA analysis.`,
-                `${pendingAnalysis} llamadas aun necesitan transcripcion o analisis QA.`,
-              )}
-            </p>
+      {access.isSuperadmin && (
+        <section className="rounded-lg border border-[#181816]/20 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-[#181816]">
+                {qacT(
+                  lang,
+                  "Pending call processing",
+                  "Procesamiento de llamadas pendientes",
+                )}
+              </h2>
+              <p className="mt-1 text-sm text-[#6f6d66]">
+                {qacT(
+                  lang,
+                  `${pendingAnalysis} calls still need transcript or QA analysis.`,
+                  `${pendingAnalysis} llamadas aun necesitan transcripcion o analisis QA.`,
+                )}
+              </p>
+            </div>
+            <QacProcessPendingButton lang={lang} />
           </div>
-          <QacProcessPendingButton lang={lang} />
-        </div>
-      </section>
-
-      {processed && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-          {qacT(
-            lang,
-            `Processed ${processed} pending calls. ${succeeded || "0"} succeeded, ${failed || "0"} failed.`,
-            `Se procesaron ${processed} llamadas pendientes. ${succeeded || "0"} correctas, ${failed || "0"} fallidas.`,
-          )}
-        </div>
+        </section>
       )}
 
       <Panel
         title={qacT(lang, "Segments", "Segmentos")}
-        action={<QacProcessPendingButton lang={lang} compact />}
+        action={
+          access.isSuperadmin ? (
+            <QacProcessPendingButton lang={lang} compact />
+          ) : null
+        }
       >
         <form className="grid gap-3 lg:grid-cols-[1.5fr_repeat(6,minmax(0,1fr))_auto]">
           <input type="hidden" name="lang" value={lang} />

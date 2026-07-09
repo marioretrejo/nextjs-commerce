@@ -28,6 +28,12 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
+  if (!access.isSuperadmin) {
+    return NextResponse.json(
+      { ok: false, error: "Only superadmins can process pending QA calls." },
+      { status: 403 },
+    );
+  }
 
   const requestedLimit = await parseLimit(req, access.isAdmin ? 5 : 3);
   const immediate = await processQacBacklog({

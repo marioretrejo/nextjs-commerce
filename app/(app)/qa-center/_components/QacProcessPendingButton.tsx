@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { qacT, type QacLang } from "./i18n";
 
 type ProcessResponse = {
@@ -22,13 +23,10 @@ export function QacProcessPendingButton({
 }) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   async function processPending() {
-    setMessage(null);
-    setError(null);
     setIsPending(true);
+    const toastId = toast.loading(qacT(lang, "Processing...", "Procesando..."));
     try {
       const response = await fetch("/api/qa-center/process-pending", {
         method: "POST",
@@ -56,27 +54,29 @@ export function QacProcessPendingButton({
       const failed = payload.failed ?? 0;
       const queued = payload.queued ?? 0;
       if (processed === 0 && queued === 0) {
-        setMessage(
+        toast.info(
           qacT(
             lang,
             "No processable pending calls were found.",
             "No encontre llamadas pendientes procesables.",
           ),
+          { id: toastId },
         );
         router.refresh();
         return;
       }
 
-      setMessage(
+      toast.success(
         qacT(
           lang,
           `Processed ${processed}. ${succeeded} succeeded, ${failed} failed. ${queued} queued in background.`,
           `Procesadas ${processed}. ${succeeded} correctas, ${failed} fallidas. ${queued} en cola en segundo plano.`,
         ),
+        { id: toastId },
       );
       router.refresh();
     } catch (err) {
-      setError(
+      toast.error(
         err instanceof Error
           ? err.message
           : qacT(
@@ -84,6 +84,7 @@ export function QacProcessPendingButton({
               "Unexpected processing error.",
               "Error inesperado procesando llamadas.",
             ),
+        { id: toastId },
       );
     } finally {
       setIsPending(false);
@@ -118,14 +119,40 @@ export function QacProcessPendingButton({
               compact ? "Procesar pendientes" : "Procesar llamadas pendientes",
             )}
       </button>
-      {message && (
-        <p className="max-w-sm text-xs font-medium text-emerald-700">
-          {message}
-        </p>
-      )}
-      {error && (
-        <p className="max-w-sm text-xs font-medium text-red-700">{error}</p>
-      )}
     </div>
   );
+}
+
+export function QacProcessResultToast({
+  lang,
+  processed,
+  succeeded,
+  failed,
+  cleanHref,
+}: {
+  lang: QacLang;
+  processed: string;
+  succeeded: string;
+  failed: string;
+  cleanHref: string;
+}) {
+  const router = useRouter();
+  const shown = useRef(false);
+  const processedCount = Number(processed || 0);
+
+  useEffect(() => {
+    if (!processedCount || shown.current) return;
+    shown.current = true;
+    toast.success(
+      qacT(
+        lang,
+        `Processed ${processed} pending calls. ${succeeded || "0"} succeeded, ${failed || "0"} failed.`,
+        `Se procesaron ${processed} llamadas pendientes. ${succeeded || "0"} correctas, ${failed || "0"} fallidas.`,
+      ),
+    );
+
+    router.replace(cleanHref, { scroll: false });
+  }, [cleanHref, failed, lang, processed, processedCount, router, succeeded]);
+
+  return null;
 }
