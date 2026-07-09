@@ -49,6 +49,7 @@ interface DashboardInteraction {
     full_text: string;
     diarized_json: unknown;
     provider: string | null;
+    created_at?: string | null;
   }>;
   qac_analyses?: Array<{
     id: string;
@@ -96,6 +97,20 @@ function segments(value: unknown): TranscriptSegment[] {
     : [];
 }
 
+function pickTranscript(
+  transcripts: DashboardInteraction["qac_transcripts"] | undefined,
+) {
+  return [...(transcripts ?? [])].sort((a, b) => {
+    const segmentDelta =
+      segments(b.diarized_json).length - segments(a.diarized_json).length;
+    if (segmentDelta !== 0) return segmentDelta;
+    return (
+      new Date(b.created_at ?? 0).getTime() -
+      new Date(a.created_at ?? 0).getTime()
+    );
+  })[0];
+}
+
 function selectedHref(
   params: Record<string, string | string[] | undefined>,
   selected: string,
@@ -140,6 +155,20 @@ function customerLabel(
     interaction?.external_call_id ??
     "Call detail"
   );
+}
+
+function speakerLabel(
+  speaker: string | undefined,
+  interaction: DashboardInteraction,
+): string {
+  const raw = (speaker ?? "").toLowerCase();
+  if (raw.includes("agent") || raw.includes("agente")) {
+    return interaction.qac_agents?.name ?? "Agente";
+  }
+  if (raw.includes("customer") || raw.includes("cliente")) {
+    return `Cliente (${customerLabel(interaction)})`;
+  }
+  return speaker ?? "Speaker";
 }
 
 function riskClass(risk: string | null | undefined): string {
@@ -207,7 +236,7 @@ export default async function QACenterDashboardPage({
        qac_voip_providers(id, name),
        qac_agents(id, name, extension),
        qac_departments(id, name),
-       qac_transcripts(full_text, diarized_json, provider),
+       qac_transcripts(full_text, diarized_json, provider, created_at),
        qac_analyses(
         id, overall_score, sentiment, risk_level, call_disposition, summary,
         strengths_json, opportunities_json, recommendations_json, trackers_json,
@@ -260,7 +289,7 @@ export default async function QACenterDashboardPage({
       (interaction) => interaction.id === valueOf(params, "selected"),
     ) ?? interactions[0];
   const selectedAnalysis = selected?.qac_analyses?.[0];
-  const selectedTranscript = selected?.qac_transcripts?.[0];
+  const selectedTranscript = pickTranscript(selected?.qac_transcripts);
   const selectedSegments = segments(selectedTranscript?.diarized_json).slice(
     0,
     8,
@@ -567,27 +596,31 @@ export default async function QACenterDashboardPage({
                     <StatusBadge value={selected.review_status} />
                   </div>
                   {selectedSegments.length > 0 ? (
-                    <div className="max-h-[420px] space-y-3 overflow-y-auto overscroll-contain pr-2">
+                    <div className="h-[340px] min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-md bg-[#f7f7f5] p-3 pr-2 sm:h-[420px]">
                       {selectedSegments.map((segment, index) => (
                         <div key={`${segment.start ?? index}-${index}`}>
                           <div className="mb-1 flex items-center gap-2 text-xs text-[#77756d]">
                             <span className="rounded bg-[#ecece6] px-2 py-0.5 font-semibold uppercase text-[#181816]">
-                              {segment.speaker ?? "Speaker"}
+                              {selected
+                                ? speakerLabel(segment.speaker, selected)
+                                : (segment.speaker ?? "Speaker")}
                             </span>
                             <span>
                               {formatDuration(Math.round(segment.start ?? 0))}
                             </span>
                           </div>
-                          <p className="break-words rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a] [overflow-wrap:anywhere]">
+                          <p className="break-words rounded-md bg-white p-3 text-sm leading-6 text-[#2f2e2a] [overflow-wrap:anywhere]">
                             {segment.text}
                           </p>
                         </div>
                       ))}
                     </div>
                   ) : selectedTranscript?.full_text ? (
-                    <pre className="max-h-[420px] overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-[#f7f7f5] p-3 font-sans text-sm leading-6 text-[#2f2e2a] overscroll-contain [overflow-wrap:anywhere]">
-                      {selectedTranscript.full_text}
-                    </pre>
+                    <div className="h-[340px] min-h-0 overflow-hidden rounded-md bg-[#f7f7f5] sm:h-[420px]">
+                      <pre className="block h-full overflow-y-auto whitespace-pre-wrap break-words p-3 font-sans text-sm leading-6 text-[#2f2e2a] overscroll-contain [overflow-wrap:anywhere]">
+                        {selectedTranscript.full_text}
+                      </pre>
+                    </div>
                   ) : (
                     <p className="text-sm text-[#77756d]">
                       No transcript available yet.

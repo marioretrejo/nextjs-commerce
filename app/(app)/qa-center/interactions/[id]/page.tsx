@@ -53,6 +53,7 @@ interface InteractionDetail {
     diarized_json: unknown;
     language: string | null;
     provider: string | null;
+    created_at?: string | null;
   }>;
   qac_analyses?: Array<{
     id: string;
@@ -84,6 +85,20 @@ function segments(value: unknown): TranscriptSegment[] {
     : [];
 }
 
+function pickTranscript(
+  transcripts: InteractionDetail["qac_transcripts"] | undefined,
+) {
+  return [...(transcripts ?? [])].sort((a, b) => {
+    const segmentDelta =
+      segments(b.diarized_json).length - segments(a.diarized_json).length;
+    if (segmentDelta !== 0) return segmentDelta;
+    return (
+      new Date(b.created_at ?? 0).getTime() -
+      new Date(a.created_at ?? 0).getTime()
+    );
+  })[0];
+}
+
 function evidence(
   value: unknown,
 ): Array<{ timestamp_seconds?: number; quote?: string }> {
@@ -110,6 +125,20 @@ function customerLabel(interaction: InteractionDetail): string {
   );
 }
 
+function speakerLabel(
+  speaker: string | undefined,
+  interaction: InteractionDetail,
+): string {
+  const raw = (speaker ?? "").toLowerCase();
+  if (raw.includes("agent") || raw.includes("agente")) {
+    return interaction.qac_agents?.name ?? "Agente";
+  }
+  if (raw.includes("customer") || raw.includes("cliente")) {
+    return `Cliente (${customerLabel(interaction)})`;
+  }
+  return speaker ?? "Speaker";
+}
+
 export default async function QACInteractionDetailPage({
   params,
   searchParams,
@@ -133,7 +162,7 @@ export default async function QACInteractionDetailPage({
        qac_voip_providers(name, slug),
        qac_agents(name, extension),
        qac_departments(name),
-       qac_transcripts(full_text, diarized_json, language, provider),
+       qac_transcripts(full_text, diarized_json, language, provider, created_at),
        qac_analyses(
         id, overall_score, sentiment, risk_level, call_disposition, summary,
         strengths_json, opportunities_json, recommendations_json, trackers_json,
@@ -151,7 +180,7 @@ export default async function QACInteractionDetailPage({
   const interaction = data as InteractionDetail | null;
   if (!interaction) notFound();
 
-  const transcript = interaction.qac_transcripts?.[0];
+  const transcript = pickTranscript(interaction.qac_transcripts);
   const analysis = interaction.qac_analyses?.[0];
   const transcriptText = transcript?.full_text ?? "";
   const diarized = segments(transcript?.diarized_json);
@@ -352,29 +381,31 @@ export default async function QACInteractionDetailPage({
               />
             </form>
             {filteredSegments.length > 0 ? (
-              <div className="max-h-[520px] space-y-3 overflow-y-auto overscroll-contain pr-2">
+              <div className="h-[360px] min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-md bg-[#f7f7f5] p-3 pr-2 sm:h-[520px]">
                 {filteredSegments.map((segment, index) => (
                   <div key={`${segment.start ?? index}-${index}`}>
                     <div className="mb-1 flex items-center gap-2 text-xs text-[#77756d]">
                       <span className="rounded bg-[#ecece6] px-2 py-0.5 font-semibold uppercase text-[#181816]">
-                        {segment.speaker ?? "Speaker"}
+                        {speakerLabel(segment.speaker, interaction)}
                       </span>
                       <span>
                         {formatDuration(Math.round(segment.start ?? 0))}
                       </span>
                     </div>
-                    <p className="break-words rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a] [overflow-wrap:anywhere]">
+                    <p className="break-words rounded-md bg-white p-3 text-sm leading-6 text-[#2f2e2a] [overflow-wrap:anywhere]">
                       {segment.text}
                     </p>
                   </div>
                 ))}
               </div>
             ) : transcriptText ? (
-              <pre className="max-h-[520px] overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-[#f7f7f5] p-3 font-sans text-sm leading-6 text-[#2f2e2a] overscroll-contain [overflow-wrap:anywhere]">
-                {q && !transcriptText.toLowerCase().includes(q)
-                  ? "No transcript matches this search."
-                  : transcriptText}
-              </pre>
+              <div className="h-[360px] min-h-0 overflow-hidden rounded-md bg-[#f7f7f5] sm:h-[520px]">
+                <pre className="block h-full overflow-y-auto whitespace-pre-wrap break-words p-3 font-sans text-sm leading-6 text-[#2f2e2a] overscroll-contain [overflow-wrap:anywhere]">
+                  {q && !transcriptText.toLowerCase().includes(q)
+                    ? "No transcript matches this search."
+                    : transcriptText}
+                </pre>
+              </div>
             ) : (
               <p className="text-sm text-[#77756d]">No transcript available.</p>
             )}
