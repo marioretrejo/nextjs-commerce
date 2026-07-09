@@ -40,6 +40,8 @@ interface InteractionRow {
   }>;
 }
 
+const INTERACTIONS_TABLE_LIMIT = 1000;
+
 function valueOf(
   params: Record<string, string | string[] | undefined>,
   key: string,
@@ -97,10 +99,11 @@ export default async function QACInteractionsPage({
         created_at, overall_score,
         qac_criteria_results(result, qac_scorecard_criteria(name))
        )`,
+      { count: "exact" },
     )
     .eq("workspace_id", access.workspaceId)
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(INTERACTIONS_TABLE_LIMIT);
 
   const provider = valueOf(params, "provider");
   const department = valueOf(params, "department");
@@ -127,7 +130,7 @@ export default async function QACInteractionsPage({
   if (from) query = query.gte("call_started_at", `${from}T00:00:00.000Z`);
   if (to) query = query.lte("call_started_at", `${to}T23:59:59.999Z`);
 
-  const { data } = await query;
+  const { data, count } = await query;
   let interactions = (data as InteractionRow[] | null) ?? [];
 
   if (search) {
@@ -187,6 +190,17 @@ export default async function QACInteractionsPage({
     if (sort === "duration_asc") return durationA - durationB;
     return dateB - dateA;
   });
+  const usesClientSideFilters = Boolean(
+    search ||
+      failedCriteria ||
+      (minScore !== null && Number.isFinite(minScore)) ||
+      (maxScore !== null && Number.isFinite(maxScore)),
+  );
+  const totalInteractions = usesClientSideFilters
+    ? interactions.length
+    : (count ?? interactions.length);
+  const isTableTruncated =
+    !usesClientSideFilters && totalInteractions > interactions.length;
 
   return (
     <QACShell
@@ -387,8 +401,12 @@ export default async function QACInteractionsPage({
       <Panel
         title={qacT(
           lang,
-          `${interactions.length} interactions`,
-          `${interactions.length} interacciones`,
+          isTableTruncated
+            ? `${interactions.length} of ${totalInteractions} interactions`
+            : `${interactions.length} interactions`,
+          isTableTruncated
+            ? `${interactions.length} de ${totalInteractions} interacciones`
+            : `${interactions.length} interacciones`,
         )}
       >
         <div className="overflow-x-auto">

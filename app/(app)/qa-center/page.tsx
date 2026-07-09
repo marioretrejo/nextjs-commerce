@@ -90,6 +90,8 @@ interface DashboardInteraction {
   }>;
 }
 
+const DASHBOARD_RECENT_LIMIT = 500;
+
 function valueOf(
   params: Record<string, string | string[] | undefined>,
   key: string,
@@ -325,11 +327,12 @@ export default async function QACenterDashboardPage({
           qac_scorecard_criteria(name, category, weight)
         )
        )`,
+      { count: "exact" },
     )
     .eq("workspace_id", access.workspaceId)
     .order("call_started_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(75);
+    .limit(DASHBOARD_RECENT_LIMIT);
 
   const provider = valueOf(params, "provider");
   const department = valueOf(params, "department");
@@ -358,7 +361,7 @@ export default async function QACenterDashboardPage({
   if (from) query = query.gte("call_started_at", `${from}T00:00:00.000Z`);
   if (to) query = query.lte("call_started_at", `${to}T23:59:59.999Z`);
 
-  const { data } = await query;
+  const { data, count } = await query;
   let interactions = (data as DashboardInteraction[] | null) ?? [];
 
   if (search) {
@@ -375,6 +378,10 @@ export default async function QACenterDashboardPage({
         .some((value) => String(value).toLowerCase().includes(search)),
     );
   }
+  const totalCalls = search
+    ? interactions.length
+    : (count ?? interactions.length);
+  const isRecentListTruncated = !search && totalCalls > interactions.length;
 
   const selected =
     interactions.find(
@@ -432,7 +439,16 @@ export default async function QACenterDashboardPage({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
           label={qacT(lang, "Calls", "Llamadas")}
-          value={interactions.length}
+          value={totalCalls}
+          hint={
+            isRecentListTruncated
+              ? qacT(
+                  lang,
+                  `Showing latest ${interactions.length}`,
+                  `Mostrando ultimas ${interactions.length}`,
+                )
+              : undefined
+          }
         />
         <MetricTile
           label={qacT(lang, "Analyzed", "Analizadas")}
@@ -600,8 +616,12 @@ export default async function QACenterDashboardPage({
         <Panel
           title={qacT(
             lang,
-            `Recent calls (${interactions.length})`,
-            `Llamadas recientes (${interactions.length})`,
+            isRecentListTruncated
+              ? `Recent calls (${interactions.length} of ${totalCalls})`
+              : `Recent calls (${interactions.length})`,
+            isRecentListTruncated
+              ? `Llamadas recientes (${interactions.length} de ${totalCalls})`
+              : `Llamadas recientes (${interactions.length})`,
           )}
         >
           <div className="max-h-[720px] space-y-2 overflow-y-auto pr-1">
