@@ -37,6 +37,8 @@ export default async function QACProvidersPage({
 }) {
   const params = (await searchParams) ?? {};
   const deleted = firstParam(params, "deleted");
+  const created = firstParam(params, "created");
+  const errorMessage = firstParam(params, "error");
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -56,9 +58,16 @@ export default async function QACProvidersPage({
       title="Providers"
       description="VoIP provider adapters normalize CDR payloads into one QA Center interaction format."
     >
-      {deleted && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Provider deleted.
+      {(deleted || created || errorMessage) && (
+        <div
+          className={
+            errorMessage
+              ? "rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              : "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          }
+        >
+          {errorMessage ??
+            (created ? "Provider created." : "Provider deleted.")}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">

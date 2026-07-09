@@ -39,6 +39,11 @@ function departmentsUrl(params: Record<string, string>): string {
   return `/qa-center/departments?${search.toString()}`;
 }
 
+function providersUrl(params: Record<string, string>): string {
+  const search = new URLSearchParams(params);
+  return `/qa-center/providers?${search.toString()}`;
+}
+
 function departmentErrorMessage(message?: string): string {
   const raw = message ?? "";
   if (
@@ -55,6 +60,21 @@ function departmentErrorMessage(message?: string): string {
     return "El departamento se intento crear, pero la base de datos necesita la migracion 082 de QA Center.";
   }
   return raw || "No se pudo crear el departamento.";
+}
+
+function providerErrorMessage(message?: string): string {
+  const raw = message ?? "";
+  if (
+    raw.includes("qac_voip_providers") ||
+    raw.includes("Could not find") ||
+    raw.includes("schema cache")
+  ) {
+    return "Falta aplicar la migracion 082 de QA Center en Supabase. La tabla qac_voip_providers no existe todavia.";
+  }
+  if (raw.includes("duplicate key")) {
+    return "Ya existe un provider con ese slug.";
+  }
+  return raw || "No se pudo crear el provider.";
 }
 
 function missingColumn(errorMessage?: string | null, column?: string): boolean {
@@ -192,10 +212,13 @@ export async function createProviderAction(formData: FormData) {
     is_active: checkbox(formData, "is_active"),
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    redirect(providersUrl({ error: providerErrorMessage(error.message) }));
+  }
 
   revalidatePath("/qa-center/providers");
   revalidatePath("/qa-center/settings");
+  redirect(providersUrl({ created: "1" }));
 }
 
 export async function createScorecardAction(formData: FormData) {
