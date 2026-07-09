@@ -171,6 +171,39 @@ function speakerLabel(
   return speaker ?? "Speaker";
 }
 
+function sentimentLabel(value: string | null | undefined): string {
+  if (!value) return "-";
+  const raw = value.toLowerCase();
+  if (
+    raw.includes("molesto") ||
+    raw.includes("angry") ||
+    raw.includes("upset")
+  ) {
+    return "😠 Molesto";
+  }
+  if (
+    raw.includes("negativo") ||
+    raw.includes("negative") ||
+    raw.includes("triste")
+  ) {
+    return "😟 Negativo";
+  }
+  if (raw.includes("feliz") || raw.includes("happy")) {
+    return "😄 Feliz";
+  }
+  if (
+    raw.includes("contento") ||
+    raw.includes("positive") ||
+    raw.includes("positivo")
+  ) {
+    return "😊 Contento";
+  }
+  if (raw.includes("neutral")) {
+    return "😐 Neutral";
+  }
+  return `🙂 ${value}`;
+}
+
 function riskClass(risk: string | null | undefined): string {
   if (risk === "critical" || risk === "high") {
     return "border-red-200 bg-red-50 text-red-700";
@@ -664,16 +697,20 @@ export default async function QACenterDashboardPage({
                   </div>
                 </div>
 
-                <div className="grid gap-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#77756d]">Sentiment</span>
-                    <span className="font-medium text-[#181816]">
-                      {selectedAnalysis?.sentiment ?? "-"}
+                <div className="grid gap-3 text-sm">
+                  <div className="grid gap-1 rounded-md bg-[#fafafa] p-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[#77756d]">
+                      Sentiment
+                    </span>
+                    <span className="break-words font-medium text-[#181816]">
+                      {sentimentLabel(selectedAnalysis?.sentiment)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#77756d]">Outcome</span>
-                    <span className="font-medium text-[#181816]">
+                  <div className="grid gap-1 rounded-md bg-[#fafafa] p-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[#77756d]">
+                      Outcome
+                    </span>
+                    <span className="break-words font-medium leading-5 text-[#181816] [overflow-wrap:anywhere]">
                       {selectedAnalysis?.call_disposition ?? "-"}
                     </span>
                   </div>

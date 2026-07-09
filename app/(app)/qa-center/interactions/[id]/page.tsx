@@ -140,6 +140,39 @@ function speakerLabel(
   return speaker ?? "Speaker";
 }
 
+function sentimentLabel(value: string | null | undefined): string {
+  if (!value) return "-";
+  const raw = value.toLowerCase();
+  if (
+    raw.includes("molesto") ||
+    raw.includes("angry") ||
+    raw.includes("upset")
+  ) {
+    return "😠 Molesto";
+  }
+  if (
+    raw.includes("negativo") ||
+    raw.includes("negative") ||
+    raw.includes("triste")
+  ) {
+    return "😟 Negativo";
+  }
+  if (raw.includes("feliz") || raw.includes("happy")) {
+    return "😄 Feliz";
+  }
+  if (
+    raw.includes("contento") ||
+    raw.includes("positive") ||
+    raw.includes("positivo")
+  ) {
+    return "😊 Contento";
+  }
+  if (raw.includes("neutral")) {
+    return "😐 Neutral";
+  }
+  return `🙂 ${value}`;
+}
+
 export default async function QACInteractionDetailPage({
   params,
   searchParams,
@@ -219,7 +252,7 @@ export default async function QACInteractionDetailPage({
         />
         <MetricTile
           label="Sentiment"
-          value={analysis?.sentiment ?? "-"}
+          value={sentimentLabel(analysis?.sentiment)}
           hint={`Risk: ${analysis?.risk_level ?? "-"}`}
         />
         <MetricTile
@@ -317,7 +350,9 @@ export default async function QACInteractionDetailPage({
                     <p className="text-xs uppercase tracking-wide text-[#77756d]">
                       Outcome
                     </p>
-                    <p>{analysis.call_disposition ?? "-"}</p>
+                    <p className="break-words [overflow-wrap:anywhere]">
+                      {analysis.call_disposition ?? "-"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-[#77756d]">
