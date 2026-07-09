@@ -323,10 +323,7 @@ export default async function QACenterDashboardPage({
     ) ?? interactions[0];
   const selectedAnalysis = selected?.qac_analyses?.[0];
   const selectedTranscript = pickTranscript(selected?.qac_transcripts);
-  const selectedSegments = segments(selectedTranscript?.diarized_json).slice(
-    0,
-    8,
-  );
+  const selectedSegments = segments(selectedTranscript?.diarized_json);
   const selectedAudioUrl = audioHref(selected);
   const selectedScore = selectedAnalysis?.overall_score ?? null;
   const scores = interactions
@@ -615,7 +612,14 @@ export default async function QACenterDashboardPage({
                     <h2 className="text-sm font-semibold text-[#181816]">
                       Transcript
                     </h2>
-                    <StatusBadge value={selected.review_status} />
+                    <div className="flex items-center gap-2">
+                      {selectedSegments.length > 0 && (
+                        <span className="text-xs text-[#77756d]">
+                          {selectedSegments.length} segments
+                        </span>
+                      )}
+                      <StatusBadge value={selected.review_status} />
+                    </div>
                   </div>
                   {selectedSegments.length > 0 ? (
                     <div className="h-[340px] min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-md bg-[#f7f7f5] p-3 pr-2 sm:h-[420px]">
