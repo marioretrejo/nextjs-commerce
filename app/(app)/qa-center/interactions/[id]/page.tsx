@@ -2,6 +2,7 @@ import { triggerQacAnalysisAction } from "../../_actions";
 import { QacAudioPlayer } from "../../_components/QacAudioPlayer";
 import { QACShell, Panel, MetricTile } from "../../_components/QACShell";
 import { StatusBadge } from "../../_components/StatusBadge";
+import { pickQacAnalysis } from "../../_components/analysis";
 import { formatDate, formatDuration, percent } from "../../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -58,6 +59,7 @@ interface InteractionDetail {
   }>;
   qac_analyses?: Array<{
     id: string;
+    created_at: string | null;
     overall_score: number | null;
     sentiment: string | null;
     risk_level: string | null;
@@ -211,7 +213,7 @@ export default async function QACInteractionDetailPage({
        qac_departments(name),
        qac_transcripts(full_text, diarized_json, language, provider, created_at),
        qac_analyses(
-        id, overall_score, sentiment, risk_level, call_disposition, summary,
+        id, created_at, overall_score, sentiment, risk_level, call_disposition, summary,
         strengths_json, opportunities_json, recommendations_json, trackers_json,
         qac_scorecards(name, version),
         qac_criteria_results(
@@ -228,7 +230,7 @@ export default async function QACInteractionDetailPage({
   if (!interaction) notFound();
 
   const transcript = pickTranscript(interaction.qac_transcripts);
-  const analysis = interaction.qac_analyses?.[0];
+  const analysis = pickQacAnalysis(interaction.qac_analyses);
   const transcriptText = transcript?.full_text ?? "";
   const diarized = segments(transcript?.diarized_json);
   const filteredSegments = q

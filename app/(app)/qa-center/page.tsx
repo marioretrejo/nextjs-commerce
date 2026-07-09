@@ -2,6 +2,7 @@ import { triggerQacAnalysisAction } from "./_actions";
 import { QacAudioPlayer } from "./_components/QacAudioPlayer";
 import { QACShell, MetricTile, Panel } from "./_components/QACShell";
 import { StatusBadge } from "./_components/StatusBadge";
+import { pickQacAnalysis } from "./_components/analysis";
 import { formatDate, formatDuration, percent } from "./_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -53,6 +54,7 @@ interface DashboardInteraction {
   }>;
   qac_analyses?: Array<{
     id: string;
+    created_at: string | null;
     overall_score: number | null;
     sentiment: string | null;
     risk_level: string | null;
@@ -284,7 +286,7 @@ export default async function QACenterDashboardPage({
        qac_departments(id, name),
        qac_transcripts(full_text, diarized_json, provider, created_at),
        qac_analyses(
-        id, overall_score, sentiment, risk_level, call_disposition, summary,
+        id, created_at, overall_score, sentiment, risk_level, call_disposition, summary,
         strengths_json, opportunities_json, recommendations_json, trackers_json,
         qac_criteria_results(
           result, score, reason,
@@ -334,13 +336,15 @@ export default async function QACenterDashboardPage({
     interactions.find(
       (interaction) => interaction.id === valueOf(params, "selected"),
     ) ?? interactions[0];
-  const selectedAnalysis = selected?.qac_analyses?.[0];
+  const selectedAnalysis = pickQacAnalysis(selected?.qac_analyses);
   const selectedTranscript = pickTranscript(selected?.qac_transcripts);
   const selectedSegments = segments(selectedTranscript?.diarized_json);
   const selectedAudioUrl = audioHref(selected);
   const selectedScore = selectedAnalysis?.overall_score ?? null;
   const scores = interactions
-    .map((interaction) => interaction.qac_analyses?.[0]?.overall_score)
+    .map(
+      (interaction) => pickQacAnalysis(interaction.qac_analyses)?.overall_score,
+    )
     .filter((score): score is number => score !== null && score !== undefined);
   const averageScore =
     scores.length > 0
@@ -483,7 +487,7 @@ export default async function QACenterDashboardPage({
         <Panel title={`Recent calls (${interactions.length})`}>
           <div className="max-h-[720px] space-y-2 overflow-y-auto pr-1">
             {interactions.map((interaction) => {
-              const analysis = interaction.qac_analyses?.[0];
+              const analysis = pickQacAnalysis(interaction.qac_analyses);
               const isSelected = selected?.id === interaction.id;
               return (
                 <Link

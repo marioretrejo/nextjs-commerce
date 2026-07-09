@@ -1,5 +1,6 @@
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
+import { pickQacAnalysis } from "../_components/analysis";
 import { formatDate, formatDuration, percent } from "../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -24,6 +25,7 @@ interface InteractionRow {
   } | null;
   qac_departments?: { id: string; name: string | null } | null;
   qac_analyses?: Array<{
+    created_at: string | null;
     overall_score: number | null;
     qac_criteria_results?: Array<{
       result: string;
@@ -85,7 +87,7 @@ export default async function QACInteractionsPage({
        qac_agents(id, name, extension),
        qac_departments(id, name),
        qac_analyses(
-        overall_score,
+        created_at, overall_score,
         qac_criteria_results(result, qac_scorecard_criteria(name))
        )`,
     )
@@ -100,8 +102,10 @@ export default async function QACInteractionsPage({
   const review = valueOf(params, "review_status");
   const from = valueOf(params, "from");
   const to = valueOf(params, "to");
-  const minScore = Number(valueOf(params, "min_score"));
-  const maxScore = Number(valueOf(params, "max_score"));
+  const minScoreValue = valueOf(params, "min_score");
+  const maxScoreValue = valueOf(params, "max_score");
+  const minScore = minScoreValue ? Number(minScoreValue) : null;
+  const maxScore = maxScoreValue ? Number(maxScoreValue) : null;
   const failedCriteria = valueOf(params, "failed_criteria").toLowerCase();
 
   if (provider) query = query.eq("provider_id", provider);
@@ -115,19 +119,23 @@ export default async function QACInteractionsPage({
   const { data } = await query;
   let interactions = (data as InteractionRow[] | null) ?? [];
 
-  if (Number.isFinite(minScore)) {
+  if (minScore !== null && Number.isFinite(minScore)) {
     interactions = interactions.filter(
-      (row) => Number(row.qac_analyses?.[0]?.overall_score ?? -1) >= minScore,
+      (row) =>
+        Number(pickQacAnalysis(row.qac_analyses)?.overall_score ?? -1) >=
+        minScore,
     );
   }
-  if (Number.isFinite(maxScore)) {
+  if (maxScore !== null && Number.isFinite(maxScore)) {
     interactions = interactions.filter(
-      (row) => Number(row.qac_analyses?.[0]?.overall_score ?? 101) <= maxScore,
+      (row) =>
+        Number(pickQacAnalysis(row.qac_analyses)?.overall_score ?? 101) <=
+        maxScore,
     );
   }
   if (failedCriteria) {
     interactions = interactions.filter((row) =>
-      (row.qac_analyses?.[0]?.qac_criteria_results ?? []).some(
+      (pickQacAnalysis(row.qac_analyses)?.qac_criteria_results ?? []).some(
         (result) =>
           result.result === "fail" &&
           (result.qac_scorecard_criteria?.name ?? "")
@@ -301,7 +309,7 @@ export default async function QACInteractionsPage({
             </thead>
             <tbody className="divide-y divide-black/15">
               {interactions.map((interaction) => {
-                const analysis = interaction.qac_analyses?.[0];
+                const analysis = pickQacAnalysis(interaction.qac_analyses);
                 const failed = (analysis?.qac_criteria_results ?? []).filter(
                   (result) => result.result === "fail",
                 );

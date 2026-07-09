@@ -1,5 +1,6 @@
 import { deleteAgentAction, updateAgentAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
+import { pickQacAnalysis } from "../_components/analysis";
 import { percent } from "../_components/format";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -26,6 +27,7 @@ interface InteractionRow {
   call_started_at: string | null;
   created_at: string;
   qac_analyses?: Array<{
+    created_at: string | null;
     overall_score: number | null;
     qac_criteria_results?: Array<{
       result: string;
@@ -79,7 +81,7 @@ export default async function QACAgentsPage({
         .select(
           `id, agent_id, status, review_status, call_started_at, created_at,
          qac_analyses(
-          overall_score,
+          created_at, overall_score,
           qac_criteria_results(
             result, score,
             qac_scorecard_criteria(name, category, weight)
@@ -107,7 +109,7 @@ export default async function QACAgentsPage({
     const calls = interactions.filter((item) => item.agent_id === agent.id);
     const analyzed = calls.filter((item) => item.status === "analyzed");
     const scores = calls
-      .map((item) => item.qac_analyses?.[0]?.overall_score)
+      .map((item) => pickQacAnalysis(item.qac_analyses)?.overall_score)
       .filter(
         (score): score is number => score !== null && score !== undefined,
       );
@@ -118,7 +120,8 @@ export default async function QACAgentsPage({
     const failed = new Map<string, number>();
 
     for (const call of calls) {
-      for (const result of call.qac_analyses?.[0]?.qac_criteria_results ?? []) {
+      const analysis = pickQacAnalysis(call.qac_analyses);
+      for (const result of analysis?.qac_criteria_results ?? []) {
         const criterion = result.qac_scorecard_criteria;
         const category = criterion?.category ?? "Uncategorized";
         const weight = Number(criterion?.weight ?? 0);
@@ -147,10 +150,14 @@ export default async function QACAgentsPage({
     }));
 
     const trend = calls
-      .filter((item) => item.qac_analyses?.[0]?.overall_score !== null)
+      .filter(
+        (item) => pickQacAnalysis(item.qac_analyses)?.overall_score !== null,
+      )
       .slice(0, 8)
       .reverse()
-      .map((item) => Number(item.qac_analyses?.[0]?.overall_score ?? 0));
+      .map((item) =>
+        Number(pickQacAnalysis(item.qac_analyses)?.overall_score ?? 0),
+      );
 
     return {
       agent,
