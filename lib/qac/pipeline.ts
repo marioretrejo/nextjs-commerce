@@ -232,6 +232,37 @@ Transcript:
 ${params.transcript}`;
 }
 
+function buildPromptOnlyAnalysisPrompt(params: {
+  departmentName: string;
+  departmentPrompt: string | null;
+  transcript: string;
+}): string {
+  return `You are QA Center for real human call center calls imported from a VoIP CDR.
+Do not assume this call came from an AI voice agent. Evaluate only the transcript below.
+
+Department: ${params.departmentName}
+Department-specific QA prompt:
+${params.departmentPrompt ?? "Analyze call quality, customer intent, risks, and improvement opportunities."}
+
+Return strict JSON with:
+{
+  "summary": string,
+  "sentiment": "positive" | "neutral" | "negative",
+  "risk_level": "low" | "medium" | "high" | "critical",
+  "call_disposition": string,
+  "strengths": string[],
+  "opportunities": string[],
+  "recommendations": string[],
+  "detected_objections": string[],
+  "follow_up_detected": boolean
+}
+
+If evidence is unavailable, say so without inventing facts.
+
+Transcript:
+${params.transcript}`;
+}
+
 export async function processQacInteraction(interactionId: string): Promise<{
   ok: boolean;
   status: string;
@@ -323,12 +354,79 @@ export async function processQacInteraction(interactionId: string): Promise<{
   if (!scorecard || criteria.length === 0) {
     await admin
       .from("qac_interactions")
-      .update({ status: "manual_review_required" })
+      .update({ status: "analyzing" })
       .eq("id", interaction.id);
+
+    const analysis = await groqJson<AnalysisJson>({
+      system:
+        "Return valid JSON only. Evaluate real call center interactions imported from CDR data.",
+      prompt: buildPromptOnlyAnalysisPrompt({
+        departmentName: department.name,
+        departmentPrompt: department.qa_prompt,
+        transcript,
+      }),
+      maxTokens: 2500,
+      temperature: 0.1,
+    });
+
+    if (!analysis) {
+      await admin
+        .from("qac_interactions")
+        .update({ status: "failed_analysis" })
+        .eq("id", interaction.id);
+      return {
+        ok: false,
+        status: "failed_analysis",
+        error: "LLM did not return a valid prompt-only analysis",
+      };
+    }
+
+    const { data: analysisRow, error: analysisError } = await admin
+      .from("qac_analyses")
+      .insert({
+        workspace_id: interaction.workspace_id,
+        interaction_id: interaction.id,
+        scorecard_id: null,
+        overall_score: null,
+        sentiment: asString(analysis.sentiment) ?? "neutral",
+        risk_level: normalizeRisk(analysis.risk_level),
+        call_disposition: asString(analysis.call_disposition),
+        summary: asString(analysis.summary),
+        strengths_json: asArray(analysis.strengths),
+        opportunities_json: asArray(analysis.opportunities),
+        recommendations_json: asArray(analysis.recommendations),
+        trackers_json: {
+          detected_objections: asArray(analysis.detected_objections),
+          follow_up_detected: Boolean(analysis.follow_up_detected),
+          prompt_only: true,
+          missing_scorecard_criteria: true,
+        },
+        raw_json: analysis,
+      })
+      .select("id")
+      .single();
+
+    if (analysisError || !analysisRow) {
+      await admin
+        .from("qac_interactions")
+        .update({ status: "failed_analysis" })
+        .eq("id", interaction.id);
+      return {
+        ok: false,
+        status: "failed_analysis",
+        error: analysisError?.message ?? "Prompt-only analysis insert failed",
+      };
+    }
+
+    await admin
+      .from("qac_interactions")
+      .update({ status: "analyzed" })
+      .eq("id", interaction.id);
+
     return {
-      ok: false,
-      status: "manual_review_required",
-      error: "No active scorecard with criteria for this department",
+      ok: true,
+      status: "analyzed",
+      analysisId: (analysisRow as { id: string }).id,
     };
   }
 
