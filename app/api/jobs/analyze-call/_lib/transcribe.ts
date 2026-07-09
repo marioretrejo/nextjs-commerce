@@ -41,7 +41,15 @@ export async function transcribeFromRecording(
   if (!audioUrl) return "";
 
   try {
-    const res = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(audioUrl, {
+      headers: {
+        Accept: "audio/mpeg,audio/wav,audio/*,*/*",
+        Referer: "https://sequoia.squaretalk.com/reporting/calls",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
     if (!res.ok) return "";
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length === 0) return "";
