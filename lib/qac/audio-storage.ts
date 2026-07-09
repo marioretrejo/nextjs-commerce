@@ -1,4 +1,5 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { createHash } from "node:crypto";
 import { isSafeUrl } from "./ssrf";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -45,13 +46,17 @@ export function qacAudioStoragePath(params: {
   workspaceId: string;
   providerSlug: string;
   externalCallId: string;
+  contentHash?: string;
   ext: AudioExt;
 }): string {
+  const suffix = params.contentHash
+    ? `_${params.contentHash.slice(0, 16)}`
+    : "";
   return [
     "qac",
     safeSegment(params.workspaceId),
     safeSegment(params.providerSlug),
-    `${safeSegment(params.externalCallId)}.${params.ext}`,
+    `${safeSegment(params.externalCallId)}${suffix}.${params.ext}`,
   ].join("/");
 }
 
@@ -110,15 +115,19 @@ export async function uploadQacRecording(params: {
     return { storagePath: null, error: "No audio bytes could be stored" };
   }
 
-  const storagePath = qacAudioStoragePath({ ...params, ext });
+  const contentHash = createHash("sha256").update(buffer).digest("hex");
+  const storagePath = qacAudioStoragePath({ ...params, contentHash, ext });
   const { error } = await admin.storage
     .from(BUCKET)
     .upload(storagePath, buffer, {
       contentType: contentTypeFor(ext),
-      upsert: true,
+      upsert: false,
     });
 
   if (error) {
+    if (error.message.toLowerCase().includes("already exists")) {
+      return { storagePath, error: null };
+    }
     return { storagePath: null, error: error.message };
   }
 

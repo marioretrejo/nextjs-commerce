@@ -197,20 +197,23 @@ export async function POST(
     const department = existingInteraction.department_id
       ? null
       : await findQacDepartment(admin, provider.workspace_id, normalized);
-    const storedAudio = existingInteraction.internal_audio_url
-      ? { storagePath: existingInteraction.internal_audio_url, error: null }
-      : await uploadQacRecording({
+    const shouldStoreIncomingAudio = Boolean(
+      normalized.recording_base64 || !existingInteraction.internal_audio_url,
+    );
+    const storedAudio = shouldStoreIncomingAudio
+      ? await uploadQacRecording({
           admin,
           workspaceId: provider.workspace_id,
           providerSlug: provider.slug,
           externalCallId: normalized.external_call_id,
           recordingBase64: normalized.recording_base64,
           recordingUrl: normalized.recording_url,
-        });
+        })
+      : { storagePath: existingInteraction.internal_audio_url, error: null };
     const departmentId =
       existingInteraction.department_id ?? department?.id ?? null;
     const audioPath =
-      existingInteraction.internal_audio_url ?? storedAudio.storagePath;
+      storedAudio.storagePath ?? existingInteraction.internal_audio_url;
     const hasAudio = Boolean(audioPath || existingInteraction.recording_url);
     const shouldAnalyze =
       (config.auto_analyze ?? true) &&

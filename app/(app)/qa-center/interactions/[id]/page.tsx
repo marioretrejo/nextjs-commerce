@@ -1,4 +1,5 @@
 import { triggerQacAnalysisAction } from "../../_actions";
+import { QacAudioPlayer } from "../../_components/QacAudioPlayer";
 import { QACShell, Panel, MetricTile } from "../../_components/QACShell";
 import { StatusBadge } from "../../_components/StatusBadge";
 import { formatDate, formatDuration, percent } from "../../_components/format";
@@ -293,19 +294,15 @@ export default async function QACInteractionDetailPage({
         <div className="flex flex-col gap-4">
           <Panel title="Audio">
             {audioUrl ? (
-              <audio controls className="w-full" src={audioUrl} />
+              <QacAudioPlayer
+                src={audioUrl}
+                downloadHref={`${audioUrl}?download=1`}
+                cdrDurationSeconds={interaction.duration_seconds}
+              />
             ) : (
               <p className="text-sm text-[#77756d]">
                 No recording URL available.
               </p>
-            )}
-            {audioUrl && (
-              <a
-                href={`${audioUrl}?download=1`}
-                className="mt-2 inline-flex rounded-md border border-[#d8d8d2] px-3 py-2 text-sm font-medium text-[#181816]"
-              >
-                Download recording
-              </a>
             )}
           </Panel>
 
