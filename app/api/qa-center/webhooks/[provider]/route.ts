@@ -104,6 +104,20 @@ function missingColumn(errorMessage?: string | null): boolean {
   return message.includes("Could not find") || message.includes("schema cache");
 }
 
+function statusConstraint(errorMessage?: string | null): boolean {
+  const message = errorMessage ?? "";
+  return (
+    message.includes("qac_interactions_status_check") ||
+    message.includes("violates check constraint")
+  );
+}
+
+function legacyStatus(status: string): string {
+  return ["pending", "analyzing", "analyzed", "failed"].includes(status)
+    ? status
+    : "pending";
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ provider: string }> },
@@ -226,6 +240,12 @@ export async function POST(
     normalized.prospect_id ??
     normalized.external_call_id ??
     "CDR interaction";
+  const legacyAgentName =
+    normalized.agent_name ??
+    normalized.agent_extension ??
+    normalized.external_agent_id ??
+    "Unknown Agent";
+  const legacyTranscript = normalized.transcript ?? "";
 
   const insertPayload = {
     workspace_id: provider.workspace_id,
@@ -233,7 +253,7 @@ export async function POST(
     provider: provider.slug,
     external_call_id: normalized.external_call_id,
     agent_id: agent?.id ?? null,
-    agent_name: normalized.agent_name,
+    agent_name: legacyAgentName,
     agent_extension: normalized.agent_extension,
     department_id: department?.id ?? null,
     department_name: normalized.department_name,
@@ -250,11 +270,31 @@ export async function POST(
     call_ended_at: normalized.call_ended_at,
     started_at: normalized.call_started_at,
     channel: "call",
-    transcript: normalized.transcript,
+    transcript: legacyTranscript,
     status,
     review_status: "pending_review",
     raw_payload: normalized.raw_payload,
     source_payload: normalized.raw_payload,
+  };
+  const legacyInsertPayload = {
+    workspace_id: provider.workspace_id,
+    agent_name: legacyAgentName,
+    channel: "call",
+    transcript: legacyTranscript,
+    audio_url: normalized.recording_url,
+    duration_s: normalized.duration_seconds,
+    status: legacyStatus(status),
+    metadata: {
+      ...normalized.raw_payload,
+      external_call_id: normalized.external_call_id,
+      provider_id: provider.id,
+      provider: provider.slug,
+      caller_id: normalized.caller_id,
+      prospect_id: normalized.prospect_id,
+      department_name: normalized.department_name,
+      disposition: normalized.disposition,
+      call_started_at: normalized.call_started_at,
+    },
   };
 
   let insertResult = await admin
@@ -266,26 +306,26 @@ export async function POST(
   if (missingColumn(insertResult.error?.message)) {
     insertResult = await admin
       .from("qac_interactions")
+      .insert(legacyInsertPayload)
+      .select("id, status")
+      .single();
+  }
+
+  if (statusConstraint(insertResult.error?.message)) {
+    insertResult = await admin
+      .from("qac_interactions")
       .insert({
-        workspace_id: provider.workspace_id,
-        provider_id: provider.id,
-        external_call_id: normalized.external_call_id,
-        agent_id: agent?.id ?? null,
-        department_id: department?.id ?? null,
-        caller_id: normalized.caller_id,
-        prospect_id: normalized.prospect_id,
-        interaction_title: title,
-        recording_url: normalized.recording_url,
-        duration_seconds: normalized.duration_seconds,
-        direction: normalized.direction,
-        disposition: normalized.disposition,
-        call_started_at: normalized.call_started_at,
-        call_ended_at: normalized.call_ended_at,
-        channel: "call",
-        status,
-        review_status: "pending_review",
-        raw_payload: normalized.raw_payload,
+        ...insertPayload,
+        status: status === "pending_audio" ? "pending" : "pending_audio",
       })
+      .select("id, status")
+      .single();
+  }
+
+  if (statusConstraint(insertResult.error?.message)) {
+    insertResult = await admin
+      .from("qac_interactions")
+      .insert(legacyInsertPayload)
       .select("id, status")
       .single();
   }
