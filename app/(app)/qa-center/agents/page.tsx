@@ -292,8 +292,8 @@ export default async function QACAgentsPage({
             </thead>
             <tbody className="divide-y divide-black/15">
               {rows.map((row) => (
-                <tr key={row.agent.id} className="align-top">
-                  <td className="py-3 pr-3">
+                <tr key={row.agent.id} className="align-middle">
+                  <td className="py-4 pr-3 align-middle">
                     <p className="font-medium text-[#181816]">
                       {row.agent.name}
                     </p>
@@ -302,7 +302,7 @@ export default async function QACAgentsPage({
                       {row.agent.extension ?? "-"}
                     </p>
                   </td>
-                  <td className="py-3 pr-3">
+                  <td className="py-4 pr-3 align-middle">
                     {row.agent.qac_departments?.name ?? "-"}
                     {!row.agent.is_active && (
                       <p className="text-xs text-[#77756d]">
@@ -310,13 +310,15 @@ export default async function QACAgentsPage({
                       </p>
                     )}
                   </td>
-                  <td className="py-3 pr-3">{row.totalCalls}</td>
-                  <td className="py-3 pr-3">{row.analyzedCalls}</td>
-                  <td className="py-3 pr-3 font-semibold">
+                  <td className="py-4 pr-3 align-middle">{row.totalCalls}</td>
+                  <td className="py-4 pr-3 align-middle">
+                    {row.analyzedCalls}
+                  </td>
+                  <td className="py-4 pr-3 align-middle font-semibold">
                     {percent(row.averageScore)}
                   </td>
-                  <td className="py-3 pr-3">
-                    <div className="space-y-1">
+                  <td className="py-4 pr-3 align-middle">
+                    <div className="space-y-1 leading-5">
                       {row.categories.map((category) => (
                         <div key={category.name} className="flex gap-2">
                           <span className="min-w-24 text-[#77756d]">
@@ -328,7 +330,7 @@ export default async function QACAgentsPage({
                       {row.categories.length === 0 && "-"}
                     </div>
                   </td>
-                  <td className="py-3 pr-3">
+                  <td className="py-4 pr-3 align-middle">
                     {row.failed.length > 0
                       ? row.failed
                           .map(
@@ -338,7 +340,7 @@ export default async function QACAgentsPage({
                           .join(", ")
                       : "-"}
                   </td>
-                  <td className="py-3 pr-3">
+                  <td className="py-4 pr-3 align-middle">
                     {(() => {
                       const trend = trendSummary(row.trend);
                       const trendStyle = trendClasses(trend.state);
@@ -420,9 +422,11 @@ export default async function QACAgentsPage({
                       );
                     })()}
                   </td>
-                  <td className="py-3 pr-3">{row.requiringReview}</td>
+                  <td className="py-4 pr-3 align-middle">
+                    {row.requiringReview}
+                  </td>
                   {access.isAdmin && (
-                    <td className="py-3 pr-3">
+                    <td className="py-4 pr-3 align-middle">
                       <div className="flex flex-col gap-2">
                         <details>
                           <summary className="inline-flex cursor-pointer rounded-md border border-black/20 px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
