@@ -80,7 +80,7 @@ export default function CalculatorPage() {
       tasa: `${fmtUSD(costs.stt_per_min)}/min`,
     },
     {
-      nombre: "Groq (LLM)",
+      nombre: "LLM",
       costo: costs.llm_per_1k_tokens * ((TOKENS_PER_MIN * durMin) / 1000),
       tasa: `${fmtUSD(costs.llm_per_1k_tokens)}/1k tok`,
     },

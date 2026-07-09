@@ -2,7 +2,7 @@
 
 export function providerLabel(p: string): string {
   const labels: Record<string, string> = {
-    groq: "Groq (LLM)",
+    groq: "LLM",
     openai: "OpenAI",
     cartesia: "Cartesia (TTS)",
     deepgram: "Deepgram (STT)",

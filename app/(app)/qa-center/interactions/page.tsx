@@ -40,6 +40,15 @@ function valueOf(
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
+function customerLabel(interaction: InteractionRow): string {
+  return (
+    interaction.prospect_id ??
+    interaction.caller_id ??
+    interaction.external_call_id ??
+    interaction.id
+  );
+}
+
 export default async function QACInteractionsPage({
   searchParams,
 }: {
@@ -344,7 +353,7 @@ export default async function QACInteractionsPage({
                         href={`/qa-center/interactions/${interaction.id}`}
                         className="font-medium text-[#181816] hover:underline"
                       >
-                        {interaction.external_call_id ?? interaction.id}
+                        {customerLabel(interaction)}
                       </Link>
                     </td>
                     <td className="py-3 pr-3">

@@ -25,8 +25,8 @@ export function ModelSettings({
         <div>
           <p className="text-sm font-semibold text-[#0a0a0a]">Model Settings</p>
           <p className="text-xs text-[#9b9b9b]">
-            Controls which Groq model is used and how deterministic the
-            responses are.
+            Controls which AI model is used and how deterministic the responses
+            are.
           </p>
         </div>
       </div>

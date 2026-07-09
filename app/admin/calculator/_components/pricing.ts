@@ -11,7 +11,7 @@ export interface ProviderCosts {
 // Twilio: $0.014/min (twilio.com/en-us/voice/pricing/us)
 // Deepgram Nova-3 streaming: $0.0077/min (deepgram.com/pricing)
 // Cartesia Sonic-3: $50/1M chars = $0.05/1k chars (cartesia.ai/pricing)
-// Groq Llama 4 Scout: $0.11/1M input + $0.34/1M output ≈ $0.000225/1k tok blended
+// LLM: $0.11/1M input + $0.34/1M output ≈ $0.000225/1k tok blended
 // LiveKit Cloud: $0.0005/participant-min (livekit.io/pricing)
 export const DEFAULTS: ProviderCosts = {
   twilio_outbound_per_min: 0.014,
@@ -59,10 +59,10 @@ export const COST_FIELDS: {
   },
   {
     key: "llm_per_1k_tokens",
-    label: "Groq · Llama 4 Scout",
+    label: "LLM",
     unit: "$/1k tokens",
-    hint: "groq.com/pricing — promedio input+output",
-    how: "Cobra por tokens procesados: $0.11/1M tokens de entrada + $0.34/1M tokens de salida. El valor configurado ($0.000225/1k) es un promedio blended asumiendo ~50% input / 50% output. Es el proveedor más barato del stack.",
+    hint: "promedio input+output",
+    how: "Cobra por tokens procesados: $0.11/1M tokens de entrada + $0.34/1M tokens de salida. El valor configurado ($0.000225/1k) es un promedio blended asumiendo ~50% input / 50% output.",
   },
   {
     key: "tts_per_1k_chars",

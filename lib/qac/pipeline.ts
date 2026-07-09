@@ -1,4 +1,4 @@
-import { transcribeAudio } from "@/lib/deepgram";
+import { transcribeAudioDetailed } from "@/lib/deepgram";
 import { groqJson } from "@/lib/groq";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadQacStoredAudio } from "./audio-storage";
@@ -16,6 +16,7 @@ interface InteractionForPipeline {
   department_id: string | null;
   recording_url: string | null;
   internal_audio_url: string | null;
+  direction: string | null;
   status: string;
 }
 
@@ -96,7 +97,7 @@ async function getTranscript(
 ): Promise<string | null> {
   const { data: existing } = await admin
     .from("qac_transcripts")
-    .select("full_text")
+    .select("full_text, diarized_json")
     .eq("interaction_id", interaction.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -105,7 +106,11 @@ async function getTranscript(
   const saved = asString(
     (existing as { full_text?: unknown } | null)?.full_text,
   );
-  if (saved) return saved;
+  const savedSegments = (existing as { diarized_json?: unknown } | null)
+    ?.diarized_json;
+  if (saved && Array.isArray(savedSegments) && savedSegments.length > 0) {
+    return saved;
+  }
 
   const audioUrl = interaction.internal_audio_url ?? interaction.recording_url;
   if (!audioUrl) {
@@ -132,11 +137,13 @@ async function getTranscript(
     return null;
   }
 
-  const transcript = await transcribeAudio(
+  const result = await transcribeAudioDetailed(
     audio.buffer,
     "es",
     audio.contentType,
+    interaction.direction,
   );
+  const transcript = result.transcript;
   if (!transcript.trim()) {
     await admin
       .from("qac_interactions")
@@ -149,7 +156,7 @@ async function getTranscript(
     workspace_id: interaction.workspace_id,
     interaction_id: interaction.id,
     full_text: transcript,
-    diarized_json: [],
+    diarized_json: result.segments,
     language: "es",
     provider: "deepgram",
   });
@@ -274,7 +281,7 @@ export async function processQacInteraction(interactionId: string): Promise<{
   const { data: rawInteraction } = await admin
     .from("qac_interactions")
     .select(
-      "id, workspace_id, provider_id, external_call_id, department_id, recording_url, internal_audio_url, status",
+      "id, workspace_id, provider_id, external_call_id, department_id, recording_url, internal_audio_url, direction, status",
     )
     .eq("id", interactionId)
     .maybeSingle();

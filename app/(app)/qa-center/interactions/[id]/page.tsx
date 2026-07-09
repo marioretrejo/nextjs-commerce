@@ -101,6 +101,15 @@ function audioHref(interaction: InteractionDetail): string | null {
   return `/api/qa-center/interactions/${interaction.id}/audio`;
 }
 
+function customerLabel(interaction: InteractionDetail): string {
+  return (
+    interaction.prospect_id ??
+    interaction.caller_id ??
+    interaction.external_call_id ??
+    interaction.id
+  );
+}
+
 export default async function QACInteractionDetailPage({
   params,
   searchParams,
@@ -190,7 +199,7 @@ export default async function QACInteractionDetailPage({
       </div>
 
       <Panel
-        title={interaction.external_call_id ?? interaction.id}
+        title={customerLabel(interaction)}
         action={
           <form action={triggerQacAnalysisAction}>
             <input type="hidden" name="interaction_id" value={interaction.id} />
@@ -347,21 +356,21 @@ export default async function QACInteractionDetailPage({
                 {filteredSegments.map((segment, index) => (
                   <div key={`${segment.start ?? index}-${index}`}>
                     <div className="mb-1 flex items-center gap-2 text-xs text-[#77756d]">
-                      <span className="font-semibold uppercase">
+                      <span className="rounded bg-[#ecece6] px-2 py-0.5 font-semibold uppercase text-[#181816]">
                         {segment.speaker ?? "Speaker"}
                       </span>
                       <span>
                         {formatDuration(Math.round(segment.start ?? 0))}
                       </span>
                     </div>
-                    <p className="rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
+                    <p className="break-words rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
                       {segment.text}
                     </p>
                   </div>
                 ))}
               </div>
             ) : transcriptText ? (
-              <pre className="max-h-[520px] whitespace-pre-wrap rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
+              <pre className="max-h-[520px] whitespace-pre-wrap break-words rounded-md bg-[#f7f7f5] p-3 font-sans text-sm leading-6 text-[#2f2e2a]">
                 {q && !transcriptText.toLowerCase().includes(q)
                   ? "No transcript matches this search."
                   : transcriptText}

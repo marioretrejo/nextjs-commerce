@@ -125,6 +125,23 @@ function audioHref(
   return `/api/qa-center/interactions/${interaction.id}/audio`;
 }
 
+function customerLabel(
+  interaction:
+    | Pick<
+        DashboardInteraction,
+        "caller_id" | "prospect_id" | "external_call_id"
+      >
+    | null
+    | undefined,
+): string {
+  return (
+    interaction?.prospect_id ??
+    interaction?.caller_id ??
+    interaction?.external_call_id ??
+    "Call detail"
+  );
+}
+
 function riskClass(risk: string | null | undefined): string {
   if (risk === "critical" || risk === "high") {
     return "border-red-200 bg-red-50 text-red-700";
@@ -273,7 +290,7 @@ export default async function QACenterDashboardPage({
     <QACShell
       active="dashboard"
       title="Dashboard"
-      description="Call monitoring with recordings, downloads, transcript and GROQ QA analysis."
+      description="Call monitoring with recordings, downloads, transcript and QA analysis."
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile label="Calls" value={interactions.length} />
@@ -413,7 +430,7 @@ export default async function QACenterDashboardPage({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-[#181816]">
                           {interaction.qac_agents?.name ??
-                            interaction.external_call_id ??
+                            customerLabel(interaction) ??
                             "Unassigned call"}
                         </p>
                         <p className="truncate text-xs text-[#77756d]">
@@ -453,7 +470,7 @@ export default async function QACenterDashboardPage({
             title={
               selected
                 ? (selected.qac_agents?.name ??
-                  selected.external_call_id ??
+                  customerLabel(selected) ??
                   "Call detail")
                 : "Call detail"
             }
@@ -531,7 +548,7 @@ export default async function QACenterDashboardPage({
                           Download recording
                         </a>
                         <span className="break-all text-xs text-[#77756d]">
-                          {selected.external_call_id ?? selected.id}
+                          {customerLabel(selected)}
                         </span>
                       </div>
                     </div>
@@ -554,21 +571,21 @@ export default async function QACenterDashboardPage({
                       {selectedSegments.map((segment, index) => (
                         <div key={`${segment.start ?? index}-${index}`}>
                           <div className="mb-1 flex items-center gap-2 text-xs text-[#77756d]">
-                            <span className="font-semibold uppercase">
+                            <span className="rounded bg-[#ecece6] px-2 py-0.5 font-semibold uppercase text-[#181816]">
                               {segment.speaker ?? "Speaker"}
                             </span>
                             <span>
                               {formatDuration(Math.round(segment.start ?? 0))}
                             </span>
                           </div>
-                          <p className="rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
+                          <p className="break-words rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
                             {segment.text}
                           </p>
                         </div>
                       ))}
                     </div>
                   ) : selectedTranscript?.full_text ? (
-                    <pre className="max-h-[420px] whitespace-pre-wrap rounded-md bg-[#f7f7f5] p-3 text-sm leading-6 text-[#2f2e2a]">
+                    <pre className="max-h-[420px] whitespace-pre-wrap break-words rounded-md bg-[#f7f7f5] p-3 font-sans text-sm leading-6 text-[#2f2e2a]">
                       {selectedTranscript.full_text}
                     </pre>
                   ) : (
@@ -588,7 +605,7 @@ export default async function QACenterDashboardPage({
 
         <div className="space-y-4">
           <Panel
-            title="GROQ QA score"
+            title="QA score"
             action={
               selectedAnalysis?.risk_level ? (
                 <span
