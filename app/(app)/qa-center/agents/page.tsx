@@ -5,6 +5,7 @@ import { percent } from "../_components/format";
 import { qacAnalysisText, qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 
 interface DepartmentRow {
   id: string;
@@ -55,6 +56,57 @@ function firstParam(
 ): string | null {
   const value = params[key];
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+type TrendState = "up" | "down" | "stable" | "insufficient" | "empty";
+
+function trendSummary(scores: number[]): {
+  state: TrendState;
+  delta: number | null;
+  latest: number | null;
+} {
+  const latest = scores.at(-1) ?? null;
+  if (scores.length === 0) return { state: "empty", delta: null, latest };
+  if (scores.length === 1) {
+    return { state: "insufficient", delta: null, latest };
+  }
+
+  const delta = Math.round((scores.at(-1) ?? 0) - (scores[0] ?? 0));
+  if (delta >= 5) return { state: "up", delta, latest };
+  if (delta <= -5) return { state: "down", delta, latest };
+  return { state: "stable", delta, latest };
+}
+
+function trendClasses(state: TrendState): {
+  badge: string;
+  icon: string;
+  bars: string;
+} {
+  if (state === "up") {
+    return {
+      badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      icon: "text-emerald-700",
+      bars: "bg-emerald-600",
+    };
+  }
+  if (state === "down") {
+    return {
+      badge: "border-red-200 bg-red-50 text-red-800",
+      icon: "text-red-700",
+      bars: "bg-red-600",
+    };
+  }
+  return {
+    badge: "border-[#d8d8d2] bg-[#f7f7f5] text-[#5f5d56]",
+    icon: "text-[#77756d]",
+    bars: "bg-[#77756d]",
+  };
+}
+
+function TrendIcon({ state }: { state: TrendState }) {
+  if (state === "up") return <TrendingUp className="h-3.5 w-3.5" />;
+  if (state === "down") return <TrendingDown className="h-3.5 w-3.5" />;
+  return <Minus className="h-3.5 w-3.5" />;
 }
 
 export default async function QACAgentsPage({
@@ -201,7 +253,7 @@ export default async function QACAgentsPage({
         title={qacT(lang, `${rows.length} agents`, `${rows.length} agentes`)}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-[#77756d]">
               <tr className="border-b border-black/15">
                 <th className="py-2 pr-3 font-medium">
@@ -287,18 +339,86 @@ export default async function QACAgentsPage({
                       : "-"}
                   </td>
                   <td className="py-3 pr-3">
-                    <div className="flex h-10 items-end gap-1">
-                      {row.trend.map((score, index) => (
-                        <span
-                          key={`${score}-${index}`}
-                          className="w-2 rounded-sm bg-[#181816]"
-                          style={{ height: `${Math.max(4, score * 0.36)}px` }}
-                        />
-                      ))}
-                      {row.trend.length === 0 && (
-                        <span className="text-[#77756d]">-</span>
-                      )}
-                    </div>
+                    {(() => {
+                      const trend = trendSummary(row.trend);
+                      const trendStyle = trendClasses(trend.state);
+                      const trendLabel =
+                        trend.state === "up"
+                          ? qacT(lang, "Rising", "Subiendo")
+                          : trend.state === "down"
+                            ? qacT(lang, "Falling", "Bajando")
+                            : trend.state === "stable"
+                              ? qacT(lang, "Stable", "Estable")
+                              : qacT(
+                                  lang,
+                                  "Not enough data",
+                                  "Sin datos suficientes",
+                                );
+                      const scoreTrail = row.trend
+                        .map((score) => Math.round(score))
+                        .join(" -> ");
+
+                      return (
+                        <div className="min-w-[190px]">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${trendStyle.badge}`}
+                            >
+                              <span className={trendStyle.icon}>
+                                <TrendIcon state={trend.state} />
+                              </span>
+                              {trendLabel}
+                            </span>
+                            {trend.latest !== null && (
+                              <span className="text-xs font-medium text-[#181816]">
+                                {qacT(lang, "Last", "Ultimo")}{" "}
+                                {percent(trend.latest)}
+                              </span>
+                            )}
+                            {trend.delta !== null && (
+                              <span className="text-xs text-[#77756d]">
+                                {trend.delta > 0 ? "+" : ""}
+                                {trend.delta} pts
+                              </span>
+                            )}
+                          </div>
+                          {row.trend.length > 0 ? (
+                            <div
+                              className="mt-2 flex h-14 items-end gap-1 rounded-md border border-[#d8d8d2] bg-[#fbfbfa] px-2 py-1"
+                              title={
+                                scoreTrail
+                                  ? qacT(
+                                      lang,
+                                      `Last QA scores: ${scoreTrail}`,
+                                      `Ultimos scores QA: ${scoreTrail}`,
+                                    )
+                                  : undefined
+                              }
+                            >
+                              {row.trend.map((score, index) => (
+                                <span
+                                  key={`${score}-${index}`}
+                                  className={`w-3 rounded-sm ${trendStyle.bars}`}
+                                  style={{
+                                    height: `${Math.max(8, Math.min(46, 8 + score * 0.38))}px`,
+                                    opacity:
+                                      index === row.trend.length - 1 ? 1 : 0.62,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-2 rounded-md border border-dashed border-[#d8d8d2] bg-[#fbfbfa] px-3 py-2 text-xs text-[#77756d]">
+                              {qacT(
+                                lang,
+                                "No analyzed QA scores yet.",
+                                "Todavia no hay scores QA analizados.",
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="py-3 pr-3">{row.requiringReview}</td>
                   {access.isAdmin && (
