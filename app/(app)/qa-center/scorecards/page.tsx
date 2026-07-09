@@ -3,6 +3,7 @@ import {
   createScorecardAction,
   deleteCriterionAction,
   deleteScorecardAction,
+  installConversionSalesV1Action,
 } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
@@ -32,6 +33,7 @@ interface ScorecardRow {
     partial_definition: string | null;
     fail_definition: string | null;
     na_definition: string | null;
+    examples_json: unknown;
     sort_order: number;
   }>;
 }
@@ -44,6 +46,44 @@ function firstParam(
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
+function languageOf(params: Record<string, string | string[] | undefined>) {
+  return firstParam(params, "lang") === "es" ? "es" : "en";
+}
+
+function ui(lang: "en" | "es", en: string, es: string): string {
+  return lang === "es" ? es : en;
+}
+
+function i18n(value: unknown): Record<string, string | undefined> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const root = value as { i18n?: unknown };
+  if (!root.i18n || typeof root.i18n !== "object" || Array.isArray(root.i18n)) {
+    return {};
+  }
+  const es = (root.i18n as { es?: unknown }).es;
+  return es && typeof es === "object" && !Array.isArray(es)
+    ? (es as Record<string, string | undefined>)
+    : {};
+}
+
+function localized(
+  criterion: NonNullable<ScorecardRow["qac_scorecard_criteria"]>[number],
+  key:
+    | "category"
+    | "name"
+    | "description"
+    | "applicability_rule"
+    | "pass_definition"
+    | "partial_definition"
+    | "fail_definition"
+    | "na_definition",
+  lang: "en" | "es",
+): string | null {
+  const base = criterion[key];
+  if (lang !== "es") return base;
+  return i18n(criterion.examples_json)[key] ?? base;
+}
+
 export default async function QACScorecardsPage({
   searchParams,
 }: {
@@ -51,6 +91,9 @@ export default async function QACScorecardsPage({
 }) {
   const params = (await searchParams) ?? {};
   const deleted = firstParam(params, "deleted");
+  const installed = firstParam(params, "installed");
+  const errorMessage = firstParam(params, "error");
+  const lang = languageOf(params);
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -69,7 +112,7 @@ export default async function QACScorecardsPage({
          qac_scorecard_criteria(
           id, category, name, description, weight, is_critical,
           applicability_rule, pass_definition, partial_definition,
-          fail_definition, na_definition, sort_order
+          fail_definition, na_definition, examples_json, sort_order
          )`,
       )
       .eq("workspace_id", access.workspaceId)
@@ -82,14 +125,60 @@ export default async function QACScorecardsPage({
   return (
     <QACShell
       active="scorecards"
-      title="Scorecards"
-      description="Department-specific QA criteria with N/A-aware scoring."
+      title={ui(lang, "Scorecards", "Scorecards")}
+      description={ui(
+        lang,
+        "Department-specific QA criteria with N/A-aware scoring.",
+        "Criterios QA por departamento con scoring que respeta N/A.",
+      )}
     >
-      {deleted && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          {deleted === "criterion"
-            ? "Criterion deleted."
-            : "Scorecard deleted."}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#deded8] bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-[#181816]">
+            {ui(lang, "Language", "Idioma")}
+          </p>
+          <p className="text-xs text-[#77756d]">
+            {ui(
+              lang,
+              "Switch scorecard definitions between English and Spanish.",
+              "Cambia las definiciones del scorecard entre ingles y español.",
+            )}
+          </p>
+        </div>
+        <div className="flex rounded-md border border-[#d8d8d2] p-1 text-sm">
+          <a
+            href="/qa-center/scorecards?lang=en"
+            className={`rounded px-3 py-1.5 ${lang === "en" ? "bg-[#181816] text-white" : "text-[#5f5d56]"}`}
+          >
+            English
+          </a>
+          <a
+            href="/qa-center/scorecards?lang=es"
+            className={`rounded px-3 py-1.5 ${lang === "es" ? "bg-[#181816] text-white" : "text-[#5f5d56]"}`}
+          >
+            Español
+          </a>
+        </div>
+      </div>
+
+      {(deleted || installed || errorMessage) && (
+        <div
+          className={
+            errorMessage
+              ? "rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              : "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          }
+        >
+          {errorMessage ??
+            (installed
+              ? ui(
+                  lang,
+                  "Conversion Sales V1 installed.",
+                  "Conversion Sales V1 instalado.",
+                )
+              : deleted === "criterion"
+                ? ui(lang, "Criterion deleted.", "Criterio eliminado.")
+                : ui(lang, "Scorecard deleted.", "Scorecard eliminado."))}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
@@ -115,7 +204,7 @@ export default async function QACScorecardsPage({
                       </h2>
                       <p className="text-sm text-[#77756d]">
                         {scorecard.qac_departments?.name ?? "No department"} -
-                        total weight {totalWeight}
+                        {ui(lang, "total weight", "peso total")} {totalWeight}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -138,11 +227,14 @@ export default async function QACScorecardsPage({
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-medium text-[#181816]">
-                              {criterion.name}
+                              {localized(criterion, "name", lang)}
                             </p>
                             <p className="text-xs text-[#77756d]">
-                              {criterion.category} - weight {criterion.weight}
-                              {criterion.is_critical ? " - critical" : ""}
+                              {localized(criterion, "category", lang)} -{" "}
+                              {ui(lang, "weight", "peso")} {criterion.weight}
+                              {criterion.is_critical
+                                ? ` - ${ui(lang, "critical", "critico")}`
+                                : ""}
                             </p>
                           </div>
                           {access.isAdmin && (
@@ -158,33 +250,43 @@ export default async function QACScorecardsPage({
                             </form>
                           )}
                         </div>
-                        {criterion.description && (
+                        {localized(criterion, "description", lang) && (
                           <p className="mt-2 text-sm text-[#2f2e2a]">
-                            {criterion.description}
+                            {localized(criterion, "description", lang)}
                           </p>
                         )}
                         <div className="mt-3 grid gap-2 text-xs text-[#5f5d56] md:grid-cols-2">
                           <p>
                             <span className="font-semibold">
-                              Applicability:
+                              {ui(lang, "Applicability:", "Aplicabilidad:")}
                             </span>{" "}
-                            {criterion.applicability_rule ?? "-"}
+                            {localized(criterion, "applicability_rule", lang) ??
+                              "-"}
                           </p>
                           <p>
                             <span className="font-semibold">N/A:</span>{" "}
-                            {criterion.na_definition ?? "-"}
+                            {localized(criterion, "na_definition", lang) ?? "-"}
                           </p>
                           <p>
-                            <span className="font-semibold">Pass:</span>{" "}
-                            {criterion.pass_definition ?? "-"}
+                            <span className="font-semibold">
+                              {ui(lang, "Pass:", "Aprobado:")}
+                            </span>{" "}
+                            {localized(criterion, "pass_definition", lang) ??
+                              "-"}
                           </p>
                           <p>
-                            <span className="font-semibold">Partial:</span>{" "}
-                            {criterion.partial_definition ?? "-"}
+                            <span className="font-semibold">
+                              {ui(lang, "Partial:", "Parcial:")}
+                            </span>{" "}
+                            {localized(criterion, "partial_definition", lang) ??
+                              "-"}
                           </p>
                           <p>
-                            <span className="font-semibold">Fail:</span>{" "}
-                            {criterion.fail_definition ?? "-"}
+                            <span className="font-semibold">
+                              {ui(lang, "Fail:", "Fallo:")}
+                            </span>{" "}
+                            {localized(criterion, "fail_definition", lang) ??
+                              "-"}
                           </p>
                         </div>
                       </div>
@@ -207,6 +309,23 @@ export default async function QACScorecardsPage({
         </Panel>
 
         <div className="flex flex-col gap-4">
+          <Panel title="Conversion Sales V1">
+            <div className="space-y-3 text-sm">
+              <p className="text-[#5f5d56]">
+                {ui(
+                  lang,
+                  "Install the full 25-rule scorecard and default AI trackers for the Conversion department.",
+                  "Instala el scorecard completo de 25 reglas y los AI Trackers por defecto para el departamento Conversion.",
+                )}
+              </p>
+              <form action={installConversionSalesV1Action}>
+                <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
+                  {ui(lang, "Install preset", "Instalar preset")}
+                </button>
+              </form>
+            </div>
+          </Panel>
+
           <Panel title="Create scorecard">
             <form action={createScorecardAction} className="space-y-3">
               <select

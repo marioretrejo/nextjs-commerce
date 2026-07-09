@@ -78,6 +78,19 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function detectedTrackerLabels(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const results = (value as { tracker_results?: unknown }).tracker_results;
+  if (!Array.isArray(results)) return [];
+  return results
+    .filter((item): item is { detected?: unknown; name?: unknown } =>
+      Boolean(item && typeof item === "object"),
+    )
+    .filter((item) => Boolean(item.detected))
+    .map((item) => String(item.name ?? "Tracker"))
+    .filter(Boolean);
+}
+
 function segments(value: unknown): TranscriptSegment[] {
   return Array.isArray(value)
     ? value.filter((item): item is TranscriptSegment =>
@@ -374,6 +387,25 @@ export default async function QACInteractionDetailPage({
                       "-"}
                   </p>
                 </div>
+                {detectedTrackerLabels(analysis.trackers_json).length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-[#77756d]">
+                      Trackers detected
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {detectedTrackerLabels(analysis.trackers_json).map(
+                        (tracker) => (
+                          <span
+                            key={tracker}
+                            className="rounded-full border border-[#d8d8d2] bg-white px-2.5 py-1 text-xs font-medium text-[#181816]"
+                          >
+                            {tracker}
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[#77756d]">
                     Strengths

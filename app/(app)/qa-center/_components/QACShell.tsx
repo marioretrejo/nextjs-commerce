@@ -12,6 +12,7 @@ const NAV = [
   { href: "/qa-center/agents", label: "Agents", key: "agents" },
   { href: "/qa-center/departments", label: "Departments", key: "departments" },
   { href: "/qa-center/scorecards", label: "Scorecards", key: "scorecards" },
+  { href: "/qa-center/trackers", label: "Trackers", key: "trackers" },
   { href: "/qa-center/providers", label: "Providers", key: "providers" },
   { href: "/qa-center/settings", label: "Settings", key: "settings" },
 ] as const;

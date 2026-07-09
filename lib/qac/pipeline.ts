@@ -30,12 +30,31 @@ interface AnalysisJson {
   recommendations?: unknown[];
   detected_objections?: unknown[];
   follow_up_detected?: boolean;
+  tracker_results?: Array<{
+    tracker_id?: string;
+    name?: string;
+    detected?: boolean;
+    confidence?: number;
+    reason?: string;
+    evidence_json?: unknown[];
+    evidence?: unknown[];
+  }>;
   criteria_results?: Array<
     Partial<QacCriterionResultInput> & {
       name?: string;
       evidence?: unknown[];
     }
   >;
+}
+
+interface QacTracker {
+  id: string;
+  name: string;
+  description: string;
+  severity: string;
+  risk_level_override: string | null;
+  trigger_manual_review: boolean;
+  positive_examples_json: unknown;
 }
 
 function asString(value: unknown): string | null {
@@ -52,6 +71,15 @@ function normalizeRisk(value: unknown): string {
     : "medium";
 }
 
+function riskRank(value: string): number {
+  return { low: 1, medium: 2, high: 3, critical: 4 }[value] ?? 2;
+}
+
+function strongestRisk(a: string, b: string | null): string {
+  if (!b) return a;
+  return riskRank(b) > riskRank(a) ? b : a;
+}
+
 function contentTypeFor(url: string): string {
   if (/\.wav(\?|$)/i.test(url)) return "audio/wav";
   if (/\.(ogg|oga)(\?|$)/i.test(url)) return "audio/ogg";
@@ -62,6 +90,86 @@ function contentTypeFor(url: string): string {
 function missingColumn(errorMessage?: string | null): boolean {
   const message = errorMessage ?? "";
   return message.includes("Could not find") || message.includes("schema cache");
+}
+
+function missingTable(errorMessage?: string | null): boolean {
+  const message = errorMessage ?? "";
+  return message.includes("Could not find") || message.includes("schema cache");
+}
+
+async function fetchQacTrackers(
+  admin: Admin,
+  workspaceId: string,
+  departmentId: string,
+): Promise<QacTracker[]> {
+  const { data, error } = await admin
+    .from("qac_trackers")
+    .select(
+      `id, name, description, severity, risk_level_override,
+       trigger_manual_review, positive_examples_json`,
+    )
+    .eq("workspace_id", workspaceId)
+    .eq("is_active", true)
+    .or(`department_id.is.null,department_id.eq.${departmentId}`);
+
+  if (error) {
+    if (missingTable(error.message)) return [];
+    console.error("[qac-trackers] fetch failed:", error.message);
+    return [];
+  }
+
+  return (data as QacTracker[] | null) ?? [];
+}
+
+function normalizeTrackerResults(analysis: AnalysisJson): Array<{
+  tracker_id: string | null;
+  name: string | null;
+  detected: boolean;
+  confidence: number | null;
+  reason: string | null;
+  evidence_json: unknown[];
+}> {
+  return (analysis.tracker_results ?? []).map((result) => ({
+    tracker_id: asString(result.tracker_id),
+    name: asString(result.name),
+    detected: Boolean(result.detected),
+    confidence:
+      typeof result.confidence === "number" &&
+      Number.isFinite(result.confidence)
+        ? result.confidence
+        : null,
+    reason: asString(result.reason),
+    evidence_json: Array.isArray(result.evidence_json)
+      ? result.evidence_json
+      : Array.isArray(result.evidence)
+        ? result.evidence
+        : [],
+  }));
+}
+
+function trackerImpact(
+  trackers: QacTracker[],
+  results: ReturnType<typeof normalizeTrackerResults>,
+): { riskLevel: string | null; requiresManualReview: boolean } {
+  let riskLevel: string | null = null;
+  let requiresManualReview = false;
+
+  for (const result of results) {
+    if (!result.detected) continue;
+    const tracker = trackers.find(
+      (item) =>
+        item.id === result.tracker_id ||
+        item.name.toLowerCase() === (result.name ?? "").toLowerCase(),
+    );
+    if (!tracker) continue;
+    requiresManualReview ||= tracker.trigger_manual_review;
+    const override = normalizeRisk(tracker.risk_level_override);
+    if (tracker.risk_level_override) {
+      riskLevel = strongestRisk(riskLevel ?? "low", override);
+    }
+  }
+
+  return { riskLevel, requiresManualReview };
 }
 
 async function fetchAudio(url: string): Promise<{
@@ -180,6 +288,7 @@ function buildAnalysisPrompt(params: {
   departmentPrompt: string | null;
   scorecardName: string;
   criteria: QacCriterion[];
+  trackers: QacTracker[];
   transcript: string;
 }): string {
   const criteria = params.criteria.map((criterion) => ({
@@ -194,6 +303,15 @@ function buildAnalysisPrompt(params: {
     fail_definition: criterion.fail_definition,
     na_definition: criterion.na_definition,
     examples: criterion.examples_json,
+  }));
+  const trackers = params.trackers.map((tracker) => ({
+    tracker_id: tracker.id,
+    name: tracker.name,
+    description: tracker.description,
+    severity: tracker.severity,
+    trigger_manual_review: tracker.trigger_manual_review,
+    risk_level_override: tracker.risk_level_override,
+    examples: tracker.positive_examples_json,
   }));
 
   return `You are QA Center for real human call center calls imported from a VoIP CDR.
@@ -215,6 +333,16 @@ Return strict JSON with:
   "recommendations": string[],
   "detected_objections": string[],
   "follow_up_detected": boolean,
+  "tracker_results": [
+    {
+      "tracker_id": string,
+      "name": string,
+      "detected": boolean,
+      "confidence": number,
+      "reason": string,
+      "evidence_json": [{"timestamp_seconds": number | null, "quote": string}]
+    }
+  ],
   "criteria_results": [
     {
       "criterion_id": string,
@@ -231,9 +359,13 @@ Scoring rules:
 - If a criterion is not applicable, return applicable=false, result="n/a", score=null.
 - Do not award or subtract points for N/A criteria.
 - If evidence is unavailable, explain the reason without inventing quotes.
+- Trackers do not affect score directly. Detect each tracker independently.
 
 Criteria:
 ${JSON.stringify(criteria, null, 2)}
+
+Trackers:
+${JSON.stringify(trackers, null, 2)}
 
 Transcript:
 ${params.transcript}`;
@@ -242,8 +374,19 @@ ${params.transcript}`;
 function buildPromptOnlyAnalysisPrompt(params: {
   departmentName: string;
   departmentPrompt: string | null;
+  trackers: QacTracker[];
   transcript: string;
 }): string {
+  const trackers = params.trackers.map((tracker) => ({
+    tracker_id: tracker.id,
+    name: tracker.name,
+    description: tracker.description,
+    severity: tracker.severity,
+    trigger_manual_review: tracker.trigger_manual_review,
+    risk_level_override: tracker.risk_level_override,
+    examples: tracker.positive_examples_json,
+  }));
+
   return `You are QA Center for real human call center calls imported from a VoIP CDR.
 Do not assume this call came from an AI voice agent. Evaluate only the transcript below.
 
@@ -261,10 +404,24 @@ Return strict JSON with:
   "opportunities": string[],
   "recommendations": string[],
   "detected_objections": string[],
-  "follow_up_detected": boolean
+  "follow_up_detected": boolean,
+  "tracker_results": [
+    {
+      "tracker_id": string,
+      "name": string,
+      "detected": boolean,
+      "confidence": number,
+      "reason": string,
+      "evidence_json": [{"timestamp_seconds": number | null, "quote": string}]
+    }
+  ]
 }
 
 If evidence is unavailable, say so without inventing facts.
+Trackers do not affect score directly. Detect each tracker independently.
+
+Trackers:
+${JSON.stringify(trackers, null, 2)}
 
 Transcript:
 ${params.transcript}`;
@@ -333,6 +490,12 @@ export async function processQacInteraction(interactionId: string): Promise<{
     };
   }
 
+  const trackers = await fetchQacTrackers(
+    admin,
+    interaction.workspace_id,
+    department.id,
+  );
+
   const { data: scorecardRaw } = await admin
     .from("qac_scorecards")
     .select(
@@ -370,9 +533,10 @@ export async function processQacInteraction(interactionId: string): Promise<{
       prompt: buildPromptOnlyAnalysisPrompt({
         departmentName: department.name,
         departmentPrompt: department.qa_prompt,
+        trackers,
         transcript,
       }),
-      maxTokens: 2500,
+      maxTokens: 3500,
       temperature: 0.1,
     });
 
@@ -388,6 +552,13 @@ export async function processQacInteraction(interactionId: string): Promise<{
       };
     }
 
+    const trackerResults = normalizeTrackerResults(analysis);
+    const impact = trackerImpact(trackers, trackerResults);
+    const finalRisk = strongestRisk(
+      normalizeRisk(analysis.risk_level),
+      impact.riskLevel,
+    );
+
     const { data: analysisRow, error: analysisError } = await admin
       .from("qac_analyses")
       .insert({
@@ -396,7 +567,7 @@ export async function processQacInteraction(interactionId: string): Promise<{
         scorecard_id: null,
         overall_score: null,
         sentiment: asString(analysis.sentiment) ?? "neutral",
-        risk_level: normalizeRisk(analysis.risk_level),
+        risk_level: finalRisk,
         call_disposition: asString(analysis.call_disposition),
         summary: asString(analysis.summary),
         strengths_json: asArray(analysis.strengths),
@@ -405,6 +576,9 @@ export async function processQacInteraction(interactionId: string): Promise<{
         trackers_json: {
           detected_objections: asArray(analysis.detected_objections),
           follow_up_detected: Boolean(analysis.follow_up_detected),
+          tracker_results: trackerResults,
+          tracker_risk_override: impact.riskLevel,
+          requires_manual_review: impact.requiresManualReview,
           prompt_only: true,
           missing_scorecard_criteria: true,
         },
@@ -427,7 +601,10 @@ export async function processQacInteraction(interactionId: string): Promise<{
 
     await admin
       .from("qac_interactions")
-      .update({ status: "analyzed" })
+      .update({
+        status: "analyzed",
+        ...(impact.requiresManualReview ? { review_status: "in_review" } : {}),
+      })
       .eq("id", interaction.id);
 
     return {
@@ -450,9 +627,10 @@ export async function processQacInteraction(interactionId: string): Promise<{
       departmentPrompt: department.qa_prompt,
       scorecardName: scorecard.name,
       criteria,
+      trackers,
       transcript,
     }),
-    maxTokens: 4000,
+    maxTokens: 6000,
     temperature: 0.1,
   });
 
@@ -479,6 +657,12 @@ export async function processQacInteraction(interactionId: string): Promise<{
 
   const score = calculateQacScore(criteria, normalizedResults);
   const finalStatus = score.notEvaluable ? "not_evaluable" : "analyzed";
+  const trackerResults = normalizeTrackerResults(analysis);
+  const impact = trackerImpact(trackers, trackerResults);
+  const finalRisk = strongestRisk(
+    normalizeRisk(analysis.risk_level),
+    impact.riskLevel,
+  );
 
   const { data: analysisRow, error: analysisError } = await admin
     .from("qac_analyses")
@@ -488,7 +672,7 @@ export async function processQacInteraction(interactionId: string): Promise<{
       scorecard_id: scorecard.id,
       overall_score: score.overallScore,
       sentiment: asString(analysis.sentiment) ?? "neutral",
-      risk_level: normalizeRisk(analysis.risk_level),
+      risk_level: finalRisk,
       call_disposition: asString(analysis.call_disposition),
       summary: asString(analysis.summary),
       strengths_json: asArray(analysis.strengths),
@@ -497,6 +681,9 @@ export async function processQacInteraction(interactionId: string): Promise<{
       trackers_json: {
         detected_objections: asArray(analysis.detected_objections),
         follow_up_detected: Boolean(analysis.follow_up_detected),
+        tracker_results: trackerResults,
+        tracker_risk_override: impact.riskLevel,
+        requires_manual_review: impact.requiresManualReview,
         applicable_weight: score.applicableWeight,
         earned_points: score.earnedPoints,
       },
@@ -545,7 +732,10 @@ export async function processQacInteraction(interactionId: string): Promise<{
 
   await admin
     .from("qac_interactions")
-    .update({ status: finalStatus })
+    .update({
+      status: finalStatus,
+      ...(impact.requiresManualReview ? { review_status: "in_review" } : {}),
+    })
     .eq("id", interaction.id);
 
   return {

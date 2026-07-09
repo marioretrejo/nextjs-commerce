@@ -89,6 +89,19 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function detectedTrackerLabels(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const results = (value as { tracker_results?: unknown }).tracker_results;
+  if (!Array.isArray(results)) return [];
+  return results
+    .filter((item): item is { detected?: unknown; name?: unknown } =>
+      Boolean(item && typeof item === "object"),
+    )
+    .filter((item) => Boolean(item.detected))
+    .map((item) => String(item.name ?? "Tracker"))
+    .filter(Boolean);
+}
+
 function segments(value: unknown): TranscriptSegment[] {
   return Array.isArray(value)
     ? value.filter((item): item is TranscriptSegment =>
@@ -811,6 +824,26 @@ export default async function QACenterDashboardPage({
                 {asStringArray(selectedAnalysis.recommendations_json)[0] && (
                   <div className="rounded-md bg-[#f7f7f5] p-3 text-[#2f2e2a]">
                     {asStringArray(selectedAnalysis.recommendations_json)[0]}
+                  </div>
+                )}
+                {detectedTrackerLabels(selectedAnalysis.trackers_json).length >
+                  0 && (
+                  <div>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#77756d]">
+                      Trackers detected
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {detectedTrackerLabels(
+                        selectedAnalysis.trackers_json,
+                      ).map((tracker) => (
+                        <span
+                          key={tracker}
+                          className="rounded-full border border-[#d8d8d2] bg-white px-2.5 py-1 text-xs font-medium text-[#181816]"
+                        >
+                          {tracker}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
