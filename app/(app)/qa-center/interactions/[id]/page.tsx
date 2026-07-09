@@ -140,6 +140,22 @@ function audioHref(interaction: InteractionDetail): string | null {
   return `/api/qa-center/interactions/${interaction.id}/audio`;
 }
 
+function criterionRatio(
+  score: number | null | undefined,
+  weight: number | null | undefined,
+): number | null {
+  const rawScore = Number(score);
+  const rawWeight = Number(weight);
+  if (
+    !Number.isFinite(rawScore) ||
+    !Number.isFinite(rawWeight) ||
+    rawWeight <= 0
+  ) {
+    return null;
+  }
+  return Math.round((rawScore / rawWeight) * 10000) / 100;
+}
+
 function customerLabel(interaction: InteractionDetail): string {
   return (
     interaction.prospect_id ??
@@ -372,6 +388,7 @@ export default async function QACInteractionDetailPage({
                 src={audioUrl}
                 downloadHref={`${audioUrl}?download=1`}
                 cdrDurationSeconds={interaction.duration_seconds}
+                lang={lang}
               />
             ) : (
               <p className="text-sm text-[#77756d]">
@@ -563,7 +580,18 @@ export default async function QACInteractionDetailPage({
                       <div className="flex items-center gap-2">
                         <StatusBadge lang={lang} value={result.result} />
                         <span className="text-sm font-semibold">
-                          {result.applicable ? percent(result.score) : "N/A"}
+                          {result.applicable
+                            ? `${percent(
+                                criterionRatio(
+                                  result.score,
+                                  result.qac_scorecard_criteria?.weight,
+                                ),
+                              )} (${Number(result.score ?? 0).toFixed(
+                                1,
+                              )}/${Number(
+                                result.qac_scorecard_criteria?.weight ?? 0,
+                              )})`
+                            : "N/A"}
                         </span>
                       </div>
                     </div>

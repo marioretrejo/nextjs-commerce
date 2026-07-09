@@ -7,7 +7,7 @@ import {
   CONVERSION_TRACKERS,
   criterionExamplesJson,
 } from "@/lib/qac/conversion-sales-v1";
-import { processQacInteraction } from "@/lib/qac/pipeline";
+import { processQacBacklog, processQacInteraction } from "@/lib/qac/pipeline";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "node:crypto";
 import { after } from "next/server";
@@ -941,7 +941,30 @@ export async function triggerQacAnalysisAction(formData: FormData) {
 
   if (!interaction) throw new Error("Interaction not found");
 
-  after(() => processQacInteraction(interactionId));
+  await processQacInteraction(interactionId);
+  after(() => processQacBacklog({ workspaceId: access.workspaceId, limit: 3 }));
   revalidatePath(`/qa-center/interactions/${interactionId}`);
   revalidatePath("/qa-center/interactions");
+  revalidatePath("/qa-center");
+}
+
+export async function processQacBacklogAction(formData: FormData) {
+  const access = await requireQacAccess();
+  const lang = langParam(formData);
+
+  const result = await processQacBacklog({
+    workspaceId: access.workspaceId,
+    limit: access.isAdmin ? 10 : 5,
+  });
+
+  revalidatePath("/qa-center");
+  revalidatePath("/qa-center/interactions");
+  redirect(
+    `/qa-center?${new URLSearchParams({
+      processed: String(result.processed),
+      succeeded: String(result.succeeded),
+      failed: String(result.failed),
+      ...lang,
+    })}`,
+  );
 }

@@ -21,6 +21,16 @@ interface InteractionForPipeline {
   status: string;
 }
 
+interface BacklogInteraction {
+  id: string;
+  status: string;
+  department_id: string | null;
+  recording_url: string | null;
+  internal_audio_url: string | null;
+  transcript?: string | null;
+  qac_analyses?: Array<{ id: string | null }>;
+}
+
 interface AnalysisJson {
   summary?: string;
   sentiment?: string;
@@ -288,7 +298,7 @@ async function getTranscript(
   );
   const savedSegments = (existing as { diarized_json?: unknown } | null)
     ?.diarized_json;
-  if (saved && Array.isArray(savedSegments) && savedSegments.length > 0) {
+  if (saved) {
     return saved;
   }
 
@@ -310,19 +320,30 @@ async function getTranscript(
     ? await fetchAudio(audioUrl)
     : await downloadQacStoredAudio(admin, audioUrl);
   if (!audio) {
+    const retryStatus = audioUrl ? "audio_ready" : "pending_audio";
     await admin
       .from("qac_interactions")
-      .update({ status: "failed_audio" })
+      .update({ status: retryStatus })
       .eq("id", interaction.id);
     return null;
   }
 
-  const result = await transcribeAudioDetailed(
-    audio.buffer,
-    "es",
-    audio.contentType,
-    interaction.direction,
-  );
+  let result;
+  try {
+    result = await transcribeAudioDetailed(
+      audio.buffer,
+      "es",
+      audio.contentType,
+      interaction.direction,
+    );
+  } catch (error) {
+    await admin
+      .from("qac_interactions")
+      .update({ status: "failed_transcription" })
+      .eq("id", interaction.id);
+    console.error("[qac-transcription] failed:", error);
+    return null;
+  }
   const transcript = result.transcript;
   if (!transcript.trim()) {
     await admin
@@ -572,7 +593,14 @@ export async function processQacInteraction(interactionId: string): Promise<{
 
   const transcript = await getTranscript(admin, interaction);
   if (!transcript) {
-    return { ok: false, status: "failed_transcription" };
+    return {
+      ok: false,
+      status:
+        interaction.recording_url || interaction.internal_audio_url
+          ? "audio_ready"
+          : "pending_audio",
+      error: "No transcript available yet",
+    };
   }
 
   const { data: deptRaw } = await admin
@@ -852,5 +880,98 @@ export async function processQacInteraction(interactionId: string): Promise<{
     ok: true,
     status: finalStatus,
     analysisId: (analysisRow as { id: string }).id,
+  };
+}
+
+function hasProcessableInput(interaction: BacklogInteraction): boolean {
+  return Boolean(
+    interaction.department_id &&
+      (interaction.transcript?.trim() ||
+        interaction.internal_audio_url ||
+        interaction.recording_url),
+  );
+}
+
+export async function processQacBacklog({
+  workspaceId,
+  limit = 5,
+}: {
+  workspaceId?: string;
+  limit?: number;
+} = {}): Promise<{
+  processed: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{ id: string; status: string; ok: boolean; error?: string }>;
+}> {
+  const admin = createAdminClient();
+  let query = admin
+    .from("qac_interactions")
+    .select(
+      `id, status, department_id, recording_url, internal_audio_url, transcript,
+       qac_analyses(id)`,
+    )
+    .in("status", [
+      "audio_ready",
+      "transcribed",
+      "transcribing",
+      "analyzing",
+      "failed_audio",
+      "failed_transcription",
+      "failed_analysis",
+    ])
+    .order("created_at", { ascending: true })
+    .limit(Math.max(limit * 3, limit));
+
+  if (workspaceId) query = query.eq("workspace_id", workspaceId);
+
+  const { data, error } = await query;
+  if (error) {
+    return {
+      processed: 0,
+      succeeded: 0,
+      failed: 1,
+      results: [
+        {
+          id: "backlog",
+          status: "query_failed",
+          ok: false,
+          error: error.message,
+        },
+      ],
+    };
+  }
+
+  const candidates = ((data as BacklogInteraction[] | null) ?? [])
+    .filter(hasProcessableInput)
+    .filter(
+      (interaction) =>
+        !interaction.qac_analyses?.length ||
+        [
+          "transcribing",
+          "analyzing",
+          "failed_audio",
+          "failed_transcription",
+          "failed_analysis",
+        ].includes(interaction.status),
+    )
+    .slice(0, limit);
+
+  const results = [];
+  for (const interaction of candidates) {
+    const result = await processQacInteraction(interaction.id);
+    results.push({
+      id: interaction.id,
+      status: result.status,
+      ok: result.ok,
+      error: result.error,
+    });
+  }
+
+  return {
+    processed: results.length,
+    succeeded: results.filter((result) => result.ok).length,
+    failed: results.filter((result) => !result.ok).length,
+    results,
   };
 }

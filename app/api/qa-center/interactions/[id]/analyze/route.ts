@@ -1,4 +1,4 @@
-import { processQacInteraction } from "@/lib/qac/pipeline";
+import { processQacBacklog, processQacInteraction } from "@/lib/qac/pipeline";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getUserWorkspaces } from "@/lib/workspace";
@@ -46,7 +46,13 @@ export async function POST(
     raw_payload: {},
   });
 
-  after(() => processQacInteraction(id));
+  after(async () => {
+    await processQacInteraction(id);
+    await processQacBacklog({
+      workspaceId: (interaction as { workspace_id: string }).workspace_id,
+      limit: 3,
+    });
+  });
 
   return NextResponse.json({ ok: true, queued: true });
 }

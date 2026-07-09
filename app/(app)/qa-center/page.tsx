@@ -1,4 +1,4 @@
-import { triggerQacAnalysisAction } from "./_actions";
+import { processQacBacklogAction, triggerQacAnalysisAction } from "./_actions";
 import { QacAudioPlayer } from "./_components/QacAudioPlayer";
 import { QACShell, MetricTile, Panel } from "./_components/QACShell";
 import { StatusBadge } from "./_components/StatusBadge";
@@ -10,6 +10,7 @@ import {
   qacOutcomeLabel,
   qacRiskLabel,
   qacSentimentLabel,
+  qacStatusLabel,
   qacT,
 } from "./_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
@@ -148,6 +149,7 @@ function selectedHref(
     "status",
     "from",
     "to",
+    "sort",
   ]) {
     const value = valueOf(params, key);
     if (value) search.set(key, value);
@@ -243,6 +245,22 @@ function scoreColor(score: number | null | undefined): string {
   return "#dc2626";
 }
 
+function criterionRatio(
+  score: number | null | undefined,
+  weight: number | null | undefined,
+): number | null {
+  const rawScore = Number(score);
+  const rawWeight = Number(weight);
+  if (
+    !Number.isFinite(rawScore) ||
+    !Number.isFinite(rawWeight) ||
+    rawWeight <= 0
+  ) {
+    return null;
+  }
+  return Math.round((rawScore / rawWeight) * 10000) / 100;
+}
+
 function waveform(seed: string): number[] {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
@@ -316,6 +334,9 @@ export default async function QACenterDashboardPage({
   const from = valueOf(params, "from");
   const to = valueOf(params, "to");
   const search = valueOf(params, "q").toLowerCase();
+  const processed = valueOf(params, "processed");
+  const succeeded = valueOf(params, "succeeded");
+  const failed = valueOf(params, "failed");
 
   if (provider) query = query.eq("provider_id", provider);
   if (department) query = query.eq("department_id", department);
@@ -368,9 +389,10 @@ export default async function QACenterDashboardPage({
       interaction.status.startsWith("failed") ||
       interaction.review_status === "in_review",
   ).length;
-  const analyzed = interactions.filter(
-    (interaction) => interaction.status === "analyzed",
+  const analyzed = interactions.filter((interaction) =>
+    Boolean(pickQacAnalysis(interaction.qac_analyses)),
   ).length;
+  const pendingAnalysis = interactions.length - analyzed;
 
   return (
     <QACShell
@@ -400,10 +422,35 @@ export default async function QACenterDashboardPage({
         <MetricTile
           label={qacT(lang, "Needs review", "Requieren revision")}
           value={needsReview}
+          hint={qacT(
+            lang,
+            `${pendingAnalysis} pending analysis`,
+            `${pendingAnalysis} analisis pendientes`,
+          )}
         />
       </div>
 
-      <Panel title={qacT(lang, "Segments", "Segmentos")}>
+      {processed && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+          {qacT(
+            lang,
+            `Processed ${processed} pending calls. ${succeeded || "0"} succeeded, ${failed || "0"} failed.`,
+            `Se procesaron ${processed} llamadas pendientes. ${succeeded || "0"} correctas, ${failed || "0"} fallidas.`,
+          )}
+        </div>
+      )}
+
+      <Panel
+        title={qacT(lang, "Segments", "Segmentos")}
+        action={
+          <form action={processQacBacklogAction}>
+            <input type="hidden" name="lang" value={lang} />
+            <button className="rounded-md border border-[#181816] bg-white px-3 py-1.5 text-xs font-semibold text-[#181816] hover:bg-[#f7f7f5]">
+              {qacT(lang, "Process pending", "Procesar pendientes")}
+            </button>
+          </form>
+        }
+      >
         <form className="grid gap-3 lg:grid-cols-[1.5fr_repeat(6,minmax(0,1fr))_auto]">
           <input type="hidden" name="lang" value={lang} />
           <label className="relative">
@@ -413,8 +460,8 @@ export default async function QACenterDashboardPage({
               type="search"
               placeholder={qacT(
                 lang,
-                "Search calls, agents, clients...",
-                "Buscar llamadas, agentes, clientes...",
+                "Search calls, phones, agents...",
+                "Buscar llamadas, telefonos, agentes...",
               )}
               defaultValue={valueOf(params, "q")}
               className="w-full rounded-md border border-[#d8d8d2] bg-white py-2 pl-9 pr-3 text-sm"
@@ -490,7 +537,7 @@ export default async function QACenterDashboardPage({
               "failed_analysis",
             ].map((item) => (
               <option key={item} value={item}>
-                {item.replace(/_/g, " ")}
+                {qacStatusLabel(lang, item)}
               </option>
             ))}
           </select>
@@ -597,7 +644,9 @@ export default async function QACenterDashboardPage({
               selected ? (
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/qa-center/interactions/${selected.id}`}
+                    href={`/qa-center/interactions/${selected.id}${
+                      lang === "es" ? "?lang=es" : ""
+                    }`}
                     className="rounded-md border border-[#d8d8d2] px-3 py-1.5 text-sm font-medium text-[#181816]"
                   >
                     {qacT(lang, "Detail", "Detalle")}
@@ -662,6 +711,7 @@ export default async function QACenterDashboardPage({
                       downloadHref={`${selectedAudioUrl}?download=1`}
                       cdrDurationSeconds={selected.duration_seconds}
                       label={customerLabel(selected)}
+                      lang={lang}
                     />
                   ) : (
                     <p className="mt-4 text-sm text-[#77756d]">
@@ -830,7 +880,11 @@ export default async function QACenterDashboardPage({
                 {selectedAnalysis.qac_criteria_results
                   .slice(0, 7)
                   .map((result, index) => {
-                    const score = Number(result.score ?? 0);
+                    const ratio = criterionRatio(
+                      result.score,
+                      result.qac_scorecard_criteria?.weight,
+                    );
+                    const score = Number(ratio ?? 0);
                     return (
                       <div
                         key={`${result.qac_scorecard_criteria?.name}-${index}`}
@@ -846,7 +900,11 @@ export default async function QACenterDashboardPage({
                           <span className="font-medium">
                             {result.result === "n/a"
                               ? "N/A"
-                              : percent(result.score)}
+                              : `${percent(ratio)} (${Number(
+                                  result.score ?? 0,
+                                ).toFixed(1)}/${Number(
+                                  result.qac_scorecard_criteria?.weight ?? 0,
+                                )})`}
                           </span>
                         </div>
                         <div className="h-2 rounded-full bg-[#ecece6]">

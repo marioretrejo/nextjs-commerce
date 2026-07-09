@@ -8,6 +8,7 @@ interface DepartmentRow {
   name: string;
   slug: string;
   qa_prompt: string | null;
+  auto_analyze?: boolean | null;
 }
 
 interface AgentRow {
@@ -50,7 +51,7 @@ export async function findQacDepartment(
     const slug = slugify(departmentName);
     const { data: bySlug } = await admin
       .from("qac_departments")
-      .select("id, name, slug, qa_prompt")
+      .select("id, name, slug, qa_prompt, auto_analyze")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true)
       .eq("slug", slug)
@@ -59,7 +60,7 @@ export async function findQacDepartment(
 
     const { data: byName } = await admin
       .from("qac_departments")
-      .select("id, name, slug, qa_prompt")
+      .select("id, name, slug, qa_prompt, auto_analyze")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true)
       .ilike("name", departmentName)
@@ -70,7 +71,7 @@ export async function findQacDepartment(
   if (cdr.agent_extension) {
     const { data: ext } = await admin
       .from("qac_department_extensions")
-      .select("qac_departments(id, name, slug, qa_prompt)")
+      .select("qac_departments(id, name, slug, qa_prompt, auto_analyze)")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true)
       .or(
@@ -87,7 +88,7 @@ export async function findQacDepartment(
   if (agent?.department_id) {
     const { data } = await admin
       .from("qac_departments")
-      .select("id, name, slug, qa_prompt")
+      .select("id, name, slug, qa_prompt, auto_analyze")
       .eq("workspace_id", workspaceId)
       .eq("id", agent.department_id)
       .eq("is_active", true)

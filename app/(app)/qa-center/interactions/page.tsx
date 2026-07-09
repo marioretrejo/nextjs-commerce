@@ -2,7 +2,12 @@ import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { pickQacAnalysis } from "../_components/analysis";
 import { formatDate, formatDuration, percent } from "../_components/format";
-import { qacAnalysisText, qacLanguageOf, qacT } from "../_components/i18n";
+import {
+  qacAnalysisText,
+  qacLanguageOf,
+  qacStatusLabel,
+  qacT,
+} from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
@@ -95,13 +100,16 @@ export default async function QACInteractionsPage({
     )
     .eq("workspace_id", access.workspaceId)
     .order("created_at", { ascending: false })
-    .limit(150);
+    .limit(300);
 
   const provider = valueOf(params, "provider");
   const department = valueOf(params, "department");
   const agent = valueOf(params, "agent");
   const status = valueOf(params, "status");
   const review = valueOf(params, "review_status");
+  const channel = valueOf(params, "channel");
+  const search = valueOf(params, "q").toLowerCase();
+  const sort = valueOf(params, "sort") || "newest";
   const from = valueOf(params, "from");
   const to = valueOf(params, "to");
   const minScoreValue = valueOf(params, "min_score");
@@ -113,13 +121,31 @@ export default async function QACInteractionsPage({
   if (provider) query = query.eq("provider_id", provider);
   if (department) query = query.eq("department_id", department);
   if (agent) query = query.eq("agent_id", agent);
+  if (channel) query = query.eq("channel", channel);
   if (status) query = query.eq("status", status);
   if (review) query = query.eq("review_status", review);
-  if (from) query = query.gte("call_started_at", from);
-  if (to) query = query.lte("call_started_at", to);
+  if (from) query = query.gte("call_started_at", `${from}T00:00:00.000Z`);
+  if (to) query = query.lte("call_started_at", `${to}T23:59:59.999Z`);
 
   const { data } = await query;
   let interactions = (data as InteractionRow[] | null) ?? [];
+
+  if (search) {
+    interactions = interactions.filter((interaction) =>
+      [
+        interaction.channel,
+        interaction.external_call_id,
+        interaction.caller_id,
+        interaction.prospect_id,
+        interaction.qac_agents?.name,
+        interaction.qac_agents?.extension,
+        interaction.qac_departments?.name,
+        interaction.qac_voip_providers?.name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(search)),
+    );
+  }
 
   if (minScore !== null && Number.isFinite(minScore)) {
     interactions = interactions.filter(
@@ -147,6 +173,21 @@ export default async function QACInteractionsPage({
     );
   }
 
+  interactions = [...interactions].sort((a, b) => {
+    const scoreA = Number(pickQacAnalysis(a.qac_analyses)?.overall_score ?? -1);
+    const scoreB = Number(pickQacAnalysis(b.qac_analyses)?.overall_score ?? -1);
+    const dateA = new Date(a.call_started_at ?? a.created_at).getTime();
+    const dateB = new Date(b.call_started_at ?? b.created_at).getTime();
+    const durationA = Number(a.duration_seconds ?? 0);
+    const durationB = Number(b.duration_seconds ?? 0);
+    if (sort === "oldest") return dateA - dateB;
+    if (sort === "score_desc") return scoreB - scoreA;
+    if (sort === "score_asc") return scoreA - scoreB;
+    if (sort === "duration_desc") return durationB - durationA;
+    if (sort === "duration_asc") return durationA - durationB;
+    return dateB - dateA;
+  });
+
   return (
     <QACShell
       active="interactions"
@@ -162,6 +203,49 @@ export default async function QACInteractionsPage({
       <Panel title={qacT(lang, "Filters", "Filtros")}>
         <form className="grid gap-3 md:grid-cols-4 lg:grid-cols-8">
           <input type="hidden" name="lang" value={lang} />
+          <input
+            name="q"
+            type="search"
+            placeholder={qacT(
+              lang,
+              "Search phone, agent, ID",
+              "Buscar telefono, agente, ID",
+            )}
+            defaultValue={valueOf(params, "q")}
+            className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm md:col-span-2"
+          />
+          <select
+            name="channel"
+            defaultValue={channel}
+            className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
+          >
+            <option value="">{qacT(lang, "Channel", "Canal")}</option>
+            <option value="call">{qacT(lang, "Call", "Llamada")}</option>
+          </select>
+          <select
+            name="sort"
+            defaultValue={sort}
+            className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
+          >
+            <option value="newest">
+              {qacT(lang, "Newest first", "Mas recientes")}
+            </option>
+            <option value="oldest">
+              {qacT(lang, "Oldest first", "Mas antiguas")}
+            </option>
+            <option value="score_desc">
+              {qacT(lang, "Highest score", "Mayor score")}
+            </option>
+            <option value="score_asc">
+              {qacT(lang, "Lowest score", "Menor score")}
+            </option>
+            <option value="duration_desc">
+              {qacT(lang, "Longest duration", "Mayor duracion")}
+            </option>
+            <option value="duration_asc">
+              {qacT(lang, "Shortest duration", "Menor duracion")}
+            </option>
+          </select>
           <select
             name="provider"
             defaultValue={provider}
@@ -238,7 +322,7 @@ export default async function QACInteractionsPage({
               "manual_review_required",
             ].map((item) => (
               <option key={item} value={item}>
-                {item.replace(/_/g, " ")}
+                {qacStatusLabel(lang, item)}
               </option>
             ))}
           </select>
@@ -258,7 +342,7 @@ export default async function QACInteractionsPage({
               "disputed",
             ].map((item) => (
               <option key={item} value={item}>
-                {item.replace(/_/g, " ")}
+                {qacStatusLabel(lang, item)}
               </option>
             ))}
           </select>
@@ -308,9 +392,9 @@ export default async function QACInteractionsPage({
         )}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-[#77756d]">
-              <tr className="border-b border-black/15">
+          <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-left text-sm">
+            <thead className="bg-[#fbfbfa] text-xs uppercase tracking-wide text-[#77756d]">
+              <tr className="border-b border-[#d8d8d2]">
                 <th className="py-2 pr-3 font-medium">
                   {qacT(lang, "Channel", "Canal")}
                 </th>
@@ -347,14 +431,17 @@ export default async function QACInteractionsPage({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-black/15">
+            <tbody className="divide-y divide-[#e2e2dc]">
               {interactions.map((interaction) => {
                 const analysis = pickQacAnalysis(interaction.qac_analyses);
                 const failed = (analysis?.qac_criteria_results ?? []).filter(
                   (result) => result.result === "fail",
                 );
                 return (
-                  <tr key={interaction.id} className="align-top">
+                  <tr
+                    key={interaction.id}
+                    className="align-top transition-colors hover:bg-[#fbfbfa]"
+                  >
                     <td className="py-3 pr-3 capitalize">
                       {interaction.channel ?? "call"}
                     </td>

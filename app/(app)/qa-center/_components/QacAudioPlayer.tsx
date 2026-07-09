@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatDuration } from "./format";
+import { qacT, type QacLang } from "./i18n";
 
 function closeEnough(a: number | null, b: number | null): boolean {
   if (a === null || b === null) return true;
@@ -14,11 +15,13 @@ export function QacAudioPlayer({
   downloadHref,
   cdrDurationSeconds,
   label,
+  lang = "en",
 }: {
   src: string;
   downloadHref: string;
   cdrDurationSeconds: number | null;
   label?: string | null;
+  lang?: QacLang;
 }) {
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const mismatch = !closeEnough(audioDuration, cdrDurationSeconds);
@@ -49,7 +52,7 @@ export function QacAudioPlayer({
           className="inline-flex items-center gap-2 rounded-md border border-[#d8d8d2] px-3 py-2 text-sm font-medium text-[#181816]"
         >
           <Download className="h-4 w-4" />
-          Download recording
+          {qacT(lang, "Download recording", "Descargar grabacion")}
         </a>
         <span className="text-xs font-medium text-[#77756d]">
           {formatDuration(displayDuration)}

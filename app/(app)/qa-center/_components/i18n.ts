@@ -105,7 +105,7 @@ const STATUS_TRANSLATIONS: Record<string, string> = {
   disputed: "en disputa",
   fail: "fallo",
   failed_analysis: "fallo de analisis",
-  failed_audio: "fallo de audio",
+  failed_audio: "audio pendiente de reintento",
   failed_transcription: "fallo de transcripcion",
   high: "alto",
   in_review: "en revision",

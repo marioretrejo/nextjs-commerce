@@ -78,8 +78,8 @@ export function QACShell({
   );
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5]">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f6f6f2]">
+      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-black/15 pb-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -130,7 +130,7 @@ export function MetricTile({
   hint?: string;
 }) {
   return (
-    <div className="rounded-lg border border-black/15 bg-white p-4">
+    <div className="rounded-lg border border-[#d8d8d2] bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-[#77756d]">
         {label}
       </p>
@@ -150,8 +150,8 @@ export function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-black/15 bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-black/15 px-4 py-3">
+    <section className="rounded-lg border border-[#d8d8d2] bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-[#d8d8d2] bg-[#fbfbfa] px-4 py-3">
         <h2 className="text-sm font-semibold text-[#181816]">{title}</h2>
         {action}
       </div>

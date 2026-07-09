@@ -4,7 +4,7 @@ import {
   findQacDepartment,
 } from "@/lib/qac/department-matching";
 import { uploadQacRecording } from "@/lib/qac/audio-storage";
-import { processQacInteraction } from "@/lib/qac/pipeline";
+import { processQacBacklog, processQacInteraction } from "@/lib/qac/pipeline";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
@@ -217,9 +217,21 @@ export async function POST(
     const hasAudio = Boolean(audioPath || existingInteraction.recording_url);
     const shouldAnalyze =
       (config.auto_analyze ?? true) &&
+      (department?.auto_analyze ?? true) &&
       Boolean(departmentId) &&
       hasAudio &&
       !["analyzing", "analyzed"].includes(existingInteraction.status);
+    const nextStatus =
+      hasAudio &&
+      [
+        "failed_audio",
+        "failed_transcription",
+        "failed_analysis",
+        "transcribing",
+        "analyzing",
+      ].includes(existingInteraction.status)
+        ? "audio_ready"
+        : existingInteraction.status;
 
     await admin
       .from("qac_interactions")
@@ -229,6 +241,7 @@ export async function POST(
         recording_url:
           existingInteraction.recording_url ?? normalized.recording_url,
         internal_audio_url: audioPath,
+        status: nextStatus,
       })
       .eq("id", existingInteraction.id);
 
@@ -242,6 +255,10 @@ export async function POST(
     if (shouldAnalyze) {
       after(async () => {
         await processQacInteraction(existingInteraction.id);
+        await processQacBacklog({
+          workspaceId: provider.workspace_id,
+          limit: 3,
+        });
       });
     }
     return NextResponse.json({
@@ -434,12 +451,17 @@ export async function POST(
 
   const shouldAnalyze =
     (config.auto_analyze ?? true) &&
+    (department?.auto_analyze ?? true) &&
     status !== "manual_review_required" &&
     (hasTranscript || hasAudio);
 
   if (shouldAnalyze) {
     after(async () => {
       const result = await processQacInteraction(interactionId);
+      await processQacBacklog({
+        workspaceId: provider.workspace_id,
+        limit: 3,
+      });
       if (!result.ok) {
         await admin.from("qac_ingestion_logs").insert({
           workspace_id: provider.workspace_id,

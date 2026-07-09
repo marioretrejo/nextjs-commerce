@@ -10,7 +10,7 @@ const STATUS_STYLES: Record<string, string> = {
   analyzing: "border-indigo-200 bg-indigo-50 text-indigo-800",
   analyzed: "border-emerald-200 bg-emerald-50 text-emerald-800",
   not_evaluable: "border-zinc-200 bg-zinc-50 text-zinc-700",
-  failed_audio: "border-red-200 bg-red-50 text-red-700",
+  failed_audio: "border-amber-200 bg-amber-50 text-amber-800",
   failed_transcription: "border-red-200 bg-red-50 text-red-700",
   failed_analysis: "border-red-200 bg-red-50 text-red-700",
   manual_review_required: "border-orange-200 bg-orange-50 text-orange-800",
