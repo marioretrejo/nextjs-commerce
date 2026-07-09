@@ -12,12 +12,17 @@ export interface QacAccess {
   isSuperadmin: boolean;
 }
 
-export async function requireQacAccess(adminOnly = false): Promise<QacAccess> {
+async function resolveQacAccess(): Promise<{
+  access: QacAccess | null;
+  redirectTo: string;
+}> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login?callbackUrl=/qa-center");
+  if (!user) {
+    return { access: null, redirectTo: "/login?callbackUrl=/qa-center" };
+  }
 
   const { data: profile } = await supabase
     .from("users")
@@ -50,8 +55,10 @@ export async function requireQacAccess(adminOnly = false): Promise<QacAccess> {
     workspace = (await getUserWorkspaces())[0] ?? null;
   }
 
-  if (!workspace) redirect("/dashboard");
-  if (!isSuperadmin && !workspace.has_compliance_qa) redirect("/dashboard");
+  if (!workspace) return { access: null, redirectTo: "/dashboard" };
+  if (!isSuperadmin && !workspace.has_compliance_qa) {
+    return { access: null, redirectTo: "/dashboard" };
+  }
 
   const { data: member } = await supabase
     .from("workspace_members")
@@ -69,13 +76,25 @@ export async function requireQacAccess(adminOnly = false): Promise<QacAccess> {
     role === "admin" ||
     role === "supervisor";
 
-  if (adminOnly && !isAdmin) redirect("/qa-center");
-
   return {
-    userId: user.id,
-    workspaceId: workspace.id,
-    workspaceName: workspace.name ?? "Workspace",
-    isAdmin,
-    isSuperadmin,
+    redirectTo: "/qa-center",
+    access: {
+      userId: user.id,
+      workspaceId: workspace.id,
+      workspaceName: workspace.name ?? "Workspace",
+      isAdmin,
+      isSuperadmin,
+    },
   };
+}
+
+export async function getQacAccess(): Promise<QacAccess | null> {
+  return (await resolveQacAccess()).access;
+}
+
+export async function requireQacAccess(adminOnly = false): Promise<QacAccess> {
+  const { access, redirectTo } = await resolveQacAccess();
+  if (!access) redirect(redirectTo);
+  if (adminOnly && !access.isAdmin) redirect("/qa-center");
+  return access;
 }

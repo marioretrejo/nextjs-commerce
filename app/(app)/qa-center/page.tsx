@@ -1,5 +1,6 @@
-import { processQacBacklogAction, triggerQacAnalysisAction } from "./_actions";
+import { triggerQacAnalysisAction } from "./_actions";
 import { QacAudioPlayer } from "./_components/QacAudioPlayer";
+import { QacProcessPendingButton } from "./_components/QacProcessPendingButton";
 import { QACShell, MetricTile, Panel } from "./_components/QACShell";
 import { StatusBadge } from "./_components/StatusBadge";
 import { pickQacAnalysis } from "./_components/analysis";
@@ -448,16 +449,7 @@ export default async function QACenterDashboardPage({
               )}
             </p>
           </div>
-          <form action={processQacBacklogAction} className="shrink-0">
-            <input type="hidden" name="lang" value={lang} />
-            <button className="w-full rounded-md bg-[#181816] px-4 py-2 text-sm font-semibold text-white hover:bg-black sm:w-auto">
-              {qacT(
-                lang,
-                "Process pending calls",
-                "Procesar llamadas pendientes",
-              )}
-            </button>
-          </form>
+          <QacProcessPendingButton lang={lang} />
         </div>
       </section>
 
@@ -473,14 +465,7 @@ export default async function QACenterDashboardPage({
 
       <Panel
         title={qacT(lang, "Segments", "Segmentos")}
-        action={
-          <form action={processQacBacklogAction}>
-            <input type="hidden" name="lang" value={lang} />
-            <button className="rounded-md border border-[#181816] bg-white px-3 py-1.5 text-xs font-semibold text-[#181816] hover:bg-[#f7f7f5]">
-              {qacT(lang, "Process pending", "Procesar pendientes")}
-            </button>
-          </form>
-        }
+        action={<QacProcessPendingButton lang={lang} compact />}
       >
         <form className="grid gap-3 lg:grid-cols-[1.5fr_repeat(6,minmax(0,1fr))_auto]">
           <input type="hidden" name="lang" value={lang} />
