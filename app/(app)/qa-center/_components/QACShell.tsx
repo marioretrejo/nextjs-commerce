@@ -1,28 +1,57 @@
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { qacHref, type QacLang } from "./i18n";
 import { QacLanguageToggle } from "./QacLanguageToggle";
 
 const NAV = [
-  { href: "/qa-center", label: "Dashboard", key: "dashboard" },
+  {
+    href: "/qa-center",
+    label: "Dashboard",
+    labelEs: "Dashboard",
+    key: "dashboard",
+  },
   {
     href: "/qa-center/interactions",
     label: "Interactions",
+    labelEs: "Interacciones",
     key: "interactions",
   },
-  { href: "/qa-center/agents", label: "Agents", key: "agents" },
-  { href: "/qa-center/departments", label: "Departments", key: "departments" },
-  { href: "/qa-center/scorecards", label: "Scorecards", key: "scorecards" },
-  { href: "/qa-center/trackers", label: "Trackers", key: "trackers" },
+  {
+    href: "/qa-center/agents",
+    label: "Agents",
+    labelEs: "Agentes",
+    key: "agents",
+  },
+  {
+    href: "/qa-center/departments",
+    label: "Departments",
+    labelEs: "Departamentos",
+    key: "departments",
+  },
+  {
+    href: "/qa-center/scorecards",
+    label: "Scorecards",
+    labelEs: "Scorecards",
+    key: "scorecards",
+  },
+  {
+    href: "/qa-center/trackers",
+    label: "Trackers",
+    labelEs: "Trackers",
+    key: "trackers",
+  },
   {
     href: "/qa-center/providers",
     label: "Providers",
+    labelEs: "Proveedores",
     key: "providers",
     superadminOnly: true,
   },
   {
     href: "/qa-center/settings",
     label: "Settings",
+    labelEs: "Configuracion",
     key: "settings",
     superadminOnly: true,
   },
@@ -34,12 +63,14 @@ export function QACShell({
   description,
   children,
   isSuperadmin = false,
+  lang = "en",
 }: {
   active: (typeof NAV)[number]["key"];
   title: string;
   description?: string;
   children: ReactNode;
   isSuperadmin?: boolean;
+  lang?: QacLang;
 }) {
   const navItems = NAV.filter(
     (item) =>
@@ -70,7 +101,7 @@ export function QACShell({
             {navItems.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                href={qacHref(item.href, lang)}
                 className={cn(
                   "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   active === item.key
@@ -78,7 +109,7 @@ export function QACShell({
                     : "text-[#5f5d56] hover:bg-white hover:text-[#181816]",
                 )}
               >
-                {item.label}
+                {lang === "es" ? item.labelEs : item.label}
               </Link>
             ))}
           </nav>

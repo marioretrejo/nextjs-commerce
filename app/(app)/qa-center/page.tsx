@@ -4,6 +4,7 @@ import { QACShell, MetricTile, Panel } from "./_components/QACShell";
 import { StatusBadge } from "./_components/StatusBadge";
 import { pickQacAnalysis } from "./_components/analysis";
 import { formatDate, formatDuration, percent } from "./_components/format";
+import { qacLanguageOf, qacT } from "./_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -132,6 +133,7 @@ function selectedHref(
 ): string {
   const search = new URLSearchParams();
   for (const key of [
+    "lang",
     "q",
     "provider",
     "department",
@@ -251,6 +253,7 @@ export default async function QACenterDashboardPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const lang = qacLanguageOf(params);
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -366,24 +369,46 @@ export default async function QACenterDashboardPage({
     <QACShell
       active="dashboard"
       title="Dashboard"
-      description="Call monitoring with recordings, downloads, transcript and QA analysis."
+      description={qacT(
+        lang,
+        "Call monitoring with recordings, downloads, transcript and QA analysis.",
+        "Monitoreo de llamadas con grabaciones, descargas, transcripcion y analisis QA.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricTile label="Calls" value={interactions.length} />
-        <MetricTile label="Analyzed" value={analyzed} />
-        <MetricTile label="Average QA score" value={percent(averageScore)} />
-        <MetricTile label="Needs review" value={needsReview} />
+        <MetricTile
+          label={qacT(lang, "Calls", "Llamadas")}
+          value={interactions.length}
+        />
+        <MetricTile
+          label={qacT(lang, "Analyzed", "Analizadas")}
+          value={analyzed}
+        />
+        <MetricTile
+          label={qacT(lang, "Average QA score", "Promedio QA")}
+          value={percent(averageScore)}
+        />
+        <MetricTile
+          label={qacT(lang, "Needs review", "Requieren revision")}
+          value={needsReview}
+        />
       </div>
 
-      <Panel title="Segments">
+      <Panel title={qacT(lang, "Segments", "Segmentos")}>
         <form className="grid gap-3 lg:grid-cols-[1.5fr_repeat(6,minmax(0,1fr))_auto]">
+          <input type="hidden" name="lang" value={lang} />
           <label className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#77756d]" />
             <input
               name="q"
               type="search"
-              placeholder="Search calls, agents, clients..."
+              placeholder={qacT(
+                lang,
+                "Search calls, agents, clients...",
+                "Buscar llamadas, agentes, clientes...",
+              )}
               defaultValue={valueOf(params, "q")}
               className="w-full rounded-md border border-[#d8d8d2] bg-white py-2 pl-9 pr-3 text-sm"
             />
@@ -393,7 +418,7 @@ export default async function QACenterDashboardPage({
             defaultValue={provider}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Provider</option>
+            <option value="">{qacT(lang, "Provider", "Proveedor")}</option>
             {(
               (providersResult.data as Array<{
                 id: string;
@@ -410,7 +435,7 @@ export default async function QACenterDashboardPage({
             defaultValue={department}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Department</option>
+            <option value="">{qacT(lang, "Department", "Departamento")}</option>
             {(
               (departmentsResult.data as Array<{
                 id: string;
@@ -427,7 +452,7 @@ export default async function QACenterDashboardPage({
             defaultValue={agent}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Agent</option>
+            <option value="">{qacT(lang, "Agent", "Agente")}</option>
             {(
               (agentsResult.data as Array<{
                 id: string;
@@ -446,7 +471,7 @@ export default async function QACenterDashboardPage({
             defaultValue={status}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Status</option>
+            <option value="">{qacT(lang, "Status", "Estado")}</option>
             {[
               "audio_ready",
               "transcribing",
@@ -478,13 +503,19 @@ export default async function QACenterDashboardPage({
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           />
           <button className="rounded-md bg-[#181816] px-4 py-2 text-sm font-medium text-white">
-            Apply
+            {qacT(lang, "Apply", "Aplicar")}
           </button>
         </form>
       </Panel>
 
       <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)_360px]">
-        <Panel title={`Recent calls (${interactions.length})`}>
+        <Panel
+          title={qacT(
+            lang,
+            `Recent calls (${interactions.length})`,
+            `Llamadas recientes (${interactions.length})`,
+          )}
+        >
           <div className="max-h-[720px] space-y-2 overflow-y-auto pr-1">
             {interactions.map((interaction) => {
               const analysis = pickQacAnalysis(interaction.qac_analyses);
@@ -536,7 +567,11 @@ export default async function QACenterDashboardPage({
             })}
             {interactions.length === 0 && (
               <p className="py-10 text-center text-sm text-[#77756d]">
-                No calls match these filters.
+                {qacT(
+                  lang,
+                  "No calls match these filters.",
+                  "No hay llamadas con estos filtros.",
+                )}
               </p>
             )}
           </div>
@@ -548,8 +583,8 @@ export default async function QACenterDashboardPage({
               selected
                 ? (selected.qac_agents?.name ??
                   customerLabel(selected) ??
-                  "Call detail")
-                : "Call detail"
+                  qacT(lang, "Call detail", "Detalle de llamada"))
+                : qacT(lang, "Call detail", "Detalle de llamada")
             }
             action={
               selected ? (
@@ -558,7 +593,7 @@ export default async function QACenterDashboardPage({
                     href={`/qa-center/interactions/${selected.id}`}
                     className="rounded-md border border-[#d8d8d2] px-3 py-1.5 text-sm font-medium text-[#181816]"
                   >
-                    Detail
+                    {qacT(lang, "Detail", "Detalle")}
                   </Link>
                   <form action={triggerQacAnalysisAction}>
                     <input
@@ -567,7 +602,7 @@ export default async function QACenterDashboardPage({
                       value={selected.id}
                     />
                     <button className="rounded-md bg-[#181816] px-3 py-1.5 text-sm font-medium text-white">
-                      Analyze
+                      {qacT(lang, "Analyze", "Analizar")}
                     </button>
                   </form>
                 </div>
@@ -587,7 +622,10 @@ export default async function QACenterDashboardPage({
                   </div>
                   <div className="flex items-center gap-2 rounded-md bg-[#f7f7f5] p-3 text-sm">
                     <ShieldCheck className="h-4 w-4 text-[#77756d]" />
-                    <span>{selected.disposition ?? "No disposition"}</span>
+                    <span>
+                      {selected.disposition ??
+                        qacT(lang, "No disposition", "Sin disposicion")}
+                    </span>
                   </div>
                 </div>
 
@@ -620,7 +658,11 @@ export default async function QACenterDashboardPage({
                     />
                   ) : (
                     <p className="mt-4 text-sm text-[#77756d]">
-                      No recording URL available.
+                      {qacT(
+                        lang,
+                        "No recording URL available.",
+                        "No hay URL de grabacion disponible.",
+                      )}
                     </p>
                   )}
                 </div>
@@ -628,7 +670,7 @@ export default async function QACenterDashboardPage({
                 <section className="border-t border-black/15 pt-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="text-sm font-semibold text-[#181816]">
-                      Transcript
+                      {qacT(lang, "Transcript", "Transcripcion")}
                     </h2>
                     <div className="flex items-center gap-2">
                       {selectedSegments.length > 0 && (
@@ -667,14 +709,22 @@ export default async function QACenterDashboardPage({
                     </div>
                   ) : (
                     <p className="text-sm text-[#77756d]">
-                      No transcript available yet.
+                      {qacT(
+                        lang,
+                        "No transcript available yet.",
+                        "Todavia no hay transcripcion disponible.",
+                      )}
                     </p>
                   )}
                 </section>
               </div>
             ) : (
               <p className="py-10 text-center text-sm text-[#77756d]">
-                Select a call to inspect.
+                {qacT(
+                  lang,
+                  "Select a call to inspect.",
+                  "Selecciona una llamada para revisar.",
+                )}
               </p>
             )}
           </Panel>
@@ -682,7 +732,7 @@ export default async function QACenterDashboardPage({
 
         <div className="space-y-4">
           <Panel
-            title="QA score"
+            title={qacT(lang, "QA score", "Puntaje QA")}
             action={
               selectedAnalysis?.risk_level ? (
                 <span
@@ -722,7 +772,7 @@ export default async function QACenterDashboardPage({
                 <div className="grid gap-3 text-sm">
                   <div className="grid gap-1 rounded-md bg-[#fafafa] p-2">
                     <span className="text-xs font-medium uppercase tracking-wide text-[#77756d]">
-                      Sentiment
+                      {qacT(lang, "Sentiment", "Sentimiento")}
                     </span>
                     <span className="break-words font-medium text-[#181816]">
                       {sentimentLabel(selectedAnalysis?.sentiment)}
@@ -730,7 +780,7 @@ export default async function QACenterDashboardPage({
                   </div>
                   <div className="grid gap-1 rounded-md bg-[#fafafa] p-2">
                     <span className="text-xs font-medium uppercase tracking-wide text-[#77756d]">
-                      Outcome
+                      {qacT(lang, "Outcome", "Resultado")}
                     </span>
                     <span className="break-words font-medium leading-5 text-[#181816] [overflow-wrap:anywhere]">
                       {selectedAnalysis?.call_disposition ?? "-"}
@@ -746,17 +796,25 @@ export default async function QACenterDashboardPage({
                   <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                     <div className="flex items-center gap-2 font-medium">
                       <AlertTriangle className="h-4 w-4" />
-                      Pending analysis
+                      {qacT(lang, "Pending analysis", "Analisis pendiente")}
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-[#77756d]">No selected call.</p>
+              <p className="text-sm text-[#77756d]">
+                {qacT(
+                  lang,
+                  "No selected call.",
+                  "No hay llamada seleccionada.",
+                )}
+              </p>
             )}
           </Panel>
 
-          <Panel title="Category breakdown">
+          <Panel
+            title={qacT(lang, "Category breakdown", "Desglose por categoria")}
+          >
             {selectedAnalysis?.qac_criteria_results?.length ? (
               <div className="space-y-3">
                 {selectedAnalysis.qac_criteria_results
@@ -792,18 +850,22 @@ export default async function QACenterDashboardPage({
               </div>
             ) : (
               <p className="text-sm text-[#77756d]">
-                No scorecard criteria results yet.
+                {qacT(
+                  lang,
+                  "No scorecard criteria results yet.",
+                  "Todavia no hay resultados de criterios del scorecard.",
+                )}
               </p>
             )}
           </Panel>
 
-          <Panel title="Coaching notes">
+          <Panel title={qacT(lang, "Coaching notes", "Notas de coaching")}>
             {selectedAnalysis ? (
               <div className="space-y-4 text-sm">
                 <div>
                   <div className="mb-2 flex items-center gap-2 font-semibold text-emerald-700">
                     <Sparkles className="h-4 w-4" />
-                    Strengths
+                    {qacT(lang, "Strengths", "Fortalezas")}
                   </div>
                   <ul className="list-disc space-y-1 pl-4 text-[#2f2e2a]">
                     {asStringArray(selectedAnalysis.strengths_json)
@@ -816,7 +878,7 @@ export default async function QACenterDashboardPage({
                 <div>
                   <div className="mb-2 flex items-center gap-2 font-semibold text-amber-700">
                     <AlertTriangle className="h-4 w-4" />
-                    Opportunities
+                    {qacT(lang, "Opportunities", "Oportunidades")}
                   </div>
                   <ul className="list-disc space-y-1 pl-4 text-[#2f2e2a]">
                     {asStringArray(selectedAnalysis.opportunities_json)
@@ -835,7 +897,7 @@ export default async function QACenterDashboardPage({
                   0 && (
                   <div>
                     <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-                      Trackers detected
+                      {qacT(lang, "Trackers detected", "Trackers detectados")}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {detectedTrackerLabels(
@@ -853,7 +915,13 @@ export default async function QACenterDashboardPage({
                 )}
               </div>
             ) : (
-              <p className="text-sm text-[#77756d]">No coaching notes yet.</p>
+              <p className="text-sm text-[#77756d]">
+                {qacT(
+                  lang,
+                  "No coaching notes yet.",
+                  "Todavia no hay notas de coaching.",
+                )}
+              </p>
             )}
           </Panel>
         </div>

@@ -151,6 +151,7 @@ export default async function QACScorecardsPage({
         "Criterios QA por departamento con scoring que respeta N/A.",
       )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       {(deleted || installed || updated || errorMessage) && (
         <div
@@ -210,7 +211,7 @@ export default async function QACScorecardsPage({
                         <form action={deleteScorecardAction}>
                           <input type="hidden" name="id" value={scorecard.id} />
                           <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
-                            Delete
+                            {ui(lang, "Delete", "Eliminar")}
                           </button>
                         </form>
                       )}
@@ -219,7 +220,7 @@ export default async function QACScorecardsPage({
                   {access.isAdmin && (
                     <details className="border-b border-black/15 bg-[#fbfbfa] px-4 py-3">
                       <summary className="inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
-                        Edit
+                        {ui(lang, "Edit", "Editar")}
                       </summary>
                       <form
                         action={updateScorecardAction}
@@ -263,7 +264,7 @@ export default async function QACScorecardsPage({
                           Active scorecard for department
                         </label>
                         <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
-                          Save changes
+                          {ui(lang, "Save changes", "Guardar cambios")}
                         </button>
                       </form>
                     </details>
@@ -292,7 +293,7 @@ export default async function QACScorecardsPage({
                                 value={criterion.id}
                               />
                               <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
-                                Delete
+                                {ui(lang, "Delete", "Eliminar")}
                               </button>
                             </form>
                           )}
@@ -339,7 +340,7 @@ export default async function QACScorecardsPage({
                         {access.isAdmin && (
                           <details className="mt-4 rounded-md border border-black/15 bg-[#fbfbfa] p-3">
                             <summary className="inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
-                              Edit
+                              {ui(lang, "Edit", "Editar")}
                             </summary>
                             <form
                               action={updateCriterionAction}
@@ -354,7 +355,7 @@ export default async function QACScorecardsPage({
                               <input
                                 name="category"
                                 defaultValue={criterion.category}
-                                placeholder="Category"
+                                placeholder={ui(lang, "Category", "Categoria")}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
                               <input
@@ -363,20 +364,28 @@ export default async function QACScorecardsPage({
                                 min="0"
                                 step="0.1"
                                 defaultValue={criterion.weight}
-                                placeholder="Weight"
+                                placeholder={ui(lang, "Weight", "Peso")}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
                               <input
                                 name="name"
                                 required
                                 defaultValue={criterion.name}
-                                placeholder="Criterion name"
+                                placeholder={ui(
+                                  lang,
+                                  "Criterion name",
+                                  "Nombre del criterio",
+                                )}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                               />
                               <textarea
                                 name="description"
                                 defaultValue={criterion.description ?? ""}
-                                placeholder="Description"
+                                placeholder={ui(
+                                  lang,
+                                  "Description",
+                                  "Descripcion",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                               />
@@ -385,14 +394,22 @@ export default async function QACScorecardsPage({
                                 defaultValue={
                                   criterion.applicability_rule ?? ""
                                 }
-                                placeholder="Applicability rule"
+                                placeholder={ui(
+                                  lang,
+                                  "Applicability rule",
+                                  "Regla de aplicabilidad",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                               />
                               <textarea
                                 name="pass_definition"
                                 defaultValue={criterion.pass_definition ?? ""}
-                                placeholder="Pass definition"
+                                placeholder={ui(
+                                  lang,
+                                  "Pass definition",
+                                  "Definicion aprobado",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
@@ -401,21 +418,33 @@ export default async function QACScorecardsPage({
                                 defaultValue={
                                   criterion.partial_definition ?? ""
                                 }
-                                placeholder="Partial definition"
+                                placeholder={ui(
+                                  lang,
+                                  "Partial definition",
+                                  "Definicion parcial",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
                               <textarea
                                 name="fail_definition"
                                 defaultValue={criterion.fail_definition ?? ""}
-                                placeholder="Fail definition"
+                                placeholder={ui(
+                                  lang,
+                                  "Fail definition",
+                                  "Definicion fallo",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
                               <textarea
                                 name="na_definition"
                                 defaultValue={criterion.na_definition ?? ""}
-                                placeholder="N/A definition"
+                                placeholder={ui(
+                                  lang,
+                                  "N/A definition",
+                                  "Definicion N/A",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                               />
@@ -424,7 +453,11 @@ export default async function QACScorecardsPage({
                                 defaultValue={examplesText(
                                   criterion.examples_json,
                                 )}
-                                placeholder="Examples, one per line"
+                                placeholder={ui(
+                                  lang,
+                                  "Examples, one per line",
+                                  "Ejemplos, uno por linea",
+                                )}
                                 rows={2}
                                 className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                               />
@@ -440,10 +473,10 @@ export default async function QACScorecardsPage({
                                   type="checkbox"
                                   defaultChecked={criterion.is_critical}
                                 />
-                                Critical
+                                {ui(lang, "Critical", "Critico")}
                               </label>
                               <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
-                                Save changes
+                                {ui(lang, "Save changes", "Guardar cambios")}
                               </button>
                             </form>
                           </details>
@@ -452,7 +485,11 @@ export default async function QACScorecardsPage({
                     ))}
                     {criteria.length === 0 && (
                       <p className="p-4 text-sm text-[#77756d]">
-                        No criteria added yet.
+                        {ui(
+                          lang,
+                          "No criteria added yet.",
+                          "Todavia no hay criterios agregados.",
+                        )}
                       </p>
                     )}
                   </div>
@@ -461,7 +498,11 @@ export default async function QACScorecardsPage({
             })}
             {scorecards.length === 0 && (
               <p className="py-8 text-center text-sm text-[#77756d]">
-                No scorecards configured yet.
+                {ui(
+                  lang,
+                  "No scorecards configured yet.",
+                  "Todavia no hay scorecards configurados.",
+                )}
               </p>
             )}
           </div>
@@ -487,14 +528,16 @@ export default async function QACScorecardsPage({
             </Panel>
           )}
 
-          <Panel title="Create scorecard">
+          <Panel title={ui(lang, "Create scorecard", "Crear scorecard")}>
             <form action={createScorecardAction} className="space-y-3">
               <select
                 name="department_id"
                 required
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               >
-                <option value="">Department</option>
+                <option value="">
+                  {ui(lang, "Department", "Departamento")}
+                </option>
                 {departments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
@@ -504,7 +547,7 @@ export default async function QACScorecardsPage({
               <input
                 name="name"
                 required
-                placeholder="Scorecard name"
+                placeholder={ui(lang, "Scorecard name", "Nombre del scorecard")}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <input
@@ -521,15 +564,19 @@ export default async function QACScorecardsPage({
                   defaultChecked
                   className="h-4 w-4"
                 />
-                Active scorecard for department
+                {ui(
+                  lang,
+                  "Active scorecard for department",
+                  "Scorecard activo para el departamento",
+                )}
               </label>
               <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-                Create scorecard
+                {ui(lang, "Create scorecard", "Crear scorecard")}
               </button>
             </form>
           </Panel>
 
-          <Panel title="Add criterion">
+          <Panel title={ui(lang, "Add criterion", "Agregar criterio")}>
             <form action={createCriterionAction} className="space-y-3">
               <select
                 name="scorecard_id"
@@ -546,7 +593,7 @@ export default async function QACScorecardsPage({
               <div className="grid grid-cols-2 gap-2">
                 <input
                   name="category"
-                  placeholder="Category"
+                  placeholder={ui(lang, "Category", "Categoria")}
                   className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                 />
                 <input
@@ -554,55 +601,67 @@ export default async function QACScorecardsPage({
                   type="number"
                   min="0"
                   step="0.1"
-                  placeholder="Weight"
+                  placeholder={ui(lang, "Weight", "Peso")}
                   className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                 />
               </div>
               <input
                 name="name"
                 required
-                placeholder="Criterion name"
+                placeholder={ui(lang, "Criterion name", "Nombre del criterio")}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="description"
-                placeholder="Description"
+                placeholder={ui(lang, "Description", "Descripcion")}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="applicability_rule"
-                placeholder="Applicability rule"
+                placeholder={ui(
+                  lang,
+                  "Applicability rule",
+                  "Regla de aplicabilidad",
+                )}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="pass_definition"
-                placeholder="Pass definition"
+                placeholder={ui(lang, "Pass definition", "Definicion aprobado")}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="partial_definition"
-                placeholder="Partial definition"
+                placeholder={ui(
+                  lang,
+                  "Partial definition",
+                  "Definicion parcial",
+                )}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="fail_definition"
-                placeholder="Fail definition"
+                placeholder={ui(lang, "Fail definition", "Definicion fallo")}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="na_definition"
-                placeholder="N/A definition"
+                placeholder={ui(lang, "N/A definition", "Definicion N/A")}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
               <textarea
                 name="examples"
-                placeholder="Examples, one per line"
+                placeholder={ui(
+                  lang,
+                  "Examples, one per line",
+                  "Ejemplos, uno por linea",
+                )}
                 rows={2}
                 className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
               />
@@ -619,11 +678,11 @@ export default async function QACScorecardsPage({
                     type="checkbox"
                     className="h-4 w-4"
                   />
-                  Critical
+                  {ui(lang, "Critical", "Critico")}
                 </label>
               </div>
               <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-                Add criterion
+                {ui(lang, "Add criterion", "Agregar criterio")}
               </button>
             </form>
           </Panel>

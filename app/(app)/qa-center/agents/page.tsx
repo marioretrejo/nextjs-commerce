@@ -2,6 +2,7 @@ import { deleteAgentAction, updateAgentAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { pickQacAnalysis } from "../_components/analysis";
 import { percent } from "../_components/format";
+import { qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -62,6 +63,7 @@ export default async function QACAgentsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const lang = qacLanguageOf(params);
   const deleted = firstParam(params, "deleted");
   const updated = firstParam(params, "updated");
   const access = await requireQacAccess();
@@ -179,31 +181,60 @@ export default async function QACAgentsPage({
   return (
     <QACShell
       active="agents"
-      title="Agents"
-      description="Agent performance calculated only from imported CDR interactions."
+      title={qacT(lang, "Agents", "Agentes")}
+      description={qacT(
+        lang,
+        "Agent performance calculated only from imported CDR interactions.",
+        "Rendimiento de agentes calculado solo desde interacciones CDR importadas.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       {(deleted || updated) && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          {updated ? "Agent updated." : "Agent deleted."}
+          {updated
+            ? qacT(lang, "Agent updated.", "Agente actualizado.")
+            : qacT(lang, "Agent deleted.", "Agente eliminado.")}
         </div>
       )}
-      <Panel title={`${rows.length} agents`}>
+      <Panel
+        title={qacT(lang, `${rows.length} agents`, `${rows.length} agentes`)}
+      >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-[#77756d]">
               <tr className="border-b border-black/15">
-                <th className="py-2 pr-3 font-medium">Agent</th>
-                <th className="py-2 pr-3 font-medium">Department</th>
-                <th className="py-2 pr-3 font-medium">Total calls</th>
-                <th className="py-2 pr-3 font-medium">Analyzed</th>
-                <th className="py-2 pr-3 font-medium">Average score</th>
-                <th className="py-2 pr-3 font-medium">Score by category</th>
-                <th className="py-2 pr-3 font-medium">Failed criteria</th>
-                <th className="py-2 pr-3 font-medium">Trend</th>
-                <th className="py-2 pr-3 font-medium">Needs review</th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Agent", "Agente")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Department", "Departamento")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Total calls", "Total llamadas")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Analyzed", "Analizadas")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Average score", "Promedio")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Score by category", "Score por categoria")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Failed criteria", "Criterios fallidos")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Trend", "Tendencia")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Needs review", "Requiere revision")}
+                </th>
                 {access.isAdmin && (
-                  <th className="py-2 pr-3 font-medium">Actions</th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "Actions", "Acciones")}
+                  </th>
                 )}
               </tr>
             </thead>
@@ -215,13 +246,16 @@ export default async function QACAgentsPage({
                       {row.agent.name}
                     </p>
                     <p className="text-xs text-[#77756d]">
-                      Extension {row.agent.extension ?? "-"}
+                      {qacT(lang, "Extension", "Extension")}{" "}
+                      {row.agent.extension ?? "-"}
                     </p>
                   </td>
                   <td className="py-3 pr-3">
                     {row.agent.qac_departments?.name ?? "-"}
                     {!row.agent.is_active && (
-                      <p className="text-xs text-[#77756d]">Inactive</p>
+                      <p className="text-xs text-[#77756d]">
+                        {qacT(lang, "Inactive", "Inactivo")}
+                      </p>
                     )}
                   </td>
                   <td className="py-3 pr-3">{row.totalCalls}</td>
@@ -269,7 +303,7 @@ export default async function QACAgentsPage({
                       <div className="flex flex-col gap-2">
                         <details>
                           <summary className="inline-flex cursor-pointer rounded-md border border-black/20 px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
-                            Edit
+                            {qacT(lang, "Edit", "Editar")}
                           </summary>
                           <form
                             action={updateAgentAction}
@@ -297,7 +331,13 @@ export default async function QACAgentsPage({
                               defaultValue={row.agent.department_id ?? ""}
                               className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                             >
-                              <option value="">No department</option>
+                              <option value="">
+                                {qacT(
+                                  lang,
+                                  "No department",
+                                  "Sin departamento",
+                                )}
+                              </option>
                               {departments.map((department) => (
                                 <option
                                   key={department.id}
@@ -313,17 +353,17 @@ export default async function QACAgentsPage({
                                 type="checkbox"
                                 defaultChecked={row.agent.is_active}
                               />
-                              Active
+                              {qacT(lang, "Active", "Activo")}
                             </label>
                             <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-                              Save changes
+                              {qacT(lang, "Save changes", "Guardar cambios")}
                             </button>
                           </form>
                         </details>
                         <form action={deleteAgentAction}>
                           <input type="hidden" name="id" value={row.agent.id} />
                           <button className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-                            Delete
+                            {qacT(lang, "Delete", "Eliminar")}
                           </button>
                         </form>
                       </div>
@@ -337,7 +377,11 @@ export default async function QACAgentsPage({
                     colSpan={access.isAdmin ? 10 : 9}
                     className="py-8 text-center text-[#77756d]"
                   >
-                    No CDR agents have been matched yet.
+                    {qacT(
+                      lang,
+                      "No CDR agents have been matched yet.",
+                      "Todavia no se han detectado agentes CDR.",
+                    )}
                   </td>
                 </tr>
               )}

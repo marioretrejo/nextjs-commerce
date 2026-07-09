@@ -2,6 +2,7 @@ import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { pickQacAnalysis } from "../_components/analysis";
 import { formatDate, formatDuration, percent } from "../_components/format";
+import { qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
@@ -57,6 +58,7 @@ export default async function QACInteractionsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const lang = qacLanguageOf(params);
   const access = await requireQacAccess();
   const admin = createAdminClient();
 
@@ -148,18 +150,24 @@ export default async function QACInteractionsPage({
   return (
     <QACShell
       active="interactions"
-      title="Interactions"
-      description="Every row here is a call center interaction imported from a provider CDR."
+      title={qacT(lang, "Interactions", "Interacciones")}
+      description={qacT(
+        lang,
+        "Every row here is a call center interaction imported from a provider CDR.",
+        "Cada fila es una interaccion de call center importada desde un CDR del proveedor.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
-      <Panel title="Filters">
+      <Panel title={qacT(lang, "Filters", "Filtros")}>
         <form className="grid gap-3 md:grid-cols-4 lg:grid-cols-8">
+          <input type="hidden" name="lang" value={lang} />
           <select
             name="provider"
             defaultValue={provider}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Provider</option>
+            <option value="">{qacT(lang, "Provider", "Proveedor")}</option>
             {(
               (providersResult.data as Array<{
                 id: string;
@@ -176,7 +184,7 @@ export default async function QACInteractionsPage({
             defaultValue={department}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Department</option>
+            <option value="">{qacT(lang, "Department", "Departamento")}</option>
             {(
               (departmentsResult.data as Array<{
                 id: string;
@@ -193,7 +201,7 @@ export default async function QACInteractionsPage({
             defaultValue={agent}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Agent</option>
+            <option value="">{qacT(lang, "Agent", "Agente")}</option>
             {(
               (agentsResult.data as Array<{
                 id: string;
@@ -212,7 +220,9 @@ export default async function QACInteractionsPage({
             defaultValue={status}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Analysis status</option>
+            <option value="">
+              {qacT(lang, "Analysis status", "Estado de analisis")}
+            </option>
             {[
               "pending_cdr",
               "pending_audio",
@@ -237,7 +247,9 @@ export default async function QACInteractionsPage({
             defaultValue={review}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           >
-            <option value="">Review status</option>
+            <option value="">
+              {qacT(lang, "Review status", "Estado de revision")}
+            </option>
             {[
               "pending_review",
               "in_review",
@@ -263,48 +275,76 @@ export default async function QACInteractionsPage({
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           />
           <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-            Apply
+            {qacT(lang, "Apply", "Aplicar")}
           </button>
           <input
             name="min_score"
             inputMode="numeric"
-            placeholder="Min score"
+            placeholder={qacT(lang, "Min score", "Score minimo")}
             defaultValue={valueOf(params, "min_score")}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           />
           <input
             name="max_score"
             inputMode="numeric"
-            placeholder="Max score"
+            placeholder={qacT(lang, "Max score", "Score maximo")}
             defaultValue={valueOf(params, "max_score")}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
           />
           <input
             name="failed_criteria"
-            placeholder="Failed criteria"
+            placeholder={qacT(lang, "Failed criteria", "Criterios fallidos")}
             defaultValue={valueOf(params, "failed_criteria")}
             className="rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm md:col-span-2"
           />
         </form>
       </Panel>
 
-      <Panel title={`${interactions.length} interactions`}>
+      <Panel
+        title={qacT(
+          lang,
+          `${interactions.length} interactions`,
+          `${interactions.length} interacciones`,
+        )}
+      >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-[#77756d]">
               <tr className="border-b border-black/15">
-                <th className="py-2 pr-3 font-medium">Channel</th>
-                <th className="py-2 pr-3 font-medium">Provider</th>
-                <th className="py-2 pr-3 font-medium">Agent</th>
-                <th className="py-2 pr-3 font-medium">Department</th>
-                <th className="py-2 pr-3 font-medium">Date</th>
-                <th className="py-2 pr-3 font-medium">Duration</th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Channel", "Canal")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Provider", "Proveedor")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Agent", "Agente")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Department", "Departamento")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Date", "Fecha")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Duration", "Duracion")}
+                </th>
                 <th className="py-2 pr-3 font-medium">Score</th>
-                <th className="py-2 pr-3 font-medium">Failed criteria</th>
-                <th className="py-2 pr-3 font-medium">Prospect / Caller</th>
-                <th className="py-2 pr-3 font-medium">Interaction ID</th>
-                <th className="py-2 pr-3 font-medium">Review</th>
-                <th className="py-2 pr-3 font-medium">Analysis</th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Failed criteria", "Criterios fallidos")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Prospect / Caller", "Prospecto / Llamante")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Interaction ID", "ID interaccion")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Review", "Revision")}
+                </th>
+                <th className="py-2 pr-3 font-medium">
+                  {qacT(lang, "Analysis", "Analisis")}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/15">
@@ -359,7 +399,9 @@ export default async function QACInteractionsPage({
                     </td>
                     <td className="py-3 pr-3">
                       <Link
-                        href={`/qa-center/interactions/${interaction.id}`}
+                        href={`/qa-center/interactions/${interaction.id}${
+                          lang === "es" ? "?lang=es" : ""
+                        }`}
                         className="font-medium text-[#181816] hover:underline"
                       >
                         {customerLabel(interaction)}
@@ -377,7 +419,11 @@ export default async function QACInteractionsPage({
               {interactions.length === 0 && (
                 <tr>
                   <td colSpan={12} className="py-8 text-center text-[#77756d]">
-                    No interactions match these filters.
+                    {qacT(
+                      lang,
+                      "No interactions match these filters.",
+                      "No hay interacciones con estos filtros.",
+                    )}
                   </td>
                 </tr>
               )}

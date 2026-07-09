@@ -4,6 +4,7 @@ import { QACShell, Panel, MetricTile } from "../../_components/QACShell";
 import { StatusBadge } from "../../_components/StatusBadge";
 import { pickQacAnalysis } from "../../_components/analysis";
 import { formatDate, formatDuration, percent } from "../../_components/format";
+import { qacLanguageOf, qacT } from "../../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
@@ -197,6 +198,7 @@ export default async function QACInteractionDetailPage({
 }) {
   const { id } = await params;
   const query = (await searchParams) ?? {};
+  const lang = qacLanguageOf(query);
   const q = String(query["q"] ?? "").toLowerCase();
   const access = await requireQacAccess();
   const admin = createAdminClient();
@@ -252,27 +254,35 @@ export default async function QACInteractionDetailPage({
   return (
     <QACShell
       active="interactions"
-      title="Interaction Detail"
-      description="CDR interaction detail with transcript, analysis and scorecard evidence."
+      title={qacT(lang, "Interaction Detail", "Detalle de interaccion")}
+      description={qacT(
+        lang,
+        "CDR interaction detail with transcript, analysis and scorecard evidence.",
+        "Detalle CDR con transcripcion, analisis y evidencia del scorecard.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
           label="Score"
           value={percent(analysis?.overall_score)}
-          hint={analysis?.qac_scorecards?.name ?? "No scorecard result yet"}
+          hint={
+            analysis?.qac_scorecards?.name ??
+            qacT(lang, "No scorecard result yet", "Sin resultado de scorecard")
+          }
         />
         <MetricTile
-          label="Duration"
+          label={qacT(lang, "Duration", "Duracion")}
           value={formatDuration(interaction.duration_seconds)}
         />
         <MetricTile
-          label="Sentiment"
+          label={qacT(lang, "Sentiment", "Sentimiento")}
           value={sentimentLabel(analysis?.sentiment)}
-          hint={`Risk: ${analysis?.risk_level ?? "-"}`}
+          hint={`${qacT(lang, "Risk", "Riesgo")}: ${analysis?.risk_level ?? "-"}`}
         />
         <MetricTile
-          label="Review"
+          label={qacT(lang, "Review", "Revision")}
           value={interaction.review_status.replace(/_/g, " ")}
         />
       </div>
@@ -283,7 +293,7 @@ export default async function QACInteractionDetailPage({
           <form action={triggerQacAnalysisAction}>
             <input type="hidden" name="interaction_id" value={interaction.id} />
             <button className="rounded-md bg-[#181816] px-3 py-1.5 text-sm font-medium text-white">
-              Analyze
+              {qacT(lang, "Analyze", "Analizar")}
             </button>
           </form>
         }
@@ -291,7 +301,7 @@ export default async function QACInteractionDetailPage({
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2 text-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-              Provider
+              {qacT(lang, "Provider", "Proveedor")}
             </p>
             <p className="font-medium text-[#181816]">
               {interaction.qac_voip_providers?.name ?? "-"}
@@ -300,18 +310,19 @@ export default async function QACInteractionDetailPage({
           </div>
           <div className="space-y-2 text-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-              Agent
+              {qacT(lang, "Agent", "Agente")}
             </p>
             <p className="font-medium text-[#181816]">
               {interaction.qac_agents?.name ?? "-"}
             </p>
             <p className="text-[#77756d]">
-              Ext. {interaction.qac_agents?.extension ?? "-"}
+              {qacT(lang, "Ext.", "Ext.")}{" "}
+              {interaction.qac_agents?.extension ?? "-"}
             </p>
           </div>
           <div className="space-y-2 text-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-              Department
+              {qacT(lang, "Department", "Departamento")}
             </p>
             <p className="font-medium text-[#181816]">
               {interaction.qac_departments?.name ?? "-"}
@@ -319,11 +330,13 @@ export default async function QACInteractionDetailPage({
             <StatusBadge value={interaction.review_status} />
           </div>
           <div className="space-y-1 text-sm">
-            <p className="text-[#77756d]">Caller / Prospect</p>
+            <p className="text-[#77756d]">
+              {qacT(lang, "Caller / Prospect", "Llamante / Prospecto")}
+            </p>
             <p>{interaction.caller_id ?? interaction.prospect_id ?? "-"}</p>
           </div>
           <div className="space-y-1 text-sm">
-            <p className="text-[#77756d]">Date</p>
+            <p className="text-[#77756d]">{qacT(lang, "Date", "Fecha")}</p>
             <p>
               {formatDate(
                 interaction.call_started_at ?? interaction.created_at,
@@ -331,7 +344,9 @@ export default async function QACInteractionDetailPage({
             </p>
           </div>
           <div className="space-y-1 text-sm">
-            <p className="text-[#77756d]">Direction / Disposition</p>
+            <p className="text-[#77756d]">
+              {qacT(lang, "Direction / Disposition", "Direccion / Disposicion")}
+            </p>
             <p>
               {interaction.direction ?? "-"} / {interaction.disposition ?? "-"}
             </p>
@@ -350,21 +365,30 @@ export default async function QACInteractionDetailPage({
               />
             ) : (
               <p className="text-sm text-[#77756d]">
-                No recording URL available.
+                {qacT(
+                  lang,
+                  "No recording URL available.",
+                  "No hay URL de grabacion disponible.",
+                )}
               </p>
             )}
           </Panel>
 
-          <Panel title="Summary">
+          <Panel title={qacT(lang, "Summary", "Resumen")}>
             {analysis ? (
               <div className="space-y-4 text-sm">
                 <p className="text-[#2f2e2a]">
-                  {analysis.summary ?? "No summary returned."}
+                  {analysis.summary ??
+                    qacT(
+                      lang,
+                      "No summary returned.",
+                      "No se devolvio resumen.",
+                    )}
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-[#77756d]">
-                      Outcome
+                      {qacT(lang, "Outcome", "Resultado")}
                     </p>
                     <p className="break-words [overflow-wrap:anywhere]">
                       {analysis.call_disposition ?? "-"}
@@ -372,18 +396,18 @@ export default async function QACInteractionDetailPage({
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-[#77756d]">
-                      Follow-up
+                      {qacT(lang, "Follow-up", "Seguimiento")}
                     </p>
                     <p>
                       {trackers.follow_up_detected
-                        ? "Detected"
-                        : "Not detected"}
+                        ? qacT(lang, "Detected", "Detectado")
+                        : qacT(lang, "Not detected", "No detectado")}
                     </p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[#77756d]">
-                    Detected objections
+                    {qacT(lang, "Detected objections", "Objeciones detectadas")}
                   </p>
                   <p>
                     {asStringArray(trackers.detected_objections).join(", ") ||
@@ -393,7 +417,7 @@ export default async function QACInteractionDetailPage({
                 {detectedTrackerLabels(analysis.trackers_json).length > 0 && (
                   <div>
                     <p className="text-xs uppercase tracking-wide text-[#77756d]">
-                      Trackers detected
+                      {qacT(lang, "Trackers detected", "Trackers detectados")}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {detectedTrackerLabels(analysis.trackers_json).map(
@@ -411,7 +435,7 @@ export default async function QACInteractionDetailPage({
                 )}
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[#77756d]">
-                    Strengths
+                    {qacT(lang, "Strengths", "Fortalezas")}
                   </p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {asStringArray(analysis.strengths_json).map((item) => (
@@ -421,7 +445,7 @@ export default async function QACInteractionDetailPage({
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[#77756d]">
-                    Opportunities
+                    {qacT(lang, "Opportunities", "Oportunidades")}
                   </p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {asStringArray(analysis.opportunities_json).map((item) => (
@@ -431,18 +455,29 @@ export default async function QACInteractionDetailPage({
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-[#77756d]">No analysis saved yet.</p>
+              <p className="text-sm text-[#77756d]">
+                {qacT(
+                  lang,
+                  "No analysis saved yet.",
+                  "Todavia no hay analisis guardado.",
+                )}
+              </p>
             )}
           </Panel>
         </div>
 
         <div className="flex flex-col gap-4">
-          <Panel title="Transcript">
+          <Panel title={qacT(lang, "Transcript", "Transcripcion")}>
             <form className="mb-3">
+              <input type="hidden" name="lang" value={lang} />
               <input
                 name="q"
                 type="search"
-                placeholder="Search transcript"
+                placeholder={qacT(
+                  lang,
+                  "Search transcript",
+                  "Buscar en transcripcion",
+                )}
                 defaultValue={String(query["q"] ?? "")}
                 className="w-full rounded-md border border-[#d8d8d2] bg-white px-3 py-2 text-sm"
               />
@@ -469,12 +504,22 @@ export default async function QACInteractionDetailPage({
               <div className="h-[360px] min-h-0 overflow-hidden rounded-md bg-[#f7f7f5] sm:h-[520px]">
                 <pre className="block h-full overflow-y-auto whitespace-pre-wrap break-words p-3 font-sans text-sm leading-6 text-[#2f2e2a] overscroll-contain [overflow-wrap:anywhere]">
                   {q && !transcriptText.toLowerCase().includes(q)
-                    ? "No transcript matches this search."
+                    ? qacT(
+                        lang,
+                        "No transcript matches this search.",
+                        "No hay coincidencias en la transcripcion.",
+                      )
                     : transcriptText}
                 </pre>
               </div>
             ) : (
-              <p className="text-sm text-[#77756d]">No transcript available.</p>
+              <p className="text-sm text-[#77756d]">
+                {qacT(
+                  lang,
+                  "No transcript available.",
+                  "No hay transcripcion disponible.",
+                )}
+              </p>
             )}
           </Panel>
 
@@ -493,7 +538,8 @@ export default async function QACInteractionDetailPage({
                         </p>
                         <p className="text-xs text-[#77756d]">
                           {result.qac_scorecard_criteria?.category ?? "-"} -
-                          Weight {result.qac_scorecard_criteria?.weight ?? 0}
+                          {qacT(lang, "Weight", "Peso")}{" "}
+                          {result.qac_scorecard_criteria?.weight ?? 0}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -520,14 +566,20 @@ export default async function QACInteractionDetailPage({
                                 {formatDuration(item.timestamp_seconds)}
                               </span>
                             )}
-                            {item.quote ?? "Evidence saved"}
+                            {item.quote ??
+                              qacT(
+                                lang,
+                                "Evidence saved",
+                                "Evidencia guardada",
+                              )}
                           </blockquote>
                         ))}
                       </div>
                     )}
                     {result.reviewer_comment && (
                       <p className="mt-2 text-sm text-[#5f5d56]">
-                        Reviewer: {result.reviewer_comment}
+                        {qacT(lang, "Reviewer", "Revisor")}:{" "}
+                        {result.reviewer_comment}
                       </p>
                     )}
                   </div>
@@ -535,7 +587,11 @@ export default async function QACInteractionDetailPage({
               </div>
             ) : (
               <p className="text-sm text-[#77756d]">
-                No scorecard criteria results yet.
+                {qacT(
+                  lang,
+                  "No scorecard criteria results yet.",
+                  "Todavia no hay resultados de criterios del scorecard.",
+                )}
               </p>
             )}
           </Panel>

@@ -120,6 +120,7 @@ export default async function QACTrackersPage({
         "Detectores sin codigo para objeciones, riesgo, intencion y señales operativas. Los trackers no cambian directamente el score.",
       )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       {(created || deleted || updated || errorMessage || migrationMissing) && (
         <div

@@ -5,6 +5,7 @@ import {
 } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
+import { qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -51,6 +52,7 @@ export default async function QACDepartmentsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const lang = qacLanguageOf(params);
   const errorMessage = firstParam(params, "error");
   const created = firstParam(params, "created");
   const deleted = firstParam(params, "deleted");
@@ -148,9 +150,14 @@ export default async function QACDepartmentsPage({
   return (
     <QACShell
       active="departments"
-      title="Departments"
-      description="Each department owns its QA prompt, extensions, agents and active scorecard."
+      title={qacT(lang, "Departments", "Departamentos")}
+      description={qacT(
+        lang,
+        "Each department owns its QA prompt, extensions, agents and active scorecard.",
+        "Cada departamento controla su prompt QA, extensiones, agentes y scorecard activo.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       {(errorMessage || created || deleted || updated) && (
         <div
@@ -162,14 +169,32 @@ export default async function QACDepartmentsPage({
         >
           {errorMessage ??
             (deleted
-              ? "Departamento eliminado correctamente."
+              ? qacT(
+                  lang,
+                  "Department deleted successfully.",
+                  "Departamento eliminado correctamente.",
+                )
               : updated
-                ? "Departamento actualizado correctamente."
-                : "Departamento creado correctamente.")}
+                ? qacT(
+                    lang,
+                    "Department updated successfully.",
+                    "Departamento actualizado correctamente.",
+                  )
+                : qacT(
+                    lang,
+                    "Department created successfully.",
+                    "Departamento creado correctamente.",
+                  ))}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-        <Panel title={`${departments.length} departments`}>
+        <Panel
+          title={qacT(
+            lang,
+            `${departments.length} departments`,
+            `${departments.length} departamentos`,
+          )}
+        >
           <div className="grid gap-3">
             {departments.map((department) => {
               const activeScorecard = department.qac_scorecards?.find(
@@ -216,7 +241,7 @@ export default async function QACDepartmentsPage({
                             value={department.id}
                           />
                           <button className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
-                            Delete
+                            {qacT(lang, "Delete", "Eliminar")}
                           </button>
                         </form>
                       )}
@@ -230,35 +255,36 @@ export default async function QACDepartmentsPage({
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-                        Extensions
+                        {qacT(lang, "Extensions", "Extensiones")}
                       </p>
                       <p className="mt-1 text-sm">
-                        {extensions.join(", ") || "None"}
+                        {extensions.join(", ") || qacT(lang, "None", "Ninguna")}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-                        Agents
+                        {qacT(lang, "Agents", "Agentes")}
                       </p>
                       <p className="mt-1 text-sm">
-                        {agents.map((agent) => agent.name).join(", ") || "None"}
+                        {agents.map((agent) => agent.name).join(", ") ||
+                          qacT(lang, "None", "Ninguno")}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-                        Active scorecard
+                        {qacT(lang, "Active scorecard", "Scorecard activo")}
                       </p>
                       <p className="mt-1 text-sm">
                         {activeScorecard
                           ? `${activeScorecard.name} v${activeScorecard.version}`
-                          : "None"}
+                          : qacT(lang, "None", "Ninguno")}
                       </p>
                     </div>
                   </div>
                   {department.qa_prompt && (
                     <div className="mt-4 rounded-md bg-[#f7f7f5] p-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[#77756d]">
-                        QA prompt
+                        {qacT(lang, "QA prompt", "Prompt QA")}
                       </p>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-[#2f2e2a]">
                         {department.qa_prompt}
@@ -268,7 +294,7 @@ export default async function QACDepartmentsPage({
                   {access.isAdmin && (
                     <details className="mt-4 rounded-md border border-black/15 bg-[#fbfbfa] p-3">
                       <summary className="inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-2.5 py-1.5 text-xs font-medium text-[#181816] hover:bg-[#f7f7f5]">
-                        Edit
+                        {qacT(lang, "Edit", "Editar")}
                       </summary>
                       <form
                         action={updateDepartmentAction}
@@ -279,7 +305,7 @@ export default async function QACDepartmentsPage({
                           name="name"
                           required
                           defaultValue={department.name}
-                          placeholder="Name"
+                          placeholder={qacT(lang, "Name", "Nombre")}
                           className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
                         />
                         <input
@@ -291,21 +317,29 @@ export default async function QACDepartmentsPage({
                         <textarea
                           name="description"
                           defaultValue={department.description ?? ""}
-                          placeholder="Description"
+                          placeholder={qacT(lang, "Description", "Descripcion")}
                           rows={3}
                           className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                         />
                         <textarea
                           name="extensions"
                           defaultValue={extensions.join("\n")}
-                          placeholder="Assigned extensions, one per line"
+                          placeholder={qacT(
+                            lang,
+                            "Assigned extensions, one per line",
+                            "Extensiones asignadas, una por linea",
+                          )}
                           rows={3}
                           className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                         />
                         <textarea
                           name="qa_prompt"
                           defaultValue={department.qa_prompt ?? ""}
-                          placeholder="Department QA prompt"
+                          placeholder={qacT(
+                            lang,
+                            "Department QA prompt",
+                            "Prompt QA del departamento",
+                          )}
                           rows={5}
                           className="rounded-md border border-[#d8d8d2] px-3 py-2 text-sm md:col-span-2"
                         />
@@ -315,7 +349,11 @@ export default async function QACDepartmentsPage({
                             type="checkbox"
                             defaultChecked={department.auto_analyze}
                           />
-                          Auto analyze imported calls
+                          {qacT(
+                            lang,
+                            "Auto analyze imported calls",
+                            "Analizar llamadas importadas automaticamente",
+                          )}
                         </label>
                         <label className="flex items-center gap-2 text-sm">
                           <input
@@ -323,10 +361,10 @@ export default async function QACDepartmentsPage({
                             type="checkbox"
                             defaultChecked={department.is_active}
                           />
-                          Active
+                          {qacT(lang, "Active", "Activo")}
                         </label>
                         <button className="rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white md:col-span-2">
-                          Save changes
+                          {qacT(lang, "Save changes", "Guardar cambios")}
                         </button>
                       </form>
                     </details>
@@ -336,18 +374,22 @@ export default async function QACDepartmentsPage({
             })}
             {departments.length === 0 && (
               <p className="py-8 text-center text-sm text-[#77756d]">
-                No departments configured yet.
+                {qacT(
+                  lang,
+                  "No departments configured yet.",
+                  "Todavia no hay departamentos configurados.",
+                )}
               </p>
             )}
           </div>
         </Panel>
 
-        <Panel title="Create department">
+        <Panel title={qacT(lang, "Create department", "Crear departamento")}>
           <form action={createDepartmentAction} className="space-y-3">
             <input
               name="name"
               required
-              placeholder="Name"
+              placeholder={qacT(lang, "Name", "Nombre")}
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
             <input
@@ -357,19 +399,27 @@ export default async function QACDepartmentsPage({
             />
             <textarea
               name="description"
-              placeholder="Description"
+              placeholder={qacT(lang, "Description", "Descripcion")}
               rows={3}
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
             <textarea
               name="extensions"
-              placeholder="Assigned extensions, one per line"
+              placeholder={qacT(
+                lang,
+                "Assigned extensions, one per line",
+                "Extensiones asignadas, una por linea",
+              )}
               rows={3}
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
             <textarea
               name="qa_prompt"
-              placeholder="Department QA prompt"
+              placeholder={qacT(
+                lang,
+                "Department QA prompt",
+                "Prompt QA del departamento",
+              )}
               rows={5}
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
@@ -380,7 +430,11 @@ export default async function QACDepartmentsPage({
                 defaultChecked
                 className="h-4 w-4"
               />
-              Auto analyze imported calls
+              {qacT(
+                lang,
+                "Auto analyze imported calls",
+                "Analizar llamadas importadas automaticamente",
+              )}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -389,10 +443,10 @@ export default async function QACDepartmentsPage({
                 defaultChecked
                 className="h-4 w-4"
               />
-              Active
+              {qacT(lang, "Active", "Activo")}
             </label>
             <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-              Create department
+              {qacT(lang, "Create department", "Crear departamento")}
             </button>
           </form>
         </Panel>

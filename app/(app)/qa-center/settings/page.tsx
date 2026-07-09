@@ -1,12 +1,19 @@
 import { QACShell, MetricTile, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { formatDate } from "../_components/format";
+import { qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { QAC_ANALYSIS_STATUSES } from "@/lib/qac/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 
-export default async function QACSettingsPage() {
+export default async function QACSettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const lang = qacLanguageOf(params);
   const access = await requireQacAccess();
   if (!access.isSuperadmin) redirect("/qa-center");
 
@@ -39,18 +46,32 @@ export default async function QACSettingsPage() {
   return (
     <QACShell
       active="settings"
-      title="Settings"
-      description="Operational QA Center configuration for CDR ingestion and analysis."
+      title={qacT(lang, "Settings", "Configuracion")}
+      description={qacT(
+        lang,
+        "Operational QA Center configuration for CDR ingestion and analysis.",
+        "Configuracion operativa de QA Center para ingesta CDR y analisis.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       <div className="grid gap-3 sm:grid-cols-3">
-        <MetricTile label="Active providers" value={providers.count ?? 0} />
-        <MetricTile label="Active departments" value={departments.count ?? 0} />
-        <MetricTile label="Active scorecards" value={scorecards.count ?? 0} />
+        <MetricTile
+          label={qacT(lang, "Active providers", "Proveedores activos")}
+          value={providers.count ?? 0}
+        />
+        <MetricTile
+          label={qacT(lang, "Active departments", "Departamentos activos")}
+          value={departments.count ?? 0}
+        />
+        <MetricTile
+          label={qacT(lang, "Active scorecards", "Scorecards activos")}
+          value={scorecards.count ?? 0}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-        <Panel title="Analysis statuses">
+        <Panel title={qacT(lang, "Analysis statuses", "Estados de analisis")}>
           <div className="flex flex-wrap gap-2">
             {QAC_ANALYSIS_STATUSES.map((status) => (
               <StatusBadge key={status} value={status} />
@@ -58,15 +79,27 @@ export default async function QACSettingsPage() {
           </div>
         </Panel>
 
-        <Panel title="Recent ingestion events">
+        <Panel
+          title={qacT(
+            lang,
+            "Recent ingestion events",
+            "Eventos recientes de ingesta",
+          )}
+        >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-[#77756d]">
                 <tr className="border-b border-black/15">
-                  <th className="py-2 pr-3 font-medium">External call</th>
-                  <th className="py-2 pr-3 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "External call", "Llamada externa")}
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "Status", "Estado")}
+                  </th>
                   <th className="py-2 pr-3 font-medium">Error</th>
-                  <th className="py-2 pr-3 font-medium">Date</th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "Date", "Fecha")}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/15">
@@ -81,7 +114,8 @@ export default async function QACSettingsPage() {
                 ).map((log) => (
                   <tr key={log.id}>
                     <td className="py-3 pr-3">
-                      {log.external_call_id ?? "No external id"}
+                      {log.external_call_id ??
+                        qacT(lang, "No external id", "Sin ID externo")}
                     </td>
                     <td className="py-3 pr-3">
                       <StatusBadge value={log.status} />
@@ -95,7 +129,11 @@ export default async function QACSettingsPage() {
                 {!logs.data?.length && (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-[#77756d]">
-                      No ingestion events yet.
+                      {qacT(
+                        lang,
+                        "No ingestion events yet.",
+                        "Todavia no hay eventos de ingesta.",
+                      )}
                     </td>
                   </tr>
                 )}

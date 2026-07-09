@@ -2,6 +2,7 @@ import { createProviderAction, deleteProviderAction } from "../_actions";
 import { QACShell, Panel } from "../_components/QACShell";
 import { StatusBadge } from "../_components/StatusBadge";
 import { maskSecret } from "../_components/format";
+import { qacLanguageOf, qacT } from "../_components/i18n";
 import { requireQacAccess } from "@/lib/qac/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
@@ -37,6 +38,7 @@ export default async function QACProvidersPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const lang = qacLanguageOf(params);
   const deleted = firstParam(params, "deleted");
   const created = firstParam(params, "created");
   const errorMessage = firstParam(params, "error");
@@ -58,9 +60,14 @@ export default async function QACProvidersPage({
   return (
     <QACShell
       active="providers"
-      title="Providers"
-      description="VoIP provider adapters normalize CDR payloads into one QA Center interaction format."
+      title={qacT(lang, "Providers", "Proveedores")}
+      description={qacT(
+        lang,
+        "VoIP provider adapters normalize CDR payloads into one QA Center interaction format.",
+        "Los adaptadores VoIP normalizan los CDR en un formato unico para QA Center.",
+      )}
       isSuperadmin={access.isSuperadmin}
+      lang={lang}
     >
       {(deleted || created || errorMessage) && (
         <div
@@ -71,22 +78,38 @@ export default async function QACProvidersPage({
           }
         >
           {errorMessage ??
-            (created ? "Provider created." : "Provider deleted.")}
+            (created
+              ? qacT(lang, "Provider created.", "Proveedor creado.")
+              : qacT(lang, "Provider deleted.", "Proveedor eliminado."))}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-        <Panel title={`${providers.length} providers`}>
+        <Panel
+          title={qacT(
+            lang,
+            `${providers.length} providers`,
+            `${providers.length} proveedores`,
+          )}
+        >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-[#77756d]">
                 <tr className="border-b border-black/15">
-                  <th className="py-2 pr-3 font-medium">Name</th>
-                  <th className="py-2 pr-3 font-medium">Type</th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "Name", "Nombre")}
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "Type", "Tipo")}
+                  </th>
                   <th className="py-2 pr-3 font-medium">Webhook</th>
                   <th className="py-2 pr-3 font-medium">Secret</th>
-                  <th className="py-2 pr-3 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium">
+                    {qacT(lang, "Status", "Estado")}
+                  </th>
                   {access.isAdmin && (
-                    <th className="py-2 pr-3 font-medium">Actions</th>
+                    <th className="py-2 pr-3 font-medium">
+                      {qacT(lang, "Actions", "Acciones")}
+                    </th>
                   )}
                 </tr>
               </thead>
@@ -120,7 +143,7 @@ export default async function QACProvidersPage({
                         <form action={deleteProviderAction}>
                           <input type="hidden" name="id" value={provider.id} />
                           <button className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-                            Delete
+                            {qacT(lang, "Delete", "Eliminar")}
                           </button>
                         </form>
                       </td>
@@ -133,7 +156,11 @@ export default async function QACProvidersPage({
                       colSpan={access.isAdmin ? 6 : 5}
                       className="py-8 text-center text-[#77756d]"
                     >
-                      No providers configured yet.
+                      {qacT(
+                        lang,
+                        "No providers configured yet.",
+                        "Todavia no hay proveedores configurados.",
+                      )}
                     </td>
                   </tr>
                 )}
@@ -142,12 +169,12 @@ export default async function QACProvidersPage({
           </div>
         </Panel>
 
-        <Panel title="Create provider">
+        <Panel title={qacT(lang, "Create provider", "Crear proveedor")}>
           <form action={createProviderAction} className="space-y-3">
             <input
               name="name"
               required
-              placeholder="Provider name"
+              placeholder={qacT(lang, "Provider name", "Nombre del proveedor")}
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
             <input
@@ -168,7 +195,11 @@ export default async function QACProvidersPage({
             </select>
             <input
               name="webhook_secret"
-              placeholder="Webhook secret, generated if blank"
+              placeholder={qacT(
+                lang,
+                "Webhook secret, generated if blank",
+                "Webhook secret, se genera si lo dejas vacio",
+              )}
               className="w-full rounded-md border border-[#d8d8d2] px-3 py-2 text-sm"
             />
             <label className="flex items-center gap-2 text-sm">
@@ -178,7 +209,11 @@ export default async function QACProvidersPage({
                 defaultChecked
                 className="h-4 w-4"
               />
-              Auto analyze when department allows it
+              {qacT(
+                lang,
+                "Auto analyze when department allows it",
+                "Analizar automaticamente cuando el departamento lo permita",
+              )}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -187,10 +222,10 @@ export default async function QACProvidersPage({
                 defaultChecked
                 className="h-4 w-4"
               />
-              Active
+              {qacT(lang, "Active", "Activo")}
             </label>
             <button className="w-full rounded-md bg-[#181816] px-3 py-2 text-sm font-medium text-white">
-              Create provider
+              {qacT(lang, "Create provider", "Crear proveedor")}
             </button>
           </form>
         </Panel>
